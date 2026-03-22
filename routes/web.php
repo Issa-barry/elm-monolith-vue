@@ -1,5 +1,11 @@
 <?php
 
+use App\Http\Controllers\ClientController;
+use App\Http\Controllers\PackingController;
+use App\Http\Controllers\PrestataireController;
+use App\Http\Controllers\ProduitController;
+use App\Http\Controllers\RoleController;
+use App\Http\Controllers\VersementController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
@@ -13,5 +19,16 @@ Route::get('/', function () {
 Route::get('dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
+
+Route::middleware(['auth'])->group(function () {
+    Route::resource('clients', ClientController::class);
+    Route::resource('prestataires', PrestataireController::class);
+    Route::resource('produits', ProduitController::class);
+    Route::resource('packings', PackingController::class);
+    Route::patch('packings/{packing}/annuler', [PackingController::class, 'annuler'])->name('packings.annuler');
+    Route::post('packings/{packing}/versements', [VersementController::class, 'store'])->name('packings.versements.store');
+    Route::delete('packings/{packing}/versements/{versement}', [VersementController::class, 'destroy'])->name('packings.versements.destroy');
+    Route::resource('roles', RoleController::class)->only(['index', 'edit', 'update']);
+});
 
 require __DIR__.'/settings.php';

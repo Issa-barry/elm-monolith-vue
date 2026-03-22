@@ -1,8 +1,17 @@
 import { InertiaLinkProps } from '@inertiajs/vue3';
 import type { LucideIcon } from 'lucide-vue-next';
 
+// ── RBAC ─────────────────────────────────────────────────────────────────────
+export type Resource = 'clients' | 'prestataires' | 'livreurs' | 'proprietaires' | 'users';
+export type CrudAction = 'create' | 'read' | 'update' | 'delete';
+export type PermissionKey = `${Resource}.${CrudAction}`;
+export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
+export type AppRole = 'super_admin' | 'admin_entreprise' | 'commerciale' | 'comptable';
+
 export interface Auth {
     user: User;
+    permissions: PermissionsMap;
+    roles: AppRole[];
 }
 
 export interface BreadcrumbItem {

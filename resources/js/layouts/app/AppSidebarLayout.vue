@@ -4,6 +4,8 @@ import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
 import type { BreadcrumbItemType } from '@/types';
+import ConfirmDialog from 'primevue/confirmdialog';
+import Toast from 'primevue/toast';
 
 interface Props {
     breadcrumbs?: BreadcrumbItemType[];
@@ -22,4 +24,6 @@ withDefaults(defineProps<Props>(), {
             <slot />
         </AppContent>
     </AppShell>
+    <ConfirmDialog />
+    <Toast position="bottom-right" />
 </template>

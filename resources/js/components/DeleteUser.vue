@@ -26,22 +26,22 @@ const passwordInput = useTemplateRef('passwordInput');
 <template>
     <div class="space-y-6">
         <HeadingSmall
-            title="Delete account"
-            description="Delete your account and all of its resources"
+            title="Supprimer le compte"
+            description="Supprimez votre compte et toutes ses données associées"
         />
         <div
             class="space-y-4 rounded-lg border border-red-100 bg-red-50 p-4 dark:border-red-200/10 dark:bg-red-700/10"
         >
             <div class="relative space-y-0.5 text-red-600 dark:text-red-100">
-                <p class="font-medium">Warning</p>
+                <p class="font-medium">Attention</p>
                 <p class="text-sm">
-                    Please proceed with caution, this cannot be undone.
+                    Procédez avec prudence, cette action est irréversible.
                 </p>
             </div>
             <Dialog>
                 <DialogTrigger as-child>
                     <Button variant="destructive" data-test="delete-user-button"
-                        >Delete account</Button
+                        >Supprimer le compte</Button
                     >
                 </DialogTrigger>
                 <DialogContent>
@@ -57,28 +57,24 @@ const passwordInput = useTemplateRef('passwordInput');
                     >
                         <DialogHeader class="space-y-3">
                             <DialogTitle
-                                >Are you sure you want to delete your
-                                account?</DialogTitle
+                                >Êtes-vous sûr de vouloir supprimer votre compte ?</DialogTitle
                             >
                             <DialogDescription>
-                                Once your account is deleted, all of its
-                                resources and data will also be permanently
-                                deleted. Please enter your password to confirm
-                                you would like to permanently delete your
-                                account.
+                                Une fois votre compte supprimé, toutes ses données seront définitivement effacées.
+                                Veuillez saisir votre mot de passe pour confirmer la suppression.
                             </DialogDescription>
                         </DialogHeader>
 
                         <div class="grid gap-2">
                             <Label for="password" class="sr-only"
-                                >Password</Label
+                                >Mot de passe</Label
                             >
                             <Input
                                 id="password"
                                 type="password"
                                 name="password"
                                 ref="passwordInput"
-                                placeholder="Password"
+                                placeholder="Mot de passe"
                             />
                             <InputError :message="errors.password" />
                         </div>
@@ -94,7 +90,7 @@ const passwordInput = useTemplateRef('passwordInput');
                                         }
                                     "
                                 >
-                                    Cancel
+                                    Annuler
                                 </Button>
                             </DialogClose>
 
@@ -104,7 +100,7 @@ const passwordInput = useTemplateRef('passwordInput');
                                 :disabled="processing"
                                 data-test="confirm-delete-user-button"
                             >
-                                Delete account
+                                Supprimer le compte
                             </Button>
                         </DialogFooter>
                     </Form>
