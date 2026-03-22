@@ -9,7 +9,8 @@
       "Read(//c/laragon/www/elm-api/**)",
       "Bash(ls /c/laragon/www/elm-api/app/Models/*.php)",
       "Bash(php -r \"require ''vendor/autoload.php''; echo ''autoload OK'';\")",
-      "Bash(curl -s http://127.0.0.1:8000/produits -H \"Accept: application/json\")"
+      "Bash(curl -s http://127.0.0.1:8000/produits -H \"Accept: application/json\")",
+      "Bash(npm list:*)"
     ]
   }
 }

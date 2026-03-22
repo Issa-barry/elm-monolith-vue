@@ -6,7 +6,7 @@ import { ArrowLeft, Image, Save, X } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import Textarea from 'primevue/textarea';
+import Editor from 'primevue/editor';
 import { computed, ref } from 'vue';
 
 // ── Props / Emits ─────────────────────────────────────────────────────────────
@@ -43,9 +43,10 @@ const emit = defineEmits<{
 }>();
 
 // Le type sélectionné a-t-il un stock ?
-const typeHasStock = computed(() => {
-    return !['service'].includes(props.form.type);
-});
+const typeHasStock = computed(() => !['service'].includes(props.form.type));
+
+// Prix usine visible uniquement pour les fabricables
+const isFabricable = computed(() => props.form.type === 'fabricable');
 
 // Prévisualisation de l'image sélectionnée
 const previewUrl = ref<string | null>(null);
@@ -148,8 +149,9 @@ const displayImage = computed(() => previewUrl.value ?? props.currentImageUrl ??
                 Tarification <span class="text-xs font-normal normal-case">(GNF)</span>
             </h3>
 
-            <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                <div>
+            <div class="grid gap-5 sm:grid-cols-2" :class="isFabricable ? 'lg:grid-cols-4' : 'lg:grid-cols-3'">
+                <!-- Prix usine : fabricable uniquement -->
+                <div v-if="isFabricable">
                     <Label class="mb-1.5 block">Prix usine</Label>
                     <InputNumber
                         :model-value="form.prix_usine"
@@ -255,12 +257,51 @@ const displayImage = computed(() => previewUrl.value ?? props.currentImageUrl ??
             <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Description
             </h3>
-            <Textarea
+            <Editor
                 :model-value="form.description ?? ''"
                 @update:model-value="$emit('update:form', { ...form, description: $event || null })"
-                :rows="4"
-                class="w-full resize-none"
-            />
+                editor-style="min-height: 160px"
+                class="w-full"
+            >
+                <template #toolbar>
+                    <span class="ql-formats">
+                        <button class="ql-bold" />
+                        <button class="ql-italic" />
+                        <button class="ql-underline" />
+                        <button class="ql-strike" />
+                    </span>
+                    <span class="ql-formats">
+                        <button class="ql-script" value="sub" />
+                        <button class="ql-script" value="super" />
+                    </span>
+                    <span class="ql-formats">
+                        <select class="ql-header">
+                            <option value="2" />
+                            <option value="3" />
+                            <option selected />
+                        </select>
+                    </span>
+                    <span class="ql-formats">
+                        <button class="ql-align" value="" />
+                        <button class="ql-align" value="center" />
+                        <button class="ql-align" value="right" />
+                    </span>
+                    <span class="ql-formats">
+                        <button class="ql-blockquote" />
+                        <button class="ql-code-block" />
+                    </span>
+                    <span class="ql-formats">
+                        <button class="ql-list" value="bullet" />
+                        <button class="ql-list" value="ordered" />
+                    </span>
+                    <span class="ql-formats">
+                        <button class="ql-link" />
+                    </span>
+                    <span class="ql-formats">
+                        <button class="ql-clean" />
+                    </span>
+                </template>
+            </Editor>
         </div>
 
         <!-- Section : Image ──────────────────────────────────────────────── -->
