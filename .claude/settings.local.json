@@ -4,7 +4,12 @@
       "Bash(composer install:*)",
       "Bash(php artisan:*)",
       "Bash(npm install:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Read(//c/laragon/www/elm-api//**)",
+      "Read(//c/laragon/www/elm-api/**)",
+      "Bash(ls /c/laragon/www/elm-api/app/Models/*.php)",
+      "Bash(php -r \"require ''vendor/autoload.php''; echo ''autoload OK'';\")",
+      "Bash(curl -s http://127.0.0.1:8000/produits -H \"Accept: application/json\")"
     ]
   }
 }

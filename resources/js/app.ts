@@ -7,6 +7,8 @@ import Nora from '@primeuix/themes/nora';
 import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import PrimeVue from 'primevue/config';
+import ConfirmationService from 'primevue/confirmationservice';
+import ToastService from 'primevue/toastservice';
 import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
 import { initializeTheme } from './composables/useAppearance';
@@ -40,6 +42,8 @@ createInertiaApp({
                     },
                 },
             })
+            .use(ConfirmationService)
+            .use(ToastService)
             .mount(el);
     },
     progress: {

@@ -13,10 +13,10 @@ import { Form, Head } from '@inertiajs/vue3';
 
 <template>
     <AuthBase
-        title="Create an account"
-        description="Enter your details below to create your account"
+        title="Créer un compte"
+        description="Renseignez vos informations pour créer votre compte"
     >
-        <Head title="Register" />
+        <Head title="Inscription" />
 
         <Form
             v-bind="store.form()"
@@ -26,7 +26,7 @@ import { Form, Head } from '@inertiajs/vue3';
         >
             <div class="grid gap-6">
                 <div class="grid gap-2">
-                    <Label for="name">Name</Label>
+                    <Label for="name">Nom</Label>
                     <Input
                         id="name"
                         type="text"
@@ -35,13 +35,13 @@ import { Form, Head } from '@inertiajs/vue3';
                         :tabindex="1"
                         autocomplete="name"
                         name="name"
-                        placeholder="Full name"
+                        placeholder="Nom complet"
                     />
                     <InputError :message="errors.name" />
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="email">Email address</Label>
+                    <Label for="email">Adresse e-mail</Label>
                     <Input
                         id="email"
                         type="email"
@@ -55,7 +55,7 @@ import { Form, Head } from '@inertiajs/vue3';
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="password">Password</Label>
+                    <Label for="password">Mot de passe</Label>
                     <Input
                         id="password"
                         type="password"
@@ -63,13 +63,13 @@ import { Form, Head } from '@inertiajs/vue3';
                         :tabindex="3"
                         autocomplete="new-password"
                         name="password"
-                        placeholder="Password"
+                        placeholder="Mot de passe"
                     />
                     <InputError :message="errors.password" />
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="password_confirmation">Confirm password</Label>
+                    <Label for="password_confirmation">Confirmer le mot de passe</Label>
                     <Input
                         id="password_confirmation"
                         type="password"
@@ -77,7 +77,7 @@ import { Form, Head } from '@inertiajs/vue3';
                         :tabindex="4"
                         autocomplete="new-password"
                         name="password_confirmation"
-                        placeholder="Confirm password"
+                        placeholder="Confirmer le mot de passe"
                     />
                     <InputError :message="errors.password_confirmation" />
                 </div>
@@ -90,17 +90,17 @@ import { Form, Head } from '@inertiajs/vue3';
                     data-test="register-user-button"
                 >
                     <Spinner v-if="processing" />
-                    Create account
+                    Créer un compte
                 </Button>
             </div>
 
             <div class="text-center text-sm text-muted-foreground">
-                Already have an account?
+                Déjà un compte ?
                 <TextLink
                     :href="login()"
                     class="underline underline-offset-4"
                     :tabindex="6"
-                    >Log in</TextLink
+                    >Se connecter</TextLink
                 >
             </div>
         </Form>

@@ -11,32 +11,37 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { usePermissions } from '@/composables/usePermissions';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, Folder, LayoutGrid } from 'lucide-vue-next';
+import { BookOpen, Folder, LayoutGrid, Package } from 'lucide-vue-next';
+import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
-];
+const { can } = usePermissions();
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Github Repo',
-        href: 'https://github.com/laravel/vue-starter-kit',
-        icon: Folder,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#vue',
-        icon: BookOpen,
-    },
-];
+const mainNavItems = computed((): NavItem[] => {
+    const items: NavItem[] = [
+        {
+            title: 'Tableau de bord',
+            href: dashboard(),
+            icon: LayoutGrid,
+        },
+    ];
+
+    if (can('produits.read')) {
+        items.push({
+            title: 'Produits',
+            href: '/produits',
+            icon: Package,
+        });
+    }
+
+    return items;
+});
+
+const footerNavItems: NavItem[] = [];
 </script>
 
 <template>
@@ -58,7 +63,7 @@ const footerNavItems: NavItem[] = [
         </SidebarContent>
 
         <SidebarFooter>
-            <NavFooter :items="footerNavItems" />
+            <NavFooter v-if="footerNavItems.length" :items="footerNavItems" />
             <NavUser />
         </SidebarFooter>
     </Sidebar>
