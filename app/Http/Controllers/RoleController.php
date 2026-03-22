@@ -12,7 +12,7 @@ use Spatie\Permission\PermissionRegistrar;
 
 class RoleController extends Controller
 {
-    private const RESOURCES = ['clients', 'prestataires', 'livreurs', 'proprietaires', 'produits', 'users'];
+    private const RESOURCES = ['clients', 'prestataires', 'livreurs', 'proprietaires', 'produits', 'packings', 'users'];
     private const ACTIONS   = ['create', 'read', 'update', 'delete'];
 
     public function index(): Response

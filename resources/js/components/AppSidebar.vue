@@ -15,7 +15,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, Folder, LayoutGrid, Package, Users } from 'lucide-vue-next';
+import { BookOpen, Folder, LayoutGrid, Layers, Package, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -43,6 +43,14 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Prestataires',
             href: '/prestataires',
             icon: Users,
+        });
+    }
+
+    if (can('packings.read')) {
+        items.push({
+            title: 'Packings',
+            href: '/packings',
+            icon: Layers,
         });
     }
 

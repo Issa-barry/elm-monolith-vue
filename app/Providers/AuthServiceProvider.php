@@ -4,12 +4,14 @@ namespace App\Providers;
 
 use App\Models\Client;
 use App\Models\Livreur;
+use App\Models\Packing;
 use App\Models\Prestataire;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\User;
 use App\Policies\ClientPolicy;
 use App\Policies\LivreurPolicy;
+use App\Policies\PackingPolicy;
 use App\Policies\PrestatairePolicy;
 use App\Policies\ProduitPolicy;
 use App\Policies\ProprietairePolicy;
@@ -25,6 +27,7 @@ class AuthServiceProvider extends ServiceProvider
         Livreur::class      => LivreurPolicy::class,
         Proprietaire::class => ProprietairePolicy::class,
         Produit::class      => ProduitPolicy::class,
+        Packing::class      => PackingPolicy::class,
         User::class         => UserPolicy::class,
     ];
 

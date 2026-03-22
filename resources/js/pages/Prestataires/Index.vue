@@ -14,6 +14,8 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { MoreVertical, Pencil, Plus, Search, Trash2, Users } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
@@ -118,10 +120,12 @@ function confirmDelete(p: Prestataire) {
                 >
                     <template #header>
                         <div class="flex items-center gap-3">
-                            <div class="relative flex-1 max-w-sm">
-                                <Search class="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                <InputText v-model="search" placeholder="Rechercher…" class="w-full pl-9 text-sm" />
-                            </div>
+                            <IconField class="max-w-sm flex-1">
+                                <InputIcon class="pointer-events-none">
+                                    <Search class="h-4 w-4 text-muted-foreground" />
+                                </InputIcon>
+                                <InputText v-model="search" placeholder="Rechercher..." class="w-full text-sm" />
+                            </IconField>
                             <span class="text-xs text-muted-foreground">{{ prestataires.length }} résultat{{ prestataires.length !== 1 ? 's' : '' }}</span>
                         </div>
                     </template>
