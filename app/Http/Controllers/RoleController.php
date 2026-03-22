@@ -37,6 +37,11 @@ class RoleController extends Controller
     {
         abort_unless(auth()->user()->can('users.read'), 403);
 
+        $isSuperAdmin = auth()->user()->isSuperAdmin();
+        $resources = $isSuperAdmin
+            ? self::RESOURCES
+            : array_values(array_filter(self::RESOURCES, fn ($r) => $r !== 'users'));
+
         return Inertia::render('Roles/Edit', [
             'role' => [
                 'id'          => $role->id,
@@ -44,14 +49,16 @@ class RoleController extends Controller
                 'permissions' => $role->permissions->pluck('name')->values(),
                 'users_count' => $role->users()->count(),
             ],
-            'resources' => self::RESOURCES,
+            'resources' => $resources,
             'actions'   => self::ACTIONS,
         ]);
     }
 
     public function update(Request $request, Role $role): RedirectResponse
     {
-        abort_unless(auth()->user()->isSuperAdmin(), 403);
+        $user = auth()->user();
+
+        abort_unless($user->isSuperAdmin() || $user->hasRole('admin_entreprise'), 403);
 
         if ($role->name === 'super_admin') {
             return back()->with('error', 'Le rôle super_admin ne peut pas être modifié.');
@@ -61,6 +68,18 @@ class RoleController extends Controller
             'permissions'   => 'array',
             'permissions.*' => 'string|exists:permissions,name',
         ])['permissions'] ?? [];
+
+        // admin_entreprise ne peut pas toucher les permissions users.* — on les préserve telles quelles
+        if (! $user->isSuperAdmin()) {
+            $lockedPerms = $role->permissions()
+                ->pluck('name')
+                ->filter(fn ($p) => str_starts_with($p, 'users.'))
+                ->values()
+                ->toArray();
+
+            $permissions = array_values(array_filter($permissions, fn ($p) => ! str_starts_with($p, 'users.')));
+            $permissions = array_merge($permissions, $lockedPerms);
+        }
 
         $role->syncPermissions($permissions);
 
