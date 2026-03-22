@@ -15,7 +15,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, Folder, LayoutGrid, Layers, Package, Users } from 'lucide-vue-next';
+import { BookOpen, Folder, Home, LayoutGrid, Layers, Package, Truck, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -51,6 +51,22 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Packings',
             href: '/packings',
             icon: Layers,
+        });
+    }
+
+    if (can('proprietaires.read')) {
+        items.push({
+            title: 'Propriétaires',
+            href: '/proprietaires',
+            icon: Home,
+        });
+    }
+
+    if (can('livreurs.read')) {
+        items.push({
+            title: 'Livreurs',
+            href: '/livreurs',
+            icon: Truck,
         });
     }
 

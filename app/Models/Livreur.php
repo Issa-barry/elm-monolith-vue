@@ -19,6 +19,10 @@ class Livreur extends Model
         'email',
         'telephone',
         'adresse',
+        'ville',
+        'pays',
+        'code_pays',
+        'code_phone_pays',
         'is_active',
     ];
 

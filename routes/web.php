@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\PackingController;
+use App\Http\Controllers\ProprietaireController;
 use App\Http\Controllers\PrestataireController;
 use App\Http\Controllers\ProduitController;
 use App\Http\Controllers\RoleController;
@@ -29,6 +31,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('packings/{packing}/versements', [VersementController::class, 'store'])->name('packings.versements.store');
     Route::delete('packings/{packing}/versements/{versement}', [VersementController::class, 'destroy'])->name('packings.versements.destroy');
     Route::resource('roles', RoleController::class)->only(['index', 'edit', 'update']);
+    Route::resource('proprietaires', ProprietaireController::class);
+    Route::resource('livreurs', LivreurController::class);
 });
 
 require __DIR__.'/settings.php';
