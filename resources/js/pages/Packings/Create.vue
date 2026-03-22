@@ -35,7 +35,7 @@ function submit() {
     <Head title="Nouveau packing" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto max-w-4xl p-6">
+        <div class="mx-auto max-w-7xl p-6">
             <div class="mb-6">
                 <h1 class="text-2xl font-semibold tracking-tight">Nouveau packing</h1>
                 <p class="mt-1 text-sm text-muted-foreground">
