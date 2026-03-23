@@ -85,6 +85,8 @@ class LivreurController extends Controller
             [$data['pays'], $data['code_phone_pays']] = LIVREUR_PAYS[$data['code_pays']];
         }
 
+        $data = $this->normalizeData($data);
+
         Livreur::create([...$data, 'organization_id' => $orgId]);
 
         return redirect()->route('livreurs.index')
@@ -137,10 +139,26 @@ class LivreurController extends Controller
             [$data['pays'], $data['code_phone_pays']] = LIVREUR_PAYS[$data['code_pays']];
         }
 
+        $data = $this->normalizeData($data);
+
         $livreur->update($data);
 
         return redirect()->route('livreurs.index')
             ->with('success', 'Livreur mis à jour avec succès.');
+    }
+
+    private function normalizeData(array $data): array
+    {
+        if (!empty($data['nom'])) {
+            $data['nom'] = mb_strtoupper($data['nom'], 'UTF-8');
+        }
+        if (!empty($data['prenom'])) {
+            $data['prenom'] = mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+        }
+        if (!empty($data['ville'])) {
+            $data['ville'] = mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+        }
+        return $data;
     }
 
     public function destroy(Livreur $livreur): RedirectResponse

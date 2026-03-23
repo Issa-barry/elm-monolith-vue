@@ -6,6 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Home, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-vue-next';
@@ -137,7 +138,7 @@ function confirmDelete(p: Proprietaire) {
                     <!-- Téléphone -->
                     <Column field="telephone" header="Téléphone" style="width: 150px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground">{{ data.telephone ?? '—' }}</span>
+                            <span class="tabular-nums text-muted-foreground">{{ formatPhoneDisplay(data.telephone) }}</span>
                         </template>
                     </Column>
 
