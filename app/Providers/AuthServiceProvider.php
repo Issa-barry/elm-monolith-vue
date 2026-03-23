@@ -9,6 +9,7 @@ use App\Models\Prestataire;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\User;
+use App\Models\Site;
 use App\Models\Vehicule;
 use App\Policies\ClientPolicy;
 use App\Policies\LivreurPolicy;
@@ -16,6 +17,7 @@ use App\Policies\PackingPolicy;
 use App\Policies\PrestatairePolicy;
 use App\Policies\ProduitPolicy;
 use App\Policies\ProprietairePolicy;
+use App\Policies\SitePolicy;
 use App\Policies\UserPolicy;
 use App\Policies\VehiculePolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
@@ -32,6 +34,7 @@ class AuthServiceProvider extends ServiceProvider
         Packing::class      => PackingPolicy::class,
         User::class         => UserPolicy::class,
         Vehicule::class     => VehiculePolicy::class,
+        Site::class         => SitePolicy::class,
     ];
 
     public function boot(): void

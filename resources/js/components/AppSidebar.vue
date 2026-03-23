@@ -15,7 +15,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, Car, Folder, Home, LayoutGrid, Layers, Package, Truck, Users } from 'lucide-vue-next';
+import { Building2, Car, LayoutGrid, Layers, Package, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -54,27 +54,43 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
+    const vehiculesSubItems: NavItem[] = [];
+
+    if (can('vehicules.read')) {
+        vehiculesSubItems.push({
+            title: 'Liste de véhicules',
+            href: '/vehicules',
+        });
+    }
+
     if (can('proprietaires.read')) {
-        items.push({
+        vehiculesSubItems.push({
             title: 'Propriétaires',
             href: '/proprietaires',
-            icon: Home,
         });
     }
 
     if (can('livreurs.read')) {
-        items.push({
+        vehiculesSubItems.push({
             title: 'Livreurs',
             href: '/livreurs',
-            icon: Truck,
         });
     }
 
-    if (can('vehicules.read')) {
+    if (vehiculesSubItems.length > 0) {
         items.push({
             title: 'Véhicules',
-            href: '/vehicules',
+            href: vehiculesSubItems[0].href,
             icon: Car,
+            items: vehiculesSubItems,
+        });
+    }
+
+    if (can('sites.read')) {
+        items.push({
+            title: 'Sites',
+            href: '/sites',
+            icon: Building2,
         });
     }
 
