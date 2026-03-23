@@ -123,7 +123,7 @@ function confirmDelete(v: Vehicule) {
                     </template>
 
                     <!-- Véhicule -->
-                    <Column field="nom_vehicule" header="Véhicule" sortable>
+                    <Column field="nom_vehicule" header="Véhicule" sortable style="min-width: 320px">
                         <template #body="{ data }">
                             <div class="flex items-center gap-3">
                                 <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30">
@@ -144,7 +144,7 @@ function confirmDelete(v: Vehicule) {
                     </Column>
 
                     <!-- Type -->
-                    <Column field="type_label" header="Type" sortable style="width: 130px">
+                    <Column field="type_label" header="Type" sortable style="width: 140px">
                         <template #body="{ data }">
                             <span class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
                                 {{ data.type_label }}
@@ -153,30 +153,30 @@ function confirmDelete(v: Vehicule) {
                     </Column>
 
                     <!-- Capacité -->
-                    <Column field="capacite_packs" header="Capacité" sortable style="width: 110px">
+                    <Column field="capacite_packs" header="Capacité" sortable style="width: 130px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground">
+                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">
                                 {{ data.capacite_packs != null ? `${data.capacite_packs} packs` : '—' }}
                             </span>
                         </template>
                     </Column>
 
                     <!-- Propriétaire -->
-                    <Column field="proprietaire_nom" header="Propriétaire">
+                    <Column field="proprietaire_nom" header="Propriétaire" style="min-width: 180px">
                         <template #body="{ data }">
                             <span class="text-muted-foreground">{{ data.proprietaire_nom ?? '—' }}</span>
                         </template>
                     </Column>
 
                     <!-- Livreur -->
-                    <Column field="livreur_nom" header="Livreur">
+                    <Column field="livreur_nom" header="Livreur" style="min-width: 180px">
                         <template #body="{ data }">
                             <span class="text-muted-foreground">{{ data.livreur_nom ?? '—' }}</span>
                         </template>
                     </Column>
 
                     <!-- Statut -->
-                    <Column field="is_active" header="Statut" sortable style="width: 90px">
+                    <Column field="is_active" header="Statut" sortable style="width: 110px">
                         <template #body="{ data }">
                             <span
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"

@@ -179,54 +179,54 @@ function confirmDelete(packing: Packing) {
                     </template>
 
                     <!-- Référence -->
-                    <Column field="reference" header="Référence" sortable style="width: 180px">
+                    <Column field="reference" header="Référence" sortable style="width: 200px">
                         <template #body="{ data }">
-                            <Link :href="`/packings/${data.id}`" class="font-mono text-xs font-semibold tracking-wide text-foreground hover:underline">
+                            <Link :href="`/packings/${data.id}`" class="font-mono text-xs font-semibold tracking-wide text-foreground whitespace-nowrap hover:underline">
                                 {{ data.reference }}
                             </Link>
                         </template>
                     </Column>
 
                     <!-- Prestataire -->
-                    <Column field="prestataire_nom" header="Prestataire" sortable>
+                    <Column field="prestataire_nom" header="Prestataire" sortable style="min-width: 240px">
                         <template #body="{ data }">
                             <span class="font-medium">{{ data.prestataire_nom ?? '—' }}</span>
                         </template>
                     </Column>
 
                     <!-- Date -->
-                    <Column field="date" header="Date" sortable style="width: 120px">
+                    <Column field="date" header="Date" sortable style="width: 130px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground">{{ formatDate(data.date) }}</span>
+                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">{{ formatDate(data.date) }}</span>
                         </template>
                     </Column>
 
                     <!-- Nb rouleaux -->
-                    <Column field="nb_rouleaux" header="Rouleaux" sortable style="width: 100px">
+                    <Column field="nb_rouleaux" header="Rouleaux" sortable style="width: 110px">
                         <template #body="{ data }">
-                            <span class="tabular-nums">{{ data.nb_rouleaux.toLocaleString('fr-FR') }}</span>
+                            <span class="tabular-nums whitespace-nowrap">{{ data.nb_rouleaux.toLocaleString('fr-FR') }}</span>
                         </template>
                     </Column>
 
                     <!-- Montant total -->
-                    <Column field="montant" header="Montant" sortable style="width: 160px">
+                    <Column field="montant" header="Montant" sortable style="width: 170px">
                         <template #body="{ data }">
-                            <span class="font-medium tabular-nums">{{ formatGNF(data.montant) }}</span>
+                            <span class="font-medium tabular-nums whitespace-nowrap">{{ formatGNF(data.montant) }}</span>
                         </template>
                     </Column>
 
                     <!-- Versé -->
-                    <Column field="montant_verse" header="Versé" sortable style="width: 160px">
+                    <Column field="montant_verse" header="Versé" sortable style="width: 170px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-emerald-600 dark:text-emerald-400">{{ formatGNF(data.montant_verse) }}</span>
+                            <span class="tabular-nums text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{{ formatGNF(data.montant_verse) }}</span>
                         </template>
                     </Column>
 
                     <!-- Restant -->
-                    <Column field="montant_restant" header="Restant" sortable style="width: 160px">
+                    <Column field="montant_restant" header="Restant" sortable style="width: 170px">
                         <template #body="{ data }">
                             <span
-                                class="tabular-nums"
+                                class="tabular-nums whitespace-nowrap"
                                 :class="data.montant_restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
                             >
                                 {{ formatGNF(data.montant_restant) }}
@@ -235,7 +235,7 @@ function confirmDelete(packing: Packing) {
                     </Column>
 
                     <!-- Statut -->
-                    <Column field="statut" header="Statut" sortable style="width: 120px">
+                    <Column field="statut" header="Statut" sortable style="width: 130px">
                         <template #body="{ data }">
                             <span
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"

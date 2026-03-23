@@ -132,14 +132,14 @@ function confirmDelete(p: Prestataire) {
                     </template>
 
                     <!-- Référence -->
-                    <Column field="reference" header="Réf." sortable style="width: 100px">
+                    <Column field="reference" header="Réf." sortable style="width: 120px">
                         <template #body="{ data }">
-                            <span class="font-mono text-xs font-semibold text-muted-foreground">{{ data.reference }}</span>
+                            <span class="font-mono text-xs font-semibold text-muted-foreground whitespace-nowrap">{{ data.reference }}</span>
                         </template>
                     </Column>
 
                     <!-- Nom -->
-                    <Column field="nom_complet" header="Prestataire" sortable>
+                    <Column field="nom_complet" header="Prestataire" sortable style="min-width: 300px">
                         <template #body="{ data }">
                             <div class="flex items-center gap-3">
                                 <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted">
@@ -154,7 +154,7 @@ function confirmDelete(p: Prestataire) {
                     </Column>
 
                     <!-- Type -->
-                    <Column field="type" header="Type" sortable style="width: 130px">
+                    <Column field="type" header="Type" sortable style="width: 140px">
                         <template #body="{ data }">
                             <span
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
@@ -166,21 +166,21 @@ function confirmDelete(p: Prestataire) {
                     </Column>
 
                     <!-- Téléphone -->
-                    <Column field="phone" header="Téléphone" style="width: 150px">
+                    <Column field="phone" header="Téléphone" style="width: 190px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground">{{ formatPhoneDisplay(data.phone) }}</span>
+                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">{{ formatPhoneDisplay(data.phone) }}</span>
                         </template>
                     </Column>
 
                     <!-- Ville -->
-                    <Column field="ville" header="Ville" sortable style="width: 130px">
+                    <Column field="ville" header="Ville" sortable style="width: 170px">
                         <template #body="{ data }">
                             <span class="text-muted-foreground">{{ data.ville ?? '—' }}</span>
                         </template>
                     </Column>
 
                     <!-- Statut -->
-                    <Column field="is_active" header="Statut" sortable style="width: 100px">
+                    <Column field="is_active" header="Statut" sortable style="width: 110px">
                         <template #body="{ data }">
                             <span
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"

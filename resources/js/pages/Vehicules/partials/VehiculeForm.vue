@@ -13,8 +13,6 @@ interface TypeOption { value: string; label: string; capacite_defaut: number }
 
 interface FormData {
     nom_vehicule: string;
-    marque: string | null;
-    modele: string | null;
     immatriculation: string;
     type_vehicule: string | null;
     capacite_packs: number | null;
@@ -105,18 +103,6 @@ const selectedType = computed(() => props.types.find(t => t.value === props.form
                         placeholder="EX-123-GN"
                     />
                     <p v-if="errors.immatriculation" class="mt-1 text-xs text-destructive">{{ errors.immatriculation }}</p>
-                </div>
-
-                <!-- Marque -->
-                <div>
-                    <Label for="marque" class="mb-1.5 block">Marque</Label>
-                    <InputText id="marque" v-model="form.marque" class="w-full" />
-                </div>
-
-                <!-- Modèle -->
-                <div>
-                    <Label for="modele" class="mb-1.5 block">Modèle</Label>
-                    <InputText id="modele" v-model="form.modele" class="w-full" />
                 </div>
 
                 <!-- Type -->

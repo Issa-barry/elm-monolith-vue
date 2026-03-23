@@ -77,8 +77,6 @@ class VehiculeController extends Controller
 
         $data = $request->validate([
             'nom_vehicule'             => 'required|string|max:100',
-            'marque'                   => 'nullable|string|max:100',
-            'modele'                   => 'nullable|string|max:100',
             'immatriculation'          => [
                 'required', 'string', 'max:20',
                 Rule::unique('vehicules', 'immatriculation')->where('organization_id', $orgId),
@@ -129,8 +127,6 @@ class VehiculeController extends Controller
 
         $data = $request->validate([
             'nom_vehicule'             => 'required|string|max:100',
-            'marque'                   => 'nullable|string|max:100',
-            'modele'                   => 'nullable|string|max:100',
             'immatriculation'          => [
                 'required', 'string', 'max:20',
                 Rule::unique('vehicules', 'immatriculation')
@@ -208,10 +204,8 @@ class VehiculeController extends Controller
 
     private function normalizeStrings(array $data): array
     {
-        foreach (['nom_vehicule', 'marque', 'modele'] as $field) {
-            if (!empty($data[$field])) {
-                $data[$field] = mb_convert_case(mb_strtolower($data[$field]), MB_CASE_TITLE, 'UTF-8');
-            }
+        if (!empty($data['nom_vehicule'])) {
+            $data['nom_vehicule'] = mb_convert_case(mb_strtolower($data['nom_vehicule']), MB_CASE_TITLE, 'UTF-8');
         }
         if (!empty($data['immatriculation'])) {
             $data['immatriculation'] = mb_strtoupper(trim($data['immatriculation']), 'UTF-8');

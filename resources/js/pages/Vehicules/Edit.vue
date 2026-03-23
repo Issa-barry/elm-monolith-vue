@@ -10,8 +10,6 @@ interface TypeOption { value: string; label: string; capacite_defaut: number }
 interface VehiculeData {
     id: number;
     nom_vehicule: string;
-    marque: string | null;
-    modele: string | null;
     immatriculation: string;
     type_vehicule: string | null;
     capacite_packs: number | null;
@@ -40,8 +38,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     _method:                  'PUT',
     nom_vehicule:             props.vehicule.nom_vehicule,
-    marque:                   props.vehicule.marque,
-    modele:                   props.vehicule.modele,
     immatriculation:          props.vehicule.immatriculation,
     type_vehicule:            props.vehicule.type_vehicule,
     capacite_packs:           props.vehicule.capacite_packs,

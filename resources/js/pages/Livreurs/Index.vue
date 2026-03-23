@@ -127,7 +127,7 @@ function confirmDelete(l: Livreur) {
                     </template>
 
                     <!-- Nom -->
-                    <Column field="nom_complet" header="Livreur" sortable>
+                    <Column field="nom_complet" header="Livreur" sortable style="min-width: 320px">
                         <template #body="{ data }">
                             <div class="flex items-center gap-3">
                                 <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted">
@@ -142,14 +142,14 @@ function confirmDelete(l: Livreur) {
                     </Column>
 
                     <!-- Téléphone -->
-                    <Column field="telephone" header="Téléphone" style="width: 160px">
+                    <Column field="telephone" header="Téléphone" style="width: 190px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground">{{ formatPhoneDisplay(data.telephone) }}</span>
+                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">{{ formatPhoneDisplay(data.telephone) }}</span>
                         </template>
                     </Column>
 
                     <!-- Localisation -->
-                    <Column field="ville" header="Localisation">
+                    <Column field="ville" header="Localisation" style="min-width: 220px">
                         <template #body="{ data }">
                             <div class="flex items-center gap-2">
                                 <img v-if="data.code_pays" :src="flagUrl(data.code_pays)" class="h-4 w-auto rounded-sm shadow-sm" />
@@ -161,7 +161,7 @@ function confirmDelete(l: Livreur) {
                     </Column>
 
                     <!-- Statut -->
-                    <Column field="is_active" header="Statut" sortable style="width: 100px">
+                    <Column field="is_active" header="Statut" sortable style="width: 110px">
                         <template #body="{ data }">
                             <span
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"

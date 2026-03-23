@@ -121,7 +121,7 @@ function confirmDelete(p: Proprietaire) {
                     </template>
 
                     <!-- Nom -->
-                    <Column field="nom_complet" header="Propriétaire" sortable>
+                    <Column field="nom_complet" header="Propriétaire" sortable style="min-width: 320px">
                         <template #body="{ data }">
                             <div class="flex items-center gap-3">
                                 <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted">
@@ -136,21 +136,21 @@ function confirmDelete(p: Proprietaire) {
                     </Column>
 
                     <!-- Téléphone -->
-                    <Column field="telephone" header="Téléphone" style="width: 150px">
+                    <Column field="telephone" header="Téléphone" style="width: 190px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground">{{ formatPhoneDisplay(data.telephone) }}</span>
+                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">{{ formatPhoneDisplay(data.telephone) }}</span>
                         </template>
                     </Column>
 
                     <!-- Adresse -->
-                    <Column field="adresse" header="Adresse">
+                    <Column field="adresse" header="Adresse" style="min-width: 220px">
                         <template #body="{ data }">
                             <span class="text-muted-foreground">{{ data.adresse ?? '—' }}</span>
                         </template>
                     </Column>
 
                     <!-- Statut -->
-                    <Column field="is_active" header="Statut" sortable style="width: 100px">
+                    <Column field="is_active" header="Statut" sortable style="width: 110px">
                         <template #body="{ data }">
                             <span
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"

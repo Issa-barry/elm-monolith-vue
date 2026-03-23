@@ -21,8 +21,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const form = useForm({
     nom_vehicule:             '',
-    marque:                   null as string | null,
-    modele:                   null as string | null,
     immatriculation:          '',
     type_vehicule:            null as string | null,
     capacite_packs:           null as number | null,
@@ -30,7 +28,7 @@ const form = useForm({
     livreur_principal_id:     null as number | null,
     pris_en_charge_par_usine: false,
     taux_commission_livreur:  null as number | null,
-    commission_active:        false,
+    commission_active:        true,
     photo:                    null as File | null,
     is_active:                true,
 });
