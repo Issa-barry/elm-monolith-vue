@@ -46,6 +46,7 @@ const resourceLabels: Record<string, string> = {
     prestataires:  'Prestataires',
     livreurs:      'Livreurs',
     proprietaires: 'Propriétaires',
+    vehicules:     'Véhicules',
     produits:      'Produits',
     packings:      'Packings',
     users:         'Utilisateurs',

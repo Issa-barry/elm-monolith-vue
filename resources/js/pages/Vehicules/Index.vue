@@ -8,7 +8,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Home, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-vue-next';
+import { Car, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import IconField from 'primevue/iconfield';
@@ -18,18 +18,21 @@ import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { ref, watch } from 'vue';
 
-interface Proprietaire {
+interface Vehicule {
     id: number;
-    nom: string;
-    prenom: string;
-    nom_complet: string;
-    email: string | null;
-    telephone: string | null;
-    adresse: string | null;
+    nom_vehicule: string;
+    marque: string | null;
+    modele: string | null;
+    immatriculation: string;
+    type_label: string;
+    capacite_packs: number | null;
+    proprietaire_nom: string | null;
+    livreur_nom: string | null;
+    photo_url: string | null;
     is_active: boolean;
 }
 
-const props = defineProps<{ proprietaires: Proprietaire[] }>();
+const props = defineProps<{ vehicules: Vehicule[] }>();
 
 const { can } = usePermissions();
 const confirm = useConfirm();
@@ -41,23 +44,23 @@ watch(search, (val) => { filters.value.global.value = val; });
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Propriétaires', href: '/proprietaires' },
+    { title: 'Véhicules', href: '/vehicules' },
 ];
 
-function confirmDelete(p: Proprietaire) {
+function confirmDelete(v: Vehicule) {
     confirm.require({
-        message: `Supprimer « ${p.nom_complet} » ? Cette action est irréversible.`,
+        message: `Supprimer « ${v.nom_vehicule} (${v.immatriculation}) » ? Cette action est irréversible.`,
         header: 'Confirmer la suppression',
         icon: 'pi pi-exclamation-triangle',
         rejectLabel: 'Annuler',
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/proprietaires/${p.id}`, {
+            router.delete(`/vehicules/${v.id}`, {
                 onSuccess: () => toast.add({
                     severity: 'success',
                     summary: 'Supprimé',
-                    detail: `${p.nom_complet} a été supprimé.`,
+                    detail: `${v.nom_vehicule} a été supprimé.`,
                     life: 3000,
                 }),
             });
@@ -67,7 +70,7 @@ function confirmDelete(p: Proprietaire) {
 </script>
 
 <template>
-    <Head title="Propriétaires" />
+    <Head title="Véhicules" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-6 p-6">
@@ -75,15 +78,15 @@ function confirmDelete(p: Proprietaire) {
             <!-- En-tête -->
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">Propriétaires</h1>
+                    <h1 class="text-2xl font-semibold tracking-tight">Véhicules</h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ proprietaires.length }} propriétaire{{ proprietaires.length !== 1 ? 's' : '' }}
+                        {{ vehicules.length }} véhicule{{ vehicules.length !== 1 ? 's' : '' }}
                     </p>
                 </div>
-                <Link v-if="can('proprietaires.create')" href="/proprietaires/create">
+                <Link v-if="can('vehicules.create')" href="/vehicules/create">
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
-                        Nouveau propriétaire
+                        Nouveau véhicule
                     </Button>
                 </Link>
             </div>
@@ -91,10 +94,10 @@ function confirmDelete(p: Proprietaire) {
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
                 <DataTable
-                    :value="proprietaires"
-                    :paginator="proprietaires.length > 20"
+                    :value="vehicules"
+                    :paginator="vehicules.length > 20"
                     :rows="20"
-                    :global-filter-fields="['nom_complet', 'email', 'telephone', 'adresse']"
+                    :global-filter-fields="['nom_vehicule', 'immatriculation', 'type_label', 'proprietaire_nom', 'livreur_nom']"
                     v-model:filters="filters"
                     data-key="id"
                     striped-rows
@@ -115,41 +118,65 @@ function confirmDelete(p: Proprietaire) {
                                 </InputIcon>
                                 <InputText v-model="search" placeholder="Rechercher..." class="w-full text-sm" />
                             </IconField>
-                            <span class="text-xs text-muted-foreground">{{ proprietaires.length }} résultat{{ proprietaires.length !== 1 ? 's' : '' }}</span>
+                            <span class="text-xs text-muted-foreground">{{ vehicules.length }} résultat{{ vehicules.length !== 1 ? 's' : '' }}</span>
                         </div>
                     </template>
 
-                    <!-- Nom -->
-                    <Column field="nom_complet" header="Propriétaire" sortable>
+                    <!-- Véhicule -->
+                    <Column field="nom_vehicule" header="Véhicule" sortable>
                         <template #body="{ data }">
                             <div class="flex items-center gap-3">
-                                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted">
-                                    <Home class="h-4 w-4 text-muted-foreground" />
+                                <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30">
+                                    <img
+                                        v-if="data.photo_url"
+                                        :src="data.photo_url"
+                                        :alt="data.nom_vehicule"
+                                        class="h-full w-full object-cover"
+                                    />
+                                    <Car v-else class="h-5 w-5 text-muted-foreground" />
                                 </div>
                                 <div>
-                                    <div class="font-medium">{{ data.nom_complet }}</div>
-                                    <div v-if="data.email" class="text-xs text-muted-foreground">{{ data.email }}</div>
+                                    <div class="font-medium">{{ data.nom_vehicule }}</div>
+                                    <div class="font-mono text-xs text-muted-foreground">{{ data.immatriculation }}</div>
                                 </div>
                             </div>
                         </template>
                     </Column>
 
-                    <!-- Téléphone -->
-                    <Column field="telephone" header="Téléphone" style="width: 150px">
+                    <!-- Type -->
+                    <Column field="type_label" header="Type" sortable style="width: 130px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground">{{ data.telephone ?? '—' }}</span>
+                            <span class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
+                                {{ data.type_label }}
+                            </span>
                         </template>
                     </Column>
 
-                    <!-- Adresse -->
-                    <Column field="adresse" header="Adresse">
+                    <!-- Capacité -->
+                    <Column field="capacite_packs" header="Capacité" sortable style="width: 110px">
                         <template #body="{ data }">
-                            <span class="text-muted-foreground">{{ data.adresse ?? '—' }}</span>
+                            <span class="tabular-nums text-muted-foreground">
+                                {{ data.capacite_packs != null ? `${data.capacite_packs} packs` : '—' }}
+                            </span>
+                        </template>
+                    </Column>
+
+                    <!-- Propriétaire -->
+                    <Column field="proprietaire_nom" header="Propriétaire">
+                        <template #body="{ data }">
+                            <span class="text-muted-foreground">{{ data.proprietaire_nom ?? '—' }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Livreur -->
+                    <Column field="livreur_nom" header="Livreur">
+                        <template #body="{ data }">
+                            <span class="text-muted-foreground">{{ data.livreur_nom ?? '—' }}</span>
                         </template>
                     </Column>
 
                     <!-- Statut -->
-                    <Column field="is_active" header="Statut" sortable style="width: 100px">
+                    <Column field="is_active" header="Statut" sortable style="width: 90px">
                         <template #body="{ data }">
                             <span
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
@@ -173,15 +200,15 @@ function confirmDelete(p: Proprietaire) {
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" class="w-44">
-                                        <DropdownMenuItem v-if="can('proprietaires.update')" as-child>
-                                            <Link :href="`/proprietaires/${data.id}/edit`" class="flex items-center gap-2 w-full">
+                                        <DropdownMenuItem v-if="can('vehicules.update')" as-child>
+                                            <Link :href="`/vehicules/${data.id}/edit`" class="flex items-center gap-2 w-full">
                                                 <Pencil class="h-4 w-4" />
                                                 Modifier
                                             </Link>
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator v-if="can('proprietaires.update') && can('proprietaires.delete')" />
+                                        <DropdownMenuSeparator v-if="can('vehicules.update') && can('vehicules.delete')" />
                                         <DropdownMenuItem
-                                            v-if="can('proprietaires.delete')"
+                                            v-if="can('vehicules.delete')"
                                             class="text-destructive focus:text-destructive cursor-pointer"
                                             @click="confirmDelete(data)"
                                         >
@@ -197,12 +224,12 @@ function confirmDelete(p: Proprietaire) {
                     <!-- État vide -->
                     <template #empty>
                         <div class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-                            <Home class="h-12 w-12 opacity-30" />
-                            <p class="text-sm">Aucun propriétaire trouvé.</p>
-                            <Link v-if="can('proprietaires.create')" href="/proprietaires/create">
+                            <Car class="h-12 w-12 opacity-30" />
+                            <p class="text-sm">Aucun véhicule trouvé.</p>
+                            <Link v-if="can('vehicules.create')" href="/vehicules/create">
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />
-                                    Ajouter le premier propriétaire
+                                    Ajouter le premier véhicule
                                 </Button>
                             </Link>
                         </div>

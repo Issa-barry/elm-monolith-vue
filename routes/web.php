@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\LivreurController;
+use App\Http\Controllers\VehiculeController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\ProprietaireController;
 use App\Http\Controllers\PrestataireController;
@@ -33,6 +34,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('roles', RoleController::class)->only(['index', 'edit', 'update']);
     Route::resource('proprietaires', ProprietaireController::class);
     Route::resource('livreurs', LivreurController::class);
+    Route::resource('vehicules', VehiculeController::class)->except(['show']);
 });
 
 require __DIR__.'/settings.php';

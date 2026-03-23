@@ -17,6 +17,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'prestataires',
         'livreurs',
         'proprietaires',
+        'vehicules',
         'produits',
         'packings',
         'users',
@@ -48,6 +49,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'prestataires.create', 'prestataires.read', 'prestataires.update', 'prestataires.delete',
             'livreurs.create', 'livreurs.read', 'livreurs.update', 'livreurs.delete',
             'proprietaires.create', 'proprietaires.read', 'proprietaires.update', 'proprietaires.delete',
+            'vehicules.create', 'vehicules.read', 'vehicules.update', 'vehicules.delete',
             'produits.create', 'produits.read', 'produits.update', 'produits.delete',
             'packings.create', 'packings.read', 'packings.update', 'packings.delete',
             'users.create', 'users.read', 'users.update',
@@ -58,6 +60,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'prestataires.create', 'prestataires.read', 'prestataires.update',
             'livreurs.create', 'livreurs.read', 'livreurs.update',
             'proprietaires.read',
+            'vehicules.create', 'vehicules.read', 'vehicules.update',
             'produits.read',
             'packings.read',
         ]);
@@ -67,6 +70,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'prestataires.read',
             'livreurs.read',
             'proprietaires.read',
+            'vehicules.read',
             'produits.read',
             'packings.read',
         ]);

@@ -156,6 +156,10 @@ class ProduitController extends Controller
     {
         $this->authorize('delete', $produit);
 
+        if ($produit->image_url) {
+            Storage::disk('public')->delete(str_replace('/storage/', '', $produit->image_url));
+        }
+
         $produit->delete();
 
         return redirect()->route('produits.index')
