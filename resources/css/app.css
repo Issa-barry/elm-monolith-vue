@@ -166,6 +166,24 @@
     * {
         @apply border-border outline-ring/50;
     }
+
+    button,
+    [role='button'],
+    input[type='button'],
+    input[type='submit'],
+    input[type='reset'] {
+        cursor: pointer;
+    }
+
+    button:disabled,
+    [role='button'][aria-disabled='true'],
+    input[type='button']:disabled,
+    input[type='submit']:disabled,
+    input[type='reset']:disabled,
+    .p-disabled {
+        cursor: not-allowed;
+    }
+
     body {
         @apply bg-background text-foreground;
     }

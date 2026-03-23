@@ -50,6 +50,7 @@ const resourceLabels: Record<string, string> = {
     sites:         'Sites',
     produits:      'Produits',
     packings:      'Packings',
+    ventes:        'Ventes',
     users:         'Utilisateurs',
 };
 

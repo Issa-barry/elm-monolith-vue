@@ -21,6 +21,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'sites',
         'produits',
         'packings',
+        'ventes',
         'users',
     ];
 
@@ -54,6 +55,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'sites.create', 'sites.read', 'sites.update', 'sites.delete',
             'produits.create', 'produits.read', 'produits.update', 'produits.delete',
             'packings.create', 'packings.read', 'packings.update', 'packings.delete',
+            'ventes.create', 'ventes.read', 'ventes.update', 'ventes.delete',
             'users.create', 'users.read', 'users.update',
         ]);
 
@@ -66,6 +68,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'sites.read',
             'produits.read',
             'packings.read',
+            'ventes.read', 'ventes.create',
         ]);
 
         $comptable->syncPermissions([
@@ -77,6 +80,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'sites.read',
             'produits.read',
             'packings.read',
+            'ventes.read',
         ]);
 
         // ── 3. Organisation par défaut ────────────────────────────────────────

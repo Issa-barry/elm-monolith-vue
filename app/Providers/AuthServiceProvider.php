@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\Client;
+use App\Models\CommandeVente;
 use App\Models\Livreur;
 use App\Models\Packing;
 use App\Models\Prestataire;
@@ -12,6 +13,7 @@ use App\Models\User;
 use App\Models\Site;
 use App\Models\Vehicule;
 use App\Policies\ClientPolicy;
+use App\Policies\CommandeVentePolicy;
 use App\Policies\LivreurPolicy;
 use App\Policies\PackingPolicy;
 use App\Policies\PrestatairePolicy;
@@ -35,6 +37,7 @@ class AuthServiceProvider extends ServiceProvider
         User::class         => UserPolicy::class,
         Vehicule::class     => VehiculePolicy::class,
         Site::class         => SitePolicy::class,
+        CommandeVente::class => CommandeVentePolicy::class,
     ];
 
     public function boot(): void

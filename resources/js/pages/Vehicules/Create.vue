@@ -42,7 +42,7 @@ function submit() {
     <Head title="Nouveau véhicule" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto max-w-2xl p-6">
+        <div class="mx-auto w-full max-w-[1280px] p-6">
             <div class="mb-8">
                 <h1 class="text-2xl font-semibold tracking-tight">Nouveau véhicule</h1>
                 <p class="mt-1 text-sm text-muted-foreground">Ajoutez un véhicule à votre flotte.</p>
