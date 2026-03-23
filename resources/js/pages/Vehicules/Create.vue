@@ -27,9 +27,9 @@ const form = useForm({
     proprietaire_id:          null as number | null,
     livreur_principal_id:     null as number | null,
     pris_en_charge_par_usine: false,
-    taux_commission_livreur:  null as number | null,
-    commission_active:        true,
-    photo:                    null as File | null,
+    taux_commission_livreur:         null as number | null,
+    taux_commission_proprietaire:    null as number | null,
+    photo:                           null as File | null,
     is_active:                true,
 });
 
@@ -42,7 +42,7 @@ function submit() {
     <Head title="Nouveau véhicule" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-[1280px] p-6">
+        <div class="mx-auto max-w-3xl p-6">
             <div class="mb-8">
                 <h1 class="text-2xl font-semibold tracking-tight">Nouveau véhicule</h1>
                 <p class="mt-1 text-sm text-muted-foreground">Ajoutez un véhicule à votre flotte.</p>

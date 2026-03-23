@@ -11,7 +11,24 @@
       "Bash(php -r \"require ''vendor/autoload.php''; echo ''autoload OK'';\")",
       "Bash(curl -s http://127.0.0.1:8000/produits -H \"Accept: application/json\")",
       "Bash(npm list:*)",
-      "Bash(find c:laragonwwwelm-monolithe -iname *prestataire* -type f)"
+      "Bash(find c:laragonwwwelm-monolithe -iname *prestataire* -type f)",
+      "Bash(cmd /c \"cd c:\\\\laragon\\\\www\\\\elm-monolithe && php artisan migrate 2>&1\")",
+      "Bash(cmd /c \"C:\\\\laragon\\\\bin\\\\php\\\\php8.4.1\\\\php.exe c:\\\\laragon\\\\www\\\\elm-monolithe\\\\artisan migrate 2>&1\")",
+      "Bash(cmd /c \"where php\")",
+      "Bash(cmd /c \"C:\\\\laragon\\\\bin\\\\php\\\\php8.4.1\\\\php.exe c:\\\\laragon\\\\www\\\\elm-monolithe\\\\artisan test tests/Unit/CommissionVenteTest.php tests/Unit/FactureVenteTest.php tests/Feature/VersementCommissionTest.php tests/Feature/EncaissementVenteTest.php --no-coverage 2>&1\")",
+      "Bash(cmd /c \"C:\\\\laragon\\\\bin\\\\php\\\\php8.4.1\\\\php.exe c:\\\\laragon\\\\www\\\\elm-monolithe\\\\artisan test --filter \"\"CommissionVenteTest|FactureVenteTest|VersementCommissionTest|EncaissementVenteTest\"\" --no-coverage 2>&1\")",
+      "Bash(cmd /c \"cd /d c:\\\\laragon\\\\www\\\\elm-monolithe && C:\\\\laragon\\\\bin\\\\php\\\\php8.4.1\\\\php.exe artisan test --filter CommissionVenteTest --no-coverage 2>&1\")",
+      "Bash(cmd /c \"cd /d c:\\\\laragon\\\\www\\\\elm-monolithe && C:\\\\laragon\\\\bin\\\\php\\\\php8.4.1\\\\php.exe artisan test --filter CommissionVenteTest --no-coverage > C:\\\\laragon\\\\www\\\\elm-monolithe\\\\test_output.txt 2>&1\")",
+      "Bash(cmd /c \"type c:\\\\laragon\\\\www\\\\elm-monolithe\\\\test_output.txt 2>&1\")",
+      "Bash(cmd /c \"C:\\\\laragon\\\\bin\\\\php\\\\php8.4.1\\\\php.exe --version 2>&1\")",
+      "Bash(powershell -Command \"& ''C:\\\\laragon\\\\bin\\\\php\\\\php8.4.1\\\\php.exe'' --version\")",
+      "Bash(powershell -Command \"& ''C:\\\\laragon\\\\bin\\\\php\\\\php-8.3.26-Win32-vs16-x64\\\\php.exe'' --version\")",
+      "Bash(powershell -Command \"Set-Location ''c:\\\\laragon\\\\www\\\\elm-monolithe''; & ''C:\\\\laragon\\\\bin\\\\php\\\\php-8.3.26-Win32-vs16-x64\\\\php.exe'' artisan test --filter CommissionVenteTest --no-coverage 2>&1\")",
+      "Bash(powershell -Command \"Set-Location ''c:\\\\laragon\\\\www\\\\elm-monolithe''; & ''C:\\\\laragon\\\\bin\\\\php\\\\php-8.5.1-nts-Win32-vs17-x64\\\\php.exe'' artisan test --filter CommissionVenteTest --no-coverage 2>&1\")",
+      "Bash(powershell -Command \"Set-Location ''c:\\\\laragon\\\\www\\\\elm-monolithe''; & ''C:\\\\laragon\\\\bin\\\\php\\\\php-8.5.1-nts-Win32-vs17-x64\\\\php.exe'' artisan test --filter FactureVenteTest --no-coverage 2>&1\")",
+      "Bash(powershell -Command \"Set-Location ''c:\\\\laragon\\\\www\\\\elm-monolithe''; & ''C:\\\\laragon\\\\bin\\\\php\\\\php-8.5.1-nts-Win32-vs17-x64\\\\php.exe'' artisan test --filter VersementCommissionTest --no-coverage 2>&1\")",
+      "Bash(Select-Object -First 10)",
+      "Bash(powershell -Command \"Set-Location ''c:\\\\laragon\\\\www\\\\elm-monolithe''; & ''C:\\\\laragon\\\\bin\\\\php\\\\php-8.5.1-nts-Win32-vs17-x64\\\\php.exe'' artisan test --filter ''VersementCommissionTest|EncaissementVenteTest'' --no-coverage 2>&1\")"
     ]
   }
 }

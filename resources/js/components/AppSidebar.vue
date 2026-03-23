@@ -30,31 +30,7 @@ const mainNavItems = computed((): NavItem[] => {
         },
     ];
 
-    if (can('produits.read')) {
-        items.push({
-            title: 'Produits',
-            href: '/produits',
-            icon: Package,
-        });
-    }
-
-    if (can('prestataires.read')) {
-        items.push({
-            title: 'Prestataires',
-            href: '/prestataires',
-            icon: Users,
-        });
-    }
-
-    if (can('packings.read')) {
-        items.push({
-            title: 'Packings',
-            href: '/packings',
-            icon: Layers,
-        });
-    }
-
-    if (can('ventes.read')) {
+        if (can('ventes.read')) {
         items.push({
             title: 'Ventes',
             href: '/ventes',
@@ -66,6 +42,26 @@ const mainNavItems = computed((): NavItem[] => {
             ],
         });
     }
+
+ 
+
+    if (can('packings.read')) {
+        items.push({
+            title: 'Packings',
+            href: '/packings',
+            icon: Layers,
+        });
+    }
+
+
+    if (can('prestataires.read')) {
+        items.push({
+            title: 'Prestataires',
+            href: '/prestataires',
+            icon: Users,
+        });
+    }
+
 
     const vehiculesSubItems: NavItem[] = [];
 
@@ -96,6 +92,14 @@ const mainNavItems = computed((): NavItem[] => {
             href: vehiculesSubItems[0].href,
             icon: Car,
             items: vehiculesSubItems,
+        });
+    }
+
+       if (can('produits.read')) {
+        items.push({
+            title: 'Produits',
+            href: '/produits',
+            icon: Package,
         });
     }
 

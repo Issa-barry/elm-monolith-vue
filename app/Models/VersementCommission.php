@@ -17,6 +17,7 @@ class VersementCommission extends Model
     protected $fillable = [
         'commission_vente_id',
         'montant',
+        'beneficiaire',
         'date_versement',
         'mode_paiement',
         'note',

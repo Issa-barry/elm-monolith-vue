@@ -17,7 +17,7 @@ interface VehiculeData {
     livreur_principal_id: number | null;
     pris_en_charge_par_usine: boolean;
     taux_commission_livreur: number | null;
-    commission_active: boolean;
+    taux_commission_proprietaire: number | null;
     photo_url: string | null;
     is_active: boolean;
 }
@@ -44,9 +44,9 @@ const form = useForm({
     proprietaire_id:          props.vehicule.proprietaire_id,
     livreur_principal_id:     props.vehicule.livreur_principal_id,
     pris_en_charge_par_usine: props.vehicule.pris_en_charge_par_usine,
-    taux_commission_livreur:  props.vehicule.taux_commission_livreur,
-    commission_active:        props.vehicule.commission_active,
-    photo:                    null as File | null,
+    taux_commission_livreur:         props.vehicule.taux_commission_livreur,
+    taux_commission_proprietaire:    props.vehicule.taux_commission_proprietaire,
+    photo:                           null as File | null,
     is_active:                props.vehicule.is_active,
 });
 
@@ -59,7 +59,7 @@ function submit() {
     <Head :title="`Modifier — ${vehicule.nom_vehicule}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-[1280px] p-6">
+        <div class="mx-auto max-w-3xl p-6">
             <div class="mb-8">
                 <h1 class="text-2xl font-semibold tracking-tight">Modifier le véhicule</h1>
                 <p class="mt-1 text-sm font-medium text-muted-foreground font-mono">{{ vehicule.immatriculation }}</p>

@@ -20,7 +20,7 @@ interface FormData {
     livreur_principal_id: number | null;
     pris_en_charge_par_usine: boolean;
     taux_commission_livreur: number | null;
-    commission_active: boolean;
+    taux_commission_proprietaire: number | null;
     photo: File | null;
     is_active: boolean;
 }
@@ -68,6 +68,16 @@ function removePhoto() {
 }
 
 const selectedType = computed(() => props.types.find(t => t.value === props.form.type_vehicule));
+
+// Taux propriétaire = 100 - taux livreur, calculé automatiquement
+watch(
+    () => props.form.taux_commission_livreur,
+    (taux) => {
+        const livreur = taux ?? 0;
+        const proprietaire = Math.max(0, 100 - livreur);
+        emit('update:form', { ...props.form, taux_commission_proprietaire: proprietaire });
+    }
+);
 </script>
 
 <template>
@@ -197,20 +207,8 @@ const selectedType = computed(() => props.types.find(t => t.value === props.form
                     </div>
                 </div>
 
-                <div class="flex items-start gap-3">
-                    <Checkbox
-                        id="commission_active"
-                        :checked="form.commission_active"
-                        @update:checked="$emit('update:form', { ...form, commission_active: $event })"
-                    />
-                    <div>
-                        <Label for="commission_active" class="cursor-pointer font-medium">Commission livreur active</Label>
-                        <p class="text-xs text-muted-foreground">Activer le calcul de commission</p>
-                    </div>
-                </div>
-
-                <div v-if="form.commission_active">
-                    <Label for="taux_commission_livreur" class="mb-1.5 block">Taux de commission (%)</Label>
+                <div>
+                    <Label for="taux_commission_livreur" class="mb-1.5 block">Taux livreur (%)</Label>
                     <InputNumber
                         id="taux_commission_livreur"
                         :model-value="form.taux_commission_livreur"
@@ -220,6 +218,23 @@ const selectedType = computed(() => props.types.find(t => t.value === props.form
                         :max-fraction-digits="2"
                         suffix=" %"
                         class="w-full"
+                    />
+                </div>
+
+                <div>
+                    <Label for="taux_commission_proprietaire" class="mb-1.5 block">
+                        Taux propriétaire (%)
+                        <span class="ml-1 text-xs text-muted-foreground">— calculé automatiquement</span>
+                    </Label>
+                    <InputNumber
+                        id="taux_commission_proprietaire"
+                        :model-value="form.taux_commission_proprietaire"
+                        :disabled="true"
+                        :min="0"
+                        :max="100"
+                        :max-fraction-digits="2"
+                        suffix=" %"
+                        class="w-full opacity-70"
                     />
                 </div>
             </div>

@@ -161,7 +161,7 @@ class FactureVente extends Model
         }
 
         $vehicule = $commande->vehicule;
-        if (!$vehicule || !$vehicule->commission_active || $vehicule->taux_commission_livreur <= 0) {
+        if (!$vehicule || $vehicule->taux_commission_livreur <= 0) {
             return;
         }
 
@@ -170,17 +170,25 @@ class FactureVente extends Model
             return;
         }
 
-        $livreur = $vehicule->livreurPrincipal;
+        $livreur          = $vehicule->livreurPrincipal;
+        $montantCommande  = (float) $commande->total_commande;
+        $tauxLivreur      = (float) $vehicule->taux_commission_livreur;
+        $tauxProprietaire = (float) ($vehicule->taux_commission_proprietaire ?? 0);
+        $partLivreur      = round($montantCommande * ($tauxLivreur / 100), 2);
+        $partProprietaire = round($montantCommande * ($tauxProprietaire / 100), 2);
 
         CommissionVente::create([
-            'organization_id'    => $commande->organization_id,
-            'commande_vente_id'  => $commande->id,
-            'vehicule_id'        => $vehicule->id,
-            'livreur_id'         => $livreur?->id,
-            'livreur_nom'        => $livreur ? trim($livreur->prenom . ' ' . $livreur->nom) : null,
-            'taux_commission'    => $vehicule->taux_commission_livreur,
-            'montant_commande'   => (float) $commande->total_commande,
-            'montant_commission' => round((float) $commande->total_commande * ($vehicule->taux_commission_livreur / 100), 2),
+            'organization_id'              => $commande->organization_id,
+            'commande_vente_id'            => $commande->id,
+            'vehicule_id'                  => $vehicule->id,
+            'livreur_id'                   => $livreur?->id,
+            'livreur_nom'                  => $livreur ? trim($livreur->prenom . ' ' . $livreur->nom) : null,
+            'taux_commission'              => $tauxLivreur,
+            'taux_commission_proprietaire' => $tauxProprietaire,
+            'montant_commande'             => $montantCommande,
+            'montant_commission'           => $partLivreur + $partProprietaire,
+            'montant_part_livreur'         => $partLivreur,
+            'montant_part_proprietaire'    => $partProprietaire,
         ]);
     }
 }

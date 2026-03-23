@@ -44,6 +44,8 @@ class EncaissementVenteController extends Controller
             'created_by'        => auth()->id(),
         ]);
 
+        $facture_vente->recalculStatut();
+
         return redirect()->back()->with('success', 'Encaissement enregistré.');
     }
 
@@ -61,6 +63,8 @@ class EncaissementVenteController extends Controller
         $commandeId = $facture->commande_vente_id;
 
         $encaissement_vente->delete();
+
+        $facture->recalculStatut();
 
         return redirect()->back()->with('success', 'Encaissement supprimé.');
     }

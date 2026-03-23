@@ -24,6 +24,7 @@ class Vehicule extends Model
         'livreur_principal_id',
         'pris_en_charge_par_usine',
         'taux_commission_livreur',
+        'taux_commission_proprietaire',
         'commission_active',
         'photo_path',
         'is_active',
@@ -37,7 +38,8 @@ class Vehicule extends Model
             'commission_active'        => 'boolean',
             'type_vehicule'            => TypeVehicule::class,
             'capacite_packs'           => 'integer',
-            'taux_commission_livreur'  => 'decimal:2',
+            'taux_commission_livreur'         => 'decimal:2',
+            'taux_commission_proprietaire'    => 'decimal:2',
         ];
     }
 

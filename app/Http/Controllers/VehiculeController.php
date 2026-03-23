@@ -35,9 +35,9 @@ class VehiculeController extends Controller
                                             ? trim($v->livreurPrincipal->prenom . ' ' . $v->livreurPrincipal->nom)
                                             : null,
             'pris_en_charge_par_usine' => $v->pris_en_charge_par_usine,
-            'taux_commission_livreur'  => $v->taux_commission_livreur,
-            'commission_active'        => $v->commission_active,
-            'photo_url'                => $v->photo_url,
+            'taux_commission_livreur'         => $v->taux_commission_livreur,
+            'taux_commission_proprietaire'    => $v->taux_commission_proprietaire,
+            'photo_url'                       => $v->photo_url,
             'is_active'                => $v->is_active,
         ];
     }
@@ -86,9 +86,9 @@ class VehiculeController extends Controller
             'proprietaire_id'          => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
             'livreur_principal_id'     => ['nullable', 'integer', Rule::exists('livreurs', 'id')->where('organization_id', $orgId)],
             'pris_en_charge_par_usine' => 'boolean',
-            'taux_commission_livreur'  => 'nullable|numeric|min:0|max:100',
-            'commission_active'        => 'boolean',
-            'photo'                    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
+            'taux_commission_livreur'         => 'nullable|numeric|min:0|max:100',
+            'taux_commission_proprietaire'    => 'nullable|numeric|min:0|max:100',
+            'photo'                           => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active'                => 'boolean',
         ], $this->messages());
 
@@ -138,9 +138,9 @@ class VehiculeController extends Controller
             'proprietaire_id'          => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
             'livreur_principal_id'     => ['nullable', 'integer', Rule::exists('livreurs', 'id')->where('organization_id', $orgId)],
             'pris_en_charge_par_usine' => 'boolean',
-            'taux_commission_livreur'  => 'nullable|numeric|min:0|max:100',
-            'commission_active'        => 'boolean',
-            'photo'                    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
+            'taux_commission_livreur'         => 'nullable|numeric|min:0|max:100',
+            'taux_commission_proprietaire'    => 'nullable|numeric|min:0|max:100',
+            'photo'                           => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active'                => 'boolean',
         ], $this->messages());
 
