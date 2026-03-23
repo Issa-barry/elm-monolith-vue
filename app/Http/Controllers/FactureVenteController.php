@@ -5,18 +5,21 @@ namespace App\Http\Controllers;
 use App\Enums\ModePaiement;
 use App\Enums\StatutFactureVente;
 use App\Models\FactureVente;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class FactureVenteController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $this->authorize('viewAny', \App\Models\CommandeVente::class);
 
-        $orgId = auth()->user()->organization_id;
+        $orgId   = auth()->user()->organization_id;
+        $periode = $request->input('periode', 'today');
 
-        $factures = FactureVente::with([
+        $query = FactureVente::with([
                 'commande.vehicule',
                 'commande.client',
                 'commande.site',
@@ -24,14 +27,22 @@ class FactureVenteController extends Controller
             ])
             ->where('organization_id', $orgId)
             ->whereNotNull('reference')
-            ->where('reference', 'not like', 'TMP-%')
-            ->orderByDesc('created_at')
+            ->where('reference', 'not like', 'TMP-%');
+
+        match ($periode) {
+            'today' => $query->whereDate('created_at', Carbon::today()),
+            'week'  => $query->whereBetween('created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
+            'month' => $query->whereYear('created_at', Carbon::now()->year)
+                             ->whereMonth('created_at', Carbon::now()->month),
+            default => null, // 'all' : pas de filtre date
+        };
+
+        $factures = $query->orderByDesc('created_at')
             ->get()
             ->map(fn (FactureVente $f) => [
                 'id'                 => $f->id,
                 'reference'          => $f->reference,
                 'commande_id'        => $f->commande_vente_id,
-                'commande_reference' => $f->commande?->reference,
                 'vehicule_nom'       => $f->commande?->vehicule?->nom_vehicule,
                 'client_nom'         => $f->commande?->client
                     ? trim($f->commande->client->prenom . ' ' . $f->commande->client->nom)
@@ -53,21 +64,22 @@ class FactureVenteController extends Controller
         $payees     = $factures->where('statut_facture', StatutFactureVente::PAYEE->value);
 
         $totaux = [
-            'total_a_encaisser'    => $factures
+            'total_a_encaisser'  => $factures
                 ->whereNotIn('statut_facture', [StatutFactureVente::PAYEE->value, StatutFactureVente::ANNULEE->value])
                 ->sum('montant_restant'),
-            'nb_impayees'          => $impayees->count(),
-            'montant_impayees'     => $impayees->sum('montant_restant'),
-            'nb_partielles'        => $partielles->count(),
-            'montant_partielles'   => $partielles->sum('montant_restant'),
-            'nb_payees'            => $payees->count(),
-            'montant_payees'       => $payees->sum('montant_net'),
+            'nb_impayees'        => $impayees->count(),
+            'montant_impayees'   => $impayees->sum('montant_restant'),
+            'nb_partielles'      => $partielles->count(),
+            'montant_partielles' => $partielles->sum('montant_restant'),
+            'nb_payees'          => $payees->count(),
+            'montant_payees'     => $payees->sum('montant_net'),
         ];
 
         return Inertia::render('Factures/Index', [
             'factures'       => $factures->values(),
             'totaux'         => $totaux,
             'modes_paiement' => ModePaiement::options(),
+            'periode'        => $periode,
         ]);
     }
 }

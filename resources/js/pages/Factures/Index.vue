@@ -5,7 +5,7 @@ import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { BadgeCheck, Clock, CreditCard, Hourglass } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
@@ -52,6 +52,7 @@ const props = defineProps<{
     factures: FactureItem[];
     totaux: Totaux;
     modes_paiement: ModePaiementOption[];
+    periode: string;
 }>();
 
 const { can } = usePermissions();
@@ -60,6 +61,18 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Factures', href: '/factures' },
 ];
+
+// ── Filtre par période ───────────────────────────────────────────────────────
+const periodes = [
+    { value: 'today', label: "Aujourd'hui" },
+    { value: 'week',  label: 'Cette semaine' },
+    { value: 'month', label: 'Ce mois' },
+    { value: 'all',   label: 'Tout' },
+];
+
+function setPeriode(p: string) {
+    router.get('/factures', { periode: p }, { preserveScroll: true, replace: true });
+}
 
 // ── Filtre par statut ────────────────────────────────────────────────────────
 const filtreStatut = ref<string>('tous');
@@ -71,9 +84,26 @@ const filtres = [
     { value: 'annulee',  label: 'Annulées' },
 ];
 
+const search = ref('');
+
 const facturesFiltrees = computed(() => {
-    if (filtreStatut.value === 'tous') return props.factures;
-    return props.factures.filter(f => f.statut_facture === filtreStatut.value);
+    let list = props.factures;
+
+    if (filtreStatut.value !== 'tous') {
+        list = list.filter(f => f.statut_facture === filtreStatut.value);
+    }
+
+    const q = search.value.toLowerCase().trim();
+    if (q) {
+        list = list.filter(f =>
+            f.reference.toLowerCase().includes(q) ||
+            (f.vehicule_nom && f.vehicule_nom.toLowerCase().includes(q)) ||
+            (f.client_nom   && f.client_nom.toLowerCase().includes(q)) ||
+            (f.site_nom     && f.site_nom.toLowerCase().includes(q))
+        );
+    }
+
+    return list;
 });
 
 // ── Couleurs statut ───────────────────────────────────────────────────────────
@@ -193,20 +223,41 @@ function progressPercent(f: FactureItem): number {
                 </div>
             </div>
 
-            <!-- Filtres -->
-            <div class="flex flex-wrap gap-2">
-                <button
-                    v-for="f in filtres"
-                    :key="f.value"
-                    type="button"
-                    class="rounded-full px-4 py-1.5 text-sm font-medium transition-colors"
-                    :class="filtreStatut === f.value
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/80'"
-                    @click="filtreStatut = f.value"
-                >
-                    {{ f.label }}
-                </button>
+            <!-- Filtres statut + période -->
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- Recherche -->
+                    <div class="relative">
+                        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0Z" />
+                        </svg>
+                        <input
+                            v-model="search"
+                            type="text"
+                            placeholder="Référence, véhicule, client…"
+                            class="h-9 w-64 rounded-md border border-input bg-background pl-8 pr-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                        />
+                    </div>
+
+                    <!-- Statut dropdown -->
+                    <Dropdown
+                        v-model="filtreStatut"
+                        :options="filtres"
+                        option-label="label"
+                        option-value="value"
+                        class="w-36"
+                    />
+
+                    <!-- Période dropdown -->
+                    <Dropdown
+                        :model-value="periode"
+                        :options="periodes"
+                        option-label="label"
+                        option-value="value"
+                        @update:model-value="setPeriode($event)"
+                        class="w-40"
+                    />
+                </div>
             </div>
 
             <!-- Tableau -->

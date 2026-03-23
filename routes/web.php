@@ -2,7 +2,9 @@
 
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeVenteController;
+use App\Http\Controllers\CommissionVenteController;
 use App\Http\Controllers\FactureVenteController;
+use App\Http\Controllers\VersementCommissionController;
 use App\Http\Controllers\EncaissementVenteController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\SiteController;
@@ -43,6 +45,9 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('ventes', CommandeVenteController::class)->except(['edit', 'update']);
     Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
     Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
+    Route::get('commissions', [CommissionVenteController::class, 'index'])->name('commissions.index');
+    Route::post('commissions/{commission_vente}/versements', [VersementCommissionController::class, 'store'])->name('commissions.versements.store');
+    Route::delete('versements-commissions/{versement_commission}', [VersementCommissionController::class, 'destroy'])->name('commissions.versements.destroy');
     Route::post('factures/{facture_vente}/encaissements', [EncaissementVenteController::class, 'store'])->name('encaissements.store');
     Route::delete('encaissements/{encaissement_vente}', [EncaissementVenteController::class, 'destroy'])->name('encaissements.destroy');
 });

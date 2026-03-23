@@ -126,6 +126,9 @@ class FactureVente extends Model
         if ($this->isAnnulee()) {
             return false;
         }
+
+        $etaitPayee = $this->isPayee();
+
         $encaisse = (float)$this->encaissements()->sum('montant');
         $net      = (float)$this->montant_net;
 
@@ -137,6 +140,47 @@ class FactureVente extends Model
             $this->statut_facture = StatutFactureVente::PARTIEL;
         }
 
-        return $this->saveQuietly();
+        $saved = $this->saveQuietly();
+
+        // Générer la commission au moment où la facture devient PAYEE
+        if (!$etaitPayee && $this->isPayee()) {
+            $this->genererCommission();
+        }
+
+        return $saved;
+    }
+
+    private function genererCommission(): void
+    {
+        // Toujours recharger avec les relations nécessaires
+        $this->load('commande.vehicule.livreurPrincipal');
+        $commande = $this->commande;
+
+        if (!$commande || !$commande->vehicule_id) {
+            return;
+        }
+
+        $vehicule = $commande->vehicule;
+        if (!$vehicule || !$vehicule->commission_active || $vehicule->taux_commission_livreur <= 0) {
+            return;
+        }
+
+        // Ne pas créer en doublon
+        if (CommissionVente::where('commande_vente_id', $commande->id)->exists()) {
+            return;
+        }
+
+        $livreur = $vehicule->livreurPrincipal;
+
+        CommissionVente::create([
+            'organization_id'    => $commande->organization_id,
+            'commande_vente_id'  => $commande->id,
+            'vehicule_id'        => $vehicule->id,
+            'livreur_id'         => $livreur?->id,
+            'livreur_nom'        => $livreur ? trim($livreur->prenom . ' ' . $livreur->nom) : null,
+            'taux_commission'    => $vehicule->taux_commission_livreur,
+            'montant_commande'   => (float) $commande->total_commande,
+            'montant_commission' => round((float) $commande->total_commande * ($vehicule->taux_commission_livreur / 100), 2),
+        ]);
     }
 }
