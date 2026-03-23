@@ -44,8 +44,7 @@ class EncaissementVenteController extends Controller
             'created_by'        => auth()->id(),
         ]);
 
-        return redirect()->route('ventes.show', $facture_vente->commande_vente_id)
-            ->with('success', 'Encaissement enregistré.');
+        return redirect()->back()->with('success', 'Encaissement enregistré.');
     }
 
     public function destroy(EncaissementVente $encaissement_vente): RedirectResponse
@@ -63,7 +62,6 @@ class EncaissementVenteController extends Controller
 
         $encaissement_vente->delete();
 
-        return redirect()->route('ventes.show', $commandeId)
-            ->with('success', 'Encaissement supprimé.');
+        return redirect()->back()->with('success', 'Encaissement supprimé.');
     }
 }

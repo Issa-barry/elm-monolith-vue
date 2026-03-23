@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeVenteController;
+use App\Http\Controllers\FactureVenteController;
 use App\Http\Controllers\EncaissementVenteController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\SiteController;
@@ -41,6 +42,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('sites', SiteController::class)->except(['show']);
     Route::resource('ventes', CommandeVenteController::class)->except(['edit', 'update']);
     Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
+    Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
     Route::post('factures/{facture_vente}/encaissements', [EncaissementVenteController::class, 'store'])->name('encaissements.store');
     Route::delete('encaissements/{encaissement_vente}', [EncaissementVenteController::class, 'destroy'])->name('encaissements.destroy');
 });

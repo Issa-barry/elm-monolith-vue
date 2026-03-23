@@ -7,6 +7,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -74,9 +75,9 @@ const typeColor: Record<string, string> = {
 };
 
 const statutColor: Record<string, string> = {
-    actif:   'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    inactif: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-    archive: 'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400',
+    actif:   'bg-emerald-500',
+    inactif: 'bg-zinc-400 dark:bg-zinc-500',
+    archive: 'bg-red-500',
 };
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
@@ -217,12 +218,11 @@ function confirmDelete(produit: Produit) {
                     <!-- Statut ──── -->
                     <Column field="statut" header="Statut" sortable style="width: 130px">
                         <template #body="{ data }">
-                            <span
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="statutColor[data.statut] ?? 'bg-muted text-muted-foreground'"
-                            >
-                                {{ data.statut_label }}
-                            </span>
+                            <StatusDot
+                                :label="data.statut_label"
+                                :dot-class="statutColor[data.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                class="text-muted-foreground"
+                            />
                         </template>
                     </Column>
 

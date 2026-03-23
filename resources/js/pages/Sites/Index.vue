@@ -4,6 +4,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem,
     DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -165,14 +166,11 @@ function confirmDelete(s: Site) {
                     <!-- Statut -->
                     <Column field="statut_label" header="Statut" sortable style="width: 120px">
                         <template #body="{ data }">
-                            <span
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="data.statut === 'active'
-                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                                    : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'"
-                            >
-                                {{ data.statut_label }}
-                            </span>
+                            <StatusDot
+                                :label="data.statut_label"
+                                :dot-class="data.statut === 'active' ? 'bg-emerald-500' : 'bg-zinc-400 dark:bg-zinc-500'"
+                                class="text-muted-foreground"
+                            />
                         </template>
                     </Column>
 

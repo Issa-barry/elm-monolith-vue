@@ -7,6 +7,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -66,10 +67,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Badges statut ─────────────────────────────────────────────────────────────
 const statutColor: Record<string, string> = {
-    impayee:   'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-    partielle: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    payee:     'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    annulee:   'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
+    impayee:   'bg-amber-500',
+    partielle: 'bg-blue-500',
+    payee:     'bg-emerald-500',
+    annulee:   'bg-zinc-400 dark:bg-zinc-500',
 };
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
@@ -237,12 +238,11 @@ function confirmDelete(packing: Packing) {
                     <!-- Statut -->
                     <Column field="statut" header="Statut" sortable style="width: 130px">
                         <template #body="{ data }">
-                            <span
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="statutColor[data.statut] ?? 'bg-muted text-muted-foreground'"
-                            >
-                                {{ data.statut_label }}
-                            </span>
+                            <StatusDot
+                                :label="data.statut_label"
+                                :dot-class="statutColor[data.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                class="text-muted-foreground"
+                            />
                         </template>
                     </Column>
 

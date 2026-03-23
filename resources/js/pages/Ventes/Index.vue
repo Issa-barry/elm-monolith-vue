@@ -8,6 +8,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
+import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -58,17 +59,17 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Statut couleurs ───────────────────────────────────────────────────────────
 const statutCommandeColor: Record<string, string> = {
-    en_cours:  'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    livree:    'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300',
-    cloturee:  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    annulee:   'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
+    en_cours:  'bg-blue-500',
+    livree:    'bg-purple-500',
+    cloturee:  'bg-emerald-500',
+    annulee:   'bg-zinc-400 dark:bg-zinc-500',
 };
 
 const statutFactureColor: Record<string, string> = {
-    impayee: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-    partiel: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    payee:   'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    annulee: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
+    impayee: 'bg-amber-500',
+    partiel: 'bg-blue-500',
+    payee:   'bg-emerald-500',
+    annulee: 'bg-zinc-400 dark:bg-zinc-500',
 };
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
@@ -216,25 +217,23 @@ function confirmDelete(c: Commande) {
                     <!-- Statut commande -->
                     <Column field="statut" header="Statut cmde" sortable style="width: 130px">
                         <template #body="{ data }">
-                            <span
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="statutCommandeColor[data.statut] ?? 'bg-muted text-muted-foreground'"
-                            >
-                                {{ data.statut_label }}
-                            </span>
+                            <StatusDot
+                                :label="data.statut_label"
+                                :dot-class="statutCommandeColor[data.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                class="text-muted-foreground"
+                            />
                         </template>
                     </Column>
 
                     <!-- Statut facture -->
                     <Column field="facture_statut" header="Statut facture" sortable style="width: 130px">
                         <template #body="{ data }">
-                            <span
+                            <StatusDot
                                 v-if="data.facture_statut"
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="statutFactureColor[data.facture_statut] ?? 'bg-muted text-muted-foreground'"
-                            >
-                                {{ data.facture_statut_label }}
-                            </span>
+                                :label="data.facture_statut_label ?? '—'"
+                                :dot-class="statutFactureColor[data.facture_statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                class="text-muted-foreground"
+                            />
                             <span v-else class="text-muted-foreground">—</span>
                         </template>
                     </Column>
@@ -355,3 +354,4 @@ function confirmDelete(c: Commande) {
         </Dialog>
     </AppLayout>
 </template>
+

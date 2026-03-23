@@ -15,7 +15,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { Building2, Car, LayoutGrid, Layers, Package, ShoppingCart, Users } from 'lucide-vue-next';
+import { Building2, Car, FileText, LayoutGrid, Layers, Package, ShoppingCart, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -59,6 +59,10 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Ventes',
             href: '/ventes',
             icon: ShoppingCart,
+            items: [
+                { title: 'Commandes', href: '/ventes' },
+                { title: 'Factures', href: '/factures' },
+            ],
         });
     }
 
