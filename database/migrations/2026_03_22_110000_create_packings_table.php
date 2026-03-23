@@ -10,7 +10,7 @@ return new class extends Migration {
             $table->id();
             $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignId('prestataire_id')->constrained('prestataires')->cascadeOnDelete();
-            $table->string('reference', 30)->nullable()->unique();
+            $table->string('reference', 50)->nullable()->unique();
             $table->date('date');
             $table->unsignedInteger('nb_rouleaux');
             $table->unsignedBigInteger('prix_par_rouleau')->default(0);

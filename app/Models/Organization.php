@@ -37,4 +37,9 @@ class Organization extends Model
     {
         return $this->hasMany(Proprietaire::class);
     }
+
+    public function sites(): HasMany
+    {
+        return $this->hasMany(Site::class);
+    }
 }

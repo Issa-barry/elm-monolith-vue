@@ -15,7 +15,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, Folder, LayoutGrid, Layers, Package, Users } from 'lucide-vue-next';
+import { Building2, Car, FileText, HandCoins, LayoutGrid, Layers, Package, ShoppingCart, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -30,13 +30,29 @@ const mainNavItems = computed((): NavItem[] => {
         },
     ];
 
-    if (can('produits.read')) {
+        if (can('ventes.read')) {
         items.push({
-            title: 'Produits',
-            href: '/produits',
-            icon: Package,
+            title: 'Ventes',
+            href: '/ventes',
+            icon: ShoppingCart,
+            items: [
+                { title: 'Commandes', href: '/ventes' },
+                { title: 'Factures', href: '/factures' },
+                { title: 'Commissions', href: '/commissions' },
+            ],
         });
     }
+
+ 
+
+    if (can('packings.read')) {
+        items.push({
+            title: 'Packings',
+            href: '/packings',
+            icon: Layers,
+        });
+    }
+
 
     if (can('prestataires.read')) {
         items.push({
@@ -46,11 +62,52 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (can('packings.read')) {
+
+    const vehiculesSubItems: NavItem[] = [];
+
+    if (can('vehicules.read')) {
+        vehiculesSubItems.push({
+            title: 'Liste de véhicules',
+            href: '/vehicules',
+        });
+    }
+
+    if (can('proprietaires.read')) {
+        vehiculesSubItems.push({
+            title: 'Propriétaires',
+            href: '/proprietaires',
+        });
+    }
+
+    if (can('livreurs.read')) {
+        vehiculesSubItems.push({
+            title: 'Livreurs',
+            href: '/livreurs',
+        });
+    }
+
+    if (vehiculesSubItems.length > 0) {
         items.push({
-            title: 'Packings',
-            href: '/packings',
-            icon: Layers,
+            title: 'Véhicules',
+            href: vehiculesSubItems[0].href,
+            icon: Car,
+            items: vehiculesSubItems,
+        });
+    }
+
+       if (can('produits.read')) {
+        items.push({
+            title: 'Produits',
+            href: '/produits',
+            icon: Package,
+        });
+    }
+
+    if (can('sites.read')) {
+        items.push({
+            title: 'Sites',
+            href: '/sites',
+            icon: Building2,
         });
     }
 

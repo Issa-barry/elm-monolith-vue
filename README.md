@@ -10,23 +10,21 @@ php artisan storage:link
 php artisan db:seed --class=FakeDataSeeder
 
 
-Playwright est en place et fonctionnel.
-
-Modifications:
-
-Ajout de @playwright/test + scripts npm dans package.json
-Configuration E2E dans playwright.config.ts
-Tests smoke créés dans smoke.spec.ts
-Artefacts Playwright ignorés dans .gitignore
-package-lock.json mis à jour automatiquement
-Validation:
-
-Installation du navigateur Chromium Playwright effectuée
-Exécution OK: npm run e2e → 2 passed
-Commandes utiles:
+# Playwright est en place et fonctionnel.
 
 npm run e2e
+Lance les tests Playwright en mode normal (headless, rapide, idéal CI).
+
 npm run e2e:headed
+Lance les tests avec navigateur visible (utile pour voir le comportement à l’écran).
+
 npm run e2e:ui
+Ouvre l’interface Playwright Test UI pour lancer/debugger test par test (très pratique en dev).
+
 npm run e2e:report
-Si tu veux, je peux maintenant ajouter un vrai scénario métier E2E (login + création produit + vérification liste).
+Ouvre le rapport HTML du dernier run (résultats, traces, screenshots, vidéos).
+
+
+
+
+ 

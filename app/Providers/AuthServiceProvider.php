@@ -3,19 +3,25 @@
 namespace App\Providers;
 
 use App\Models\Client;
+use App\Models\CommandeVente;
 use App\Models\Livreur;
 use App\Models\Packing;
 use App\Models\Prestataire;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\User;
+use App\Models\Site;
+use App\Models\Vehicule;
 use App\Policies\ClientPolicy;
+use App\Policies\CommandeVentePolicy;
 use App\Policies\LivreurPolicy;
 use App\Policies\PackingPolicy;
 use App\Policies\PrestatairePolicy;
 use App\Policies\ProduitPolicy;
 use App\Policies\ProprietairePolicy;
+use App\Policies\SitePolicy;
 use App\Policies\UserPolicy;
+use App\Policies\VehiculePolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
 
@@ -29,6 +35,9 @@ class AuthServiceProvider extends ServiceProvider
         Produit::class      => ProduitPolicy::class,
         Packing::class      => PackingPolicy::class,
         User::class         => UserPolicy::class,
+        Vehicule::class     => VehiculePolicy::class,
+        Site::class         => SitePolicy::class,
+        CommandeVente::class => CommandeVentePolicy::class,
     ];
 
     public function boot(): void

@@ -88,7 +88,7 @@ function fromDate(val: Date | null): string {
                 </div>
 
                 <!-- Date -->
-                <div>
+                <div class="sm:col-span-2">
                     <Label class="mb-1.5 block">Date <span class="text-destructive">*</span></Label>
                     <Calendar
                         :model-value="toDate(form.date)"
@@ -100,14 +100,6 @@ function fromDate(val: Date | null): string {
                         :class="{ 'p-invalid': errors.date }"
                     />
                     <p v-if="errors.date" class="mt-1 text-xs text-destructive">{{ errors.date }}</p>
-                </div>
-
-                <!-- Référence (lecture seule, affiché uniquement en édition) -->
-                <div v-if="reference">
-                    <Label class="mb-1.5 block">Référence</Label>
-                    <div class="flex h-10 w-full items-center rounded-md border bg-muted/40 px-3 font-mono text-sm tracking-widest text-muted-foreground select-all">
-                        {{ reference }}
-                    </div>
                 </div>
 
                 <!-- Nb rouleaux -->
@@ -161,20 +153,6 @@ function fromDate(val: Date | null): string {
             </div>
         </div>
 
-        <!-- Section : Notes ─────────────────────────────────────────────────── -->
-        <div class="rounded-xl border bg-card p-6 shadow-sm">
-            <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Notes
-            </h3>
-            <Textarea
-                :model-value="form.notes ?? ''"
-                @update:model-value="$emit('update:form', { ...form, notes: ($event as string) || null })"
-                rows="4"
-                placeholder="Observations, informations complémentaires..."
-                class="w-full resize-none"
-            />
-            <p v-if="errors.notes" class="mt-1 text-xs text-destructive">{{ errors.notes }}</p>
-        </div>
 
         <!-- Pied de formulaire ───────────────────────────────────────────────── -->
         <div class="flex items-center justify-between">

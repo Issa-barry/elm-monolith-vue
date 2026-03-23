@@ -117,7 +117,7 @@ function fromDate(val: Date | null): string {
 // ── Formulaire versement ───────────────────────────────────────────────────────
 const versementForm = useForm({
     date:    new Date().toISOString().slice(0, 10),
-    montant: null as number | null,
+    montant: props.packing.montant_restant as number | null,
     notes:   null as string | null,
 });
 
@@ -287,7 +287,6 @@ const canAddVersement = computed(() =>
                             <tr class="border-b bg-muted/40">
                                 <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Date</th>
                                 <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Montant</th>
-                                <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Notes</th>
                                 <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Enregistré par</th>
                                 <th class="px-4 py-2.5 text-right font-medium text-muted-foreground" v-if="can('packings.update')"></th>
                             </tr>
@@ -298,7 +297,6 @@ const canAddVersement = computed(() =>
                                 <td class="px-4 py-3 font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
                                     {{ formatGNF(v.montant) }}
                                 </td>
-                                <td class="px-4 py-3 text-muted-foreground">{{ v.notes ?? '—' }}</td>
                                 <td class="px-4 py-3 text-muted-foreground">
                                     <div>{{ v.created_by ?? '—' }}</div>
                                     <div class="text-xs text-muted-foreground/60">{{ formatDateTime(v.created_at) }}</div>
@@ -360,18 +358,6 @@ const canAddVersement = computed(() =>
                                 :class="{ 'p-invalid': versementForm.errors.montant }"
                             />
                             <p v-if="versementForm.errors.montant" class="mt-1 text-xs text-destructive">{{ versementForm.errors.montant }}</p>
-                        </div>
-
-                        <!-- Notes -->
-                        <div>
-                            <Label class="mb-1.5 block text-xs">Notes</Label>
-                            <Textarea
-                                :model-value="versementForm.notes ?? ''"
-                                @update:model-value="versementForm.notes = ($event as string) || null"
-                                rows="1"
-                                placeholder="Optionnel..."
-                                class="w-full resize-none"
-                            />
                         </div>
 
                         <!-- Bouton submit (pleine largeur) -->

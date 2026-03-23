@@ -24,6 +24,19 @@ enum ProduitType: string
         return $this !== self::SERVICE;
     }
 
+    public function isVendable(): bool
+    {
+        return in_array('prix_vente', $this->requiredPrices(), true);
+    }
+
+    public static function vendableValues(): array
+    {
+        return array_column(
+            array_filter(self::cases(), fn(self $c) => $c->isVendable()),
+            'value'
+        );
+    }
+
     public function requiredPrices(): array
     {
         return match ($this) {

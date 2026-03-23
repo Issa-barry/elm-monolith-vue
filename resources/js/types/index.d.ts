@@ -2,7 +2,14 @@ import { InertiaLinkProps } from '@inertiajs/vue3';
 import type { LucideIcon } from 'lucide-vue-next';
 
 // ── RBAC ─────────────────────────────────────────────────────────────────────
-export type Resource = 'clients' | 'prestataires' | 'livreurs' | 'proprietaires' | 'users';
+export type Resource =
+    | 'clients'
+    | 'prestataires'
+    | 'livreurs'
+    | 'proprietaires'
+    | 'produits'
+    | 'packings'
+    | 'users';
 export type CrudAction = 'create' | 'read' | 'update' | 'delete';
 export type PermissionKey = `${Resource}.${CrudAction}`;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
@@ -24,6 +31,7 @@ export interface NavItem {
     href: NonNullable<InertiaLinkProps['href']>;
     icon?: LucideIcon;
     isActive?: boolean;
+    items?: NavItem[];
 }
 
 export type AppPageProps<

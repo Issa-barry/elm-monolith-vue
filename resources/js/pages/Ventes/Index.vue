@@ -1,0 +1,357 @@
+<script setup lang="ts">
+import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
+import StatusDot from '@/components/StatusDot.vue';
+import { usePermissions } from '@/composables/usePermissions';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { type BreadcrumbItem } from '@/types';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { MoreVertical, Plus, Search, ShoppingCart, Trash2, XCircle } from 'lucide-vue-next';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import Dialog from 'primevue/dialog';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
+import InputText from 'primevue/inputtext';
+import Textarea from 'primevue/textarea';
+import { useConfirm } from 'primevue/useconfirm';
+import { useToast } from 'primevue/usetoast';
+import { ref, watch } from 'vue';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface Commande {
+    id: number;
+    reference: string;
+    statut: string;
+    statut_label: string;
+    total_commande: number;
+    vehicule_nom: string | null;
+    client_nom: string | null;
+    facture_statut: string | null;
+    facture_statut_label: string | null;
+    facture_montant_restant: number | null;
+    created_at: string;
+    is_annulee: boolean;
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+const props = defineProps<{ commandes: Commande[] }>();
+
+const { can } = usePermissions();
+const confirm = useConfirm();
+const toast = useToast();
+
+const search = ref('');
+const filters = ref({ global: { value: '', matchMode: 'contains' } });
+watch(search, (val) => { filters.value.global.value = val; });
+
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Tableau de bord', href: '/dashboard' },
+    { title: 'Ventes', href: '/ventes' },
+];
+
+// ── Statut couleurs ───────────────────────────────────────────────────────────
+const statutCommandeColor: Record<string, string> = {
+    en_cours:  'bg-blue-500',
+    livree:    'bg-purple-500',
+    cloturee:  'bg-emerald-500',
+    annulee:   'bg-zinc-400 dark:bg-zinc-500',
+};
+
+const statutFactureColor: Record<string, string> = {
+    impayee: 'bg-amber-500',
+    partiel: 'bg-blue-500',
+    payee:   'bg-emerald-500',
+    annulee: 'bg-zinc-400 dark:bg-zinc-500',
+};
+
+// ── Formatage ─────────────────────────────────────────────────────────────────
+function formatGNF(val: number): string {
+    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
+}
+
+// ── Annulation ────────────────────────────────────────────────────────────────
+const annulerDialogVisible = ref(false);
+const selectedCommande = ref<Commande | null>(null);
+
+const annulerForm = useForm({
+    motif_annulation: '',
+});
+
+function openAnnulerDialog(commande: Commande) {
+    selectedCommande.value = commande;
+    annulerForm.reset();
+    annulerDialogVisible.value = true;
+}
+
+function submitAnnuler() {
+    if (!selectedCommande.value) return;
+    annulerForm.patch(`/ventes/${selectedCommande.value.id}/annuler`, {
+        onSuccess: () => {
+            annulerDialogVisible.value = false;
+            toast.add({ severity: 'success', summary: 'Annulée', detail: 'Commande annulée avec succès.', life: 3000 });
+        },
+    });
+}
+
+// ── Suppression ───────────────────────────────────────────────────────────────
+function confirmDelete(c: Commande) {
+    confirm.require({
+        message: `Supprimer la commande « ${c.reference} » ? Cette action est irréversible.`,
+        header: 'Confirmer la suppression',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Supprimer',
+        acceptClass: 'p-button-danger',
+        accept: () => {
+            router.delete(`/ventes/${c.id}`, {
+                onSuccess: () => toast.add({
+                    severity: 'success',
+                    summary: 'Supprimée',
+                    detail: 'Commande supprimée.',
+                    life: 3000,
+                }),
+            });
+        },
+    });
+}
+</script>
+
+<template>
+    <Head title="Ventes" />
+
+    <AppLayout :breadcrumbs="breadcrumbs">
+        <div class="flex flex-col gap-6 p-6">
+
+            <!-- En-tête -->
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-semibold tracking-tight">Ventes</h1>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        {{ commandes.length }} commande{{ commandes.length !== 1 ? 's' : '' }}
+                    </p>
+                </div>
+                <Link v-if="can('ventes.create')" href="/ventes/create">
+                    <Button>
+                        <Plus class="mr-2 h-4 w-4" />
+                        Nouvelle commande
+                    </Button>
+                </Link>
+            </div>
+
+            <!-- Tableau -->
+            <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+                <DataTable
+                    :value="commandes"
+                    :paginator="commandes.length > 20"
+                    :rows="20"
+                    :global-filter-fields="['reference', 'vehicule_nom', 'client_nom', 'statut_label', 'facture_statut_label']"
+                    v-model:filters="filters"
+                    data-key="id"
+                    striped-rows
+                    removable-sort
+                    class="text-sm"
+                    table-class="w-full"
+                    :pt="{
+                        root: { class: 'w-full' },
+                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
+                        tbody: { class: 'divide-y' },
+                    }"
+                >
+                    <template #header>
+                        <div class="flex items-center gap-3">
+                            <IconField class="max-w-sm flex-1">
+                                <InputIcon class="pointer-events-none">
+                                    <Search class="h-4 w-4 text-muted-foreground" />
+                                </InputIcon>
+                                <InputText v-model="search" placeholder="Rechercher..." class="w-full text-sm" />
+                            </IconField>
+                            <span class="text-xs text-muted-foreground">{{ commandes.length }} résultat{{ commandes.length !== 1 ? 's' : '' }}</span>
+                        </div>
+                    </template>
+
+                    <!-- Référence -->
+                    <Column field="reference" header="Référence" sortable style="min-width: 180px">
+                        <template #body="{ data }">
+                            <Link :href="`/ventes/${data.id}`" class="font-mono text-sm font-semibold tracking-wide hover:underline">
+                                {{ data.reference }}
+                            </Link>
+                        </template>
+                    </Column>
+
+                    <!-- Date -->
+                    <Column field="created_at" header="Date" sortable style="width: 120px">
+                        <template #body="{ data }">
+                            <span class="tabular-nums text-muted-foreground">{{ data.created_at }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Véhicule -->
+                    <Column field="vehicule_nom" header="Véhicule" style="min-width: 150px">
+                        <template #body="{ data }">
+                            <span class="text-muted-foreground">{{ data.vehicule_nom ?? '—' }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Client -->
+                    <Column field="client_nom" header="Client" style="min-width: 150px">
+                        <template #body="{ data }">
+                            <span class="text-muted-foreground">{{ data.client_nom ?? '—' }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Total -->
+                    <Column field="total_commande" header="Total" sortable style="width: 160px">
+                        <template #body="{ data }">
+                            <span class="font-medium tabular-nums">{{ formatGNF(data.total_commande) }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Statut commande -->
+                    <Column field="statut" header="Statut cmde" sortable style="width: 130px">
+                        <template #body="{ data }">
+                            <StatusDot
+                                :label="data.statut_label"
+                                :dot-class="statutCommandeColor[data.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                class="text-muted-foreground"
+                            />
+                        </template>
+                    </Column>
+
+                    <!-- Statut facture -->
+                    <Column field="facture_statut" header="Statut facture" sortable style="width: 130px">
+                        <template #body="{ data }">
+                            <StatusDot
+                                v-if="data.facture_statut"
+                                :label="data.facture_statut_label ?? '—'"
+                                :dot-class="statutFactureColor[data.facture_statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                class="text-muted-foreground"
+                            />
+                            <span v-else class="text-muted-foreground">—</span>
+                        </template>
+                    </Column>
+
+                    <!-- Restant dû -->
+                    <Column field="facture_montant_restant" header="Restant dû" sortable style="width: 150px">
+                        <template #body="{ data }">
+                            <span
+                                v-if="data.facture_montant_restant !== null"
+                                class="tabular-nums font-medium"
+                                :class="data.facture_montant_restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'"
+                            >
+                                {{ formatGNF(data.facture_montant_restant) }}
+                            </span>
+                            <span v-else class="text-muted-foreground">—</span>
+                        </template>
+                    </Column>
+
+                    <!-- Actions -->
+                    <Column header="" style="width: 56px">
+                        <template #body="{ data }">
+                            <div class="flex justify-end">
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger as-child>
+                                        <Button variant="ghost" size="icon" class="h-8 w-8">
+                                            <MoreVertical class="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" class="w-44">
+                                        <DropdownMenuItem as-child>
+                                            <Link :href="`/ventes/${data.id}`" class="flex items-center gap-2 w-full cursor-pointer">
+                                                <ShoppingCart class="h-4 w-4" />
+                                                Voir
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            v-if="!data.is_annulee && can('ventes.update')"
+                                            class="cursor-pointer text-amber-600 focus:text-amber-600"
+                                            @click="openAnnulerDialog(data)"
+                                        >
+                                            <XCircle class="h-4 w-4" />
+                                            Annuler
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator v-if="data.is_annulee && can('ventes.delete')" />
+                                        <DropdownMenuItem
+                                            v-if="data.is_annulee && can('ventes.delete')"
+                                            class="cursor-pointer text-destructive focus:text-destructive"
+                                            @click="confirmDelete(data)"
+                                        >
+                                            <Trash2 class="h-4 w-4" />
+                                            Supprimer
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                        </template>
+                    </Column>
+
+                    <!-- État vide -->
+                    <template #empty>
+                        <div class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                            <ShoppingCart class="h-12 w-12 opacity-30" />
+                            <p class="text-sm">Aucune commande trouvée.</p>
+                            <Link v-if="can('ventes.create')" href="/ventes/create">
+                                <Button variant="outline" size="sm">
+                                    <Plus class="mr-2 h-4 w-4" />
+                                    Créer la première commande
+                                </Button>
+                            </Link>
+                        </div>
+                    </template>
+                </DataTable>
+            </div>
+        </div>
+
+        <!-- Dialog Annulation -->
+        <Dialog
+            v-model:visible="annulerDialogVisible"
+            modal
+            header="Annuler la commande"
+            :style="{ width: '480px' }"
+        >
+            <div class="space-y-4">
+                <p class="text-sm text-muted-foreground">
+                    Vous êtes sur le point d'annuler la commande
+                    <span class="font-mono font-semibold">{{ selectedCommande?.reference }}</span>.
+                    Cette action est irréversible.
+                </p>
+                <div>
+                    <Label class="mb-1.5 block text-sm">
+                        Motif d'annulation <span class="text-destructive">*</span>
+                    </Label>
+                    <Textarea
+                        v-model="annulerForm.motif_annulation"
+                        rows="4"
+                        class="w-full"
+                        placeholder="Indiquez la raison de l'annulation..."
+                        :class="{ 'p-invalid': annulerForm.errors.motif_annulation }"
+                    />
+                    <p v-if="annulerForm.errors.motif_annulation" class="mt-1 text-xs text-destructive">
+                        {{ annulerForm.errors.motif_annulation }}
+                    </p>
+                </div>
+            </div>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <Button variant="outline" @click="annulerDialogVisible = false">Retour</Button>
+                    <Button
+                        variant="destructive"
+                        :disabled="annulerForm.processing || !annulerForm.motif_annulation.trim()"
+                        @click="submitAnnuler"
+                    >
+                        <XCircle class="mr-2 h-4 w-4" />
+                        {{ annulerForm.processing ? 'Annulation…' : 'Confirmer l\'annulation' }}
+                    </Button>
+                </div>
+            </template>
+        </Dialog>
+    </AppLayout>
+</template>
+

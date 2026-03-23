@@ -7,6 +7,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -74,9 +75,9 @@ const typeColor: Record<string, string> = {
 };
 
 const statutColor: Record<string, string> = {
-    actif:   'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    inactif: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-    archive: 'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400',
+    actif:   'bg-emerald-500',
+    inactif: 'bg-zinc-400 dark:bg-zinc-500',
+    archive: 'bg-red-500',
 };
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
@@ -182,16 +183,16 @@ function confirmDelete(produit: Produit) {
                     </Column>
 
                     <!-- Code ──── -->
-                    <Column field="code_interne" header="Code-barres" sortable style="width: 150px">
+                    <Column field="code_interne" header="Code-barres" sortable style="width: 170px">
                         <template #body="{ data }">
-                            <div class="font-mono text-xs font-semibold tracking-wide text-foreground">
+                            <div class="font-mono text-xs font-semibold tracking-wide text-foreground whitespace-nowrap">
                                 {{ data.code_interne }}
                             </div>
                         </template>
                     </Column>
 
                     <!-- Nom ──── -->
-                    <Column field="nom" header="Produit" sortable>
+                    <Column field="nom" header="Produit" sortable style="min-width: 240px">
                         <template #body="{ data }">
                             <div class="flex items-center gap-1.5 font-medium">
                                 {{ data.nom }}
@@ -203,7 +204,7 @@ function confirmDelete(produit: Produit) {
                     </Column>
 
                     <!-- Type ──── -->
-                    <Column field="type" header="Type" sortable style="width: 130px">
+                    <Column field="type" header="Type" sortable style="width: 140px">
                         <template #body="{ data }">
                             <span
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
@@ -215,35 +216,34 @@ function confirmDelete(produit: Produit) {
                     </Column>
 
                     <!-- Statut ──── -->
-                    <Column field="statut" header="Statut" sortable style="width: 120px">
+                    <Column field="statut" header="Statut" sortable style="width: 130px">
                         <template #body="{ data }">
-                            <span
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="statutColor[data.statut] ?? 'bg-muted text-muted-foreground'"
-                            >
-                                {{ data.statut_label }}
-                            </span>
+                            <StatusDot
+                                :label="data.statut_label"
+                                :dot-class="statutColor[data.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                class="text-muted-foreground"
+                            />
                         </template>
                     </Column>
 
                     <!-- Prix vente ──── -->
-                    <Column field="prix_vente" header="Prix vente" sortable style="width: 140px">
+                    <Column field="prix_vente" header="Prix vente" sortable style="width: 160px">
                         <template #body="{ data }">
-                            <span class="font-medium tabular-nums">{{ formatPrix(data.prix_vente) }}</span>
+                            <span class="font-medium tabular-nums whitespace-nowrap">{{ formatPrix(data.prix_vente) }}</span>
                         </template>
                     </Column>
 
                     <!-- Prix achat ──── -->
-                    <Column field="prix_achat" header="Prix achat" sortable style="width: 140px">
+                    <Column field="prix_achat" header="Prix achat" sortable style="width: 160px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground">{{ formatPrix(data.prix_achat) }}</span>
+                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">{{ formatPrix(data.prix_achat) }}</span>
                         </template>
                     </Column>
 
                     <!-- Prix usine ──── (fabricable uniquement) -->
-                    <Column field="prix_usine" header="Prix usine" sortable style="width: 140px">
+                    <Column field="prix_usine" header="Prix usine" sortable style="width: 160px">
                         <template #body="{ data }">
-                            <span v-if="data.type === 'fabricable'" class="tabular-nums text-muted-foreground">
+                            <span v-if="data.type === 'fabricable'" class="tabular-nums text-muted-foreground whitespace-nowrap">
                                 {{ formatPrix(data.prix_usine) }}
                             </span>
                             <span v-else class="text-xs text-muted-foreground/40">—</span>
@@ -251,7 +251,7 @@ function confirmDelete(produit: Produit) {
                     </Column>
 
                     <!-- Stock ──── -->
-                    <Column field="qte_stock" header="Stock" sortable style="width: 110px">
+                    <Column field="qte_stock" header="Stock" sortable style="width: 120px">
                         <template #body="{ data }">
                             <div v-if="data.has_stock" class="flex items-center gap-1.5">
                                 <PackageMinus v-if="!data.in_stock" class="h-4 w-4 text-red-500" />

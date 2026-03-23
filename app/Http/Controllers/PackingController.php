@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 use App\Enums\PackingStatut;
 use App\Models\Packing;
 use App\Models\Prestataire;
+use App\Models\Produit;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -63,9 +64,13 @@ class PackingController extends Controller
                 'label' => $p->nom_complet ?? $p->reference,
             ]);
 
+        $rouleau = Produit::where('organization_id', auth()->user()->organization_id)
+            ->where('nom', 'like', '%rouleau%')
+            ->first();
+
         return Inertia::render('Packings/Create', [
             'prestataires' => $prestataires,
-            'prix_defaut'  => 0,
+            'prix_defaut'  => $rouleau?->prix_vente ?? 500,
             'statuts'      => PackingStatut::options(),
         ]);
     }

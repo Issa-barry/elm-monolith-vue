@@ -17,8 +17,11 @@ class RolesAndPermissionsSeeder extends Seeder
         'prestataires',
         'livreurs',
         'proprietaires',
+        'vehicules',
+        'sites',
         'produits',
         'packings',
+        'ventes',
         'users',
     ];
 
@@ -48,8 +51,11 @@ class RolesAndPermissionsSeeder extends Seeder
             'prestataires.create', 'prestataires.read', 'prestataires.update', 'prestataires.delete',
             'livreurs.create', 'livreurs.read', 'livreurs.update', 'livreurs.delete',
             'proprietaires.create', 'proprietaires.read', 'proprietaires.update', 'proprietaires.delete',
+            'vehicules.create', 'vehicules.read', 'vehicules.update', 'vehicules.delete',
+            'sites.create', 'sites.read', 'sites.update', 'sites.delete',
             'produits.create', 'produits.read', 'produits.update', 'produits.delete',
             'packings.create', 'packings.read', 'packings.update', 'packings.delete',
+            'ventes.create', 'ventes.read', 'ventes.update', 'ventes.delete',
             'users.create', 'users.read', 'users.update',
         ]);
 
@@ -58,8 +64,11 @@ class RolesAndPermissionsSeeder extends Seeder
             'prestataires.create', 'prestataires.read', 'prestataires.update',
             'livreurs.create', 'livreurs.read', 'livreurs.update',
             'proprietaires.read',
+            'vehicules.create', 'vehicules.read', 'vehicules.update',
+            'sites.read',
             'produits.read',
             'packings.read',
+            'ventes.read', 'ventes.create',
         ]);
 
         $comptable->syncPermissions([
@@ -67,8 +76,11 @@ class RolesAndPermissionsSeeder extends Seeder
             'prestataires.read',
             'livreurs.read',
             'proprietaires.read',
+            'vehicules.read',
+            'sites.read',
             'produits.read',
             'packings.read',
+            'ventes.read',
         ]);
 
         // ── 3. Organisation par défaut ────────────────────────────────────────
