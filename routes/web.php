@@ -41,7 +41,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('proprietaires', ProprietaireController::class);
     Route::resource('livreurs', LivreurController::class);
     Route::resource('vehicules', VehiculeController::class)->except(['show']);
-    Route::resource('sites', SiteController::class)->except(['show']);
+    Route::resource('sites', SiteController::class);
     Route::resource('ventes', CommandeVenteController::class)->except(['edit', 'update']);
     Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
     Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');

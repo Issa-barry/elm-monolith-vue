@@ -72,7 +72,7 @@ function confirmDelete(p: Proprietaire) {
     <Head title="Propriétaires" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6">
+        <div class="flex min-h-0 flex-1 flex-col gap-6 p-6">
 
             <!-- En-tête -->
             <div class="flex items-center justify-between">
@@ -91,7 +91,7 @@ function confirmDelete(p: Proprietaire) {
             </div>
 
             <!-- Tableau -->
-            <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div class="flex min-h-0 flex-1 flex-col overflow-hidden border bg-card">
                 <DataTable
                     :value="proprietaires"
                     :paginator="proprietaires.length > 20"
@@ -101,10 +101,10 @@ function confirmDelete(p: Proprietaire) {
                     data-key="id"
                     striped-rows
                     removable-sort
-                    class="text-sm"
+                    class="h-full text-sm"
                     table-class="w-full"
                     :pt="{
-                        root: { class: 'w-full' },
+                        root: { class: 'flex h-full w-full flex-col' },
                         header: { class: 'border-b bg-muted/30 px-4 py-3' },
                         tbody: { class: 'divide-y' },
                     }"

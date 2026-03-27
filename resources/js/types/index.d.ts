@@ -9,7 +9,8 @@ export type Resource =
     | 'proprietaires'
     | 'produits'
     | 'packings'
-    | 'users';
+    | 'users'
+    | 'parametres';
 export type CrudAction = 'create' | 'read' | 'update' | 'delete';
 export type PermissionKey = `${Resource}.${CrudAction}`;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;

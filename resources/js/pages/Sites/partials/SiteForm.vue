@@ -2,7 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { ArrowLeft, Save } from 'lucide-vue-next';
-import Dropdown from 'primevue/dropdown';
+import Select from 'primevue/select';
 import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
 
@@ -34,15 +34,18 @@ function flagUrl(code: string) {
 
 interface FormData {
     nom: string;
-    code: string;
+    code?: string;
     type: string | null;
     statut: string | null;
     localisation: string | null;
     pays: string | null;
     ville: string | null;
-    quartier: string | null;
     description: string | null;
     parent_id: number | null;
+    latitude: number | null;
+    longitude: number | null;
+    telephone: string | null;
+    email: string | null;
 }
 
 const props = defineProps<{
@@ -52,6 +55,7 @@ const props = defineProps<{
     types: Option[];
     statuts: Option[];
     parentOptions: Option[];
+    isCreate?: boolean;
 }>();
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
@@ -80,25 +84,22 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
                     <p v-if="errors.nom" class="mt-1 text-xs text-destructive">{{ errors.nom }}</p>
                 </div>
 
-                <!-- Code -->
-                <div>
-                    <Label for="code" class="mb-1.5 block">Code <span class="text-destructive">*</span></Label>
+                <!-- Code (edit only — read-only, auto-generated) -->
+                <div v-if="!isCreate">
+                    <Label for="code" class="mb-1.5 block">Code</Label>
                     <InputText
                         id="code"
                         :model-value="form.code"
-                        @update:model-value="emit('update:form', { ...form, code: ($event as string).toUpperCase() })"
-                        class="w-full font-mono"
-                        :class="{ 'p-invalid': errors.code }"
-                        placeholder="CONAKRY-01"
+                        class="w-full font-mono bg-muted text-muted-foreground"
+                        readonly
                     />
-                    <p v-if="errors.code" class="mt-1 text-xs text-destructive">{{ errors.code }}</p>
-                    <p v-else class="mt-1 text-xs text-muted-foreground">Majuscules, chiffres, tirets et underscores uniquement.</p>
+                    <p class="mt-1 text-xs text-muted-foreground">Identifiant unique généré automatiquement.</p>
                 </div>
 
                 <!-- Type -->
                 <div>
                     <Label class="mb-1.5 block">Type <span class="text-destructive">*</span></Label>
-                    <Dropdown
+                    <Select
                         :model-value="form.type"
                         @update:model-value="emit('update:form', { ...form, type: $event })"
                         :options="types"
@@ -114,7 +115,7 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
                 <!-- Statut -->
                 <div>
                     <Label class="mb-1.5 block">Statut</Label>
-                    <Dropdown
+                    <Select
                         :model-value="form.statut"
                         @update:model-value="emit('update:form', { ...form, statut: $event })"
                         :options="statuts"
@@ -138,7 +139,7 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
                 <!-- Pays -->
                 <div>
                     <Label class="mb-1.5 block">Pays</Label>
-                    <Dropdown
+                    <Select
                         :model-value="form.pays"
                         @update:model-value="emit('update:form', { ...form, pays: $event })"
                         :options="PAYS_OPTIONS"
@@ -161,7 +162,7 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
                                 <span>{{ option.label }}</span>
                             </div>
                         </template>
-                    </Dropdown>
+                    </Select>
                 </div>
 
                 <!-- Ville -->
@@ -175,20 +176,9 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
                     />
                 </div>
 
-                <!-- Quartier -->
-                <div>
-                    <Label for="quartier" class="mb-1.5 block">Quartier</Label>
-                    <InputText
-                        id="quartier"
-                        :model-value="form.quartier ?? ''"
-                        @update:model-value="emit('update:form', { ...form, quartier: ($event as string) || null })"
-                        class="w-full"
-                    />
-                </div>
-
-                <!-- Localisation (full width) -->
+                <!-- Adresse (full width) -->
                 <div class="sm:col-span-2">
-                    <Label for="localisation" class="mb-1.5 block">Adresse / Localisation</Label>
+                    <Label for="localisation" class="mb-1.5 block">Adresse</Label>
                     <InputText
                         id="localisation"
                         :model-value="form.localisation ?? ''"
@@ -196,6 +186,67 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
                         class="w-full"
                         placeholder="Ex: Route de Coleah, Immeuble ABC"
                     />
+                </div>
+
+                <!-- Latitude -->
+                <div>
+                    <Label for="latitude" class="mb-1.5 block">Latitude</Label>
+                    <InputText
+                        id="latitude"
+                        :model-value="form.latitude !== null ? String(form.latitude) : ''"
+                        @update:model-value="emit('update:form', { ...form, latitude: $event ? Number($event) : null })"
+                        class="w-full font-mono"
+                        placeholder="9.5370"
+                    />
+                    <p v-if="errors.latitude" class="mt-1 text-xs text-destructive">{{ errors.latitude }}</p>
+                </div>
+
+                <!-- Longitude -->
+                <div>
+                    <Label for="longitude" class="mb-1.5 block">Longitude</Label>
+                    <InputText
+                        id="longitude"
+                        :model-value="form.longitude !== null ? String(form.longitude) : ''"
+                        @update:model-value="emit('update:form', { ...form, longitude: $event ? Number($event) : null })"
+                        class="w-full font-mono"
+                        placeholder="-13.6773"
+                    />
+                    <p v-if="errors.longitude" class="mt-1 text-xs text-destructive">{{ errors.longitude }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contact -->
+        <div class="rounded-xl border bg-card p-6 shadow-sm">
+            <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Contact
+            </h3>
+            <div class="grid gap-5 sm:grid-cols-2">
+                <!-- Téléphone -->
+                <div>
+                    <Label for="telephone" class="mb-1.5 block">N° de contact</Label>
+                    <InputText
+                        id="telephone"
+                        :model-value="form.telephone ?? ''"
+                        @update:model-value="emit('update:form', { ...form, telephone: ($event as string) || null })"
+                        class="w-full"
+                        placeholder="+224 620 00 00 00"
+                    />
+                    <p v-if="errors.telephone" class="mt-1 text-xs text-destructive">{{ errors.telephone }}</p>
+                </div>
+
+                <!-- Email -->
+                <div>
+                    <Label for="email" class="mb-1.5 block">Email</Label>
+                    <InputText
+                        id="email"
+                        type="email"
+                        :model-value="form.email ?? ''"
+                        @update:model-value="emit('update:form', { ...form, email: ($event as string) || null })"
+                        class="w-full"
+                        placeholder="contact@site.com"
+                    />
+                    <p v-if="errors.email" class="mt-1 text-xs text-destructive">{{ errors.email }}</p>
                 </div>
             </div>
         </div>
@@ -207,7 +258,7 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
             </h3>
             <div>
                 <Label class="mb-1.5 block">Site parent <span class="text-xs font-normal text-muted-foreground">(optionnel)</span></Label>
-                <Dropdown
+                <Select
                     :model-value="form.parent_id"
                     @update:model-value="emit('update:form', { ...form, parent_id: $event ?? null })"
                     :options="parentOptions"

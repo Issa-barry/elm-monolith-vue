@@ -5,6 +5,7 @@ import { Separator } from '@/components/ui/separator';
 import { usePermissions } from '@/composables/usePermissions';
 import { toUrl, urlIsActive } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
+import { edit as editParametres } from '@/routes/parametres';
 import { edit as editProfile } from '@/routes/profile';
 import { show } from '@/routes/two-factor';
 import { edit as editPassword } from '@/routes/user-password';
@@ -24,6 +25,10 @@ const sidebarNavItems = computed((): NavItem[] => {
 
     if (can('users.read')) {
         items.push({ title: 'Rôles & Permissions', href: '/roles' });
+    }
+
+    if (can('parametres.update')) {
+        items.push({ title: 'Paramétrage système', href: editParametres().url });
     }
 
     return items;

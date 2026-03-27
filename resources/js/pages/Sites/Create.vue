@@ -20,15 +20,17 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const form = useForm({
     nom:          '',
-    code:         '',
     type:         null as string | null,
-    statut:       null as string | null,
+    statut:       'active' as string | null,
     localisation: null as string | null,
-    pays:         null as string | null,
+    pays:         'Guinée' as string | null,
     ville:        null as string | null,
-    quartier:     null as string | null,
     description:  null as string | null,
     parent_id:    null as number | null,
+    latitude:     null as number | null,
+    longitude:    null as number | null,
+    telephone:    null as string | null,
+    email:        null as string | null,
 });
 
 function submit() {
@@ -53,6 +55,7 @@ function submit() {
                 :types="types"
                 :statuts="statuts"
                 :parent-options="parentOptions"
+                :is-create="true"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

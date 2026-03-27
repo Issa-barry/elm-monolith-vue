@@ -27,6 +27,10 @@ class Site extends Model
         'quartier',
         'description',
         'parent_id',
+        'latitude',
+        'longitude',
+        'telephone',
+        'email',
     ];
 
     protected function casts(): array
@@ -48,6 +52,15 @@ class Site extends Model
         static::creating(function (Site $site) {
             if (empty($site->statut)) {
                 $site->statut = SiteStatut::ACTIVE;
+            }
+            if (empty($site->code)) {
+                $orgId = $site->organization_id;
+                $num = static::withTrashed()->where('organization_id', $orgId)->count() + 1;
+                do {
+                    $code = str_pad((string) $num, 3, '0', STR_PAD_LEFT);
+                    $num++;
+                } while (static::withTrashed()->where('organization_id', $orgId)->where('code', $code)->exists());
+                $site->code = $code;
             }
         });
     }

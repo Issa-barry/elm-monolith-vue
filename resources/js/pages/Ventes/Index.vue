@@ -147,7 +147,7 @@ function confirmDelete(c: Commande) {
             </div>
 
             <!-- Tableau -->
-            <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="commandes"
                     :paginator="commandes.length > 20"

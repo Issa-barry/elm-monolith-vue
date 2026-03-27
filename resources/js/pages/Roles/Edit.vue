@@ -52,6 +52,7 @@ const resourceLabels: Record<string, string> = {
     packings:      'Packings',
     ventes:        'Ventes',
     users:         'Utilisateurs',
+    parametres:    'Paramètres',
 };
 
 const actionLabels: Record<string, { label: string; color: string }> = {

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
+use App\Models\Parametre;
 
 class Produit extends Model
 {
@@ -138,7 +139,7 @@ class Produit extends Model
         if (! $this->type?->hasStock() || $this->qte_stock <= 0) {
             return false;
         }
-        $seuil = $this->seuil_alerte_stock ?? 5;
+        $seuil = $this->seuil_alerte_stock ?? Parametre::getSeuilStockFaible((int) $this->organization_id);
         return $seuil > 0 && $this->qte_stock <= $seuil;
     }
 

@@ -261,7 +261,7 @@ function progressPercent(f: FactureItem): number {
             </div>
 
             <!-- Tableau -->
-            <div class="rounded-xl border bg-card shadow-sm">
+            <div class="rounded-xl border bg-card">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>

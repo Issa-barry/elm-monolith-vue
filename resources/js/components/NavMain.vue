@@ -65,18 +65,29 @@ function toggleMenu(item: NavItem) {
                     :tooltip="item.title"
                 >
                     <Link :href="item.href">
-                        <component v-if="item.icon" :is="item.icon" />
+                        <component
+                            v-if="item.icon"
+                            :is="item.icon"
+                            class="text-sidebar-primary"
+                        />
                         <span>{{ item.title }}</span>
                     </Link>
                 </SidebarMenuButton>
 
                 <template v-else>
                     <SidebarMenuButton :is-active="isParentActive(item)" :tooltip="item.title" @click="toggleMenu(item)">
-                        <component v-if="item.icon" :is="item.icon" />
+                        <component
+                            v-if="item.icon"
+                            :is="item.icon"
+                            class="text-sidebar-primary"
+                        />
                         <span>{{ item.title }}</span>
                     </SidebarMenuButton>
                     <SidebarMenuAction @click.stop="toggleMenu(item)">
-                        <ChevronDown class="h-4 w-4 opacity-70 transition-transform" :class="isMenuOpen(item) ? 'rotate-180' : ''" />
+                        <ChevronDown
+                            class="h-4 w-4 text-sidebar-primary opacity-70 transition-transform"
+                            :class="isMenuOpen(item) ? 'rotate-180' : ''"
+                        />
                     </SidebarMenuAction>
 
                     <SidebarMenuSub v-if="isMenuOpen(item)">

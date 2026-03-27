@@ -1,9 +1,5 @@
 import '../css/app.css';
 
-import Aura from '@primeuix/themes/aura';
-import Lara from '@primeuix/themes/lara';
-import Material from '@primeuix/themes/material';
-import Nora from '@primeuix/themes/nora';
 import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import PrimeVue from 'primevue/config';
@@ -12,17 +8,20 @@ import ToastService from 'primevue/toastservice';
 import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
 import { initializeTheme } from './composables/useAppearance';
+import {
+    applyAppThemeColors,
+    applyStoredPrimeVueColors,
+    getPrimeVueThemePreset,
+    getStoredPrimeVueTheme,
+    resolvePrimeVueThemeFromEnv,
+} from './lib/primevue-theme';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
-const primeVueThemeName = (import.meta.env.VITE_PRIMEVUE_THEME || 'aura').toLowerCase();
-const primeVuePreset =
-    primeVueThemeName === 'lara'
-        ? Lara
-        : primeVueThemeName === 'material'
-          ? Material
-          : primeVueThemeName === 'nora'
-            ? Nora
-            : Aura;
+const initialPrimeVueTheme = getStoredPrimeVueTheme() ?? resolvePrimeVueThemeFromEnv();
+const { preset: primeVuePreset } = getPrimeVueThemePreset(initialPrimeVueTheme);
+
+// Apply light/dark class before the app mounts to avoid a flash of wrong theme.
+initializeTheme();
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
@@ -32,7 +31,7 @@ createInertiaApp({
             import.meta.glob<DefineComponent>('./pages/**/*.vue'),
         ),
     setup({ el, App, props, plugin }) {
-        createApp({ render: () => h(App, props) })
+        const app = createApp({ render: () => h(App, props) })
             .use(plugin)
             .use(PrimeVue, {
                 theme: {
@@ -41,15 +40,18 @@ createInertiaApp({
                         darkModeSelector: '.dark',
                     },
                 },
-            })
-            .use(ConfirmationService)
-            .use(ToastService)
-            .mount(el);
+            });
+
+        const { primary, surface } = applyStoredPrimeVueColors(initialPrimeVueTheme);
+        applyAppThemeColors(
+            primary,
+            surface,
+            document.documentElement.classList.contains('dark'),
+        );
+
+        app.use(ConfirmationService).use(ToastService).mount(el);
     },
     progress: {
         color: '#4B5563',
     },
 });
-
-// This will set light / dark mode on page load...
-initializeTheme();

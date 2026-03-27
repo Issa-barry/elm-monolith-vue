@@ -9,7 +9,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Building2, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-vue-next';
+import { Building2, Eye, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import IconField from 'primevue/iconfield';
@@ -107,7 +107,7 @@ function confirmDelete(s: Site) {
             </div>
 
             <!-- Tableau -->
-            <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="sites"
                     :paginator="sites.length > 20"
@@ -199,6 +199,12 @@ function confirmDelete(s: Site) {
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" class="w-44">
+                                        <DropdownMenuItem as-child>
+                                            <Link :href="`/sites/${data.id}`" class="flex items-center gap-2 w-full">
+                                                <Eye class="h-4 w-4" />
+                                                Voir
+                                            </Link>
+                                        </DropdownMenuItem>
                                         <DropdownMenuItem v-if="can('sites.update')" as-child>
                                             <Link :href="`/sites/${data.id}/edit`" class="flex items-center gap-2 w-full">
                                                 <Pencil class="h-4 w-4" />
