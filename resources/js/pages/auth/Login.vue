@@ -36,14 +36,14 @@ const showPassword = ref(false);
         <Head title="Connexion" />
 
         <Card
-            class="mx-auto w-full max-w-lg rounded-2xl border-border/80 bg-card/95 shadow-2xl shadow-black/8 dark:shadow-black/35"
+            class="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col border-0 bg-transparent shadow-none md:min-h-0 md:rounded-2xl md:border md:border-border/80 md:bg-card/95 md:shadow-2xl md:shadow-black/8 md:dark:shadow-black/35"
         >
-            <CardHeader class="px-6 pt-8 pb-0 text-center sm:px-8">
-                <!-- <div
-                    class="mx-auto mb-1 flex h-10 w-10 items-center justify-center rounded-md"
+            <CardHeader class="px-4 pt-10 pb-2 text-center sm:px-6 md:px-8 md:pt-8 md:pb-0">
+                <div
+                    class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-md"
                 >
-                    <AppLogoIcon class="size-9 fill-current text-foreground" />
-                </div> -->
+                    <AppLogoIcon class="size-10 fill-current text-foreground" />
+                </div>
                 <CardTitle class="text-2xl font-semibold">
                     Connexion
                 </CardTitle>
@@ -51,7 +51,9 @@ const showPassword = ref(false);
                     Eau la maman
                 </CardDescription>
             </CardHeader>
-            <CardContent class="px-8 pt-2 pb-4 sm:px-10 sm:pt-3 sm:pb-6">
+            <CardContent
+                class="flex flex-1 flex-col px-3 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-4 md:px-10 md:pt-3 md:pb-6"
+            >
                 <div
                     v-if="status"
                     class="mb-4 text-center text-sm font-medium text-green-600"
@@ -63,10 +65,10 @@ const showPassword = ref(false);
                     v-bind="store.form()"
                     :reset-on-success="['password']"
                     v-slot="{ errors, processing }"
-                    class="flex flex-col gap-6"
+                    class="flex flex-1 flex-col"
                 >
-                    <div class="grid gap-6">
-                        <div class="grid gap-2">
+                    <div class="space-y-5">
+                        <div class="space-y-2">
                             <Label for="email"
                                 >Adresse e-mail
                                 <span class="text-red-500">*</span></Label
@@ -80,18 +82,17 @@ const showPassword = ref(false);
                                 :tabindex="1"
                                 autocomplete="email"
                                 placeholder="email@example.com"
-                                class="h-10"
+                                class="h-12 text-base"
                             />
                             <InputError :message="errors.email" />
                         </div>
 
-                        <div class="grid gap-2">
-                            <div class="flex items-center justify-between">
+                        <div class="space-y-2">
+                            <div class="flex items-center">
                                 <Label for="password"
                                     >Mot de passe
                                     <span class="text-red-500">*</span></Label
                                 >
-                                
                             </div>
                             <div class="relative">
                                 <Input
@@ -102,7 +103,7 @@ const showPassword = ref(false);
                                     :tabindex="2"
                                     autocomplete="current-password"
                                     placeholder="Mot de passe"
-                                    class="h-10 pr-10"
+                                    class="h-12 pr-10 text-base"
                                 />
                                 <button
                                     type="button"
@@ -122,17 +123,27 @@ const showPassword = ref(false);
                             </div>
                             <InputError :message="errors.password" />
                         </div>
+                    </div>
 
-                        <div class="flex items-center justify-between">
-                            <Label for="remember" class="flex items-center space-x-3">
-                                <Checkbox id="remember" name="remember" :tabindex="3" />
-                                <span>Se souvenir de moi</span>
-                            </Label>
-                        </div>
+                    <div class="mt-5 flex items-center justify-between gap-3 text-sm">
+                        <Label for="remember" class="flex items-center space-x-2">
+                            <Checkbox id="remember" name="remember" :tabindex="3" />
+                            <span>Se souvenir de moi</span>
+                        </Label>
+                        <TextLink
+                            v-if="canResetPassword"
+                            :href="request()"
+                            class="text-sm"
+                            :tabindex="5"
+                        >
+                            Mot de passe oublie ?
+                        </TextLink>
+                    </div>
 
+                    <div class="mt-auto space-y-4 pt-6">
                         <Button
                             type="submit"
-                            class="mt-2 w-full"
+                            class="h-12 w-full rounded-xl text-base font-semibold"
                             :tabindex="4"
                             :disabled="processing"
                             data-test="login-button"
@@ -140,14 +151,16 @@ const showPassword = ref(false);
                             <Spinner v-if="processing" />
                             Se connecter
                         </Button>
-                    </div>
 
-                    <div
-                        class="text-center text-sm text-muted-foreground"
-                        v-if="canRegister"
-                    >
-                    <TextLink   class="text-center text-sm text-muted-foreground mr-2" v-if="canResetPassword" :href="request()" :tabindex="5">Mot de passe oublie ?</TextLink>
-                         <TextLink :href="register()" :tabindex="5" >S'inscrire</TextLink>
+                        <div
+                            class="text-center text-sm text-muted-foreground"
+                            v-if="canRegister"
+                        >
+                            Pas encore de compte ?
+                            <TextLink :href="register()" :tabindex="6">
+                                S'inscrire
+                            </TextLink>
+                        </div>
                     </div>
                 </Form>
             </CardContent>

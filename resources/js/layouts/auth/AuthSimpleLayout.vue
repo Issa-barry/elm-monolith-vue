@@ -11,7 +11,7 @@ defineProps<{
 
 <template>
     <div
-        class="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10"
+        class="flex min-h-dvh flex-col gap-6 bg-background px-4 py-4 md:min-h-svh md:items-center md:justify-center md:p-10"
     >
         <div class="w-full max-w-lg">
             <div class="flex flex-col" :class="title || description ? 'gap-8' : 'gap-0'">
