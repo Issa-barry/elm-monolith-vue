@@ -15,16 +15,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import AuthBase from '@/layouts/AuthLayout.vue';
+import { Eye, EyeOff } from 'lucide-vue-next';
 import { register } from '@/routes';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
 import { Form, Head } from '@inertiajs/vue3';
+import { ref } from 'vue';
 
 defineProps<{
     status?: string;
     canResetPassword: boolean;
     canRegister: boolean;
 }>();
+
+const showPassword = ref(false);
 </script>
 
 <template>
@@ -35,11 +39,11 @@ defineProps<{
             class="mx-auto w-full max-w-lg rounded-2xl border-border/80 bg-card/95 shadow-2xl shadow-black/8 dark:shadow-black/35"
         >
             <CardHeader class="px-6 pt-8 pb-0 text-center sm:px-8">
-                <div
+                <!-- <div
                     class="mx-auto mb-1 flex h-10 w-10 items-center justify-center rounded-md"
                 >
                     <AppLogoIcon class="size-9 fill-current text-foreground" />
-                </div>
+                </div> -->
                 <CardTitle class="text-2xl font-semibold">
                     Connexion
                 </CardTitle>
@@ -47,7 +51,7 @@ defineProps<{
                     Eau la maman
                 </CardDescription>
             </CardHeader>
-            <CardContent class="px-6 pt-2 pb-4 sm:px-8 sm:pt-3 sm:pb-6">
+            <CardContent class="px-8 pt-2 pb-4 sm:px-10 sm:pt-3 sm:pb-6">
                 <div
                     v-if="status"
                     class="mb-4 text-center text-sm font-medium text-green-600"
@@ -63,7 +67,10 @@ defineProps<{
                 >
                     <div class="grid gap-6">
                         <div class="grid gap-2">
-                            <Label for="email">Adresse e-mail</Label>
+                            <Label for="email"
+                                >Adresse e-mail
+                                <span class="text-red-500">*</span></Label
+                            >
                             <Input
                                 id="email"
                                 type="email"
@@ -73,24 +80,46 @@ defineProps<{
                                 :tabindex="1"
                                 autocomplete="email"
                                 placeholder="email@example.com"
+                                class="h-10"
                             />
                             <InputError :message="errors.email" />
                         </div>
 
                         <div class="grid gap-2">
                             <div class="flex items-center justify-between">
-                                <Label for="password">Mot de passe</Label>
+                                <Label for="password"
+                                    >Mot de passe
+                                    <span class="text-red-500">*</span></Label
+                                >
                                 
                             </div>
-                            <Input
-                                id="password"
-                                type="password"
-                                name="password"
-                                required
-                                :tabindex="2"
-                                autocomplete="current-password"
-                                placeholder="Mot de passe"
-                            />
+                            <div class="relative">
+                                <Input
+                                    id="password"
+                                    :type="showPassword ? 'text' : 'password'"
+                                    name="password"
+                                    required
+                                    :tabindex="2"
+                                    autocomplete="current-password"
+                                    placeholder="Mot de passe"
+                                    class="h-10 pr-10"
+                                />
+                                <button
+                                    type="button"
+                                    class="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                                    @click="showPassword = !showPassword"
+                                    :aria-label="
+                                        showPassword
+                                            ? 'Masquer le mot de passe'
+                                            : 'Afficher le mot de passe'
+                                    "
+                                >
+                                    <component
+                                        :is="showPassword ? EyeOff : Eye"
+                                        class="h-4 w-4"
+                                    />
+                                </button>
+                            </div>
                             <InputError :message="errors.password" />
                         </div>
 
