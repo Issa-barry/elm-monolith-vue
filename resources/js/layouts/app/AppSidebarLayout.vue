@@ -22,7 +22,9 @@ withDefaults(defineProps<Props>(), {
     <AppShell variant="sidebar">
         <AppSidebar />
         <AppContent variant="sidebar" class="overflow-x-hidden rounded-none">
-            <AppSidebarHeader v-if="showHeader" :breadcrumbs="breadcrumbs" />
+            <div class="hidden sm:block">
+                <AppSidebarHeader v-if="showHeader" :breadcrumbs="breadcrumbs" />
+            </div>
             <div class="flex flex-1 flex-col">
                 <slot />
             </div>
