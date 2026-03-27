@@ -88,7 +88,7 @@ function confirmDelete(produit: Produit) {
 <template>
     <Head title="Produits" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
 
         <!-- ─── VUE DESKTOP ─── -->
         <div class="hidden sm:flex flex-col gap-6 p-6">

@@ -63,7 +63,7 @@ function submit() {
 <template>
     <Head :title="`Modifier — ${produit.nom}`" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
 
         <!-- ─── Header mobile ─── -->
         <div class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden">
