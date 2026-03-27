@@ -1,4 +1,11 @@
 import { onMounted, ref } from 'vue';
+import {
+    applyPrimeVueThemePreset,
+    getStoredPrimeVueTheme,
+    resolvePrimeVueThemeFromEnv,
+    setStoredPrimeVueTheme,
+    type PrimeVueThemeName,
+} from '@/lib/primevue-theme';
 
 type Appearance = 'light' | 'dark' | 'system';
 
@@ -68,6 +75,7 @@ export function initializeTheme() {
 }
 
 const appearance = ref<Appearance>('system');
+const primeVueTheme = ref<PrimeVueThemeName>(resolvePrimeVueThemeFromEnv());
 
 export function useAppearance() {
     onMounted(() => {
@@ -78,6 +86,9 @@ export function useAppearance() {
         if (savedAppearance) {
             appearance.value = savedAppearance;
         }
+
+        const savedPrimeVueTheme = getStoredPrimeVueTheme();
+        primeVueTheme.value = savedPrimeVueTheme ?? resolvePrimeVueThemeFromEnv();
     });
 
     function updateAppearance(value: Appearance) {
@@ -92,8 +103,18 @@ export function useAppearance() {
         updateTheme(value);
     }
 
+    function updatePrimeVueTheme(value: PrimeVueThemeName) {
+        primeVueTheme.value = value;
+
+        setStoredPrimeVueTheme(value);
+        setCookie('primevue_theme', value);
+        applyPrimeVueThemePreset(value);
+    }
+
     return {
         appearance,
         updateAppearance,
+        primeVueTheme,
+        updatePrimeVueTheme,
     };
 }

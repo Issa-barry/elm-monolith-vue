@@ -1,9 +1,5 @@
 import '../css/app.css';
 
-import Aura from '@primeuix/themes/aura';
-import Lara from '@primeuix/themes/lara';
-import Material from '@primeuix/themes/material';
-import Nora from '@primeuix/themes/nora';
 import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import PrimeVue from 'primevue/config';
@@ -12,17 +8,15 @@ import ToastService from 'primevue/toastservice';
 import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
 import { initializeTheme } from './composables/useAppearance';
+import {
+    getPrimeVueThemePreset,
+    getStoredPrimeVueTheme,
+    resolvePrimeVueThemeFromEnv,
+} from './lib/primevue-theme';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
-const primeVueThemeName = (import.meta.env.VITE_PRIMEVUE_THEME || 'aura').toLowerCase();
-const primeVuePreset =
-    primeVueThemeName === 'lara'
-        ? Lara
-        : primeVueThemeName === 'material'
-          ? Material
-          : primeVueThemeName === 'nora'
-            ? Nora
-            : Aura;
+const initialPrimeVueTheme = getStoredPrimeVueTheme() ?? resolvePrimeVueThemeFromEnv();
+const { preset: primeVuePreset } = getPrimeVueThemePreset(initialPrimeVueTheme);
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),

@@ -23,6 +23,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'packings',
         'ventes',
         'users',
+        'parametres',
     ];
 
     private const ACTIONS = ['create', 'read', 'update', 'delete'];
@@ -57,6 +58,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'packings.create', 'packings.read', 'packings.update', 'packings.delete',
             'ventes.create', 'ventes.read', 'ventes.update', 'ventes.delete',
             'users.create', 'users.read', 'users.update',
+            'parametres.read', 'parametres.update',
         ]);
 
         $commerciale->syncPermissions([
