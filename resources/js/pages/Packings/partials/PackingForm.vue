@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Save } from 'lucide-vue-next';
+import { Save } from 'lucide-vue-next';
 import Calendar from 'primevue/calendar';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
@@ -59,11 +59,11 @@ function fromDate(val: Date | null): string {
 </script>
 
 <template>
-    <form class="space-y-8" @submit.prevent="emit('submit')">
+    <form id="packing-form" class="space-y-8" @submit.prevent="emit('submit')">
 
         <!-- Section : Informations ──────────────────────────────────────────── -->
-        <div class="rounded-xl border bg-card p-6 shadow-sm">
-            <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
+            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Informations
             </h3>
 
@@ -155,10 +155,9 @@ function fromDate(val: Date | null): string {
 
 
         <!-- Pied de formulaire ───────────────────────────────────────────────── -->
-        <div class="flex items-center justify-between">
+        <div class="hidden items-center justify-between sm:flex">
             <a href="/packings">
                 <Button type="button" variant="outline">
-                    <ArrowLeft class="mr-2 h-4 w-4" />
                     Retour
                 </Button>
             </a>
@@ -167,5 +166,6 @@ function fromDate(val: Date | null): string {
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
         </div>
+        <div class="h-20 sm:hidden" />
     </form>
 </template>

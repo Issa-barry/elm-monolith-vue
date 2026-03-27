@@ -13,7 +13,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { MoreVertical, Plus, Search, ShoppingCart, Trash2, XCircle } from 'lucide-vue-next';
+import { ArrowLeft, ChevronRight, MoreVertical, Plus, Search, ShoppingCart, Trash2, XCircle } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
@@ -23,7 +23,7 @@ import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Commande {
@@ -77,6 +77,18 @@ function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
 
+// ── Filtre mobile ─────────────────────────────────────────────────────────────
+const mobileSearch = ref('');
+
+const mobileFiltered = computed(() => {
+    const q = mobileSearch.value.toLowerCase().trim();
+    if (!q) return props.commandes;
+    return props.commandes.filter(c =>
+        c.reference.toLowerCase().includes(q) ||
+        (c.client_nom && c.client_nom.toLowerCase().includes(q))
+    );
+});
+
 // ── Annulation ────────────────────────────────────────────────────────────────
 const annulerDialogVisible = ref(false);
 const selectedCommande = ref<Commande | null>(null);
@@ -127,8 +139,81 @@ function confirmDelete(c: Commande) {
 <template>
     <Head title="Ventes" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+
+        <!-- ── MOBILE VIEW ─────────────────────────────────────────────────── -->
+        <div class="flex flex-col sm:hidden">
+
+            <!-- Sticky header -->
+            <div class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3">
+                <Link href="/dashboard" class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground">
+                    <ArrowLeft class="h-5 w-5" />
+                </Link>
+                <span class="text-base font-semibold">Ventes</span>
+                <Link v-if="can('ventes.create')" href="/ventes/create">
+                    <Button size="sm" class="h-8 px-3 text-xs">
+                        <Plus class="mr-1 h-3.5 w-3.5" />
+                        Nouveau
+                    </Button>
+                </Link>
+                <div v-else class="w-8" />
+            </div>
+
+            <!-- Search -->
+            <div class="border-b px-4 py-2">
+                <div class="relative">
+                    <Search class="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    <input
+                        v-model="mobileSearch"
+                        type="text"
+                        placeholder="Référence, client…"
+                        class="h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                </div>
+            </div>
+
+            <!-- Card list -->
+            <div class="divide-y">
+                <Link
+                    v-for="c in mobileFiltered"
+                    :key="c.id"
+                    :href="`/ventes/${c.id}`"
+                    class="flex items-start justify-between gap-3 px-4 py-3 hover:bg-muted/10 active:bg-muted/20"
+                >
+                    <div class="min-w-0 flex-1">
+                        <p class="font-mono text-sm font-semibold tracking-wide text-primary">{{ c.reference }}</p>
+                        <p class="mt-0.5 text-xs text-muted-foreground">{{ c.client_nom ?? '—' }}</p>
+                        <p class="mt-1 text-sm font-medium tabular-nums">{{ formatGNF(c.total_commande) }}</p>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <div class="flex flex-col items-end gap-1.5">
+                            <StatusDot
+                                :label="c.statut_label"
+                                :dot-class="statutCommandeColor[c.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                class="text-xs text-muted-foreground"
+                            />
+                            <span class="text-xs tabular-nums text-muted-foreground">{{ c.created_at }}</span>
+                        </div>
+                        <ChevronRight class="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                    </div>
+                </Link>
+            </div>
+
+            <!-- Empty state -->
+            <div v-if="mobileFiltered.length === 0" class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                <ShoppingCart class="h-10 w-10 opacity-30" />
+                <p class="text-sm">Aucune commande trouvée.</p>
+                <Link v-if="can('ventes.create')" href="/ventes/create">
+                    <Button variant="outline" size="sm">
+                        <Plus class="mr-2 h-4 w-4" />
+                        Créer la première commande
+                    </Button>
+                </Link>
+            </div>
+        </div>
+
+        <!-- ── DESKTOP VIEW ────────────────────────────────────────────────── -->
+        <div class="hidden sm:flex flex-col gap-6 p-6">
 
             <!-- En-tête -->
             <div class="flex items-center justify-between">

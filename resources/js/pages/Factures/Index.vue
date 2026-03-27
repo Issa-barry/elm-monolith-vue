@@ -6,7 +6,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { BadgeCheck, Clock, CreditCard, Hourglass } from 'lucide-vue-next';
+import { ArrowLeft, BadgeCheck, Clock, CreditCard, Hourglass, Search } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
@@ -131,6 +131,24 @@ function formatCompact(val: number): string {
     return val + ' GNF';
 }
 
+// ── Filtre mobile ─────────────────────────────────────────────────────────────
+const mobileSearch = ref('');
+
+const mobileFiltered = computed(() => {
+    const q = mobileSearch.value.toLowerCase().trim();
+    let list = props.factures;
+    if (filtreStatut.value !== 'tous') {
+        list = list.filter(f => f.statut_facture === filtreStatut.value);
+    }
+    if (!q) return list;
+    return list.filter(f =>
+        f.reference.toLowerCase().includes(q) ||
+        (f.vehicule_nom && f.vehicule_nom.toLowerCase().includes(q)) ||
+        (f.client_nom   && f.client_nom.toLowerCase().includes(q)) ||
+        (f.site_nom     && f.site_nom.toLowerCase().includes(q))
+    );
+});
+
 // ── Dialog encaissement ───────────────────────────────────────────────────────
 const dialogVisible  = ref(false);
 const factureActive  = ref<FactureItem | null>(null);
@@ -171,8 +189,102 @@ function progressPercent(f: FactureItem): number {
 <template>
     <Head title="Factures de vente" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="w-full space-y-6 p-6">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+
+        <!-- ── MOBILE VIEW ─────────────────────────────────────────────────── -->
+        <div class="flex flex-col sm:hidden">
+
+            <!-- Sticky header -->
+            <div class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3">
+                <Link href="/dashboard" class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground">
+                    <ArrowLeft class="h-5 w-5" />
+                </Link>
+                <span class="text-base font-semibold">Factures</span>
+                <div class="w-8" />
+            </div>
+
+            <!-- KPI cards -->
+            <div class="grid grid-cols-2 gap-3 p-4">
+                <div class="rounded-xl border bg-card p-4 shadow-sm">
+                    <p class="text-xs text-muted-foreground">Restant à encaisser</p>
+                    <p class="mt-1 text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ formatCompact(totaux.total_a_encaisser) }}</p>
+                </div>
+                <div class="rounded-xl border bg-card p-4 shadow-sm">
+                    <p class="text-xs text-muted-foreground">Impayées</p>
+                    <p class="mt-1 text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ formatCompact(totaux.montant_impayees) }}</p>
+                    <p class="text-xs text-muted-foreground">{{ totaux.nb_impayees }} facture{{ totaux.nb_impayees > 1 ? 's' : '' }}</p>
+                </div>
+                <div class="rounded-xl border bg-card p-4 shadow-sm">
+                    <p class="text-xs text-muted-foreground">Partielles</p>
+                    <p class="mt-1 text-lg font-bold tabular-nums text-blue-600 dark:text-blue-400">{{ formatCompact(totaux.montant_partielles) }}</p>
+                    <p class="text-xs text-muted-foreground">{{ totaux.nb_partielles }} facture{{ totaux.nb_partielles > 1 ? 's' : '' }}</p>
+                </div>
+                <div class="rounded-xl border bg-card p-4 shadow-sm">
+                    <p class="text-xs text-muted-foreground">Soldées</p>
+                    <p class="mt-1 text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ formatCompact(totaux.montant_payees) }}</p>
+                    <p class="text-xs text-muted-foreground">{{ totaux.nb_payees }} facture{{ totaux.nb_payees > 1 ? 's' : '' }}</p>
+                </div>
+            </div>
+
+            <!-- Search -->
+            <div class="border-t border-b px-4 py-2">
+                <div class="relative">
+                    <Search class="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    <input
+                        v-model="mobileSearch"
+                        type="text"
+                        placeholder="Référence, véhicule, client…"
+                        class="h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                </div>
+            </div>
+
+            <!-- Card list -->
+            <div class="divide-y">
+                <div
+                    v-for="f in mobileFiltered"
+                    :key="f.id"
+                    class="flex items-start justify-between gap-3 px-4 py-3"
+                >
+                    <div class="min-w-0 flex-1">
+                        <p class="font-mono text-sm font-semibold tracking-wide">{{ f.reference }}</p>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            {{ f.vehicule_nom ?? f.client_nom ?? '—' }}
+                        </p>
+                        <p class="mt-1 text-sm font-medium tabular-nums">{{ formatGNF(f.montant_net) }}</p>
+                        <p v-if="f.montant_restant > 0" class="text-xs font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                            Restant : {{ formatGNF(f.montant_restant) }}
+                        </p>
+                    </div>
+                    <div class="flex flex-col items-end gap-2 shrink-0">
+                        <StatusDot
+                            :label="f.statut_label"
+                            :dot-class="statutColor[f.statut_facture] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                            class="text-xs text-muted-foreground"
+                        />
+                        <span class="text-xs tabular-nums text-muted-foreground">{{ f.created_at }}</span>
+                        <Button
+                            v-if="!f.is_annulee && !f.is_payee && can('ventes.update')"
+                            size="sm"
+                            variant="outline"
+                            class="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
+                            @click="openDialog(f)"
+                        >
+                            <CreditCard class="mr-1 h-3.5 w-3.5" />
+                            Encaisser
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty state -->
+            <div v-if="mobileFiltered.length === 0" class="py-16 text-center text-sm text-muted-foreground">
+                Aucune facture trouvée.
+            </div>
+        </div>
+
+        <!-- ── DESKTOP VIEW ────────────────────────────────────────────────── -->
+        <div class="hidden sm:block w-full space-y-6 p-4 sm:p-6">
 
             <!-- En-tête -->
             <div class="flex items-center justify-between">

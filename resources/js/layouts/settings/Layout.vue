@@ -38,21 +38,21 @@ const currentPath = typeof window !== undefined ? window.location.pathname : '';
 </script>
 
 <template>
-    <div class="px-4 py-6">
+    <div class="p-4 sm:p-6">
         <Heading
             title="Paramètres"
             description="Gérez votre profil et les paramètres de votre compte"
         />
 
         <div class="flex flex-col lg:flex-row lg:space-x-12">
-            <aside class="w-full max-w-xl lg:w-48">
-                <nav class="flex flex-col space-y-1 space-x-0">
+            <aside class="w-full lg:w-48">
+                <nav class="flex overflow-x-auto gap-1 sm:flex-col sm:space-y-1 sm:overflow-x-visible pb-2 sm:pb-0">
                     <Button
                         v-for="item in sidebarNavItems"
                         :key="toUrl(item.href)"
                         variant="ghost"
                         :class="[
-                            'w-full justify-start',
+                            'shrink-0 justify-start sm:w-full',
                             { 'bg-muted': urlIsActive(item.href, currentPath) },
                         ]"
                         as-child
@@ -65,7 +65,7 @@ const currentPath = typeof window !== undefined ? window.location.pathname : '';
                 </nav>
             </aside>
 
-            <Separator class="my-6 lg:hidden" />
+            <Separator class="my-4 lg:hidden" />
 
             <div class="flex-1 md:max-w-2xl">
                 <section class="max-w-xl space-y-12">

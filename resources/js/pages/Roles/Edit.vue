@@ -176,8 +176,21 @@ const breadcrumbs: BreadcrumbItem[] = [
 <template>
     <Head :title="`Permissions — ${cfg.label}`" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+        <!-- Mobile sticky header -->
+        <div class="sticky top-0 z-10 flex items-center gap-3 border-b bg-background px-4 py-3 sm:hidden">
+            <Link href="/roles">
+                <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
+                    <ArrowLeft class="h-4 w-4" />
+                </Button>
+            </Link>
+            <p class="flex-1 truncate text-center text-sm font-semibold">
+                Permissions — {{ cfg.label }}
+            </p>
+            <div class="w-8 shrink-0" />
+        </div>
+
+        <div class="flex flex-col gap-6 p-4 sm:p-6">
 
             <!-- En-tête ─────────────────────────────────────────────────────── -->
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -237,7 +250,7 @@ const breadcrumbs: BreadcrumbItem[] = [
             </div>
 
             <!-- Matrice de permissions ──────────────────────────────────────── -->
-            <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div class="overflow-x-auto overflow-hidden rounded-xl border bg-card shadow-sm">
 
                 <!-- Titre matrice -->
                 <div class="flex items-center justify-between border-b bg-muted/30 px-6 py-3">

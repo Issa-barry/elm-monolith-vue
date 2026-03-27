@@ -6,7 +6,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
 import {
-    Building2, Mail, MapPin, Pencil, Phone, Users,
+    ArrowLeft, Building2, Mail, MapPin, Pencil, Phone, Users,
     Globe, ChevronRight, Navigation,
 } from 'lucide-vue-next';
 
@@ -77,11 +77,27 @@ function mapsUrl(lat: number, lng: number) {
 <template>
     <Head :title="site.nom" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6 max-w-4xl mx-auto">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+        <!-- Mobile sticky header -->
+        <div class="sticky top-0 z-10 flex items-center gap-3 border-b bg-background px-4 py-3 sm:hidden">
+            <Link href="/sites">
+                <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
+                    <ArrowLeft class="h-4 w-4" />
+                </Button>
+            </Link>
+            <p class="flex-1 truncate text-center text-sm font-semibold">{{ site.nom }}</p>
+            <Link v-if="can('sites.update')" :href="`/sites/${site.id}/edit`">
+                <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
+                    <Pencil class="h-4 w-4" />
+                </Button>
+            </Link>
+            <div v-else class="w-8 shrink-0" />
+        </div>
+
+        <div class="flex flex-col gap-6 p-4 sm:p-6 max-w-4xl mx-auto">
 
             <!-- En-tête -->
-            <div class="flex items-start justify-between gap-4">
+            <div class="hidden sm:flex items-start justify-between gap-4">
                 <div class="flex items-center gap-4">
                     <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border bg-muted/40">
                         <Building2 class="h-7 w-7 text-muted-foreground" />
@@ -112,7 +128,7 @@ function mapsUrl(lat: number, lng: number) {
                 </Link>
             </div>
 
-            <div class="grid gap-6 md:grid-cols-2">
+            <div class="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2">
 
                 <!-- Localisation -->
                 <div class="rounded-xl border bg-card p-5">
