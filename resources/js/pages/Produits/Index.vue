@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -14,9 +14,9 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     AlertTriangle,
+    ArrowLeft,
     MoreVertical,
     Package,
-    PackageMinus,
     Pencil,
     Plus,
     Search,
@@ -29,23 +29,17 @@ import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
-// ── Props ─────────────────────────────────────────────────────────────────────
 interface Produit {
     id: number;
     nom: string;
     code_interne: string | null;
-    type: string;
-    type_label: string;
+    image_url: string | null;
+    is_critique: boolean;
     statut: string;
     statut_label: string;
-    image_url: string | null;
-    prix_vente: number | null;
-    prix_usine: number | null;
-    prix_achat: number | null;
-    qte_stock: number;
-    is_critique: boolean;
+    qte_stock: number | null;
     in_stock: boolean;
     is_low_stock: boolean;
     has_stock: boolean;
@@ -61,35 +55,22 @@ const search = ref('');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => { filters.value.global.value = val; });
 
+const filteredProduits = computed(() => {
+    const query = search.value.trim().toLowerCase();
+    if (!query) return props.produits;
+    return props.produits.filter((p) =>
+        [p.nom, p.code_interne ?? ''].join(' ').toLowerCase().includes(query),
+    );
+});
+
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Produits', href: '/produits' },
 ];
 
-// ── Config badges ─────────────────────────────────────────────────────────────
-const typeColor: Record<string, string> = {
-    materiel:    'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    service:     'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300',
-    fabricable:  'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-    achat_vente: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-};
-
-const statutColor: Record<string, string> = {
-    actif:   'bg-emerald-500',
-    inactif: 'bg-zinc-400 dark:bg-zinc-500',
-    archive: 'bg-red-500',
-};
-
-// ── Formatage ─────────────────────────────────────────────────────────────────
-function formatPrix(v: number | null): string {
-    if (v === null || v === undefined) return '—';
-    return new Intl.NumberFormat('fr-GN', { style: 'decimal' }).format(v) + ' GNF';
-}
-
-// ── Suppression ───────────────────────────────────────────────────────────────
 function confirmDelete(produit: Produit) {
     confirm.require({
-        message: `Supprimer « ${produit.nom} » ? Cette action est irréversible.`,
+        message: `Supprimer "${produit.nom}" ? Cette action est irreversible.`,
         header: 'Confirmer la suppression',
         icon: 'pi pi-exclamation-triangle',
         rejectLabel: 'Annuler',
@@ -97,7 +78,14 @@ function confirmDelete(produit: Produit) {
         acceptClass: 'p-button-danger',
         accept: () => {
             router.delete(`/produits/${produit.id}`, {
-                onSuccess: () => toast.add({ severity: 'success', summary: 'Supprimé', detail: `${produit.nom} a été supprimé.`, life: 3000 }),
+                onSuccess: () => {
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Supprime',
+                        detail: `${produit.nom} a ete supprime.`,
+                        life: 3000,
+                    });
+                },
             });
         },
     });
@@ -108,17 +96,17 @@ function confirmDelete(produit: Produit) {
     <Head title="Produits" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6">
 
-            <!-- En-tête ──────────────────────────────────────────────────────── -->
+        <!-- ─── VUE DESKTOP ─── -->
+        <div class="hidden sm:flex flex-col gap-6 p-6">
+
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-2xl font-semibold tracking-tight">Produits</h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ produits.length }} produit{{ produits.length !== 1 ? 's' : '' }} dans le catalogue
+                        {{ props.produits.length }} produit{{ props.produits.length !== 1 ? 's' : '' }} dans le catalogue
                     </p>
                 </div>
-
                 <Link v-if="can('produits.create')" href="/produits/create">
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
@@ -127,13 +115,12 @@ function confirmDelete(produit: Produit) {
                 </Link>
             </div>
 
-            <!-- Tableau ──────────────────────────────────────────────────────── -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="produits"
-                    :paginator="produits.length > 20"
+                    :value="props.produits"
+                    :paginator="props.produits.length > 20"
                     :rows="20"
-                    :global-filter-fields="['nom', 'code_interne', 'type_label', 'statut_label']"
+                    :global-filter-fields="['nom', 'code_interne']"
                     v-model:filters="filters"
                     data-key="id"
                     striped-rows
@@ -146,35 +133,25 @@ function confirmDelete(produit: Produit) {
                         tbody: { class: 'divide-y' },
                     }"
                 >
-                    <!-- Barre de recherche -->
                     <template #header>
                         <div class="flex items-center gap-3">
                             <IconField class="max-w-sm flex-1">
                                 <InputIcon class="pointer-events-none">
                                     <Search class="h-4 w-4 text-muted-foreground" />
                                 </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Rechercher un produit..."
-                                    class="w-full text-sm"
-                                />
+                                <InputText v-model="search" placeholder="Rechercher un produit..." class="w-full text-sm" />
                             </IconField>
                             <span class="text-xs text-muted-foreground">
-                                {{ produits.length }} résultat{{ produits.length !== 1 ? 's' : '' }}
+                                {{ props.produits.length }} résultat{{ props.produits.length !== 1 ? 's' : '' }}
                             </span>
                         </div>
                     </template>
 
-                    <!-- Image ──── -->
-                    <Column header="Image" style="width: 60px">
+                    <!-- Image -->
+                    <Column header="Image" style="width: 72px">
                         <template #body="{ data }">
                             <div class="h-10 w-10 overflow-hidden rounded-lg border bg-muted">
-                                <img
-                                    v-if="data.image_url"
-                                    :src="data.image_url"
-                                    :alt="data.nom"
-                                    class="h-full w-full object-cover"
-                                />
+                                <img v-if="data.image_url" :src="data.image_url" :alt="data.nom" class="h-full w-full object-cover" />
                                 <div v-else class="flex h-full w-full items-center justify-center">
                                     <Package class="h-5 w-5 text-muted-foreground/40" />
                                 </div>
@@ -182,95 +159,59 @@ function confirmDelete(produit: Produit) {
                         </template>
                     </Column>
 
-                    <!-- Code ──── -->
-                    <Column field="code_interne" header="Code-barres" sortable style="width: 170px">
+                    <!-- Code -->
+                    <Column field="code_interne" header="Code" sortable style="width: 180px">
                         <template #body="{ data }">
-                            <div class="font-mono text-xs font-semibold tracking-wide text-foreground whitespace-nowrap">
-                                {{ data.code_interne }}
-                            </div>
-                        </template>
-                    </Column>
-
-                    <!-- Nom ──── -->
-                    <Column field="nom" header="Produit" sortable style="min-width: 240px">
-                        <template #body="{ data }">
-                            <div class="flex items-center gap-1.5 font-medium">
-                                {{ data.nom }}
-                                <span v-if="data.is_critique" title="Produit critique">
-                                    <AlertTriangle class="h-3.5 w-3.5 text-amber-500" />
-                                </span>
-                            </div>
-                        </template>
-                    </Column>
-
-                    <!-- Type ──── -->
-                    <Column field="type" header="Type" sortable style="width: 140px">
-                        <template #body="{ data }">
-                            <span
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="typeColor[data.type] ?? 'bg-muted text-muted-foreground'"
-                            >
-                                {{ data.type_label }}
+                            <span class="font-mono text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                                {{ data.code_interne || '—' }}
                             </span>
                         </template>
                     </Column>
 
-                    <!-- Statut ──── -->
-                    <Column field="statut" header="Statut" sortable style="width: 130px">
+                    <!-- Produit -->
+                    <Column field="nom" header="Produit" sortable style="min-width: 200px">
+                        <template #body="{ data }">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-medium">{{ data.nom }}</span>
+                                <AlertTriangle v-if="data.is_critique" class="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                            </div>
+                        </template>
+                    </Column>
+
+                    <!-- Stock -->
+                    <Column field="qte_stock" header="Stock" sortable style="width: 120px">
+                        <template #body="{ data }">
+                            <template v-if="!data.has_stock">
+                                <span class="text-xs text-muted-foreground">—</span>
+                            </template>
+                            <template v-else>
+                                <div class="flex items-center gap-1.5">
+                                    <span
+                                        class="tabular-nums text-sm font-medium"
+                                        :class="data.is_low_stock ? 'text-amber-600' : 'text-foreground'"
+                                    >{{ data.qte_stock ?? 0 }}</span>
+                                    <AlertTriangle v-if="data.is_low_stock" class="h-3.5 w-3.5 text-amber-500" />
+                                </div>
+                            </template>
+                        </template>
+                    </Column>
+
+                    <!-- Statut -->
+                    <Column field="statut" header="Statut" sortable style="width: 120px">
                         <template #body="{ data }">
                             <StatusDot
                                 :label="data.statut_label"
-                                :dot-class="statutColor[data.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                :dot-class="
+                                    data.statut === 'actif'   ? 'bg-emerald-500' :
+                                    data.statut === 'inactif' ? 'bg-zinc-400 dark:bg-zinc-500' :
+                                    'bg-orange-400'
+                                "
                                 class="text-muted-foreground"
                             />
                         </template>
                     </Column>
 
-                    <!-- Prix vente ──── -->
-                    <Column field="prix_vente" header="Prix vente" sortable style="width: 160px">
-                        <template #body="{ data }">
-                            <span class="font-medium tabular-nums whitespace-nowrap">{{ formatPrix(data.prix_vente) }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Prix achat ──── -->
-                    <Column field="prix_achat" header="Prix achat" sortable style="width: 160px">
-                        <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">{{ formatPrix(data.prix_achat) }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Prix usine ──── (fabricable uniquement) -->
-                    <Column field="prix_usine" header="Prix usine" sortable style="width: 160px">
-                        <template #body="{ data }">
-                            <span v-if="data.type === 'fabricable'" class="tabular-nums text-muted-foreground whitespace-nowrap">
-                                {{ formatPrix(data.prix_usine) }}
-                            </span>
-                            <span v-else class="text-xs text-muted-foreground/40">—</span>
-                        </template>
-                    </Column>
-
-                    <!-- Stock ──── -->
-                    <Column field="qte_stock" header="Stock" sortable style="width: 120px">
-                        <template #body="{ data }">
-                            <div v-if="data.has_stock" class="flex items-center gap-1.5">
-                                <PackageMinus v-if="!data.in_stock" class="h-4 w-4 text-red-500" />
-                                <AlertTriangle v-else-if="data.is_low_stock" class="h-4 w-4 text-amber-500" />
-                                <span
-                                    class="font-medium tabular-nums"
-                                    :class="{
-                                        'text-red-600 dark:text-red-400': !data.in_stock,
-                                        'text-amber-600 dark:text-amber-400': data.is_low_stock && data.in_stock,
-                                    }"
-                                >
-                                    {{ data.qte_stock }}
-                                </span>
-                            </div>
-                            <span v-else class="text-xs text-muted-foreground italic">Service</span>
-                        </template>
-                    </Column>
-
-                    <!-- Actions ──── -->
+                    <!-- Actions -->
                     <Column header="" style="width: 56px">
                         <template #body="{ data }">
                             <div class="flex justify-end">
@@ -282,7 +223,7 @@ function confirmDelete(produit: Produit) {
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" class="w-44">
                                         <DropdownMenuItem v-if="can('produits.update')" as-child>
-                                            <Link :href="`/produits/${data.id}/edit`" class="flex items-center gap-2 w-full">
+                                            <Link :href="`/produits/${data.id}/edit`" class="flex w-full items-center gap-2">
                                                 <Pencil class="h-4 w-4" />
                                                 Modifier
                                             </Link>
@@ -290,7 +231,7 @@ function confirmDelete(produit: Produit) {
                                         <DropdownMenuSeparator v-if="can('produits.update') && can('produits.delete')" />
                                         <DropdownMenuItem
                                             v-if="can('produits.delete')"
-                                            class="text-destructive focus:text-destructive cursor-pointer"
+                                            class="cursor-pointer text-destructive focus:text-destructive"
                                             @click="confirmDelete(data)"
                                         >
                                             <Trash2 class="h-4 w-4" />
@@ -302,7 +243,7 @@ function confirmDelete(produit: Produit) {
                         </template>
                     </Column>
 
-                    <!-- État vide -->
+                    <!-- Empty state -->
                     <template #empty>
                         <div class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
                             <Package class="h-12 w-12 opacity-30" />
@@ -318,5 +259,133 @@ function confirmDelete(produit: Produit) {
                 </DataTable>
             </div>
         </div>
+
+        <!-- ─── VUE MOBILE ─── -->
+        <div class="flex flex-col sm:hidden min-h-full bg-background">
+
+            <!-- Header fixe style app native -->
+            <div class="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border/60">
+                <div class="relative flex items-center justify-center px-4 pt-4 pb-3">
+                    <!-- Bouton retour (gauche) -->
+                    <Link
+                        href="/dashboard"
+                        class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-95 transition-transform"
+                    >
+                        <ArrowLeft class="h-4 w-4" />
+                    </Link>
+
+                    <!-- Titre centré -->
+                    <div class="text-center">
+                        <h1 class="text-[17px] font-semibold leading-tight">Produits</h1>
+                        <p class="text-[11px] text-muted-foreground">
+                            {{ filteredProduits.length }} dans le catalogue
+                        </p>
+                    </div>
+
+                    <!-- Bouton action (droite) -->
+                    <Link v-if="can('produits.create')" href="/produits/create" class="absolute right-4 shrink-0">
+                        <button class="inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm active:scale-95 transition-transform">
+                            <Plus class="h-3.5 w-3.5" />
+                            Nouveau
+                        </button>
+                    </Link>
+                </div>
+
+                <!-- Barre de recherche -->
+                <div class="px-4 pb-3">
+                    <div class="relative flex items-center">
+                        <Search class="absolute left-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        <input
+                            v-model="search"
+                            type="search"
+                            placeholder="Rechercher un produit..."
+                            class="w-full rounded-xl border-0 bg-muted py-2.5 pl-9 pr-4 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Liste produits -->
+            <div v-if="filteredProduits.length" class="divide-y divide-border/50">
+                <div
+                    v-for="data in filteredProduits"
+                    :key="data.id"
+                    class="flex items-center gap-3.5 px-4 py-3.5 active:bg-muted/40 transition-colors"
+                >
+                    <!-- Image -->
+                    <div class="h-12 w-12 shrink-0 overflow-hidden rounded-xl border bg-muted shadow-sm">
+                        <img
+                            v-if="data.image_url"
+                            :src="data.image_url"
+                            :alt="data.nom"
+                            class="h-full w-full object-cover"
+                        />
+                        <div v-else class="flex h-full w-full items-center justify-center">
+                            <Package class="h-5 w-5 text-muted-foreground/30" />
+                        </div>
+                    </div>
+
+                    <!-- Infos -->
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-1.5">
+                            <p class="truncate text-[13px] font-semibold leading-tight">{{ data.nom }}</p>
+                            <AlertTriangle
+                                v-if="data.is_critique"
+                                class="h-3.5 w-3.5 shrink-0 text-amber-500"
+                            />
+                        </div>
+                        <p class="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                            {{ data.code_interne || '—' }}
+                        </p>
+                    </div>
+
+                    <!-- Actions -->
+                    <DropdownMenu>
+                        <DropdownMenuTrigger as-child>
+                            <button class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-muted transition-colors">
+                                <MoreVertical class="h-4 w-4" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="w-44">
+                            <DropdownMenuItem v-if="can('produits.update')" as-child>
+                                <Link :href="`/produits/${data.id}/edit`" class="flex w-full items-center gap-2">
+                                    <Pencil class="h-4 w-4" />
+                                    Modifier
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator v-if="can('produits.update') && can('produits.delete')" />
+                            <DropdownMenuItem
+                                v-if="can('produits.delete')"
+                                class="cursor-pointer text-destructive focus:text-destructive"
+                                @click="confirmDelete(data)"
+                            >
+                                <Trash2 class="h-4 w-4" />
+                                Supprimer
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </div>
+
+            <!-- Empty state mobile -->
+            <div v-else class="flex flex-col items-center gap-4 px-6 py-16 text-center">
+                <div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+                    <Package class="h-8 w-8 text-muted-foreground/40" />
+                </div>
+                <div>
+                    <p class="font-medium text-foreground">Aucun produit</p>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        {{ search ? 'Aucun résultat pour cette recherche.' : 'Le catalogue est vide pour le moment.' }}
+                    </p>
+                </div>
+                <Link v-if="can('produits.create') && !search" href="/produits/create">
+                    <button class="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm active:scale-95 transition-transform">
+                        <Plus class="h-4 w-4" />
+                        Créer le premier produit
+                    </button>
+                </Link>
+            </div>
+        </div>
+
     </AppLayout>
 </template>

@@ -9,10 +9,12 @@ import Toast from 'primevue/toast';
 
 interface Props {
     breadcrumbs?: BreadcrumbItemType[];
+    showHeader?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
     breadcrumbs: () => [],
+    showHeader: true,
 });
 </script>
 
@@ -20,7 +22,7 @@ withDefaults(defineProps<Props>(), {
     <AppShell variant="sidebar">
         <AppSidebar />
         <AppContent variant="sidebar" class="overflow-x-hidden rounded-none">
-            <AppSidebarHeader :breadcrumbs="breadcrumbs" />
+            <AppSidebarHeader v-if="showHeader" :breadcrumbs="breadcrumbs" />
             <div class="flex flex-1 flex-col">
                 <slot />
             </div>
