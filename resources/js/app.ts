@@ -9,6 +9,7 @@ import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
 import { initializeTheme } from './composables/useAppearance';
 import {
+    applyStoredPrimeVueColors,
     getPrimeVueThemePreset,
     getStoredPrimeVueTheme,
     resolvePrimeVueThemeFromEnv,
@@ -26,7 +27,7 @@ createInertiaApp({
             import.meta.glob<DefineComponent>('./pages/**/*.vue'),
         ),
     setup({ el, App, props, plugin }) {
-        createApp({ render: () => h(App, props) })
+        const app = createApp({ render: () => h(App, props) })
             .use(plugin)
             .use(PrimeVue, {
                 theme: {
@@ -35,10 +36,11 @@ createInertiaApp({
                         darkModeSelector: '.dark',
                     },
                 },
-            })
-            .use(ConfirmationService)
-            .use(ToastService)
-            .mount(el);
+            });
+
+        applyStoredPrimeVueColors(initialPrimeVueTheme);
+
+        app.use(ConfirmationService).use(ToastService).mount(el);
     },
     progress: {
         color: '#4B5563',

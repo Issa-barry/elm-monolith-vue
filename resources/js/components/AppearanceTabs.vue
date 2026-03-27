@@ -2,7 +2,16 @@
 import { useAppearance } from '@/composables/useAppearance';
 import { Monitor, Moon, Sun } from 'lucide-vue-next';
 
-const { appearance, updateAppearance, primeVueTheme, updatePrimeVueTheme } = useAppearance();
+const {
+    appearance,
+    updateAppearance,
+    primeVueTheme,
+    updatePrimeVueTheme,
+    primeVuePrimary,
+    updatePrimeVuePrimary,
+    primeVueSurface,
+    updatePrimeVueSurface,
+} = useAppearance();
 
 const tabs = [
     { value: 'light', Icon: Sun, label: 'Light' },
@@ -11,10 +20,33 @@ const tabs = [
 ] as const;
 
 const primeVueThemes = [
+    { value: 'starter', label: 'Starter Kit' },
     { value: 'aura', label: 'Aura' },
     { value: 'lara', label: 'Lara' },
     { value: 'material', label: 'Material' },
     { value: 'nora', label: 'Nora' },
+] as const;
+
+const primeVuePrimaryColors = [
+    { value: 'zinc', colorClass: 'bg-zinc-500' },
+    { value: 'emerald', colorClass: 'bg-emerald-500' },
+    { value: 'blue', colorClass: 'bg-blue-500' },
+    { value: 'indigo', colorClass: 'bg-indigo-500' },
+    { value: 'violet', colorClass: 'bg-violet-500' },
+    { value: 'fuchsia', colorClass: 'bg-fuchsia-500' },
+    { value: 'rose', colorClass: 'bg-rose-500' },
+    { value: 'orange', colorClass: 'bg-orange-500' },
+    { value: 'amber', colorClass: 'bg-amber-500' },
+    { value: 'teal', colorClass: 'bg-teal-500' },
+    { value: 'cyan', colorClass: 'bg-cyan-500' },
+] as const;
+
+const primeVueSurfaceColors = [
+    { value: 'zinc', colorClass: 'bg-zinc-500' },
+    { value: 'slate', colorClass: 'bg-slate-500' },
+    { value: 'stone', colorClass: 'bg-stone-500' },
+    { value: 'neutral', colorClass: 'bg-neutral-500' },
+    { value: 'gray', colorClass: 'bg-gray-500' },
 ] as const;
 </script>
 
@@ -56,6 +88,52 @@ const primeVueThemes = [
                     ]"
                 >
                     {{ label }}
+                </button>
+            </div>
+        </div>
+
+        <div class="space-y-2">
+            <p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Couleur principale
+            </p>
+            <div class="flex flex-wrap gap-2">
+                <button
+                    v-for="{ value, colorClass } in primeVuePrimaryColors"
+                    :key="value"
+                    type="button"
+                    :aria-label="`Couleur ${value}`"
+                    @click="updatePrimeVuePrimary(value)"
+                    :class="[
+                        'flex h-8 w-8 items-center justify-center rounded-full border transition-all',
+                        primeVuePrimary === value
+                            ? 'border-foreground ring-2 ring-offset-2 ring-offset-background'
+                            : 'border-border hover:scale-105',
+                    ]"
+                >
+                    <span class="h-5 w-5 rounded-full" :class="colorClass" />
+                </button>
+            </div>
+        </div>
+
+        <div class="space-y-2">
+            <p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Surface
+            </p>
+            <div class="flex flex-wrap gap-2">
+                <button
+                    v-for="{ value, colorClass } in primeVueSurfaceColors"
+                    :key="value"
+                    type="button"
+                    :aria-label="`Surface ${value}`"
+                    @click="updatePrimeVueSurface(value)"
+                    :class="[
+                        'flex h-8 w-8 items-center justify-center rounded-full border transition-all',
+                        primeVueSurface === value
+                            ? 'border-foreground ring-2 ring-offset-2 ring-offset-background'
+                            : 'border-border hover:scale-105',
+                    ]"
+                >
+                    <span class="h-5 w-5 rounded-full" :class="colorClass" />
                 </button>
             </div>
         </div>

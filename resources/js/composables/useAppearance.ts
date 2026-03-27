@@ -1,9 +1,21 @@
 import { onMounted, ref } from 'vue';
 import {
+    applyPrimeVuePrimaryColor,
+    applyPrimeVueSurfaceColor,
     applyPrimeVueThemePreset,
+    getDefaultPrimeVuePrimary,
+    getDefaultPrimeVueSurface,
+    getStoredPrimeVuePrimary,
+    getStoredPrimeVueSurface,
     getStoredPrimeVueTheme,
+    resolvePrimeVuePrimaryFromEnv,
+    resolvePrimeVueSurfaceFromEnv,
     resolvePrimeVueThemeFromEnv,
+    setStoredPrimeVuePrimary,
+    setStoredPrimeVueSurface,
     setStoredPrimeVueTheme,
+    type PrimeVuePrimaryName,
+    type PrimeVueSurfaceName,
     type PrimeVueThemeName,
 } from '@/lib/primevue-theme';
 
@@ -76,6 +88,12 @@ export function initializeTheme() {
 
 const appearance = ref<Appearance>('system');
 const primeVueTheme = ref<PrimeVueThemeName>(resolvePrimeVueThemeFromEnv());
+const primeVuePrimary = ref<PrimeVuePrimaryName>(
+    resolvePrimeVuePrimaryFromEnv(primeVueTheme.value),
+);
+const primeVueSurface = ref<PrimeVueSurfaceName>(
+    resolvePrimeVueSurfaceFromEnv(primeVueTheme.value),
+);
 
 export function useAppearance() {
     onMounted(() => {
@@ -89,6 +107,14 @@ export function useAppearance() {
 
         const savedPrimeVueTheme = getStoredPrimeVueTheme();
         primeVueTheme.value = savedPrimeVueTheme ?? resolvePrimeVueThemeFromEnv();
+
+        const savedPrimeVuePrimary = getStoredPrimeVuePrimary();
+        primeVuePrimary.value =
+            savedPrimeVuePrimary ?? resolvePrimeVuePrimaryFromEnv(primeVueTheme.value);
+
+        const savedPrimeVueSurface = getStoredPrimeVueSurface();
+        primeVueSurface.value =
+            savedPrimeVueSurface ?? resolvePrimeVueSurfaceFromEnv(primeVueTheme.value);
     });
 
     function updateAppearance(value: Appearance) {
@@ -109,6 +135,37 @@ export function useAppearance() {
         setStoredPrimeVueTheme(value);
         setCookie('primevue_theme', value);
         applyPrimeVueThemePreset(value);
+
+        if (value === 'starter') {
+            const starterPrimary = getDefaultPrimeVuePrimary(value);
+            const starterSurface = getDefaultPrimeVueSurface(value);
+
+            primeVuePrimary.value = starterPrimary;
+            primeVueSurface.value = starterSurface;
+            setStoredPrimeVuePrimary(starterPrimary);
+            setStoredPrimeVueSurface(starterSurface);
+            setCookie('primevue_primary', starterPrimary);
+            setCookie('primevue_surface', starterSurface);
+        }
+
+        applyPrimeVuePrimaryColor(primeVuePrimary.value);
+        applyPrimeVueSurfaceColor(primeVueSurface.value);
+    }
+
+    function updatePrimeVuePrimary(value: PrimeVuePrimaryName) {
+        primeVuePrimary.value = value;
+
+        setStoredPrimeVuePrimary(value);
+        setCookie('primevue_primary', value);
+        applyPrimeVuePrimaryColor(value);
+    }
+
+    function updatePrimeVueSurface(value: PrimeVueSurfaceName) {
+        primeVueSurface.value = value;
+
+        setStoredPrimeVueSurface(value);
+        setCookie('primevue_surface', value);
+        applyPrimeVueSurfaceColor(value);
     }
 
     return {
@@ -116,5 +173,9 @@ export function useAppearance() {
         updateAppearance,
         primeVueTheme,
         updatePrimeVueTheme,
+        primeVuePrimary,
+        updatePrimeVuePrimary,
+        primeVueSurface,
+        updatePrimeVueSurface,
     };
 }
