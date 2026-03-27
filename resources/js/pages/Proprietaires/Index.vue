@@ -91,7 +91,7 @@ function confirmDelete(p: Proprietaire) {
             </div>
 
             <!-- Tableau -->
-            <div class="flex min-h-0 flex-1 flex-col overflow-hidden border bg-card shadow-sm">
+            <div class="flex min-h-0 flex-1 flex-col overflow-hidden border bg-card">
                 <DataTable
                     :value="proprietaires"
                     :paginator="proprietaires.length > 20"

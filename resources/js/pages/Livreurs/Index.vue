@@ -97,7 +97,7 @@ function confirmDelete(l: Livreur) {
             </div>
 
             <!-- Tableau -->
-            <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="livreurs"
                     :paginator="livreurs.length > 20"

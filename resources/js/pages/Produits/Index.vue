@@ -128,7 +128,7 @@ function confirmDelete(produit: Produit) {
             </div>
 
             <!-- Tableau ──────────────────────────────────────────────────────── -->
-            <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="produits"
                     :paginator="produits.length > 20"

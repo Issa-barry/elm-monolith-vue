@@ -107,7 +107,7 @@ function confirmDelete(s: Site) {
             </div>
 
             <!-- Tableau -->
-            <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="sites"
                     :paginator="sites.length > 20"

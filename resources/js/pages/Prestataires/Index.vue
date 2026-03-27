@@ -102,7 +102,7 @@ function confirmDelete(p: Prestataire) {
             </div>
 
             <!-- Tableau -->
-            <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="prestataires"
                     :paginator="prestataires.length > 20"
