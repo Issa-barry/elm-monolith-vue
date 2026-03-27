@@ -1,5 +1,6 @@
 import { onMounted, ref } from 'vue';
 import {
+    applyAppThemeColors,
     applyPrimeVuePrimaryColor,
     applyPrimeVueSurfaceColor,
     applyPrimeVueThemePreset,
@@ -67,10 +68,31 @@ const getStoredAppearance = () => {
     return localStorage.getItem('appearance') as Appearance | null;
 };
 
+const resolveCurrentPrimeVueColors = () => {
+    const theme = getStoredPrimeVueTheme() ?? resolvePrimeVueThemeFromEnv();
+    const primary =
+        getStoredPrimeVuePrimary() ?? resolvePrimeVuePrimaryFromEnv(theme);
+    const surface =
+        getStoredPrimeVueSurface() ?? resolvePrimeVueSurfaceFromEnv(theme);
+
+    return { theme, primary, surface };
+};
+
 const handleSystemThemeChange = () => {
     const currentAppearance = getStoredAppearance();
 
     updateTheme(currentAppearance || 'system');
+
+    if (typeof document === 'undefined') {
+        return;
+    }
+
+    const { primary, surface } = resolveCurrentPrimeVueColors();
+    applyAppThemeColors(
+        primary,
+        surface,
+        document.documentElement.classList.contains('dark'),
+    );
 };
 
 export function initializeTheme() {
@@ -81,6 +103,13 @@ export function initializeTheme() {
     // Initialize theme from saved preference or default to system...
     const savedAppearance = getStoredAppearance();
     updateTheme(savedAppearance || 'system');
+
+    const { primary, surface } = resolveCurrentPrimeVueColors();
+    applyAppThemeColors(
+        primary,
+        surface,
+        document.documentElement.classList.contains('dark'),
+    );
 
     // Set up system theme change listener...
     mediaQuery()?.addEventListener('change', handleSystemThemeChange);
@@ -96,6 +125,18 @@ const primeVueSurface = ref<PrimeVueSurfaceName>(
 );
 
 export function useAppearance() {
+    const syncAppThemeColors = () => {
+        if (typeof document === 'undefined') {
+            return;
+        }
+
+        applyAppThemeColors(
+            primeVuePrimary.value,
+            primeVueSurface.value,
+            document.documentElement.classList.contains('dark'),
+        );
+    };
+
     onMounted(() => {
         const savedAppearance = localStorage.getItem(
             'appearance',
@@ -115,6 +156,8 @@ export function useAppearance() {
         const savedPrimeVueSurface = getStoredPrimeVueSurface();
         primeVueSurface.value =
             savedPrimeVueSurface ?? resolvePrimeVueSurfaceFromEnv(primeVueTheme.value);
+
+        syncAppThemeColors();
     });
 
     function updateAppearance(value: Appearance) {
@@ -127,6 +170,7 @@ export function useAppearance() {
         setCookie('appearance', value);
 
         updateTheme(value);
+        syncAppThemeColors();
     }
 
     function updatePrimeVueTheme(value: PrimeVueThemeName) {
@@ -150,6 +194,7 @@ export function useAppearance() {
 
         applyPrimeVuePrimaryColor(primeVuePrimary.value);
         applyPrimeVueSurfaceColor(primeVueSurface.value);
+        syncAppThemeColors();
     }
 
     function updatePrimeVuePrimary(value: PrimeVuePrimaryName) {
@@ -158,6 +203,7 @@ export function useAppearance() {
         setStoredPrimeVuePrimary(value);
         setCookie('primevue_primary', value);
         applyPrimeVuePrimaryColor(value);
+        syncAppThemeColors();
     }
 
     function updatePrimeVueSurface(value: PrimeVueSurfaceName) {
@@ -166,6 +212,7 @@ export function useAppearance() {
         setStoredPrimeVueSurface(value);
         setCookie('primevue_surface', value);
         applyPrimeVueSurfaceColor(value);
+        syncAppThemeColors();
     }
 
     return {

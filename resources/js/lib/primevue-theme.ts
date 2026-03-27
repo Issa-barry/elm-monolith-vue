@@ -8,10 +8,16 @@ export type PrimeVueThemeName = 'aura' | 'lara' | 'material' | 'nora' | 'starter
 export type PrimeVuePrimaryName =
     | 'zinc'
     | 'emerald'
+    | 'green'
+    | 'lime'
+    | 'yellow'
+    | 'sky'
     | 'blue'
     | 'indigo'
     | 'violet'
+    | 'purple'
     | 'fuchsia'
+    | 'pink'
     | 'rose'
     | 'orange'
     | 'amber'
@@ -58,6 +64,58 @@ const PRIMARY_PALETTES: Record<PrimeVuePrimaryName, Record<number, string>> = {
         900: '#064e3b',
         950: '#022c22',
     },
+    green: {
+        50: '#f0fdf4',
+        100: '#dcfce7',
+        200: '#bbf7d0',
+        300: '#86efac',
+        400: '#4ade80',
+        500: '#22c55e',
+        600: '#16a34a',
+        700: '#15803d',
+        800: '#166534',
+        900: '#14532d',
+        950: '#052e16',
+    },
+    lime: {
+        50: '#f7fee7',
+        100: '#ecfccb',
+        200: '#d9f99d',
+        300: '#bef264',
+        400: '#a3e635',
+        500: '#84cc16',
+        600: '#65a30d',
+        700: '#4d7c0f',
+        800: '#3f6212',
+        900: '#365314',
+        950: '#1a2e05',
+    },
+    yellow: {
+        50: '#fefce8',
+        100: '#fef9c3',
+        200: '#fef08a',
+        300: '#fde047',
+        400: '#facc15',
+        500: '#eab308',
+        600: '#ca8a04',
+        700: '#a16207',
+        800: '#854d0e',
+        900: '#713f12',
+        950: '#422006',
+    },
+    sky: {
+        50: '#f0f9ff',
+        100: '#e0f2fe',
+        200: '#bae6fd',
+        300: '#7dd3fc',
+        400: '#38bdf8',
+        500: '#0ea5e9',
+        600: '#0284c7',
+        700: '#0369a1',
+        800: '#075985',
+        900: '#0c4a6e',
+        950: '#082f49',
+    },
     blue: {
         50: '#eff6ff',
         100: '#dbeafe',
@@ -97,6 +155,19 @@ const PRIMARY_PALETTES: Record<PrimeVuePrimaryName, Record<number, string>> = {
         900: '#4c1d95',
         950: '#2e1065',
     },
+    purple: {
+        50: '#faf5ff',
+        100: '#f3e8ff',
+        200: '#e9d5ff',
+        300: '#d8b4fe',
+        400: '#c084fc',
+        500: '#a855f7',
+        600: '#9333ea',
+        700: '#7e22ce',
+        800: '#6b21a8',
+        900: '#581c87',
+        950: '#3b0764',
+    },
     fuchsia: {
         50: '#fdf4ff',
         100: '#fae8ff',
@@ -109,6 +180,19 @@ const PRIMARY_PALETTES: Record<PrimeVuePrimaryName, Record<number, string>> = {
         800: '#86198f',
         900: '#701a75',
         950: '#4a044e',
+    },
+    pink: {
+        50: '#fdf2f8',
+        100: '#fce7f3',
+        200: '#fbcfe8',
+        300: '#f9a8d4',
+        400: '#f472b6',
+        500: '#ec4899',
+        600: '#db2777',
+        700: '#be185d',
+        800: '#9d174d',
+        900: '#831843',
+        950: '#500724',
     },
     rose: {
         50: '#fff1f2',
@@ -385,6 +469,92 @@ export function applyPrimeVueSurfaceColor(value: PrimeVueSurfaceName) {
     updateSurfacePalette({
         light: scale,
         dark: scale,
+    });
+}
+
+export function applyAppThemeColors(
+    primary: PrimeVuePrimaryName,
+    surface: PrimeVueSurfaceName,
+    isDark: boolean,
+) {
+    if (typeof document === 'undefined') {
+        return;
+    }
+
+    const p = PRIMARY_PALETTES[primary];
+    const s = SURFACE_PALETTES[surface];
+    const root = document.documentElement;
+
+    const tokens = isDark
+        ? {
+              '--background': s[950],
+              '--foreground': s[50],
+              '--card': s[900],
+              '--card-foreground': s[50],
+              '--popover': s[900],
+              '--popover-foreground': s[50],
+              '--primary': p[400],
+              '--primary-foreground': s[950],
+              '--secondary': s[800],
+              '--secondary-foreground': s[50],
+              '--muted': s[800],
+              '--muted-foreground': s[300],
+              '--accent': s[800],
+              '--accent-foreground': s[50],
+              '--border': s[800],
+              '--input': s[800],
+              '--ring': p[400],
+              '--chart-1': p[400],
+              '--chart-2': p[500],
+              '--chart-3': p[600],
+              '--chart-4': p[300],
+              '--chart-5': p[200],
+              '--sidebar-background': s[950],
+              '--sidebar-foreground': s[100],
+              '--sidebar-primary': p[500],
+              '--sidebar-primary-foreground': s[950],
+              '--sidebar-accent': s[900],
+              '--sidebar-accent-foreground': s[100],
+              '--sidebar-border': s[800],
+              '--sidebar-ring': p[400],
+              '--sidebar': s[900],
+          }
+        : {
+              '--background': '#ffffff',
+              '--foreground': s[950],
+              '--card': '#ffffff',
+              '--card-foreground': s[950],
+              '--popover': '#ffffff',
+              '--popover-foreground': s[950],
+              '--primary': p[600],
+              '--primary-foreground': '#ffffff',
+              '--secondary': s[200],
+              '--secondary-foreground': s[800],
+              '--muted': s[100],
+              '--muted-foreground': s[500],
+              '--accent': s[100],
+              '--accent-foreground': s[800],
+              '--border': s[200],
+              '--input': s[300],
+              '--ring': p[500],
+              '--chart-1': p[500],
+              '--chart-2': p[400],
+              '--chart-3': p[300],
+              '--chart-4': p[600],
+              '--chart-5': p[700],
+              '--sidebar-background': s[50],
+              '--sidebar-foreground': s[700],
+              '--sidebar-primary': p[600],
+              '--sidebar-primary-foreground': '#ffffff',
+              '--sidebar-accent': s[100],
+              '--sidebar-accent-foreground': s[800],
+              '--sidebar-border': s[200],
+              '--sidebar-ring': p[500],
+              '--sidebar': s[50],
+          };
+
+    Object.entries(tokens).forEach(([name, value]) => {
+        root.style.setProperty(name, value);
     });
 }
 

@@ -30,15 +30,21 @@ const primeVueThemes = [
 const primeVuePrimaryColors = [
     { value: 'zinc', colorClass: 'bg-zinc-500' },
     { value: 'emerald', colorClass: 'bg-emerald-500' },
+    { value: 'green', colorClass: 'bg-green-500' },
+    { value: 'lime', colorClass: 'bg-lime-500' },
+    { value: 'orange', colorClass: 'bg-orange-500' },
+    { value: 'amber', colorClass: 'bg-amber-500' },
+    { value: 'yellow', colorClass: 'bg-yellow-500' },
+    { value: 'teal', colorClass: 'bg-teal-500' },
+    { value: 'cyan', colorClass: 'bg-cyan-500' },
+    { value: 'sky', colorClass: 'bg-sky-500' },
     { value: 'blue', colorClass: 'bg-blue-500' },
     { value: 'indigo', colorClass: 'bg-indigo-500' },
     { value: 'violet', colorClass: 'bg-violet-500' },
+    { value: 'purple', colorClass: 'bg-purple-500' },
     { value: 'fuchsia', colorClass: 'bg-fuchsia-500' },
+    { value: 'pink', colorClass: 'bg-pink-500' },
     { value: 'rose', colorClass: 'bg-rose-500' },
-    { value: 'orange', colorClass: 'bg-orange-500' },
-    { value: 'amber', colorClass: 'bg-amber-500' },
-    { value: 'teal', colorClass: 'bg-teal-500' },
-    { value: 'cyan', colorClass: 'bg-cyan-500' },
 ] as const;
 
 const primeVueSurfaceColors = [

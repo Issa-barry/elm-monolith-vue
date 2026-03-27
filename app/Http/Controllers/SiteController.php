@@ -29,6 +29,10 @@ class SiteController extends Controller
             'quartier'     => $s->quartier,
             'description'  => $s->description,
             'parent_id'    => $s->parent_id,
+            'latitude'     => $s->latitude,
+            'longitude'    => $s->longitude,
+            'telephone'    => $s->telephone,
+            'email'        => $s->email,
             'parent_nom'   => $s->parent?->nom,
             'enfants_count' => $s->enfants()->count(),
         ];
@@ -47,6 +51,33 @@ class SiteController extends Controller
 
         return Inertia::render('Sites/Index', [
             'sites' => $sites,
+        ]);
+    }
+
+    public function show(Site $site): Response
+    {
+        $this->authorize('view', $site);
+
+        $site->load(['parent', 'enfants', 'users']);
+
+        return Inertia::render('Sites/Show', [
+            'site' => [
+                ...$this->siteData($site),
+                'enfants'    => $site->enfants->map(fn (Site $e) => [
+                    'id'          => $e->id,
+                    'nom'         => $e->nom,
+                    'code'        => $e->code,
+                    'type_label'  => $e->type_label,
+                    'statut'      => $e->statut?->value,
+                    'statut_label' => $e->statut_label,
+                ]),
+                'users'      => $site->users->map(fn ($u) => [
+                    'id'    => $u->id,
+                    'name'  => $u->name,
+                    'email' => $u->email,
+                    'role'  => $u->pivot->role,
+                ]),
+            ],
         ]);
     }
 
@@ -70,11 +101,6 @@ class SiteController extends Controller
 
         $data = $request->validate([
             'nom'         => 'required|string|max:255',
-            'code'        => [
-                'required', 'string', 'max:50',
-                'regex:/^[A-Z0-9_-]+$/',
-                Rule::unique('sites', 'code')->where('organization_id', $orgId),
-            ],
             'type'        => ['required', Rule::in(array_column(SiteType::cases(), 'value'))],
             'statut'      => ['nullable', Rule::in(array_column(SiteStatut::cases(), 'value'))],
             'localisation' => 'nullable|string|max:255',
@@ -86,6 +112,10 @@ class SiteController extends Controller
                 'nullable', 'integer',
                 Rule::exists('sites', 'id')->where('organization_id', $orgId),
             ],
+            'latitude'    => 'nullable|numeric|between:-90,90',
+            'longitude'   => 'nullable|numeric|between:-180,180',
+            'telephone'   => 'nullable|string|max:50',
+            'email'       => 'nullable|email|max:255',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
@@ -136,6 +166,10 @@ class SiteController extends Controller
                 'nullable', 'integer',
                 Rule::exists('sites', 'id')->where('organization_id', $orgId),
             ],
+            'latitude'    => 'nullable|numeric|between:-90,90',
+            'longitude'   => 'nullable|numeric|between:-180,180',
+            'telephone'   => 'nullable|string|max:50',
+            'email'       => 'nullable|email|max:255',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);

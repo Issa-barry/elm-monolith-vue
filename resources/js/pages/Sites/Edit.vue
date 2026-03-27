@@ -15,9 +15,12 @@ interface SiteData {
     localisation: string | null;
     pays: string | null;
     ville: string | null;
-    quartier: string | null;
     description: string | null;
     parent_id: number | null;
+    latitude: number | null;
+    longitude: number | null;
+    telephone: string | null;
+    email: string | null;
 }
 
 const props = defineProps<{
@@ -42,9 +45,12 @@ const form = useForm({
     localisation: props.site.localisation,
     pays:         props.site.pays,
     ville:        props.site.ville,
-    quartier:     props.site.quartier,
     description:  props.site.description,
     parent_id:    props.site.parent_id,
+    latitude:     props.site.latitude,
+    longitude:    props.site.longitude,
+    telephone:    props.site.telephone,
+    email:        props.site.email,
 });
 
 function submit() {

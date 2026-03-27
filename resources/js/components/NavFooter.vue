@@ -25,7 +25,7 @@ defineProps<Props>();
             <SidebarMenu>
                 <SidebarMenuItem v-for="item in items" :key="item.title">
                     <SidebarMenuButton
-                        class="text-neutral-600 hover:text-neutral-800 dark:text-neutral-300 dark:hover:text-neutral-100"
+                        class="text-sidebar-foreground hover:text-sidebar-accent-foreground"
                         as-child
                     >
                         <a
@@ -33,7 +33,7 @@ defineProps<Props>();
                             target="_blank"
                             rel="noopener noreferrer"
                         >
-                            <component :is="item.icon" />
+                            <component :is="item.icon" class="text-sidebar-primary" />
                             <span>{{ item.title }}</span>
                         </a>
                     </SidebarMenuButton>

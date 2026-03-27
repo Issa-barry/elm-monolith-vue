@@ -9,6 +9,7 @@ import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
 import { initializeTheme } from './composables/useAppearance';
 import {
+    applyAppThemeColors,
     applyStoredPrimeVueColors,
     getPrimeVueThemePreset,
     getStoredPrimeVueTheme,
@@ -18,6 +19,9 @@ import {
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 const initialPrimeVueTheme = getStoredPrimeVueTheme() ?? resolvePrimeVueThemeFromEnv();
 const { preset: primeVuePreset } = getPrimeVueThemePreset(initialPrimeVueTheme);
+
+// Apply light/dark class before the app mounts to avoid a flash of wrong theme.
+initializeTheme();
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
@@ -38,7 +42,12 @@ createInertiaApp({
                 },
             });
 
-        applyStoredPrimeVueColors(initialPrimeVueTheme);
+        const { primary, surface } = applyStoredPrimeVueColors(initialPrimeVueTheme);
+        applyAppThemeColors(
+            primary,
+            surface,
+            document.documentElement.classList.contains('dark'),
+        );
 
         app.use(ConfirmationService).use(ToastService).mount(el);
     },
@@ -46,6 +55,3 @@ createInertiaApp({
         color: '#4B5563',
     },
 });
-
-// This will set light / dark mode on page load...
-initializeTheme();
