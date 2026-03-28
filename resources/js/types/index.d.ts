@@ -14,7 +14,7 @@ export type Resource =
 export type CrudAction = 'create' | 'read' | 'update' | 'delete';
 export type PermissionKey = `${Resource}.${CrudAction}`;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
-export type AppRole = 'super_admin' | 'admin_entreprise' | 'commerciale' | 'comptable';
+export type AppRole = 'super_admin' | 'admin_entreprise' | 'manager' | 'commerciale' | 'comptable' | 'client';
 
 export interface Auth {
     user: User;

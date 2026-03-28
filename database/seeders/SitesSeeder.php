@@ -12,7 +12,7 @@ class SitesSeeder extends Seeder
 {
     public function run(): void
     {
-        $org = Organization::where('slug', 'elm-demo')->firstOrFail();
+        $org = Organization::where('slug', 'elm')->firstOrFail();
 
         // Créer le siège en premier (parent)
         $siege = Site::firstOrCreate(

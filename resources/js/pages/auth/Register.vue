@@ -40,9 +40,10 @@ const selectedPays = computed(() =>
     PAYS.find((pays) => pays.code === selectedCountryCode.value) ?? PAYS[0],
 );
 
-const fullPhone = computed(() =>
-    phoneDigits.value ? `${selectedPays.value.prefix}${phoneDigits.value}` : '',
-);
+const fullPhone = computed(() => {
+    if (!phoneDigits.value) return '';
+    return `${selectedPays.value.prefix}${phoneDigits.value.replace(/^0/, '')}`;
+});
 
 function flagUrl(code: string): string {
     return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
@@ -57,7 +58,9 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 
 function handlePhoneInput(e: Event) {
     const input = e.target as HTMLInputElement;
-    const digits = input.value.replace(/\D/g, '').slice(0, selectedPays.value.localLength);
+    const raw = input.value.replace(/\D/g, '');
+    const max = raw.startsWith('0') ? selectedPays.value.localLength + 1 : selectedPays.value.localLength;
+    const digits = raw.slice(0, max);
     phoneDigits.value = digits;
     input.value = digits;
 }
@@ -149,7 +152,7 @@ function handlePhoneInput(e: Event) {
                             autocomplete="tel-national"
                             inputmode="numeric"
                             pattern="[0-9]*"
-                            :maxlength="selectedPays.localLength"
+                            :maxlength="phoneDigits.startsWith('0') ? selectedPays.localLength + 1 : selectedPays.localLength"
                             :placeholder="`${selectedPays.localLength} chiffres`"
                             class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm"
                         />

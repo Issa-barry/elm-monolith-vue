@@ -62,6 +62,7 @@ function formatDate(iso: string | null): string {
 const ROLE_LABELS: Record<string, string> = {
     super_admin:      'Super Admin',
     admin_entreprise: 'Admin entreprise',
+    manager:          'Manager',
     commerciale:      'Commercial(e)',
     comptable:        'Comptable',
     client:           'Client',
