@@ -95,7 +95,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
             <CardHeader class="px-4 pt-10 pb-2 text-center sm:px-6 md:px-8 md:pt-8 md:pb-0">
                 <Link
                     :href="home()"
-                    class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-md"
+                    class="mx-auto mb-2 flex h-10 w-12 items-center justify-center rounded-md"
                 >
                     <AppLogoIcon class="size-10 fill-current text-foreground" />
                     <span class="sr-only">Accueil</span>
@@ -135,6 +135,10 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                                     option-value="code"
                                     :tabindex="1"
                                     class="shrink-0"
+                                    :pt="{
+                                        root: { class: 'h-10' },
+                                        label: { class: 'flex items-center py-0 h-10' },
+                                    }"
                                 >
                                     <template #value="{ value }">
                                         <div v-if="value" class="flex items-center gap-2">
@@ -162,7 +166,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                                     autofocus
                                     :maxlength="phoneDigits.startsWith('0') ? selectedPays.localLength + 1 : selectedPays.localLength"
                                     :placeholder="`${selectedPays.localLength} chiffres`"
-                                    class="flex h-12 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    class="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                                 />
                             </div>
                             <InputError :message="errors.telephone" />
@@ -182,7 +186,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                                     :tabindex="3"
                                     autocomplete="current-password"
                                     placeholder="Mot de passe"
-                                    class="flex h-12 w-full rounded-md border border-input bg-transparent px-3 py-1 pr-10 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    class="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 pr-10 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                                 />
                                 <button
                                     type="button"
@@ -207,7 +211,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                     <div class="mt-auto space-y-4 pt-6">
                         <Button
                             type="submit"
-                            class="h-12 w-full rounded-xl text-base font-semibold"
+                            class="h-10 w-full rounded-xl text-base font-semibold"
                             :tabindex="5"
                             :disabled="processing"
                             data-test="login-button"

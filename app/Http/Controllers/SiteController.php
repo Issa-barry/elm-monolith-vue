@@ -35,20 +35,6 @@ class SiteController extends Controller
             'email'        => $s->email,
             'parent_nom'   => $s->parent?->nom,
             'enfants_count' => (int) ($s->enfants_count ?? $s->enfants()->count()),
-            'users_count'   => (int) ($s->users_count ?? $s->users()->count()),
-            'users_names'   => $s->relationLoaded('users')
-                ? $s->users->pluck('name')->implode(' ')
-                : '',
-            'users'         => $s->relationLoaded('users')
-                ? $s->users
-                    ->take(3)
-                    ->map(fn ($u) => [
-                        'id'   => $u->id,
-                        'name' => $u->name,
-                    ])
-                    ->values()
-                    ->all()
-                : [],
         ];
     }
 
@@ -56,8 +42,8 @@ class SiteController extends Controller
     {
         $this->authorize('viewAny', Site::class);
 
-        $sites = Site::with(['parent', 'users:id,name'])
-            ->withCount(['enfants', 'users'])
+        $sites = Site::with(['parent'])
+            ->withCount(['enfants'])
             ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom')
             ->get()
