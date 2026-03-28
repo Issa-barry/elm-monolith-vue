@@ -198,8 +198,8 @@ watch(
                 <div class="flex items-start gap-3 sm:col-span-2">
                     <Checkbox
                         id="pris_en_charge_par_usine"
-                        :checked="Boolean(form.pris_en_charge_par_usine)"
-                        @update:checked="$emit('update:form', { ...form, pris_en_charge_par_usine: $event })"
+                        :model-value="Boolean(form.pris_en_charge_par_usine)"
+                        @update:model-value="$emit('update:form', { ...form, pris_en_charge_par_usine: $event === true })"
                     />
                     <div>
                         <Label for="pris_en_charge_par_usine" class="cursor-pointer font-medium">Pris en charge par l'usine</Label>
@@ -299,8 +299,8 @@ watch(
             <div class="flex items-center gap-3">
                 <Checkbox
                     id="is_active"
-                    :checked="Boolean(form.is_active)"
-                    @update:checked="$emit('update:form', { ...form, is_active: $event })"
+                    :model-value="Boolean(form.is_active)"
+                    @update:model-value="$emit('update:form', { ...form, is_active: $event === true })"
                 />
                 <div>
                     <Label for="is_active" class="cursor-pointer font-medium">Véhicule actif</Label>

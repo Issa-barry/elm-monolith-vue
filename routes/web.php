@@ -20,13 +20,7 @@ use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
 Route::get('/', function () {
-    if (! auth()->check()) {
-        return redirect()->route('login');
-    }
-
-    return auth()->user()->hasRole('client')
-        ? redirect()->route('client.dashboard')
-        : redirect()->route('dashboard');
+    return Inertia::render('Welcome');
 })->name('home');
 
 Route::get('dashboard', function () {
