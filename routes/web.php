@@ -20,16 +20,21 @@ use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
 Route::get('/', function () {
-    return auth()->check()
-        ? redirect()->route('dashboard')
-        : redirect()->route('login');
+    if (! auth()->check()) {
+        return redirect()->route('login');
+    }
+
+    return auth()->user()->hasRole('client')
+        ? redirect()->route('client.dashboard')
+        : redirect()->route('dashboard');
 })->name('home');
 
 Route::get('dashboard', function () {
     return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+})->middleware(['auth', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable'])->name('dashboard');
 
-Route::middleware(['auth'])->group(function () {
+// Espace staff
+Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commerciale|comptable'])->group(function () {
     Route::resource('clients', ClientController::class);
     Route::resource('prestataires', PrestataireController::class);
     Route::resource('produits', ProduitController::class);
@@ -50,6 +55,11 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('versements-commissions/{versement_commission}', [VersementCommissionController::class, 'destroy'])->name('commissions.versements.destroy');
     Route::post('factures/{facture_vente}/encaissements', [EncaissementVenteController::class, 'store'])->name('encaissements.store');
     Route::delete('encaissements/{encaissement_vente}', [EncaissementVenteController::class, 'destroy'])->name('encaissements.destroy');
+});
+
+// Espace client
+Route::middleware(['auth', 'role:client'])->prefix('client')->name('client.')->group(function () {
+    Route::get('/dashboard', [\App\Http\Controllers\Client\ClientDashboardController::class, 'index'])->name('dashboard');
 });
 
 require __DIR__.'/settings.php';
