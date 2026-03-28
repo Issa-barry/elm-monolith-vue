@@ -20,6 +20,11 @@ import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
+function initials(name: string | null | undefined): string {
+    if (!name) return '?';
+    return name.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+}
+
 interface Livreur {
     id: number;
     nom: string;
@@ -130,9 +135,9 @@ function confirmDelete(l: Livreur) {
                     :key="l.id"
                     class="flex items-center gap-3.5 px-4 py-3.5 transition-colors active:bg-muted/40"
                 >
-                    <!-- Icon -->
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
-                        <Truck class="h-5 w-5 text-muted-foreground" />
+                    <!-- Avatar -->
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-semibold">
+                        {{ initials(l.nom_complet) }}
                     </div>
 
                     <!-- Info -->
@@ -249,8 +254,8 @@ function confirmDelete(l: Livreur) {
                     <Column field="nom_complet" header="Livreur" sortable style="min-width: 320px">
                         <template #body="{ data }">
                             <div class="flex items-center gap-3">
-                                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted">
-                                    <Truck class="h-4 w-4 text-muted-foreground" />
+                                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
+                                    {{ initials(data.nom_complet) }}
                                 </div>
                                 <div>
                                     <div class="font-medium">{{ data.nom_complet }}</div>

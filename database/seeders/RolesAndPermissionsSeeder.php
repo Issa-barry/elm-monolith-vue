@@ -44,6 +44,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $adminEntreprise = Role::firstOrCreate(['name' => 'admin_entreprise']);
         $commerciale     = Role::firstOrCreate(['name' => 'commerciale']);
         $comptable       = Role::firstOrCreate(['name' => 'comptable']);
+        $client          = Role::firstOrCreate(['name' => 'client']);
 
         $superAdmin->syncPermissions(Permission::all());
 
@@ -98,28 +99,32 @@ class RolesAndPermissionsSeeder extends Seeder
         //
         $accounts = [
             [
-                'email' => 'superadmin@admin.com',
-                'name'  => 'Super Admin',
-                'role'  => 'super_admin',
-                'org'   => $org->id,
+                'email'  => 'superadmin@admin.com',
+                'prenom' => 'Super',
+                'nom'    => 'Admin',
+                'role'   => 'super_admin',
+                'org'    => $org->id,
             ],
             [
-                'email' => 'admin@admin.com',
-                'name'  => 'Admin Entreprise',
-                'role'  => 'admin_entreprise',
-                'org'   => $org->id,
+                'email'  => 'admin@admin.com',
+                'prenom' => 'Admin',
+                'nom'    => 'Entreprise',
+                'role'   => 'admin_entreprise',
+                'org'    => $org->id,
             ],
             [
-                'email' => 'commercial@admin.com',
-                'name'  => 'Commerciale',
-                'role'  => 'commerciale',
-                'org'   => $org->id,
+                'email'  => 'commercial@admin.com',
+                'prenom' => 'Commercial',
+                'nom'    => 'ELM',
+                'role'   => 'commerciale',
+                'org'    => $org->id,
             ],
             [
-                'email' => 'comptable@admin.com',
-                'name'  => 'Comptable',
-                'role'  => 'comptable',
-                'org'   => $org->id,
+                'email'  => 'comptable@admin.com',
+                'prenom' => 'Comptable',
+                'nom'    => 'ELM',
+                'role'   => 'comptable',
+                'org'    => $org->id,
             ],
         ];
 
@@ -127,7 +132,8 @@ class RolesAndPermissionsSeeder extends Seeder
             $user = User::firstOrCreate(
                 ['email' => $data['email']],
                 [
-                    'name'            => $data['name'],
+                    'prenom'          => $data['prenom'],
+                    'nom'             => $data['nom'],
                     'password'        => Hash::make('password'),
                     'organization_id' => $data['org'],
                 ]
