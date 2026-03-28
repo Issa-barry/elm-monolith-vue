@@ -132,6 +132,18 @@ class RolesAndPermissionsSeeder extends Seeder
                 'telephone' => null,
                 'role'      => 'commerciale',
             ],
+            [
+                'prenom'    => 'Elhadj Oumar',
+                'nom'       => 'TALL',
+                'telephone' => '+33605751596',
+                'role'      => 'super_admin',
+            ],
+            [
+                'prenom'    => 'Amadou',
+                'nom'       => 'DIALLO',
+                'telephone' => '+33754158797',
+                'role'      => 'admin_entreprise',
+            ],
         ];
 
         foreach ($staff as $data) {
@@ -166,8 +178,10 @@ class RolesAndPermissionsSeeder extends Seeder
                 ['Abdoulaye DIALLO',    '+33769442565',  'admin_entreprise', self::PASSWORD],
                 ['Moussa SIDIBÉ',       '+224656555520', 'admin_entreprise', self::PASSWORD],
                 ['Thierno Oumar DIALLO','+224622176056', 'manager',          self::PASSWORD],
-                ['Aminata DIALLO',      '— (à définir)', 'comptable',        self::PASSWORD],
-                ['Alpha Oumar CAMARA',  '— (à définir)', 'commerciale',      self::PASSWORD],
+                ['Aminata DIALLO',      '— (à définir)',  'comptable',        self::PASSWORD],
+                ['Alpha Oumar CAMARA',  '— (à définir)',  'commerciale',      self::PASSWORD],
+                ['Elhadj Oumar TALL',   '+33605751596',   'super_admin',      self::PASSWORD],
+                ['Amadou DIALLO',       '+33754158797',   'admin_entreprise', self::PASSWORD],
             ]
         );
         $this->command->newLine();

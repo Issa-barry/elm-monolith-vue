@@ -12,20 +12,21 @@ interface CountryOption {
     value: string;
     code: string;
     dial: string;
+    localLength: number;
 }
 
 const PAYS_OPTIONS: CountryOption[] = [
-    { label: 'Guinée',              value: 'Guinée',              code: 'GN', dial: '+224' },
-    { label: 'Guinée-Bissau',       value: 'Guinée-Bissau',       code: 'GW', dial: '+245' },
-    { label: 'Sénégal',             value: 'Sénégal',             code: 'SN', dial: '+221' },
-    { label: 'Mali',                value: 'Mali',                code: 'ML', dial: '+223' },
-    { label: "Côte d'Ivoire",       value: "Côte d'Ivoire",       code: 'CI', dial: '+225' },
-    { label: 'Liberia',             value: 'Liberia',             code: 'LR', dial: '+231' },
-    { label: 'Sierra Leone',        value: 'Sierra Leone',        code: 'SL', dial: '+232' },
-    { label: 'France',              value: 'France',              code: 'FR', dial: '+33'  },
-    { label: 'Chine',               value: 'Chine',               code: 'CN', dial: '+86'  },
-    { label: 'Émirats arabes unis', value: 'Émirats arabes unis', code: 'AE', dial: '+971' },
-    { label: 'Inde',                value: 'Inde',                code: 'IN', dial: '+91'  },
+    { label: 'Guinée',              value: 'Guinée',              code: 'GN', dial: '+224', localLength: 9 },
+    { label: 'Guinée-Bissau',       value: 'Guinée-Bissau',       code: 'GW', dial: '+245', localLength: 7 },
+    { label: 'Sénégal',             value: 'Sénégal',             code: 'SN', dial: '+221', localLength: 9 },
+    { label: 'Mali',                value: 'Mali',                code: 'ML', dial: '+223', localLength: 8 },
+    { label: "Côte d'Ivoire",       value: "Côte d'Ivoire",       code: 'CI', dial: '+225', localLength: 10 },
+    { label: 'Liberia',             value: 'Liberia',             code: 'LR', dial: '+231', localLength: 8 },
+    { label: 'Sierra Leone',        value: 'Sierra Leone',        code: 'SL', dial: '+232', localLength: 8 },
+    { label: 'France',              value: 'France',              code: 'FR', dial: '+33', localLength: 9 },
+    { label: 'Chine',               value: 'Chine',               code: 'CN', dial: '+86', localLength: 11 },
+    { label: 'Émirats arabes unis', value: 'Émirats arabes unis', code: 'AE', dial: '+971', localLength: 9 },
+    { label: 'Inde',                value: 'Inde',                code: 'IN', dial: '+91', localLength: 10 },
 ];
 
 function flagUrl(code: string) {
@@ -54,17 +55,39 @@ const props = defineProps<{
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
 
 const selectedCountry = computed(() => PAYS_OPTIONS.find(c => c.code === props.form.code_pays));
+const selectedPhoneLength = computed(() => selectedCountry.value?.localLength ?? 24);
+const phoneMaxLength = computed(() => {
+    const digits = String(props.form.telephone ?? '').replace(/\D/g, '');
+    return digits.startsWith('0') ? selectedPhoneLength.value + 1 : selectedPhoneLength.value;
+});
 
 function onPaysChange(pays: string) {
     const country = PAYS_OPTIONS.find(c => c.value === pays);
     if (country) {
+        const currentDigits = String(props.form.telephone ?? '').replace(/\D/g, '');
+        const max = currentDigits.startsWith('0') ? country.localLength + 1 : country.localLength;
         emit('update:form', {
             ...props.form,
             pays: country.value,
             code_pays: country.code,
             code_phone_pays: country.dial,
+            telephone: currentDigits.slice(0, max) || null,
         });
     }
+}
+
+function handlePhoneKeydown(e: KeyboardEvent) {
+    const pass = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+    if (pass.includes(e.key)) return;
+    if ((e.ctrlKey || e.metaKey) && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())) return;
+    if (!/^\d$/.test(e.key)) e.preventDefault();
+}
+
+function onTelephoneInput(value: string | null | undefined) {
+    const raw = String(value ?? '').replace(/\D/g, '');
+    const max = raw.startsWith('0') ? selectedPhoneLength.value + 1 : selectedPhoneLength.value;
+    const digits = raw.slice(0, max);
+    emit('update:form', { ...props.form, telephone: digits || null });
 }
 </script>
 
@@ -162,8 +185,13 @@ function onPaysChange(pays: string) {
                         <InputText
                             id="telephone"
                             :model-value="form.telephone ?? ''"
-                            @update:model-value="emit('update:form', { ...props.form, telephone: $event || null })"
-                            placeholder="Ex: 622000003"
+                            @update:model-value="onTelephoneInput($event)"
+                            @keydown="handlePhoneKeydown"
+                            :placeholder="`${selectedPhoneLength} chiffres`"
+                            inputmode="numeric"
+                            pattern="[0-9]*"
+                            autocomplete="tel-national"
+                            :maxlength="phoneMaxLength"
                             class="w-full"
                             :class="{ 'p-invalid': errors.telephone }"
                         />
@@ -222,3 +250,4 @@ function onPaysChange(pays: string) {
         <div class="h-20 sm:hidden" />
     </form>
 </template>
+

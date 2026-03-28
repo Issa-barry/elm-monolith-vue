@@ -6,6 +6,7 @@ use App\Models\Livreur;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -21,6 +22,20 @@ const LIVREUR_PAYS = [
     'CN' => ['Chine',                '+86'],
     'AE' => ['Émirats arabes unis',  '+971'],
     'IN' => ['Inde',                 '+91'],
+];
+
+const LIVREUR_PHONE_LOCAL_LENGTHS = [
+    'GN' => 9,
+    'GW' => 7,
+    'SN' => 9,
+    'ML' => 8,
+    'CI' => 10,
+    'LR' => 8,
+    'SL' => 8,
+    'FR' => 9,
+    'CN' => 11,
+    'AE' => 9,
+    'IN' => 10,
 ];
 
 class LivreurController extends Controller
@@ -90,6 +105,8 @@ class LivreurController extends Controller
         if (!empty($data['code_pays']) && isset(LIVREUR_PAYS[$data['code_pays']])) {
             [$data['pays'], $data['code_phone_pays']] = LIVREUR_PAYS[$data['code_pays']];
         }
+
+        $this->validateLocalPhoneLength($data);
 
         $data = $this->normalizeData($data);
 
@@ -184,12 +201,40 @@ class LivreurController extends Controller
             [$data['pays'], $data['code_phone_pays']] = LIVREUR_PAYS[$data['code_pays']];
         }
 
+        $this->validateLocalPhoneLength($data);
+
         $data = $this->normalizeData($data);
 
         $livreur->update($data);
 
         return redirect()->route('livreurs.index')
             ->with('success', 'Livreur mis à jour avec succès.');
+    }
+
+    private function validateLocalPhoneLength(array $data): void
+    {
+        if (empty($data['telephone']) || empty($data['code_pays'])) {
+            return;
+        }
+
+        $expectedLength = LIVREUR_PHONE_LOCAL_LENGTHS[$data['code_pays']] ?? null;
+        if (! $expectedLength) {
+            return;
+        }
+
+        $digits = preg_replace('/\D+/', '', (string) $data['telephone']) ?? '';
+        if ($digits === '') {
+            return;
+        }
+
+        $isValidLength = strlen($digits) === $expectedLength
+            || (strlen($digits) === ($expectedLength + 1) && str_starts_with($digits, '0'));
+
+        if (! $isValidLength) {
+            throw ValidationException::withMessages([
+                'telephone' => "Le numero doit contenir {$expectedLength} chiffres (ou " . ($expectedLength + 1) . ' avec un 0 initial).',
+            ]);
+        }
     }
 
     private function normalizeData(array $data): array
@@ -205,10 +250,22 @@ class LivreurController extends Controller
         }
         // Combiner dial + chiffres locaux → numéro international complet
         // (seulement si le numéro n'est pas déjà au format international)
-        if (!empty($data['code_phone_pays']) && !empty($data['telephone'])) {
-            $tel = (string) $data['telephone'];
-            if (!str_starts_with($tel, '+')) {
-                $data['telephone'] = $data['code_phone_pays'] . ltrim($tel, '0');
+        if (!empty($data['telephone'])) {
+            $telephone = trim((string) $data['telephone']);
+            $telephoneDigits = preg_replace('/\D+/', '', $telephone) ?? '';
+
+            if ($telephoneDigits === '') {
+                $data['telephone'] = null;
+            } elseif (str_starts_with($telephone, '+')) {
+                $data['telephone'] = '+' . $telephoneDigits;
+            } elseif (!empty($data['code_phone_pays'])) {
+                $dialDigits = preg_replace('/\D+/', '', (string) $data['code_phone_pays']) ?? '';
+                $localDigits = preg_replace('/^0/', '', $telephoneDigits);
+                $data['telephone'] = $dialDigits !== ''
+                    ? '+' . $dialDigits . $localDigits
+                    : $telephoneDigits;
+            } else {
+                $data['telephone'] = $telephoneDigits;
             }
         }
         return $data;
@@ -223,3 +280,4 @@ class LivreurController extends Controller
             ->with('success', 'Livreur supprimé.');
     }
 }
+
