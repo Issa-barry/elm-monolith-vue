@@ -4,6 +4,17 @@ Application de gestion interne — Laravel 12 + Inertia.js + Vue 3 + Vite.
 
 ---
 
+
+cd ~/domains/usine-eau-api.fr/public_html
+composer2 update
+php artisan migrate:fresh --seed
+php artisan optimize:clear
+php artisan optimize
+
+php artisan db:seed --class=FakeDataSeeder
+php artisan storage:link
+
+
 ## Stack technique
 
 | Couche | Technologie |

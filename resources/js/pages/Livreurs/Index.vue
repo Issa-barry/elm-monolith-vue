@@ -32,6 +32,7 @@ interface Livreur {
     nom_complet: string;
     email: string | null;
     telephone: string | null;
+    code_phone_pays: string | null;
     ville: string | null;
     pays: string | null;
     code_pays: string | null;
@@ -268,7 +269,7 @@ function confirmDelete(l: Livreur) {
                     <!-- Téléphone -->
                     <Column field="telephone" header="Téléphone" style="width: 190px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">{{ formatPhoneDisplay(data.telephone) }}</span>
+                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">{{ formatPhoneDisplay(data.telephone, data.code_phone_pays) }}</span>
                         </template>
                     </Column>
 

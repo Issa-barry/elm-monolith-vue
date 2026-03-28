@@ -30,7 +30,7 @@ class VehiculeController extends Controller
             'type_label'               => $v->type_label,
             'capacite_packs'           => $v->capacite_packs,
             'proprietaire_id'          => $v->proprietaire_id,
-            'proprietaire_nom'         => $v->proprietaire?->nom_complet ?? $v->proprietaire?->nom,
+            'proprietaire_nom'         => $v->proprietaire ? trim($v->proprietaire->prenom . ' ' . $v->proprietaire->nom) : null,
             'livreur_principal_id'     => $v->livreur_principal_id,
             'livreur_nom'              => $v->livreurPrincipal
                                             ? trim($v->livreurPrincipal->prenom . ' ' . $v->livreurPrincipal->nom)

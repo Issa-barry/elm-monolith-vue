@@ -11,6 +11,10 @@ class Livreur extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected $casts = [
+        'is_active' => 'boolean',
+    ];
+
     protected $fillable = [
         'organization_id',
         'user_id',

@@ -77,6 +77,10 @@ function toggleMenu(item: NavItem) {
                             class="text-sidebar-primary"
                         />
                         <span>{{ item.title }}</span>
+                        <span
+                            v-if="item.badge"
+                            class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                        >{{ item.badge }}</span>
                     </Link>
                 </SidebarMenuButton>
 

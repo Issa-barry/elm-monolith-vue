@@ -14,9 +14,13 @@ return new class extends Migration
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->string('nom');
             $table->string('prenom');
-            $table->string('email')->nullable();
-            $table->string('telephone', 20)->nullable();
+            $table->string('email')->nullable()->unique();
+            $table->string('telephone', 20)->unique();
             $table->text('adresse')->nullable();
+            $table->string('ville', 100);
+            $table->string('pays', 100);
+            $table->string('code_pays', 5);
+            $table->string('code_phone_pays', 10);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();

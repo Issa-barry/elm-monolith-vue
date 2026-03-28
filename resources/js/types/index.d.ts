@@ -32,6 +32,7 @@ export interface NavItem {
     href: NonNullable<InertiaLinkProps['href']>;
     icon?: LucideIcon;
     isActive?: boolean;
+    badge?: number;
     items?: NavItem[];
 }
 
@@ -42,6 +43,7 @@ export type AppPageProps<
     quote: { message: string; author: string };
     auth: Auth;
     sidebarOpen: boolean;
+    stock_alertes: { ruptures: number; faibles: number; total: number };
 };
 
 export interface Organization {

@@ -93,6 +93,38 @@ class ProduitController extends Controller
             ->with('success', 'Produit créé avec succès.');
     }
 
+    public function show(Produit $produit): Response
+    {
+        $this->authorize('view', $produit);
+
+        return Inertia::render('Produits/Show', [
+            'produit' => [
+                'id'                 => $produit->id,
+                'nom'                => $produit->nom,
+                'code_interne'       => $produit->code_interne,
+                'code_fournisseur'   => $produit->code_fournisseur,
+                'image_url'          => $produit->image_url,
+                'type'               => $produit->type?->value,
+                'type_label'         => $produit->type?->label(),
+                'statut'             => $produit->statut?->value,
+                'statut_label'       => $produit->statut?->label(),
+                'prix_usine'         => $produit->prix_usine,
+                'prix_vente'         => $produit->prix_vente,
+                'prix_achat'         => $produit->prix_achat,
+                'cout'               => $produit->cout,
+                'qte_stock'          => $produit->qte_stock,
+                'seuil_alerte_stock' => $produit->seuil_alerte_stock,
+                'description'        => $produit->description,
+                'is_critique'        => $produit->is_critique,
+                'in_stock'           => $produit->in_stock,
+                'is_low_stock'       => $produit->is_low_stock,
+                'has_stock'          => $produit->type?->hasStock() ?? true,
+                'created_at'         => $produit->created_at?->toISOString(),
+                'updated_at'         => $produit->updated_at?->toISOString(),
+            ],
+        ]);
+    }
+
     public function edit(Produit $produit): Response
     {
         $this->authorize('update', $produit);

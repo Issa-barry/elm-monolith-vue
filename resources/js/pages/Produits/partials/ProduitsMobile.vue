@@ -11,6 +11,7 @@ import { Link } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowLeft,
+    Eye,
     MoreVertical,
     Package,
     Pencil,
@@ -113,7 +114,7 @@ const filteredProduits = computed(() => {
                 </div>
 
                 <!-- Infos -->
-                <div class="min-w-0 flex-1">
+                <Link :href="`/produits/${data.id}`" class="min-w-0 flex-1">
                     <div class="flex items-center gap-1.5">
                         <p class="truncate text-[13px] font-semibold leading-tight">{{ data.nom }}</p>
                         <AlertTriangle v-if="data.is_critique" class="h-3.5 w-3.5 shrink-0 text-amber-500" />
@@ -121,7 +122,7 @@ const filteredProduits = computed(() => {
                     <p class="mt-0.5 font-mono text-[11px] text-muted-foreground">
                         {{ data.code_interne || '—' }}
                     </p>
-                </div>
+                </Link>
 
                 <!-- Actions -->
                 <DropdownMenu>
@@ -131,6 +132,13 @@ const filteredProduits = computed(() => {
                         </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" class="w-44">
+                        <DropdownMenuItem as-child>
+                            <Link :href="`/produits/${data.id}`" class="flex w-full items-center gap-2">
+                                <Eye class="h-4 w-4" />
+                                Voir le détail
+                            </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator v-if="can('produits.update')" />
                         <DropdownMenuItem v-if="can('produits.update')" as-child>
                             <Link :href="`/produits/${data.id}/edit`" class="flex w-full items-center gap-2">
                                 <Pencil class="h-4 w-4" />

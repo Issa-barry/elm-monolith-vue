@@ -5,6 +5,7 @@ use App\Models\Proprietaire;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -20,6 +21,20 @@ const PROPRIETAIRE_PAYS = [
     'CN' => ['Chine',                '+86'],
     'AE' => ['Émirats arabes unis',  '+971'],
     'IN' => ['Inde',                 '+91'],
+];
+
+const PROPRIETAIRE_PHONE_LOCAL_LENGTHS = [
+    'GN' => 9,
+    'GW' => 7,
+    'SN' => 9,
+    'ML' => 8,
+    'CI' => 10,
+    'LR' => 8,
+    'SL' => 8,
+    'FR' => 9,
+    'CN' => 11,
+    'AE' => 9,
+    'IN' => 10,
 ];
 
 class ProprietaireController extends Controller
@@ -38,6 +53,7 @@ class ProprietaireController extends Controller
                 'nom_complet'=> trim("{$p->prenom} {$p->nom}"),
                 'email'      => $p->email,
                 'telephone'  => $p->telephone,
+                'code_phone_pays' => $p->code_phone_pays,
                 'adresse'    => $p->adresse,
                 'is_active'  => $p->is_active,
             ]);
@@ -82,6 +98,8 @@ class ProprietaireController extends Controller
             [$data['pays'], $data['code_phone_pays']] = PROPRIETAIRE_PAYS[$data['code_pays']];
         }
 
+        $this->validateLocalPhoneLength($data);
+
         $data = $this->normalizeData($data);
 
         Proprietaire::create([...$data, 'organization_id' => $orgId]);
@@ -94,21 +112,53 @@ class ProprietaireController extends Controller
     {
         $this->authorize('update', $proprietaire);
 
+        [$telephone, $codePhonePays, $codePays, $pays] = $this->splitPhone(
+            $proprietaire->telephone,
+            $proprietaire->code_phone_pays,
+            $proprietaire->code_pays,
+            $proprietaire->pays,
+        );
+
         return Inertia::render('Proprietaires/Edit', [
             'proprietaire' => [
                 'id'              => $proprietaire->id,
                 'nom'             => $proprietaire->nom,
                 'prenom'          => $proprietaire->prenom,
                 'email'           => $proprietaire->email,
-                'telephone'       => $proprietaire->telephone,
+                'telephone'       => $telephone,
                 'adresse'         => $proprietaire->adresse,
                 'ville'           => $proprietaire->ville,
-                'pays'            => $proprietaire->pays,
-                'code_pays'       => $proprietaire->code_pays,
-                'code_phone_pays' => $proprietaire->code_phone_pays,
+                'pays'            => $pays,
+                'code_pays'       => $codePays,
+                'code_phone_pays' => $codePhonePays,
                 'is_active'       => $proprietaire->is_active,
             ],
         ]);
+    }
+
+    /**
+     * Sépare un numéro complet (+224622000003) en [chiffres_locaux, dial, code_pays, pays].
+     * Si le numéro ne commence pas par un dial connu, le retourne tel quel.
+     */
+    private function splitPhone(?string $telephone, ?string $codePhonePays, ?string $codePays, ?string $pays): array
+    {
+        if (! $telephone) {
+            return [null, $codePhonePays, $codePays, $pays];
+        }
+
+        if ($codePhonePays && str_starts_with($telephone, $codePhonePays)) {
+            return [substr($telephone, strlen($codePhonePays)), $codePhonePays, $codePays, $pays];
+        }
+
+        $sorted = PROPRIETAIRE_PAYS;
+        uasort($sorted, fn ($a, $b) => strlen($b[1]) <=> strlen($a[1]));
+        foreach ($sorted as $code => [$name, $dial]) {
+            if (str_starts_with($telephone, $dial)) {
+                return [substr($telephone, strlen($dial)), $dial, $code, $name];
+            }
+        }
+
+        return [$telephone, $codePhonePays, $codePays, $pays];
     }
 
     public function update(Request $request, Proprietaire $proprietaire): RedirectResponse
@@ -135,12 +185,40 @@ class ProprietaireController extends Controller
             [$data['pays'], $data['code_phone_pays']] = PROPRIETAIRE_PAYS[$data['code_pays']];
         }
 
+        $this->validateLocalPhoneLength($data);
+
         $data = $this->normalizeData($data);
 
         $proprietaire->update($data);
 
         return redirect()->route('proprietaires.index')
             ->with('success', 'Propriétaire mis à jour avec succès.');
+    }
+
+    private function validateLocalPhoneLength(array $data): void
+    {
+        if (empty($data['telephone']) || empty($data['code_pays'])) {
+            return;
+        }
+
+        $expectedLength = PROPRIETAIRE_PHONE_LOCAL_LENGTHS[$data['code_pays']] ?? null;
+        if (! $expectedLength) {
+            return;
+        }
+
+        $digits = preg_replace('/\D+/', '', (string) $data['telephone']) ?? '';
+        if ($digits === '') {
+            return;
+        }
+
+        $isValidLength = strlen($digits) === $expectedLength
+            || (strlen($digits) === ($expectedLength + 1) && str_starts_with($digits, '0'));
+
+        if (! $isValidLength) {
+            throw ValidationException::withMessages([
+                'telephone' => "Le numero doit contenir {$expectedLength} chiffres (ou " . ($expectedLength + 1) . ' avec un 0 initial).',
+            ]);
+        }
     }
 
     private function normalizeData(array $data): array
@@ -154,6 +232,24 @@ class ProprietaireController extends Controller
         if (!empty($data['ville'])) {
             $data['ville'] = mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
         }
+        if (!empty($data['telephone'])) {
+            $telephone = trim((string) $data['telephone']);
+            $telephoneDigits = preg_replace('/\D+/', '', $telephone) ?? '';
+
+            if ($telephoneDigits === '') {
+                $data['telephone'] = null;
+            } elseif (str_starts_with($telephone, '+')) {
+                $data['telephone'] = '+' . $telephoneDigits;
+            } elseif (!empty($data['code_phone_pays'])) {
+                $dialDigits = preg_replace('/\D+/', '', (string) $data['code_phone_pays']) ?? '';
+                $localDigits = preg_replace('/^0/', '', $telephoneDigits);
+                $data['telephone'] = $dialDigits !== ''
+                    ? '+' . $dialDigits . $localDigits
+                    : $telephoneDigits;
+            } else {
+                $data['telephone'] = $telephoneDigits;
+            }
+        }
         return $data;
     }
 
@@ -166,3 +262,4 @@ class ProprietaireController extends Controller
             ->with('success', 'Propriétaire supprimé.');
     }
 }
+

@@ -7,6 +7,7 @@ import {
 import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, Building2, Eye, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-vue-next';
@@ -326,7 +327,7 @@ function confirmDelete(s: Site) {
                     <!-- Téléphone -->
                     <Column field="telephone" header="Téléphone" style="min-width: 140px">
                         <template #body="{ data }">
-                            <span class="text-muted-foreground">{{ data.telephone ?? '—' }}</span>
+                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">{{ formatPhoneDisplay(data.telephone) }}</span>
                         </template>
                     </Column>
 

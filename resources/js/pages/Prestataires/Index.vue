@@ -34,6 +34,7 @@ interface Prestataire {
     nom_complet: string | null;
     email: string | null;
     phone: string | null;
+    code_phone_pays: string | null;
     ville: string | null;
     type: string;
     type_label: string;
@@ -293,7 +294,7 @@ function confirmDelete(p: Prestataire) {
                     <!-- Téléphone -->
                     <Column field="phone" header="Téléphone" style="width: 190px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">{{ formatPhoneDisplay(data.phone) }}</span>
+                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">{{ formatPhoneDisplay(data.phone, data.code_phone_pays) }}</span>
                         </template>
                     </Column>
 

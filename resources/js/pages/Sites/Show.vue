@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay, phoneToTelHref } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
 import {
@@ -71,40 +72,6 @@ function flagUrl(pays: string) {
 
 function mapsUrl(lat: number, lng: number) {
     return `https://www.google.com/maps?q=${lat},${lng}`;
-}
-
-function formatPhoneNumber(phone: string) {
-    const raw = phone.trim();
-    const hasPlus = raw.startsWith('+');
-    const digits = raw.replace(/\D/g, '');
-
-    if (!digits) return raw;
-
-    if (digits.startsWith('224') && digits.length === 12) {
-        const local = digits.slice(3);
-        return `+224 ${local.slice(0, 3)} ${local.slice(3, 5)} ${local.slice(5, 7)} ${local.slice(7, 9)}`;
-    }
-
-    if (hasPlus) {
-        const countryCodeLength = digits.length > 11 ? 3 : digits.length > 10 ? 2 : 1;
-        const countryCode = digits.slice(0, countryCodeLength);
-        const rest = digits.slice(countryCodeLength);
-        const grouped = rest.match(/.{1,3}/g)?.join(' ') ?? rest;
-        return `+${countryCode}${grouped ? ` ${grouped}` : ''}`;
-    }
-
-    if (digits.length === 9) {
-        return `${digits.slice(0, 3)} ${digits.slice(3, 5)} ${digits.slice(5, 7)} ${digits.slice(7, 9)}`;
-    }
-
-    return digits.match(/.{1,3}/g)?.join(' ') ?? digits;
-}
-
-function telHref(phone: string) {
-    const raw = phone.trim();
-    const digits = raw.replace(/\D/g, '');
-    if (!digits) return `tel:${raw}`;
-    return raw.startsWith('+') ? `tel:+${digits}` : `tel:${digits}`;
 }
 </script>
 
@@ -217,8 +184,8 @@ function telHref(phone: string) {
                         <div v-if="site.telephone" class="flex items-center justify-between">
                             <dt class="text-muted-foreground">Téléphone</dt>
                             <dd>
-                                <a :href="telHref(site.telephone)" class="font-medium hover:underline">
-                                    {{ formatPhoneNumber(site.telephone) }}
+                                <a :href="phoneToTelHref(site.telephone)" class="font-medium hover:underline">
+                                    {{ formatPhoneDisplay(site.telephone) }}
                                 </a>
                             </dd>
                         </div>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Produit;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -22,6 +23,28 @@ class HandleInertiaRequests extends Middleware
      *
      * @see https://inertiajs.com/asset-versioning
      */
+    private function stockAlertes(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user || ! $user->organization_id) {
+            return ['ruptures' => 0, 'faibles' => 0, 'total' => 0];
+        }
+
+        $produits = Produit::where('organization_id', $user->organization_id)
+            ->where('statut', '!=', 'archive')
+            ->whereNotNull('qte_stock')
+            ->get(['id', 'qte_stock', 'seuil_alerte_stock', 'type', 'organization_id']);
+
+        $ruptures = $produits->filter(fn ($p) => $p->type?->hasStock() && $p->qte_stock <= 0)->count();
+        $faibles  = $produits->filter(fn ($p) => $p->type?->hasStock() && $p->is_low_stock)->count();
+
+        return [
+            'ruptures' => $ruptures,
+            'faibles'  => $faibles,
+            'total'    => $ruptures + $faibles,
+        ];
+    }
+
     public function version(Request $request): ?string
     {
         return parent::version($request);
@@ -47,7 +70,8 @@ class HandleInertiaRequests extends Middleware
                 'permissions' => $request->user()?->permissionsMap() ?? [],
                 'roles'       => $request->user()?->getRoleNames() ?? [],
             ],
-            'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'sidebarOpen'   => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'stock_alertes' => $this->stockAlertes($request),
         ];
     }
 }

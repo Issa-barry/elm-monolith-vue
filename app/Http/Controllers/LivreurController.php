@@ -6,6 +6,7 @@ use App\Models\Livreur;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -21,6 +22,20 @@ const LIVREUR_PAYS = [
     'CN' => ['Chine',                '+86'],
     'AE' => ['Émirats arabes unis',  '+971'],
     'IN' => ['Inde',                 '+91'],
+];
+
+const LIVREUR_PHONE_LOCAL_LENGTHS = [
+    'GN' => 9,
+    'GW' => 7,
+    'SN' => 9,
+    'ML' => 8,
+    'CI' => 10,
+    'LR' => 8,
+    'SL' => 8,
+    'FR' => 9,
+    'CN' => 11,
+    'AE' => 9,
+    'IN' => 10,
 ];
 
 class LivreurController extends Controller
@@ -39,6 +54,7 @@ class LivreurController extends Controller
                 'nom_complet'=> trim("{$l->prenom} {$l->nom}"),
                 'email'      => $l->email,
                 'telephone'  => $l->telephone,
+                'code_phone_pays' => $l->code_phone_pays,
                 'ville'      => $l->ville,
                 'pays'       => $l->pays,
                 'code_pays'  => $l->code_pays,
@@ -67,23 +83,30 @@ class LivreurController extends Controller
         $data = $request->validate([
             'nom'       => 'required|string|max:255',
             'prenom'    => 'required|string|max:255',
-            'email'     => 'nullable|email:rfc,dns|max:255',
-            'telephone' => ['nullable', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
-            'code_pays' => ['nullable', Rule::in(array_keys(LIVREUR_PAYS))],
-            'ville'     => 'nullable|string|max:100',
+            'email'     => 'nullable|email:rfc,dns|max:255|unique:livreurs,email',
+            'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/', 'unique:livreurs,telephone'],
+            'code_pays' => ['required', Rule::in(array_keys(LIVREUR_PAYS))],
+            'ville'     => 'required|string|max:100',
             'adresse'   => 'nullable|string|max:500',
             'is_active' => 'boolean',
         ], [
-            'nom.required'    => 'Le nom est obligatoire.',
-            'prenom.required' => 'Le prénom est obligatoire.',
-            'email.email'     => "L'adresse email est invalide.",
-            'telephone.regex' => 'Le numéro de téléphone est invalide.',
-            'code_pays.in'    => 'Pays invalide.',
+            'nom.required'         => 'Le nom est obligatoire.',
+            'prenom.required'      => 'Le prénom est obligatoire.',
+            'email.email'          => "L'adresse email est invalide.",
+            'email.unique'         => 'Cet email est déjà utilisé.',
+            'telephone.required'   => 'Le numéro de téléphone est obligatoire.',
+            'telephone.regex'      => 'Le numéro de téléphone est invalide.',
+            'telephone.unique'     => 'Ce numéro de téléphone est déjà utilisé.',
+            'code_pays.required'   => 'Le pays est obligatoire.',
+            'code_pays.in'         => 'Pays invalide.',
+            'ville.required'       => 'La ville est obligatoire.',
         ]);
 
         if (!empty($data['code_pays']) && isset(LIVREUR_PAYS[$data['code_pays']])) {
             [$data['pays'], $data['code_phone_pays']] = LIVREUR_PAYS[$data['code_pays']];
         }
+
+        $this->validateLocalPhoneLength($data);
 
         $data = $this->normalizeData($data);
 
@@ -97,21 +120,55 @@ class LivreurController extends Controller
     {
         $this->authorize('update', $livreur);
 
+        [$telephone, $codePhonePays, $codePays, $pays] = $this->splitPhone(
+            $livreur->telephone,
+            $livreur->code_phone_pays,
+            $livreur->code_pays,
+            $livreur->pays,
+        );
+
         return Inertia::render('Livreurs/Edit', [
             'livreur' => [
                 'id'              => $livreur->id,
                 'nom'             => $livreur->nom,
                 'prenom'          => $livreur->prenom,
                 'email'           => $livreur->email,
-                'telephone'       => $livreur->telephone,
+                'telephone'       => $telephone,
                 'adresse'         => $livreur->adresse,
                 'ville'           => $livreur->ville,
-                'pays'            => $livreur->pays,
-                'code_pays'       => $livreur->code_pays,
-                'code_phone_pays' => $livreur->code_phone_pays,
+                'pays'            => $pays,
+                'code_pays'       => $codePays,
+                'code_phone_pays' => $codePhonePays,
                 'is_active'       => $livreur->is_active,
             ],
         ]);
+    }
+
+    /**
+     * Sépare un numéro complet (+224622000003) en [chiffres_locaux, dial, code_pays, pays].
+     * Si le numéro ne commence pas par un dial connu, le retourne tel quel.
+     */
+    private function splitPhone(?string $telephone, ?string $codePhonePays, ?string $codePays, ?string $pays): array
+    {
+        if (! $telephone) {
+            return [null, $codePhonePays, $codePays, $pays];
+        }
+
+        // Si on connaît déjà le dial et que le numéro commence par lui → strip
+        if ($codePhonePays && str_starts_with($telephone, $codePhonePays)) {
+            return [substr($telephone, strlen($codePhonePays)), $codePhonePays, $codePays, $pays];
+        }
+
+        // Auto-détection : trier par longueur de dial décroissante (évite +97 avant +971)
+        $sorted = LIVREUR_PAYS;
+        uasort($sorted, fn ($a, $b) => strlen($b[1]) <=> strlen($a[1]));
+        foreach ($sorted as $code => [$name, $dial]) {
+            if (str_starts_with($telephone, $dial)) {
+                return [substr($telephone, strlen($dial)), $dial, $code, $name];
+            }
+        }
+
+        return [$telephone, $codePhonePays, $codePays, $pays];
     }
 
     public function update(Request $request, Livreur $livreur): RedirectResponse
@@ -121,23 +178,30 @@ class LivreurController extends Controller
         $data = $request->validate([
             'nom'       => 'required|string|max:255',
             'prenom'    => 'required|string|max:255',
-            'email'     => 'nullable|email:rfc,dns|max:255',
-            'telephone' => ['nullable', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
-            'code_pays' => ['nullable', Rule::in(array_keys(LIVREUR_PAYS))],
-            'ville'     => 'nullable|string|max:100',
+            'email'     => ['nullable', 'email:rfc,dns', 'max:255', Rule::unique('livreurs', 'email')->ignore($livreur->id)],
+            'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/', Rule::unique('livreurs', 'telephone')->ignore($livreur->id)],
+            'code_pays' => ['required', Rule::in(array_keys(LIVREUR_PAYS))],
+            'ville'     => 'required|string|max:100',
             'adresse'   => 'nullable|string|max:500',
             'is_active' => 'boolean',
         ], [
-            'nom.required'    => 'Le nom est obligatoire.',
-            'prenom.required' => 'Le prénom est obligatoire.',
-            'email.email'     => "L'adresse email est invalide.",
-            'telephone.regex' => 'Le numéro de téléphone est invalide.',
-            'code_pays.in'    => 'Pays invalide.',
+            'nom.required'         => 'Le nom est obligatoire.',
+            'prenom.required'      => 'Le prénom est obligatoire.',
+            'email.email'          => "L'adresse email est invalide.",
+            'email.unique'         => 'Cet email est déjà utilisé.',
+            'telephone.required'   => 'Le numéro de téléphone est obligatoire.',
+            'telephone.regex'      => 'Le numéro de téléphone est invalide.',
+            'telephone.unique'     => 'Ce numéro de téléphone est déjà utilisé.',
+            'code_pays.required'   => 'Le pays est obligatoire.',
+            'code_pays.in'         => 'Pays invalide.',
+            'ville.required'       => 'La ville est obligatoire.',
         ]);
 
         if (!empty($data['code_pays']) && isset(LIVREUR_PAYS[$data['code_pays']])) {
             [$data['pays'], $data['code_phone_pays']] = LIVREUR_PAYS[$data['code_pays']];
         }
+
+        $this->validateLocalPhoneLength($data);
 
         $data = $this->normalizeData($data);
 
@@ -145,6 +209,32 @@ class LivreurController extends Controller
 
         return redirect()->route('livreurs.index')
             ->with('success', 'Livreur mis à jour avec succès.');
+    }
+
+    private function validateLocalPhoneLength(array $data): void
+    {
+        if (empty($data['telephone']) || empty($data['code_pays'])) {
+            return;
+        }
+
+        $expectedLength = LIVREUR_PHONE_LOCAL_LENGTHS[$data['code_pays']] ?? null;
+        if (! $expectedLength) {
+            return;
+        }
+
+        $digits = preg_replace('/\D+/', '', (string) $data['telephone']) ?? '';
+        if ($digits === '') {
+            return;
+        }
+
+        $isValidLength = strlen($digits) === $expectedLength
+            || (strlen($digits) === ($expectedLength + 1) && str_starts_with($digits, '0'));
+
+        if (! $isValidLength) {
+            throw ValidationException::withMessages([
+                'telephone' => "Le numero doit contenir {$expectedLength} chiffres (ou " . ($expectedLength + 1) . ' avec un 0 initial).',
+            ]);
+        }
     }
 
     private function normalizeData(array $data): array
@@ -158,6 +248,26 @@ class LivreurController extends Controller
         if (!empty($data['ville'])) {
             $data['ville'] = mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
         }
+        // Combiner dial + chiffres locaux → numéro international complet
+        // (seulement si le numéro n'est pas déjà au format international)
+        if (!empty($data['telephone'])) {
+            $telephone = trim((string) $data['telephone']);
+            $telephoneDigits = preg_replace('/\D+/', '', $telephone) ?? '';
+
+            if ($telephoneDigits === '') {
+                $data['telephone'] = null;
+            } elseif (str_starts_with($telephone, '+')) {
+                $data['telephone'] = '+' . $telephoneDigits;
+            } elseif (!empty($data['code_phone_pays'])) {
+                $dialDigits = preg_replace('/\D+/', '', (string) $data['code_phone_pays']) ?? '';
+                $localDigits = preg_replace('/^0/', '', $telephoneDigits);
+                $data['telephone'] = $dialDigits !== ''
+                    ? '+' . $dialDigits . $localDigits
+                    : $telephoneDigits;
+            } else {
+                $data['telephone'] = $telephoneDigits;
+            }
+        }
         return $data;
     }
 
@@ -170,3 +280,4 @@ class LivreurController extends Controller
             ->with('success', 'Livreur supprimé.');
     }
 }
+

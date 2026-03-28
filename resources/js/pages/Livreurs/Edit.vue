@@ -38,7 +38,7 @@ const form = useForm({
     pays: props.livreur.pays,
     code_pays: props.livreur.code_pays,
     code_phone_pays: props.livreur.code_phone_pays,
-    is_active: props.livreur.is_active,
+    is_active: Boolean(props.livreur.is_active),
 });
 
 function submit() {
