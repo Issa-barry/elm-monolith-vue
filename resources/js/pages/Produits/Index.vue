@@ -15,6 +15,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     AlertTriangle,
+    Eye,
     MoreVertical,
     Package,
     Pencil,
@@ -29,7 +30,8 @@ import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
+import { usePage } from '@inertiajs/vue3';
 
 interface Produit {
     id: number;
@@ -50,6 +52,10 @@ const props = defineProps<{ produits: Produit[] }>();
 const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
+const page = usePage();
+const stockAlertes = computed(() => (page.props as any).stock_alertes ?? { ruptures: 0, faibles: 0, total: 0 });
+const ruptures = computed(() => props.produits.filter(p => p.has_stock && p.qte_stock !== null && p.qte_stock <= 0));
+const faibles  = computed(() => props.produits.filter(p => p.has_stock && p.is_low_stock));
 
 const search = ref('');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
@@ -92,6 +98,26 @@ function confirmDelete(produit: Produit) {
 
         <!-- ─── VUE DESKTOP ─── -->
         <div class="hidden sm:flex flex-col gap-6 p-6">
+
+            <!-- Alertes stock -->
+            <div v-if="ruptures.length > 0 || faibles.length > 0" class="flex flex-col gap-2">
+                <div v-if="ruptures.length > 0" class="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                    <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>
+                        <span class="font-semibold">Rupture de stock</span>
+                        <span class="text-destructive/80"> — </span>
+                        <span class="text-destructive/80">{{ ruptures.map(p => p.nom).join(', ') }}</span>
+                    </div>
+                </div>
+                <div v-if="faibles.length > 0" class="flex items-start gap-3 rounded-lg border border-amber-400/30 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-950/20 dark:text-amber-400">
+                    <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>
+                        <span class="font-semibold">Stock faible</span>
+                        <span class="text-amber-600/80 dark:text-amber-400/80"> — </span>
+                        <span class="text-amber-600/80 dark:text-amber-400/80">{{ faibles.map(p => p.nom).join(', ') }}</span>
+                    </div>
+                </div>
+            </div>
 
             <div class="flex items-center justify-between">
                 <div>
@@ -164,10 +190,10 @@ function confirmDelete(produit: Produit) {
                     <!-- Produit -->
                     <Column field="nom" header="Produit" sortable style="min-width: 200px">
                         <template #body="{ data }">
-                            <div class="flex items-center gap-1.5">
+                            <Link :href="`/produits/${data.id}`" class="flex items-center gap-1.5 hover:underline underline-offset-2">
                                 <span class="font-medium">{{ data.nom }}</span>
                                 <AlertTriangle v-if="data.is_critique" class="h-3.5 w-3.5 shrink-0 text-amber-500" />
-                            </div>
+                            </Link>
                         </template>
                     </Column>
 
@@ -215,6 +241,13 @@ function confirmDelete(produit: Produit) {
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" class="w-44">
+                                        <DropdownMenuItem as-child>
+                                            <Link :href="`/produits/${data.id}`" class="flex w-full items-center gap-2">
+                                                <Eye class="h-4 w-4" />
+                                                Voir le détail
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator v-if="can('produits.update') || can('produits.delete')" />
                                         <DropdownMenuItem v-if="can('produits.update')" as-child>
                                             <Link :href="`/produits/${data.id}/edit`" class="flex w-full items-center gap-2">
                                                 <Pencil class="h-4 w-4" />
@@ -255,6 +288,16 @@ function confirmDelete(produit: Produit) {
 
         <!-- ─── VUE MOBILE ─── -->
         <div class="sm:hidden">
+            <div v-if="ruptures.length > 0 || faibles.length > 0" class="flex flex-col gap-2 px-4 pt-4">
+                <div v-if="ruptures.length > 0" class="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
+                    <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <div><span class="font-semibold">Rupture</span> — {{ ruptures.map(p => p.nom).join(', ') }}</div>
+                </div>
+                <div v-if="faibles.length > 0" class="flex items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-50 px-3 py-2.5 text-xs text-amber-700 dark:bg-amber-950/20 dark:text-amber-400">
+                    <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <div><span class="font-semibold">Stock faible</span> — {{ faibles.map(p => p.nom).join(', ') }}</div>
+                </div>
+            </div>
             <ProduitsMobile :produits="props.produits" :on-delete="confirmDelete" />
         </div>
 

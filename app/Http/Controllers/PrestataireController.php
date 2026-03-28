@@ -102,6 +102,13 @@ class PrestataireController extends Controller
     {
         $this->authorize('update', $prestataire);
 
+        [$phone, $codePhonePays, $codePays, $pays] = $this->splitPhone(
+            $prestataire->phone,
+            $prestataire->code_phone_pays,
+            $prestataire->code_pays,
+            $prestataire->pays,
+        );
+
         return Inertia::render('Prestataires/Edit', [
             'prestataire' => [
                 'id'             => $prestataire->id,
@@ -110,10 +117,10 @@ class PrestataireController extends Controller
                 'prenom'         => $prestataire->prenom,
                 'raison_sociale' => $prestataire->raison_sociale,
                 'email'          => $prestataire->email,
-                'phone'          => $prestataire->phone,
-                'code_phone_pays'=> $prestataire->code_phone_pays,
-                'code_pays'      => $prestataire->code_pays,
-                'pays'           => $prestataire->pays,
+                'phone'          => $phone,
+                'code_phone_pays'=> $codePhonePays,
+                'code_pays'      => $codePays,
+                'pays'           => $pays,
                 'ville'          => $prestataire->ville,
                 'adresse'        => $prestataire->adresse,
                 'type'           => $prestataire->type?->value,
@@ -122,6 +129,24 @@ class PrestataireController extends Controller
             ],
             'types' => PrestataireType::options(),
         ]);
+    }
+
+    private function splitPhone(?string $phone, ?string $codePhonePays, ?string $codePays, ?string $pays): array
+    {
+        if (! $phone) {
+            return [null, $codePhonePays, $codePays, $pays];
+        }
+        if ($codePhonePays && str_starts_with($phone, $codePhonePays)) {
+            return [substr($phone, strlen($codePhonePays)), $codePhonePays, $codePays, $pays];
+        }
+        $sorted = PRESTATAIRE_PAYS;
+        uasort($sorted, fn ($a, $b) => strlen($b[1]) <=> strlen($a[1]));
+        foreach ($sorted as $code => [$name, $dial]) {
+            if (str_starts_with($phone, $dial)) {
+                return [substr($phone, strlen($dial)), $dial, $code, $name];
+            }
+        }
+        return [$phone, $codePhonePays, $codePays, $pays];
     }
 
     public function update(Request $request, Prestataire $prestataire): RedirectResponse
@@ -168,6 +193,12 @@ class PrestataireController extends Controller
         }
         if (!empty($data['ville'])) {
             $data['ville'] = mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+        }
+        if (!empty($data['code_phone_pays']) && !empty($data['phone'])) {
+            $tel = (string) $data['phone'];
+            if (!str_starts_with($tel, '+')) {
+                $data['phone'] = $data['code_phone_pays'] . ltrim($tel, '0');
+            }
         }
         return $data;
     }

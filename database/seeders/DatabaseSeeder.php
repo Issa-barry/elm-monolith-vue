@@ -12,6 +12,7 @@ class DatabaseSeeder extends Seeder
             RolesAndPermissionsSeeder::class,
             ClientSeeder::class,
             PrestatairesSeeder::class,
+            LivreursSeeder::class,
             ProprietairesSeeder::class,
             VehiculesSeeder::class,
             SitesSeeder::class,

@@ -220,7 +220,7 @@ const displayImage = computed(() => previewUrl.value ?? props.currentImageUrl ??
                 <div class="flex items-center gap-3 sm:pt-6">
                     <Checkbox
                         id="is_critique"
-                        :checked="form.is_critique"
+                        :checked="Boolean(form.is_critique)"
                         @update:checked="$emit('update:form', { ...form, is_critique: $event })"
                     />
                     <div>

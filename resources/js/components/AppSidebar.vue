@@ -14,12 +14,14 @@ import {
 import { usePermissions } from '@/composables/usePermissions';
 import { dashboard, home } from '@/routes';
 import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import { Building2, Car, FileText, HandCoins, LayoutGrid, Layers, Package, ShoppingCart, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
 const { can } = usePermissions();
+const page = usePage();
+const stockAlertes = computed(() => (page.props as any).stock_alertes ?? { total: 0 });
 
 const mainNavItems = computed((): NavItem[] => {
     const items: NavItem[] = [
@@ -95,11 +97,12 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-       if (can('produits.read')) {
+    if (can('produits.read')) {
         items.push({
             title: 'Produits',
             href: '/produits',
             icon: Package,
+            badge: stockAlertes.value.total > 0 ? stockAlertes.value.total : undefined,
         });
     }
 

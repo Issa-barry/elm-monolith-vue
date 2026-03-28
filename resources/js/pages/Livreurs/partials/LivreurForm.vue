@@ -107,7 +107,7 @@ function onPaysChange(pays: string) {
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
-                    <Label class="mb-1.5 block">Pays</Label>
+                    <Label class="mb-1.5 block">Pays <span class="text-destructive">*</span></Label>
                     <Dropdown
                         :model-value="form.pays"
                         @update:model-value="onPaysChange($event)"
@@ -135,8 +135,9 @@ function onPaysChange(pays: string) {
                     <p v-if="errors.code_pays" class="mt-1 text-xs text-destructive">{{ errors.code_pays }}</p>
                 </div>
                 <div>
-                    <Label for="ville" class="mb-1.5 block">Ville</Label>
-                    <InputText id="ville" v-model="form.ville" class="w-full" />
+                    <Label for="ville" class="mb-1.5 block">Ville <span class="text-destructive">*</span></Label>
+                    <InputText id="ville" v-model="form.ville" class="w-full" :class="{ 'p-invalid': errors.ville }" />
+                    <p v-if="errors.ville" class="mt-1 text-xs text-destructive">{{ errors.ville }}</p>
                 </div>
                 <div class="sm:col-span-2">
                     <Label for="adresse" class="mb-1.5 block">Adresse</Label>
@@ -152,20 +153,23 @@ function onPaysChange(pays: string) {
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
-                    <Label for="telephone" class="mb-1.5 block">Téléphone</Label>
+                    <Label for="telephone" class="mb-1.5 block">Téléphone <span class="text-destructive">*</span></Label>
                     <div class="flex gap-2">
                         <div class="flex h-10 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border bg-muted/40 px-2 font-mono text-sm text-muted-foreground">
                             <img v-if="selectedCountry" :src="flagUrl(selectedCountry.code)" :alt="selectedCountry.label" class="h-4 w-auto rounded-sm shadow-sm" />
-                            <span>{{ form.code_phone_pays ?? '+???' }}</span>
+                            <span>{{ form.code_phone_pays ?? '—' }}</span>
                         </div>
                         <InputText
                             id="telephone"
-                            v-model="form.telephone"
+                            :model-value="form.telephone ?? ''"
+                            @update:model-value="emit('update:form', { ...props.form, telephone: $event || null })"
+                            placeholder="Ex: 622000003"
                             class="w-full"
                             :class="{ 'p-invalid': errors.telephone }"
                         />
                     </div>
                     <p v-if="errors.telephone" class="mt-1 text-xs text-destructive">{{ errors.telephone }}</p>
+                    <p v-else class="mt-1 text-xs text-muted-foreground">Saisissez les chiffres sans indicatif</p>
                 </div>
                 <div>
                     <Label for="email" class="mb-1.5 block">Email</Label>
@@ -189,12 +193,16 @@ function onPaysChange(pays: string) {
             <div class="flex items-center gap-3">
                 <Checkbox
                     id="is_active"
-                    :checked="form.is_active"
+                    :checked="Boolean(form.is_active)"
                     @update:checked="$emit('update:form', { ...form, is_active: $event })"
                 />
                 <div>
-                    <Label for="is_active" class="cursor-pointer font-medium">Livreur actif</Label>
-                    <p class="text-xs text-muted-foreground">Décochez pour désactiver</p>
+                    <Label for="is_active" class="cursor-pointer font-medium">
+                        {{ form.is_active ? 'Actif' : 'Inactif' }}
+                    </Label>
+                    <p class="text-xs text-muted-foreground">
+                        {{ form.is_active ? 'Décochez pour désactiver ce livreur' : 'Cochez pour activer ce livreur' }}
+                    </p>
                 </div>
             </div>
         </div>

@@ -198,7 +198,7 @@ watch(
                 <div class="flex items-start gap-3 sm:col-span-2">
                     <Checkbox
                         id="pris_en_charge_par_usine"
-                        :checked="form.pris_en_charge_par_usine"
+                        :checked="Boolean(form.pris_en_charge_par_usine)"
                         @update:checked="$emit('update:form', { ...form, pris_en_charge_par_usine: $event })"
                     />
                     <div>
@@ -299,7 +299,7 @@ watch(
             <div class="flex items-center gap-3">
                 <Checkbox
                     id="is_active"
-                    :checked="form.is_active"
+                    :checked="Boolean(form.is_active)"
                     @update:checked="$emit('update:form', { ...form, is_active: $event })"
                 />
                 <div>
