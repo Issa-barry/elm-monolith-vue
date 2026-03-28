@@ -35,6 +35,8 @@ interface Site {
     parent_id: number | null;
     parent_nom: string | null;
     enfants_count: number;
+    localisation: string | null;
+    telephone: string | null;
 }
 
 const props = defineProps<{ sites: Site[] }>();
@@ -238,7 +240,7 @@ function confirmDelete(s: Site) {
                     :value="sites"
                     :paginator="sites.length > 20"
                     :rows="20"
-                    :global-filter-fields="['nom', 'code', 'type_label', 'statut_label', 'ville', 'parent_nom']"
+                    :global-filter-fields="['nom', 'code', 'type_label', 'statut_label', 'ville', 'parent_nom', 'localisation', 'telephone']"
                     v-model:filters="filters"
                     data-key="id"
                     striped-rows
@@ -308,9 +310,23 @@ function confirmDelete(s: Site) {
                     </Column>
 
                     <!-- Ville -->
-                    <Column field="ville" header="Ville" style="min-width: 140px">
+                    <Column field="ville" header="Ville" style="min-width: 120px">
                         <template #body="{ data }">
                             <span class="text-muted-foreground">{{ data.ville ?? '—' }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Adresse -->
+                    <Column field="localisation" header="Adresse" style="min-width: 180px">
+                        <template #body="{ data }">
+                            <span class="text-muted-foreground">{{ data.localisation ?? '—' }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Téléphone -->
+                    <Column field="telephone" header="Téléphone" style="min-width: 140px">
+                        <template #body="{ data }">
+                            <span class="text-muted-foreground">{{ data.telephone ?? '—' }}</span>
                         </template>
                     </Column>
 
