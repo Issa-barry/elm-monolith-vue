@@ -53,6 +53,21 @@ function formatPhone(phone: string | null): string {
     const groups = local.match(/.{1,3}/g) ?? [local];
     return `${prefix} ${groups.join(' ')}`;
 }
+
+function formatDate(iso: string | null): string {
+    if (!iso) return '—';
+    return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(iso));
+}
+
+const ROLE_LABELS: Record<string, string> = {
+    super_admin:      'Super Admin',
+    admin_entreprise: 'Admin entreprise',
+    commerciale:      'Commercial(e)',
+    comptable:        'Comptable',
+    client:           'Client',
+};
+
+const roles = computed(() => (page.props.auth.roles as string[]).map(r => ROLE_LABELS[r] ?? r));
 </script>
 
 <template>
@@ -133,6 +148,53 @@ function formatPhone(phone: string | null): string {
                                 {{ formatPhone(authUser.telephone) || '—' }}
                             </p>
                         </template>
+                    </div>
+
+                    <!-- Informations du compte (lecture seule) -->
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <!-- Organisation -->
+                        <div class="grid gap-2">
+                            <Label>Organisation</Label>
+                            <p class="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+                                {{ authUser.organization?.name ?? '—' }}
+                            </p>
+                        </div>
+
+                        <!-- Rôle(s) -->
+                        <div class="grid gap-2">
+                            <Label>Rôle(s)</Label>
+                            <p class="flex h-9 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm">
+                                <span
+                                    v-for="role in roles"
+                                    :key="role"
+                                    class="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+                                >{{ role }}</span>
+                                <span v-if="!roles.length" class="text-muted-foreground">—</span>
+                            </p>
+                        </div>
+
+                        <!-- Membre depuis -->
+                        <div class="grid gap-2">
+                            <Label>Membre depuis</Label>
+                            <p class="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+                                {{ formatDate(authUser.created_at) }}
+                            </p>
+                        </div>
+
+                        <!-- Statut email -->
+                        <div class="grid gap-2">
+                            <Label>E-mail vérifié</Label>
+                            <p class="flex h-9 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm">
+                                <template v-if="authUser.email_verified_at">
+                                    <span class="h-2 w-2 rounded-full bg-green-500"></span>
+                                    <span class="text-muted-foreground">{{ formatDate(authUser.email_verified_at) }}</span>
+                                </template>
+                                <template v-else>
+                                    <span class="h-2 w-2 rounded-full bg-amber-400"></span>
+                                    <span class="text-muted-foreground">Non vérifié</span>
+                                </template>
+                            </p>
+                        </div>
                     </div>
 
                     <div v-if="mustVerifyEmail && !authUser.email_verified_at">

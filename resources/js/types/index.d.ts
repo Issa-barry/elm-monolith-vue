@@ -44,6 +44,12 @@ export type AppPageProps<
     sidebarOpen: boolean;
 };
 
+export interface Organization {
+    id: number;
+    name: string;
+    slug: string;
+}
+
 export interface User {
     id: number;
     prenom: string;
@@ -55,6 +61,7 @@ export interface User {
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;
+    organization: Organization | null;
 }
 
 export type BreadcrumbItemType = BreadcrumbItem;
