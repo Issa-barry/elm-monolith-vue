@@ -178,14 +178,16 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
 
                 <!-- Adresse (full width) -->
                 <div class="sm:col-span-2">
-                    <Label for="localisation" class="mb-1.5 block">Adresse</Label>
+                    <Label for="localisation" class="mb-1.5 block">Adresse <span class="text-destructive">*</span></Label>
                     <InputText
                         id="localisation"
                         :model-value="form.localisation ?? ''"
                         @update:model-value="emit('update:form', { ...form, localisation: ($event as string) || null })"
                         class="w-full"
+                        :class="{ 'p-invalid': errors.localisation }"
                         placeholder="Ex: Route de Coleah, Immeuble ABC"
                     />
+                    <p v-if="errors.localisation" class="mt-1 text-xs text-destructive">{{ errors.localisation }}</p>
                 </div>
 
                 <!-- Latitude -->

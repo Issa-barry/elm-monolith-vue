@@ -837,7 +837,7 @@ withDefaults(
                 </div>
             </main>
         </div>
-        v2
+        v : 1.2
         <div class="hidden h-14.5 lg:block"></div>
     </div>
 </template>
