@@ -127,6 +127,10 @@ function handlePhoneInput(e: Event) {
                             option-value="code"
                             :tabindex="3"
                             class="shrink-0"
+                            :pt="{
+                                root: { class: 'h-10' },
+                                label: { class: 'flex items-center py-0 h-10' },
+                            }"
                         >
                             <template #value="{ value }">
                                 <div v-if="value" class="flex items-center gap-2">

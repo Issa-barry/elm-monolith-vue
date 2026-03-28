@@ -113,24 +113,7 @@ php artisan migrate --force
 php artisan optimize:clear
 php artisan optimize
 ```
-
-### Variables `.env` production
-
-```env
-APP_NAME="Eau la maman"
-APP_ENV=production
-APP_DEBUG=false
-APP_URL=https://tondomaine.com
-APP_LOCALE=fr
-APP_FALLBACK_LOCALE=fr
-
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=elm_prod
-DB_USERNAME=
-DB_PASSWORD=
-```
+ 
 
 ### Hostinger / cPanel
 
@@ -143,15 +126,4 @@ npm run build
 git add public/build
 git commit -m "build: production"
 git push
-```
-
-**Sur le serveur (SSH ou terminal cPanel) :**
-```bash
-cd ~/domains/eau-la-maman.fr/public_html
-
-git pull origin main
-composer2 install --optimize-autoloader --no-dev
-php artisan migrate --force
-php artisan optimize:clear
-php artisan optimize
 ```
