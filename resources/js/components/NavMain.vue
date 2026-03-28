@@ -10,6 +10,7 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
+import { useSidebar } from '@/components/ui/sidebar/utils';
 import { toUrl } from '@/lib/utils';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
@@ -21,6 +22,11 @@ const props = defineProps<{
 }>();
 
 const page = usePage();
+const { isMobile, setOpenMobile } = useSidebar();
+
+function closeMobileSidebar() {
+    if (isMobile.value) setOpenMobile(false);
+}
 const openMenus = reactive<Record<string, boolean>>({});
 
 function isItemActive(href: NavItem['href']) {
@@ -64,7 +70,7 @@ function toggleMenu(item: NavItem) {
                     :is-active="isItemActive(item.href)"
                     :tooltip="item.title"
                 >
-                    <Link :href="item.href">
+                    <Link :href="item.href" @click="closeMobileSidebar">
                         <component
                             v-if="item.icon"
                             :is="item.icon"
@@ -93,7 +99,7 @@ function toggleMenu(item: NavItem) {
                     <SidebarMenuSub v-if="isMenuOpen(item)">
                         <SidebarMenuSubItem v-for="subItem in item.items" :key="`${item.title}-${subItem.title}`">
                             <SidebarMenuSubButton as-child :is-active="isItemActive(subItem.href)">
-                                <Link :href="subItem.href">
+                                <Link :href="subItem.href" @click="closeMobileSidebar">
                                     <span>{{ subItem.title }}</span>
                                 </Link>
                             </SidebarMenuSubButton>

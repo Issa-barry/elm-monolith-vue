@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ArrowLeft, Save } from 'lucide-vue-next';
+import { Spinner } from '@/components/ui/spinner';
 import ProduitForm from './partials/ProduitForm.vue';
 
 interface Option { value: string; label: string }
@@ -61,16 +63,32 @@ function submit() {
 <template>
     <Head :title="`Modifier — ${produit.nom}`" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto max-w-4xl p-6">
-            <div class="mb-6">
-                <h1 class="text-2xl font-semibold tracking-tight">Modifier le produit</h1>
-                <p class="mt-1 text-sm text-muted-foreground">
-                    <span class="font-mono text-xs font-semibold">{{ produit.code }}</span>
-                    · {{ produit.nom }}
-                </p>
-            </div>
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
 
+        <!-- ─── Header mobile ─── -->
+        <div class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden">
+            <div class="relative flex items-center justify-center px-4 py-3">
+                <Link
+                    href="/produits"
+                    class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
+                >
+                    <ArrowLeft class="h-4 w-4" />
+                </Link>
+                <div class="text-center">
+                    <h1 class="text-[17px] font-semibold leading-tight">Modifier</h1>
+                    <p class="truncate text-[11px] text-muted-foreground">{{ produit.nom }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── Header desktop ─── -->
+        <div class="hidden sm:block mx-auto max-w-4xl px-6 pt-6 pb-0">
+            <h1 class="text-2xl font-semibold tracking-tight">Modifier le produit</h1>
+            <p class="mt-1 text-sm text-muted-foreground">· {{ produit.nom }}</p>
+        </div>
+
+        <!-- ─── Formulaire ─── -->
+        <div class="mx-auto max-w-4xl p-4 sm:p-6">
             <ProduitForm
                 :form="form"
                 :errors="form.errors"
@@ -83,5 +101,20 @@ function submit() {
                 @submit="submit"
             />
         </div>
+
+        <!-- ─── Footer sticky mobile ─── -->
+        <div class="fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden">
+            <button
+                type="submit"
+                form="produit-form"
+                :disabled="form.processing"
+                class="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-60"
+            >
+                <Spinner v-if="form.processing" class="h-4 w-4" />
+                <Save v-else class="h-4 w-4" />
+                {{ form.processing ? 'Enregistrement…' : 'Enregistrer les modifications' }}
+            </button>
+        </div>
+
     </AppLayout>
 </template>

@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -10,7 +10,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Home, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Home, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import IconField from 'primevue/iconfield';
@@ -18,7 +18,7 @@ import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface Proprietaire {
     id: number;
@@ -40,6 +40,17 @@ const toast = useToast();
 const search = ref('');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => { filters.value.global.value = val; });
+
+const mobileFiltered = computed(() => {
+    const q = search.value.trim().toLowerCase();
+    if (!q) return props.proprietaires;
+    return props.proprietaires.filter(p =>
+        p.nom_complet.toLowerCase().includes(q) ||
+        (p.email ?? '').toLowerCase().includes(q) ||
+        (p.telephone ?? '').toLowerCase().includes(q) ||
+        (p.adresse ?? '').toLowerCase().includes(q),
+    );
+});
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -71,8 +82,110 @@ function confirmDelete(p: Proprietaire) {
 <template>
     <Head title="Propriétaires" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex min-h-0 flex-1 flex-col gap-6 p-6">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+
+        <!-- ── Mobile (< sm) ──────────────────────────────────────────────── -->
+        <div class="flex flex-col sm:hidden">
+
+            <!-- Sticky header -->
+            <div class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-3 py-2">
+                <Link href="/dashboard">
+                    <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
+                        <ArrowLeft class="h-4 w-4" />
+                    </Button>
+                </Link>
+                <span class="flex-1 text-center text-sm font-semibold">Propriétaires</span>
+                <Link v-if="can('proprietaires.create')" href="/proprietaires/create">
+                    <Button size="sm" class="h-8 px-3 text-xs">
+                        <Plus class="mr-1 h-3.5 w-3.5" />
+                        Nouveau
+                    </Button>
+                </Link>
+                <div v-else class="h-8 w-[72px]" />
+            </div>
+
+            <!-- Search -->
+            <div class="px-3 py-2">
+                <div class="relative">
+                    <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    <input
+                        v-model="search"
+                        type="search"
+                        placeholder="Rechercher..."
+                        class="w-full rounded-lg border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                </div>
+            </div>
+
+            <!-- Card list -->
+            <div class="divide-y">
+                <div
+                    v-for="p in mobileFiltered"
+                    :key="p.id"
+                    class="flex items-center gap-3.5 px-4 py-3.5 transition-colors active:bg-muted/40"
+                >
+                    <!-- Avatar -->
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
+                        <Home class="h-5 w-5 text-muted-foreground" />
+                    </div>
+
+                    <!-- Info -->
+                    <div class="min-w-0 flex-1">
+                        <div class="truncate font-medium text-sm">{{ p.nom_complet }}</div>
+                        <div v-if="p.email" class="truncate text-xs text-muted-foreground">{{ p.email }}</div>
+                        <div v-if="p.telephone" class="text-xs text-muted-foreground tabular-nums">{{ formatPhoneDisplay(p.telephone) }}</div>
+                    </div>
+
+                    <!-- Status dot -->
+                    <StatusDot
+                        :label="p.is_active ? 'Actif' : 'Inactif'"
+                        :dot-class="p.is_active ? 'bg-emerald-500' : 'bg-zinc-400 dark:bg-zinc-500'"
+                        class="shrink-0 text-xs text-muted-foreground"
+                    />
+
+                    <!-- Dropdown -->
+                    <DropdownMenu>
+                        <DropdownMenuTrigger as-child>
+                            <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
+                                <MoreVertical class="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="w-44">
+                            <DropdownMenuItem v-if="can('proprietaires.update')" as-child>
+                                <Link :href="`/proprietaires/${p.id}/edit`" class="flex items-center gap-2 w-full">
+                                    <Pencil class="h-4 w-4" />
+                                    Modifier
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator v-if="can('proprietaires.update') && can('proprietaires.delete')" />
+                            <DropdownMenuItem
+                                v-if="can('proprietaires.delete')"
+                                class="text-destructive focus:text-destructive cursor-pointer"
+                                @click="confirmDelete(p)"
+                            >
+                                <Trash2 class="h-4 w-4" />
+                                Supprimer
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </div>
+
+            <!-- Empty state -->
+            <div v-if="mobileFiltered.length === 0" class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                <Home class="h-12 w-12 opacity-30" />
+                <p class="text-sm">Aucun propriétaire trouvé.</p>
+                <Link v-if="can('proprietaires.create')" href="/proprietaires/create">
+                    <Button variant="outline" size="sm">
+                        <Plus class="mr-2 h-4 w-4" />
+                        Ajouter le premier propriétaire
+                    </Button>
+                </Link>
+            </div>
+        </div>
+
+        <!-- ── Desktop (≥ sm) ─────────────────────────────────────────────── -->
+        <div class="hidden sm:flex min-h-0 flex-1 flex-col gap-6 p-6">
 
             <!-- En-tête -->
             <div class="flex items-center justify-between">
@@ -211,5 +324,3 @@ function confirmDelete(p: Proprietaire) {
         </div>
     </AppLayout>
 </template>
-
-

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Save } from 'lucide-vue-next';
+import { Save } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
@@ -62,11 +62,11 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
 </script>
 
 <template>
-    <form class="space-y-6" @submit.prevent="emit('submit')">
+    <form id="site-form" class="space-y-4 sm:space-y-6" @submit.prevent="emit('submit')">
 
         <!-- Identification -->
-        <div class="rounded-xl border bg-card p-6 shadow-sm">
-            <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
+            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Identification
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
@@ -131,8 +131,8 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
         </div>
 
         <!-- Localisation -->
-        <div class="rounded-xl border bg-card p-6 shadow-sm">
-            <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
+            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Localisation
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
@@ -217,8 +217,8 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
         </div>
 
         <!-- Contact -->
-        <div class="rounded-xl border bg-card p-6 shadow-sm">
-            <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
+            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Contact
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
@@ -252,8 +252,8 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
         </div>
 
         <!-- Hiérarchie -->
-        <div class="rounded-xl border bg-card p-6 shadow-sm">
-            <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
+            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Hiérarchie
             </h3>
             <div>
@@ -275,8 +275,8 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
         </div>
 
         <!-- Informations -->
-        <div class="rounded-xl border bg-card p-6 shadow-sm">
-            <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
+            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Informations complémentaires
             </h3>
             <div>
@@ -294,10 +294,9 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
         </div>
 
         <!-- Pied -->
-        <div class="flex items-center justify-between">
+        <div class="hidden items-center justify-between sm:flex">
             <a href="/sites">
                 <Button type="button" variant="outline">
-                    <ArrowLeft class="mr-2 h-4 w-4" />
                     Retour
                 </Button>
             </a>
@@ -306,5 +305,6 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
         </div>
+        <div class="h-20 sm:hidden" />
     </form>
 </template>

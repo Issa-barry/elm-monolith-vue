@@ -12,6 +12,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
+    ArrowLeft,
     ChevronDown,
     Pencil,
     Plus,
@@ -169,11 +170,29 @@ const canAddVersement = computed(() =>
 <template>
     <Head :title="packing.reference" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto max-w-4xl space-y-6 p-6">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+        <!-- Mobile sticky header -->
+        <div class="sticky top-0 z-10 flex items-center gap-3 border-b bg-background px-4 py-3 sm:hidden">
+            <Link href="/packings">
+                <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
+                    <ArrowLeft class="h-4 w-4" />
+                </Button>
+            </Link>
+            <p class="flex-1 truncate text-center font-mono text-sm font-semibold">
+                {{ packing.reference }}
+            </p>
+            <Link v-if="packing.can_edit && can('packings.update')" :href="`/packings/${packing.id}/edit`">
+                <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
+                    <Pencil class="h-4 w-4" />
+                </Button>
+            </Link>
+            <div v-else class="w-8 shrink-0" />
+        </div>
+
+        <div class="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
 
             <!-- En-tête ──────────────────────────────────────────────────────── -->
-            <div class="flex items-start justify-between gap-4">
+            <div class="hidden sm:flex items-start justify-between gap-4">
                 <div>
                     <h1 class="font-mono text-2xl font-bold tracking-wide">{{ packing.reference }}</h1>
                     <p class="mt-1 text-sm text-muted-foreground">{{ packing.prestataire_nom ?? '—' }}</p>
@@ -210,7 +229,7 @@ const canAddVersement = computed(() =>
                 <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                     Récapitulatif
                 </h3>
-                <div class="grid gap-4 sm:grid-cols-2">
+                <div class="grid gap-4 grid-cols-1 sm:grid-cols-2">
                     <div>
                         <p class="text-xs text-muted-foreground">Date</p>
                         <p class="mt-0.5 font-medium">{{ formatDate(packing.date) }}</p>
@@ -257,7 +276,7 @@ const canAddVersement = computed(() =>
 
                 <!-- Barre de progression -->
                 <div class="mb-6 space-y-2">
-                    <div class="flex items-center justify-between text-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-1 text-sm">
                         <span class="text-muted-foreground">
                             Versé : <span class="font-semibold text-foreground tabular-nums">{{ formatGNF(packing.montant_verse) }}</span>
                             / {{ formatGNF(packing.montant) }}

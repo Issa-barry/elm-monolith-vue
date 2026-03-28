@@ -195,11 +195,25 @@ const progressPercent = computed(() => {
 <template>
     <Head :title="commande.reference" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto max-w-5xl space-y-6 p-6">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+
+        <!-- Mobile sticky header -->
+        <div class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden">
+            <div class="relative flex items-center justify-center px-4 py-3">
+                <Link href="/ventes" class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95">
+                    <ArrowLeft class="h-4 w-4" />
+                </Link>
+                <div class="text-center">
+                    <h1 class="text-[17px] font-semibold leading-tight">{{ commande.reference }}</h1>
+                    <p class="text-[11px] text-muted-foreground">{{ commande.date }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
 
             <!-- En-tête commande ──────────────────────────────────────────────── -->
-            <div class="flex items-start justify-between gap-4">
+            <div class="hidden sm:flex items-start justify-between gap-4">
                 <div class="flex items-start gap-4">
                     <Link href="/ventes">
                         <Button variant="ghost" size="icon" class="h-8 w-8 mt-1">
@@ -243,7 +257,7 @@ const progressPercent = computed(() => {
             </div>
 
             <!-- Infos générales -->
-            <div class="rounded-xl border bg-card p-6 shadow-sm">
+            <div class="rounded-xl border bg-card p-4 sm:p-5 shadow-sm">
                 <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                     Informations
                 </h3>
@@ -274,11 +288,11 @@ const progressPercent = computed(() => {
             </div>
 
             <!-- Lignes de commande -->
-            <div class="rounded-xl border bg-card p-6 shadow-sm">
+            <div class="rounded-xl border bg-card p-4 sm:p-5 shadow-sm">
                 <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                     Lignes de commande
                 </h3>
-                <div class="overflow-hidden rounded-lg border">
+                <div class="overflow-x-auto overflow-hidden rounded-lg border">
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="border-b bg-muted/40">
@@ -307,7 +321,7 @@ const progressPercent = computed(() => {
             </div>
 
             <!-- Section facture -->
-            <div v-if="facture" class="rounded-xl border bg-card p-6 shadow-sm">
+            <div v-if="facture" class="rounded-xl border bg-card p-4 sm:p-5 shadow-sm">
 
                 <!-- En-tête facture -->
                 <div class="mb-5 flex items-center justify-between">
@@ -360,7 +374,7 @@ const progressPercent = computed(() => {
                 </div>
 
                 <!-- Tableau des encaissements -->
-                <div v-if="facture.encaissements.length > 0" class="mb-6 overflow-hidden rounded-lg border">
+                <div v-if="facture.encaissements.length > 0" class="mb-6 overflow-x-auto overflow-hidden rounded-lg border">
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="border-b bg-muted/40">

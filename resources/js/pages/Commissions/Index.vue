@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { BadgeCheck, Car, Clock, HandCoins, Hourglass, MapPin, User, X } from 'lucide-vue-next';
+import { ArrowLeft, BadgeCheck, Car, Clock, HandCoins, Hourglass, MapPin, Search, User, X } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
@@ -123,12 +124,37 @@ const commissionsFiltrees = computed(() => {
     return list;
 });
 
+// -- Filtre mobile -------------------------------------------------------------
+const mobileSearch = ref('');
+
+const mobileFiltered = computed(() => {
+    const q = mobileSearch.value.toLowerCase().trim();
+    let list = props.commissions;
+    if (filtreStatut.value !== 'tous') {
+        list = list.filter(c => c.statut === filtreStatut.value);
+    }
+    if (!q) return list;
+    return list.filter(c =>
+        (c.commande_reference && c.commande_reference.toLowerCase().includes(q)) ||
+        (c.vehicule_nom       && c.vehicule_nom.toLowerCase().includes(q)) ||
+        (c.livreur_nom        && c.livreur_nom.toLowerCase().includes(q)) ||
+        (c.immatriculation    && c.immatriculation.toLowerCase().includes(q))
+    );
+});
+
 // -- Couleurs statut -----------------------------------------------------------
 const statutColor: Record<string, string> = {
     en_attente: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
     partielle:  'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
     versee:     'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
     annulee:    'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
+};
+
+const statutDotColor: Record<string, string> = {
+    en_attente: 'bg-amber-500',
+    partielle:  'bg-blue-500',
+    versee:     'bg-emerald-500',
+    annulee:    'bg-zinc-400 dark:bg-zinc-500',
 };
 
 // -- Formatage -----------------------------------------------------------------
@@ -255,8 +281,107 @@ function submitVersementProprietaire() {
 <template>
     <Head title="Commissions" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="w-full space-y-6 p-6">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+
+        <!-- ── MOBILE VIEW ─────────────────────────────────────────────────── -->
+        <div class="flex flex-col sm:hidden">
+
+            <!-- Sticky header -->
+            <div class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3">
+                <Link href="/dashboard" class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground">
+                    <ArrowLeft class="h-5 w-5" />
+                </Link>
+                <span class="text-base font-semibold">Commissions</span>
+                <div class="w-8" />
+            </div>
+
+            <!-- KPI cards -->
+            <div class="grid grid-cols-2 gap-3 p-4">
+                <div class="rounded-xl border bg-card p-4 shadow-sm">
+                    <p class="text-xs text-muted-foreground">Restant à verser</p>
+                    <p class="mt-1 text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ formatCompact(totaux.total_a_verser) }}</p>
+                </div>
+                <div class="rounded-xl border bg-card p-4 shadow-sm">
+                    <p class="text-xs text-muted-foreground">En attente</p>
+                    <p class="mt-1 text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ formatCompact(totaux.montant_en_attente) }}</p>
+                    <p class="text-xs text-muted-foreground">{{ totaux.nb_en_attente }} commission{{ totaux.nb_en_attente > 1 ? 's' : '' }}</p>
+                </div>
+                <div class="rounded-xl border bg-card p-4 shadow-sm">
+                    <p class="text-xs text-muted-foreground">Partielles</p>
+                    <p class="mt-1 text-lg font-bold tabular-nums text-blue-600 dark:text-blue-400">{{ formatCompact(totaux.montant_partielles) }}</p>
+                    <p class="text-xs text-muted-foreground">{{ totaux.nb_partielles }} commission{{ totaux.nb_partielles > 1 ? 's' : '' }}</p>
+                </div>
+                <div class="rounded-xl border bg-card p-4 shadow-sm">
+                    <p class="text-xs text-muted-foreground">Versées</p>
+                    <p class="mt-1 text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ formatCompact(totaux.montant_versees) }}</p>
+                    <p class="text-xs text-muted-foreground">{{ totaux.nb_versees }} commission{{ totaux.nb_versees > 1 ? 's' : '' }}</p>
+                </div>
+            </div>
+
+            <!-- Search -->
+            <div class="border-t border-b px-4 py-2">
+                <div class="relative">
+                    <Search class="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    <input
+                        v-model="mobileSearch"
+                        type="text"
+                        placeholder="Commande, véhicule, livreur…"
+                        class="h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                </div>
+            </div>
+
+            <!-- Card list -->
+            <div class="divide-y">
+                <div
+                    v-for="c in mobileFiltered"
+                    :key="c.id"
+                    class="flex items-start justify-between gap-3 px-4 py-3"
+                >
+                    <div class="min-w-0 flex-1">
+                        <p class="font-medium text-sm">{{ c.vehicule_nom ?? c.livreur_nom ?? '—' }}</p>
+                        <p v-if="c.vehicule_nom && c.livreur_nom" class="text-xs text-muted-foreground">{{ c.livreur_nom }}</p>
+                        <Link
+                            v-if="c.commande_id"
+                            :href="`/ventes/${c.commande_id}`"
+                            class="mt-0.5 block font-mono text-xs font-semibold text-primary hover:underline"
+                        >
+                            {{ c.commande_reference ?? '—' }}
+                        </Link>
+                        <p class="mt-1 text-sm font-semibold tabular-nums">{{ formatGNF(c.montant_commission) }}</p>
+                        <p v-if="c.montant_restant > 0" class="text-xs font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                            Restant : {{ formatGNF(c.montant_restant) }}
+                        </p>
+                    </div>
+                    <div class="flex flex-col items-end gap-2 shrink-0">
+                        <StatusDot
+                            :label="c.statut_label"
+                            :dot-class="statutDotColor[c.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                            class="text-xs text-muted-foreground"
+                        />
+                        <span class="text-xs tabular-nums text-muted-foreground">{{ c.created_at }}</span>
+                        <Button
+                            v-if="!c.is_annulee && !c.is_versee && can('ventes.update')"
+                            size="sm"
+                            variant="outline"
+                            class="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
+                            @click="openDialog(c)"
+                        >
+                            <HandCoins class="mr-1 h-3.5 w-3.5" />
+                            Verser
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty state -->
+            <div v-if="mobileFiltered.length === 0" class="py-16 text-center text-sm text-muted-foreground">
+                Aucune commission trouvée.
+            </div>
+        </div>
+
+        <!-- ── DESKTOP VIEW ────────────────────────────────────────────────── -->
+        <div class="hidden sm:block w-full space-y-6 p-4 sm:p-6">
 
             <!-- En-tete -->
             <div>

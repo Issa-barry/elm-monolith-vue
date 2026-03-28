@@ -2,7 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Save } from 'lucide-vue-next';
+import { Save } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import { computed } from 'vue';
@@ -69,11 +69,11 @@ function onPaysChange(pays: string) {
 </script>
 
 <template>
-    <form class="space-y-6" @submit.prevent="emit('submit')">
+    <form id="proprietaire-form" class="space-y-4 sm:space-y-6" @submit.prevent="emit('submit')">
 
         <!-- Identité -->
-        <div class="rounded-xl border bg-card p-6 shadow-sm">
-            <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
+            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Identité
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
@@ -101,8 +101,8 @@ function onPaysChange(pays: string) {
         </div>
 
         <!-- Localisation -->
-        <div class="rounded-xl border bg-card p-6 shadow-sm">
-            <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
+            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Localisation
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
@@ -146,8 +146,8 @@ function onPaysChange(pays: string) {
         </div>
 
         <!-- Contact -->
-        <div class="rounded-xl border bg-card p-6 shadow-sm">
-            <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
+            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Contact
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
@@ -182,8 +182,8 @@ function onPaysChange(pays: string) {
         </div>
 
         <!-- Statut -->
-        <div class="rounded-xl border bg-card p-6 shadow-sm">
-            <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
+            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Statut
             </h3>
             <div class="flex items-center gap-3">
@@ -200,10 +200,9 @@ function onPaysChange(pays: string) {
         </div>
 
         <!-- Pied -->
-        <div class="flex items-center justify-between">
+        <div class="hidden items-center justify-between sm:flex">
             <a href="/proprietaires">
                 <Button type="button" variant="outline">
-                    <ArrowLeft class="mr-2 h-4 w-4" />
                     Retour
                 </Button>
             </a>
@@ -212,5 +211,6 @@ function onPaysChange(pays: string) {
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
         </div>
+        <div class="h-20 sm:hidden" />
     </form>
 </template>

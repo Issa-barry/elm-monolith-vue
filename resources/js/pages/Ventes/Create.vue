@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { Plus, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
@@ -221,20 +221,33 @@ function submit() {
 <template>
     <Head title="Nouvelle commande" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto max-w-5xl p-6">
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
 
-            <div class="mb-6">
+        <!-- Mobile sticky header -->
+        <div class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden">
+            <div class="relative flex items-center justify-center px-4 py-3">
+                <Link href="/ventes" class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95">
+                    <ArrowLeft class="h-4 w-4" />
+                </Link>
+                <div class="text-center">
+                    <h1 class="text-[17px] font-semibold leading-tight">Nouvelle vente</h1>
+                </div>
+            </div>
+        </div>
+
+        <div class="mx-auto max-w-5xl p-4 sm:p-6">
+
+            <div class="mb-6 hidden sm:block">
                 <h1 class="text-2xl font-semibold tracking-tight">Nouvelle commande de vente</h1>
                 <p class="mt-1 text-sm text-muted-foreground">
                     Créez une commande et sa facture sera générée automatiquement.
                 </p>
             </div>
 
-            <form class="space-y-6" @submit.prevent="submit">
+            <form id="vente-form" class="space-y-6" @submit.prevent="submit">
 
                 <!-- En-tête commande -->
-                <div class="rounded-xl border bg-card p-6 shadow-sm">
+                <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
                     <h2 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                         Informations générales
                     </h2>
@@ -341,14 +354,15 @@ function submit() {
                 </div>
 
                 <!-- Lignes de commande -->
-                <div class="rounded-xl border bg-card p-6 shadow-sm">
+                <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
                     <h2 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                         Lignes de commande
                     </h2>
 
                     <p v-if="form.errors.lignes" class="mb-3 text-xs text-destructive">{{ form.errors.lignes }}</p>
 
-                    <div class="overflow-hidden rounded-lg border">
+                    <!-- ── Tableau desktop ── -->
+                    <div class="hidden overflow-hidden rounded-lg border sm:block">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b bg-muted/40">
@@ -361,7 +375,6 @@ function submit() {
                             </thead>
                             <tbody class="divide-y">
                                 <tr v-for="(ligne, index) in form.lignes" :key="index" class="hover:bg-muted/10">
-                                    <!-- Produit -->
                                     <td class="px-4 py-3">
                                         <Dropdown
                                             :model-value="ligne.produit_id"
@@ -374,55 +387,21 @@ function submit() {
                                             class="w-full"
                                             :class="{ 'p-invalid': (form.errors as any)[`lignes.${index}.produit_id`] }"
                                         />
-                                        <p
-                                            v-if="(form.errors as any)[`lignes.${index}.produit_id`]"
-                                            class="mt-1 text-xs text-destructive"
-                                        >
+                                        <p v-if="(form.errors as any)[`lignes.${index}.produit_id`]" class="mt-1 text-xs text-destructive">
                                             {{ (form.errors as any)[`lignes.${index}.produit_id`] }}
                                         </p>
                                     </td>
-
-                                    <!-- Qté -->
                                     <td class="px-4 py-3">
-                                        <InputNumber
-                                            :model-value="ligne.qte"
-                                            @update:model-value="onQteChange(index, $event)"
-                                            :min="1"
-                                            :use-grouping="false"
-                                            class="w-full"
-                                            input-class="w-full text-center"
-                                            :class="{ 'p-invalid': (form.errors as any)[`lignes.${index}.qte`] }"
-                                        />
+                                        <InputNumber :model-value="ligne.qte" @update:model-value="onQteChange(index, $event)" :min="1" :use-grouping="false" class="w-full" input-class="w-full text-center" />
                                     </td>
-
-                                    <!-- Prix unit. (modifiable) -->
                                     <td class="px-4 py-3">
-                                        <InputNumber
-                                            :model-value="ligne.prix_vente"
-                                            @update:model-value="onPrixChange(index, $event)"
-                                            :min="0"
-                                            :use-grouping="false"
-                                            suffix=" GNF"
-                                            class="w-full"
-                                            input-class="w-full text-right"
-                                        />
+                                        <InputNumber :model-value="ligne.prix_vente" @update:model-value="onPrixChange(index, $event)" :min="0" :use-grouping="false" suffix=" GNF" class="w-full" input-class="w-full text-right" />
                                     </td>
-
-                                    <!-- Total ligne (lecture seule) -->
                                     <td class="px-4 py-3 text-right tabular-nums font-medium">
                                         {{ ligne.total > 0 ? formatGNF(ligne.total) : '—' }}
                                     </td>
-
-                                    <!-- Supprimer -->
                                     <td class="px-4 py-3 text-center">
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            class="h-7 w-7 text-destructive hover:text-destructive"
-                                            :disabled="form.lignes.length <= 1"
-                                            @click="removeLigne(index)"
-                                        >
+                                        <Button type="button" variant="ghost" size="icon" class="h-7 w-7 text-destructive hover:text-destructive" :disabled="form.lignes.length <= 1" @click="removeLigne(index)">
                                             <Trash2 class="h-4 w-4" />
                                         </Button>
                                     </td>
@@ -431,20 +410,89 @@ function submit() {
                         </table>
                     </div>
 
-                    <!-- Ajouter une ligne -->
+                    <!-- ── Cards mobile ── -->
+                    <div class="space-y-3 sm:hidden">
+                        <div
+                            v-for="(ligne, index) in form.lignes"
+                            :key="index"
+                            class="rounded-xl border bg-muted/20 p-3"
+                        >
+                            <!-- Produit -->
+                            <Dropdown
+                                :model-value="ligne.produit_id"
+                                @update:model-value="onProduitChange(index, $event)"
+                                :options="produitOptions"
+                                option-label="label"
+                                option-value="value"
+                                placeholder="Choisir un produit..."
+                                filter
+                                class="w-full"
+                                :class="{ 'p-invalid': (form.errors as any)[`lignes.${index}.produit_id`] }"
+                            />
+
+                            <!-- Qté + Prix -->
+                            <div class="mt-2.5 grid grid-cols-2 gap-2.5">
+                                <div>
+                                    <p class="mb-1 text-[11px] font-medium text-muted-foreground">Quantité</p>
+                                    <InputNumber
+                                        :model-value="ligne.qte"
+                                        @update:model-value="onQteChange(index, $event)"
+                                        :min="1"
+                                        :use-grouping="false"
+                                        class="w-full"
+                                        input-class="w-full text-center"
+                                    />
+                                </div>
+                                <div>
+                                    <p class="mb-1 text-[11px] font-medium text-muted-foreground">Prix unit. (GNF)</p>
+                                    <InputNumber
+                                        :model-value="ligne.prix_vente"
+                                        @update:model-value="onPrixChange(index, $event)"
+                                        :min="0"
+                                        :use-grouping="false"
+                                        class="w-full"
+                                        input-class="w-full"
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- Total + Supprimer -->
+                            <div class="mt-2.5 flex items-center justify-between">
+                                <div>
+                                    <p class="text-[11px] text-muted-foreground">Total ligne</p>
+                                    <p class="text-sm font-semibold tabular-nums">
+                                        {{ ligne.total > 0 ? formatGNF(ligne.total) : '—' }}
+                                    </p>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    class="h-8 w-8 text-destructive hover:text-destructive"
+                                    :disabled="form.lignes.length <= 1"
+                                    @click="removeLigne(index)"
+                                >
+                                    <Trash2 class="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ajouter + Total -->
                     <div class="mt-4 flex items-center justify-between">
                         <Button type="button" variant="outline" size="sm" @click="addLigne">
                             <Plus class="mr-2 h-4 w-4" />
                             Ajouter une ligne
                         </Button>
-
-                        <!-- Total général -->
                         <div class="text-right">
-                            <p class="text-xs text-muted-foreground uppercase tracking-wider">Total commande</p>
+                            <p class="text-xs uppercase tracking-wider text-muted-foreground">Total commande</p>
                             <p class="text-2xl font-bold tabular-nums">{{ formatGNF(totalGeneral) }}</p>
                         </div>
                     </div>
                 </div>
+
+                <!-- Spacer for mobile sticky footer -->
+                <div class="h-20 sm:hidden" />
 
                 <!-- Footer -->
                 <div class="flex items-center justify-between">
@@ -458,5 +506,18 @@ function submit() {
 
             </form>
         </div>
+
+        <!-- Mobile sticky footer -->
+        <div class="fixed bottom-0 left-0 right-0 z-20 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden">
+            <Button
+                class="w-full"
+                :disabled="!canSubmit"
+                @click="submit"
+            >
+                <Save class="mr-2 h-4 w-4" />
+                {{ form.processing ? 'Enregistrement…' : 'Enregistrer la vente' }}
+            </Button>
+        </div>
+
     </AppLayout>
 </template>

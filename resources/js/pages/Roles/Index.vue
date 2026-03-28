@@ -75,11 +75,12 @@ function usersLabel(count: number): string {
 </script>
 
 <template>
-    <AppLayout :breadcrumbs="breadcrumbItems">
+    <AppLayout :breadcrumbs="breadcrumbItems" :hide-mobile-header="true">
         <Head title="Roles & Permissions" />
 
         <SettingsLayout>
-            <div class="space-y-6">
+            <!-- Desktop table -->
+            <div class="hidden sm:block space-y-6">
                 <HeadingSmall
                     title="Roles"
                     description="Liste des roles du projet"
@@ -144,6 +145,28 @@ function usersLabel(count: number): string {
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+
+            <!-- Mobile list -->
+            <div class="sm:hidden space-y-2">
+                <div
+                    v-for="role in props.roles"
+                    :key="role.id"
+                    class="flex items-center justify-between rounded-xl border bg-card px-4 py-3"
+                >
+                    <div class="flex items-center gap-3">
+                        <span class="h-2.5 w-2.5 rounded-full shrink-0" :class="roleDotClass(role.name)" />
+                        <div>
+                            <p class="font-medium text-sm">{{ displayRoleName(role.name) }}</p>
+                            <p class="text-xs text-muted-foreground">{{ usersLabel(role.users_count) }}</p>
+                        </div>
+                    </div>
+                    <Link :href="`/roles/${role.id}/edit`">
+                        <Button variant="outline" size="sm">
+                            <ShieldCheck class="h-4 w-4" />
+                        </Button>
+                    </Link>
                 </div>
             </div>
         </SettingsLayout>
