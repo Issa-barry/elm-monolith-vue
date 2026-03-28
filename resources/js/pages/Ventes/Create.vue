@@ -2,6 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Plus, Save, Trash2 } from 'lucide-vue-next';
@@ -332,7 +333,7 @@ function submit() {
                                             {{ [option.prenom, option.nom].filter(Boolean).join(' ') }}
                                         </div>
                                         <div v-if="option.telephone" class="mt-0.5 text-xs text-muted-foreground">
-                                            {{ option.telephone }}
+                                            {{ formatPhoneDisplay(option.telephone) }}
                                         </div>
                                     </div>
                                 </template>

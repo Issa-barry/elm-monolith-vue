@@ -38,6 +38,7 @@ class ProprietaireController extends Controller
                 'nom_complet'=> trim("{$p->prenom} {$p->nom}"),
                 'email'      => $p->email,
                 'telephone'  => $p->telephone,
+                'code_phone_pays' => $p->code_phone_pays,
                 'adresse'    => $p->adresse,
                 'is_active'  => $p->is_active,
             ]);

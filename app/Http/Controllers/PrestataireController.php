@@ -43,6 +43,7 @@ class PrestataireController extends Controller
                 'raison_sociale'=> $p->raison_sociale,
                 'email'         => $p->email,
                 'phone'         => $p->phone,
+                'code_phone_pays' => $p->code_phone_pays,
                 'ville'         => $p->ville,
                 'type'          => $p->type?->value,
                 'type_label'    => $p->type_label,

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
 
@@ -44,15 +45,6 @@ watch(authUser, (u) => {
     email.value     = u.email     ?? '';
     telephone.value = u.telephone ?? '';
 });
-
-function formatPhone(phone: string | null): string {
-    if (!phone) return '';
-    const match = phone.match(/^(\+\d{1,3})(\d+)$/);
-    if (!match) return phone;
-    const [, prefix, local] = match;
-    const groups = local.match(/.{1,3}/g) ?? [local];
-    return `${prefix} ${groups.join(' ')}`;
-}
 
 function formatDate(iso: string | null): string {
     if (!iso) return '—';
@@ -146,7 +138,7 @@ const roles = computed(() => (page.props.auth.roles as string[]).map(r => ROLE_L
                         </template>
                         <template v-else>
                             <p class="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
-                                {{ formatPhone(authUser.telephone) || '—' }}
+                                {{ formatPhoneDisplay(authUser.telephone) }}
                             </p>
                         </template>
                     </div>

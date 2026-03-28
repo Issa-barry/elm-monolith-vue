@@ -39,6 +39,7 @@ class LivreurController extends Controller
                 'nom_complet'=> trim("{$l->prenom} {$l->nom}"),
                 'email'      => $l->email,
                 'telephone'  => $l->telephone,
+                'code_phone_pays' => $l->code_phone_pays,
                 'ville'      => $l->ville,
                 'pays'       => $l->pays,
                 'code_pays'  => $l->code_pays,

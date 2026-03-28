@@ -32,6 +32,7 @@ interface Proprietaire {
     nom_complet: string;
     email: string | null;
     telephone: string | null;
+    code_phone_pays: string | null;
     adresse: string | null;
     is_active: boolean;
 }
@@ -138,7 +139,7 @@ function confirmDelete(p: Proprietaire) {
                     <div class="min-w-0 flex-1">
                         <div class="truncate font-medium text-sm">{{ p.nom_complet }}</div>
                         <div v-if="p.email" class="truncate text-xs text-muted-foreground">{{ p.email }}</div>
-                        <div v-if="p.telephone" class="text-xs text-muted-foreground tabular-nums">{{ formatPhoneDisplay(p.telephone) }}</div>
+                        <div v-if="p.telephone" class="text-xs text-muted-foreground tabular-nums">{{ formatPhoneDisplay(p.telephone, p.code_phone_pays) }}</div>
                     </div>
 
                     <!-- Status dot -->
@@ -257,7 +258,7 @@ function confirmDelete(p: Proprietaire) {
                     <!-- Téléphone -->
                     <Column field="telephone" header="Téléphone" style="width: 190px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">{{ formatPhoneDisplay(data.telephone) }}</span>
+                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">{{ formatPhoneDisplay(data.telephone, data.code_phone_pays) }}</span>
                         </template>
                     </Column>
 
