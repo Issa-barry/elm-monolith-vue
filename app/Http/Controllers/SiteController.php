@@ -103,7 +103,7 @@ class SiteController extends Controller
             'nom'         => 'required|string|max:255',
             'type'        => ['required', Rule::in(array_column(SiteType::cases(), 'value'))],
             'statut'      => ['nullable', Rule::in(array_column(SiteStatut::cases(), 'value'))],
-            'localisation' => 'nullable|string|max:255',
+            'localisation' => 'required|string|max:255',
             'pays'        => 'nullable|string|max:100',
             'ville'       => 'nullable|string|max:100',
             'quartier'    => 'nullable|string|max:100',
@@ -157,7 +157,7 @@ class SiteController extends Controller
             ],
             'type'        => ['required', Rule::in(array_column(SiteType::cases(), 'value'))],
             'statut'      => ['nullable', Rule::in(array_column(SiteStatut::cases(), 'value'))],
-            'localisation' => 'nullable|string|max:255',
+            'localisation' => 'required|string|max:255',
             'pays'        => 'nullable|string|max:100',
             'ville'       => 'nullable|string|max:100',
             'quartier'    => 'nullable|string|max:100',
@@ -241,8 +241,9 @@ class SiteController extends Controller
             'code.unique'        => 'Ce code est déjà utilisé par un autre site de votre organisation.',
             'type.required'      => 'Le type de site est obligatoire.',
             'type.in'            => 'Type de site invalide.',
-            'statut.in'          => 'Statut invalide.',
-            'parent_id.exists'   => 'Le site parent sélectionné est introuvable.',
+            'statut.in'               => 'Statut invalide.',
+            'localisation.required'   => "L'adresse du site est obligatoire.",
+            'parent_id.exists'        => 'Le site parent sélectionné est introuvable.',
         ];
     }
 }
