@@ -10,23 +10,20 @@ return new class extends Migration
     {
         Schema::create('produits', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
+            $table->unsignedBigInteger('organization_id');
 
             $table->string('nom');
             $table->string('code_interne', 50)->nullable()->unique();
             $table->string('code_fournisseur', 100)->nullable()->index();
 
-            // Prix en GNF (entiers)
             $table->unsignedBigInteger('prix_usine')->nullable();
             $table->unsignedBigInteger('prix_vente')->nullable();
             $table->unsignedBigInteger('prix_achat')->nullable();
             $table->unsignedBigInteger('cout')->nullable();
 
-            // Stock (sera déplacé dans une table Stock séparée avec les Sites)
             $table->unsignedInteger('qte_stock')->default(0);
             $table->unsignedInteger('seuil_alerte_stock')->nullable();
 
-            // Catégorisation
             $table->string('type')->default('materiel')->index();
             $table->string('statut')->default('actif')->index();
 
@@ -36,17 +33,25 @@ return new class extends Migration
             $table->timestamp('last_stockout_notified_at')->nullable();
             $table->timestamp('archived_at')->nullable();
 
-            // Traçabilité
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('deleted_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('archived_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->unsignedBigInteger('archived_by')->nullable();
 
             $table->timestamps();
             $table->softDeletes();
 
             $table->index(['statut', 'type']);
             $table->index(['organization_id', 'statut']);
+        });
+
+        // FK séparées pour éviter les problèmes MySQL avec ALTER TABLE dans le même batch
+        Schema::table('produits', function (Blueprint $table) {
+            $table->foreign('organization_id')->references('id')->on('organizations')->cascadeOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('archived_by')->references('id')->on('users')->nullOnDelete();
         });
     }
 

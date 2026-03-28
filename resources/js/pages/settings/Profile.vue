@@ -3,6 +3,7 @@ import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileCo
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
 import { Form, Head, Link, usePage } from '@inertiajs/vue3';
+import { computed, ref, watch } from 'vue';
 
 import DeleteUser from '@/components/DeleteUser.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
@@ -29,7 +30,45 @@ const breadcrumbItems: BreadcrumbItem[] = [
 ];
 
 const page = usePage();
-const user = page.props.auth.user;
+const authUser = computed(() => page.props.auth.user);
+const isSuperAdmin = computed(() => (page.props.auth.roles as string[]).includes('super_admin'));
+
+const prenom    = ref(authUser.value.prenom    ?? '');
+const nom       = ref(authUser.value.nom       ?? '');
+const email     = ref(authUser.value.email     ?? '');
+const telephone = ref(authUser.value.telephone ?? '');
+
+watch(authUser, (u) => {
+    prenom.value    = u.prenom    ?? '';
+    nom.value       = u.nom       ?? '';
+    email.value     = u.email     ?? '';
+    telephone.value = u.telephone ?? '';
+});
+
+function formatPhone(phone: string | null): string {
+    if (!phone) return '';
+    const match = phone.match(/^(\+\d{1,3})(\d+)$/);
+    if (!match) return phone;
+    const [, prefix, local] = match;
+    const groups = local.match(/.{1,3}/g) ?? [local];
+    return `${prefix} ${groups.join(' ')}`;
+}
+
+function formatDate(iso: string | null): string {
+    if (!iso) return '—';
+    return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(iso));
+}
+
+const ROLE_LABELS: Record<string, string> = {
+    super_admin:      'Super Admin',
+    admin_entreprise: 'Admin entreprise',
+    manager:          'Manager',
+    commerciale:      'Commercial(e)',
+    comptable:        'Comptable',
+    client:           'Client',
+};
+
+const roles = computed(() => (page.props.auth.roles as string[]).map(r => ROLE_LABELS[r] ?? r));
 </script>
 
 <template>
@@ -40,7 +79,7 @@ const user = page.props.auth.user;
             <div class="flex flex-col space-y-6">
                 <HeadingSmall
                     title="Informations du profil"
-                    description="Mettez à jour votre nom et votre adresse e-mail"
+                    description="Mettez à jour vos informations personnelles"
                 />
 
                 <Form
@@ -48,18 +87,34 @@ const user = page.props.auth.user;
                     class="space-y-6"
                     v-slot="{ errors, processing, recentlySuccessful }"
                 >
-                    <div class="grid gap-2">
-                        <Label for="name">Nom</Label>
-                        <Input
-                            id="name"
-                            class="mt-1 block w-full"
-                            name="name"
-                            :default-value="user.name"
-                            required
-                            autocomplete="name"
-                            placeholder="Nom complet"
-                        />
-                        <InputError class="mt-2" :message="errors.name" />
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div class="grid gap-2">
+                            <Label for="prenom">Prénom <span class="text-destructive">*</span></Label>
+                            <Input
+                                id="prenom"
+                                class="mt-1 block w-full"
+                                name="prenom"
+                                v-model="prenom"
+                                required
+                                autocomplete="given-name"
+                                placeholder="Prénom"
+                            />
+                            <InputError class="mt-2" :message="errors.prenom" />
+                        </div>
+
+                        <div class="grid gap-2">
+                            <Label for="nom">Nom <span class="text-destructive">*</span></Label>
+                            <Input
+                                id="nom"
+                                class="mt-1 block w-full"
+                                name="nom"
+                                v-model="nom"
+                                required
+                                autocomplete="family-name"
+                                placeholder="Nom"
+                            />
+                            <InputError class="mt-2" :message="errors.nom" />
+                        </div>
                     </div>
 
                     <div class="grid gap-2">
@@ -69,15 +124,81 @@ const user = page.props.auth.user;
                             type="email"
                             class="mt-1 block w-full"
                             name="email"
-                            :default-value="user.email"
-                            required
+                            v-model="email"
                             autocomplete="username"
                             placeholder="Adresse e-mail"
                         />
                         <InputError class="mt-2" :message="errors.email" />
                     </div>
 
-                    <div v-if="mustVerifyEmail && !user.email_verified_at">
+                    <!-- Téléphone -->
+                    <div class="grid gap-2">
+                        <Label>Téléphone</Label>
+                        <template v-if="isSuperAdmin">
+                            <Input
+                                type="tel"
+                                class="mt-1 block w-full"
+                                name="telephone"
+                                v-model="telephone"
+                                autocomplete="tel"
+                                placeholder="+224620000000"
+                            />
+                        </template>
+                        <template v-else>
+                            <p class="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+                                {{ formatPhone(authUser.telephone) || '—' }}
+                            </p>
+                        </template>
+                    </div>
+
+                    <!-- Informations du compte (lecture seule) -->
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <!-- Organisation -->
+                        <div class="grid gap-2">
+                            <Label>Organisation</Label>
+                            <p class="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+                                {{ authUser.organization?.name ?? '—' }}
+                            </p>
+                        </div>
+
+                        <!-- Rôle(s) -->
+                        <div class="grid gap-2">
+                            <Label>Rôle(s)</Label>
+                            <p class="flex h-9 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm">
+                                <span
+                                    v-for="role in roles"
+                                    :key="role"
+                                    class="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+                                >{{ role }}</span>
+                                <span v-if="!roles.length" class="text-muted-foreground">—</span>
+                            </p>
+                        </div>
+
+                        <!-- Membre depuis -->
+                        <div class="grid gap-2">
+                            <Label>Membre depuis</Label>
+                            <p class="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+                                {{ formatDate(authUser.created_at) }}
+                            </p>
+                        </div>
+
+                        <!-- Statut email -->
+                        <div class="grid gap-2">
+                            <Label>E-mail vérifié</Label>
+                            <p class="flex h-9 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm">
+                                <template v-if="authUser.email_verified_at">
+                                    <span class="h-2 w-2 rounded-full bg-green-500"></span>
+                                    <span class="text-muted-foreground">{{ formatDate(authUser.email_verified_at) }}</span>
+                                </template>
+                                <template v-else>
+                                    <span class="h-2 w-2 rounded-full bg-amber-400"></span>
+                                    <span class="text-muted-foreground">Non vérifié</span>
+                                </template>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div v-if="mustVerifyEmail && !authUser.email_verified_at">
                         <p class="-mt-4 text-sm text-muted-foreground">
                             Votre adresse e-mail n'est pas vérifiée.
                             <Link

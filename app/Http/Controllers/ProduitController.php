@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Models\Produit;
+use App\Services\ImageService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -75,7 +76,8 @@ class ProduitController extends Controller
         ]);
 
         if ($request->hasFile('image')) {
-            $data['image_url'] = '/storage/' . $request->file('image')->store('produits', 'public');
+            $path = (new ImageService())->storeAsWebp($request->file('image'), 'produits');
+            $data['image_url'] = '/storage/' . $path;
         }
         unset($data['image']);
 
@@ -139,10 +141,10 @@ class ProduitController extends Controller
         ]);
 
         if ($request->hasFile('image')) {
-            if ($produit->image_url) {
-                Storage::disk('public')->delete(str_replace('/storage/', '', $produit->image_url));
-            }
-            $data['image_url'] = '/storage/' . $request->file('image')->store('produits', 'public');
+            $imageService = new ImageService();
+            $imageService->delete(str_replace('/storage/', '', $produit->image_url ?? ''));
+            $path = $imageService->storeAsWebp($request->file('image'), 'produits');
+            $data['image_url'] = '/storage/' . $path;
         }
         unset($data['image']);
 

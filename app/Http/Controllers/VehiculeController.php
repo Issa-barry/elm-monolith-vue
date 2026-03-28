@@ -7,6 +7,7 @@ use App\Models\Livreur;
 use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
+use App\Services\ImageService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -95,7 +96,7 @@ class VehiculeController extends Controller
         $data = $this->normalizeStrings($data);
 
         if ($request->hasFile('photo')) {
-            $data['photo_path'] = $request->file('photo')->store('vehicules', 'public');
+            $data['photo_path'] = (new ImageService())->storeAsWebp($request->file('photo'), 'vehicules');
         }
 
         unset($data['photo']);
@@ -147,10 +148,9 @@ class VehiculeController extends Controller
         $data = $this->normalizeStrings($data);
 
         if ($request->hasFile('photo')) {
-            if ($vehicule->photo_path) {
-                Storage::disk('public')->delete($vehicule->photo_path);
-            }
-            $data['photo_path'] = $request->file('photo')->store('vehicules', 'public');
+            $imageService = new ImageService();
+            $imageService->delete($vehicule->photo_path);
+            $data['photo_path'] = $imageService->storeAsWebp($request->file('photo'), 'vehicules');
         }
 
         unset($data['photo']);

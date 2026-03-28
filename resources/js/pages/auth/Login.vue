@@ -11,16 +11,15 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import AuthBase from '@/layouts/AuthLayout.vue';
 import { Eye, EyeOff } from 'lucide-vue-next';
 import { home, register } from '@/routes';
 import { store } from '@/routes/login';
-import { request } from '@/routes/password';
 import { Form, Head, Link } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import Select from 'primevue/select';
+import { computed, ref } from 'vue';
 
 defineProps<{
     status?: string;
@@ -28,7 +27,62 @@ defineProps<{
     canRegister: boolean;
 }>();
 
+interface CountryOption {
+    label: string;
+    code: string;
+    prefix: string;
+    localLength: number;
+}
+
+const PAYS: CountryOption[] = [
+    { label: 'Guinée',               code: 'GN', prefix: '+224', localLength: 9  },
+    { label: 'Guinée-Bissau',        code: 'GW', prefix: '+245', localLength: 7  },
+    { label: 'Sénégal',              code: 'SN', prefix: '+221', localLength: 9  },
+    { label: 'Mali',                 code: 'ML', prefix: '+223', localLength: 8  },
+    { label: "Côte d'Ivoire",        code: 'CI', prefix: '+225', localLength: 10 },
+    { label: 'Liberia',              code: 'LR', prefix: '+231', localLength: 8  },
+    { label: 'Sierra Leone',         code: 'SL', prefix: '+232', localLength: 8  },
+    { label: 'France',               code: 'FR', prefix: '+33',  localLength: 9  },
+    { label: 'Chine',                code: 'CN', prefix: '+86',  localLength: 11 },
+    { label: 'Émirats arabes unis',  code: 'AE', prefix: '+971', localLength: 9  },
+    { label: 'Inde',                 code: 'IN', prefix: '+91',  localLength: 10 },
+];
+
+const selectedCountryCode = ref(PAYS[0].code);
+const phoneDigits = ref('');
 const showPassword = ref(false);
+
+const selectedPays = computed(() =>
+    PAYS.find((p) => p.code === selectedCountryCode.value) ?? PAYS[0],
+);
+
+// Si l'utilisateur tape 0xxxxxxxx (format local avec 0 initial), on le strip pour l'international
+const fullPhone = computed(() => {
+    if (!phoneDigits.value) return '';
+    // Strip leading 0 for international format (visible dans l'input, supprimé techniquement)
+    return `${selectedPays.value.prefix}${phoneDigits.value.replace(/^0/, '')}`;
+});
+
+function flagUrl(code: string): string {
+    return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
+}
+
+function handlePhoneInput(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const raw = input.value.replace(/\D/g, '');
+    // +1 digit autorisé si commence par 0 (ex: 0758855039 = 10 chiffres France)
+    const max = raw.startsWith('0') ? selectedPays.value.localLength + 1 : selectedPays.value.localLength;
+    const digits = raw.slice(0, max);
+    phoneDigits.value = digits;
+    input.value = digits;
+}
+
+function handlePhoneKeydown(e: KeyboardEvent) {
+    const pass = ['Backspace','Delete','Tab','Escape','Enter','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'];
+    if (pass.includes(e.key)) return;
+    if ((e.ctrlKey || e.metaKey) && ['a','c','v','x'].includes(e.key.toLowerCase())) return;
+    if (!/^\d$/.test(e.key)) e.preventDefault();
+}
 </script>
 
 <template>
@@ -46,13 +100,10 @@ const showPassword = ref(false);
                     <AppLogoIcon class="size-10 fill-current text-foreground" />
                     <span class="sr-only">Accueil</span>
                 </Link>
-                <CardTitle class="text-2xl font-semibold">
-                    Connexion
-                </CardTitle>
-                <CardDescription class="text-sm">
-                    Eau la maman
-                </CardDescription>
+                <CardTitle class="text-2xl font-semibold">Connexion</CardTitle>
+                <CardDescription class="text-sm">Eau la maman</CardDescription>
             </CardHeader>
+
             <CardContent
                 class="flex flex-1 flex-col px-3 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-4 md:px-10 md:pt-3 md:pb-6"
             >
@@ -69,58 +120,77 @@ const showPassword = ref(false);
                     v-slot="{ errors, processing }"
                     class="flex flex-1 flex-col"
                 >
+                    <!-- Champ téléphone caché (valeur complète) -->
+                    <input type="hidden" name="telephone" :value="fullPhone" />
+
                     <div class="space-y-5">
+                        <!-- Sélecteur pays + numéro -->
                         <div class="space-y-2">
-                            <Label for="email"
-                                >Adresse e-mail
-                                <span class="text-red-500">*</span></Label
-                            >
-                            <Input
-                                id="email"
-                                type="email"
-                                name="email"
-                                required
-                                autofocus
-                                :tabindex="1"
-                                autocomplete="email"
-                                placeholder="email@example.com"
-                                class="h-12 text-base"
-                            />
-                            <InputError :message="errors.email" />
+                            <Label>Numéro de téléphone <span class="text-destructive">*</span></Label>
+                            <div class="flex gap-2">
+                                <Select
+                                    v-model="selectedCountryCode"
+                                    :options="PAYS"
+                                    option-label="label"
+                                    option-value="code"
+                                    :tabindex="1"
+                                    class="shrink-0"
+                                >
+                                    <template #value="{ value }">
+                                        <div v-if="value" class="flex items-center gap-2">
+                                            <img :src="flagUrl(value)" class="h-4 w-auto rounded-sm shadow-sm" />
+                                            <span class="font-mono text-sm">{{ selectedPays.prefix }}</span>
+                                        </div>
+                                    </template>
+                                    <template #option="{ option }">
+                                        <div class="flex items-center gap-2">
+                                            <img :src="flagUrl(option.code)" :alt="option.label" class="h-4 w-auto rounded-sm shadow-sm" />
+                                            <span>{{ option.label }}</span>
+                                            <span class="ml-auto text-xs text-muted-foreground">{{ option.prefix }}</span>
+                                        </div>
+                                    </template>
+                                </Select>
+
+                                <input
+                                    :value="phoneDigits"
+                                    @keydown="handlePhoneKeydown"
+                                    @input="handlePhoneInput"
+                                    type="tel"
+                                    :tabindex="2"
+                                    autocomplete="tel-national"
+                                    inputmode="numeric"
+                                    autofocus
+                                    :maxlength="phoneDigits.startsWith('0') ? selectedPays.localLength + 1 : selectedPays.localLength"
+                                    :placeholder="`${selectedPays.localLength} chiffres`"
+                                    class="flex h-12 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                />
+                            </div>
+                            <InputError :message="errors.telephone" />
                         </div>
 
+                        <!-- Mot de passe -->
                         <div class="space-y-2">
-                            <div class="flex items-center">
-                                <Label for="password"
-                                    >Mot de passe
-                                    <span class="text-red-500">*</span></Label
-                                >
-                            </div>
+                            <Label for="password">
+                                Mot de passe <span class="text-destructive">*</span>
+                            </Label>
                             <div class="relative">
-                                <Input
+                                <input
                                     id="password"
                                     :type="showPassword ? 'text' : 'password'"
                                     name="password"
                                     required
-                                    :tabindex="2"
+                                    :tabindex="3"
                                     autocomplete="current-password"
                                     placeholder="Mot de passe"
-                                    class="h-12 pr-10 text-base"
+                                    class="flex h-12 w-full rounded-md border border-input bg-transparent px-3 py-1 pr-10 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                                 />
                                 <button
                                     type="button"
                                     class="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
                                     @click="showPassword = !showPassword"
-                                    :aria-label="
-                                        showPassword
-                                            ? 'Masquer le mot de passe'
-                                            : 'Afficher le mot de passe'
-                                    "
+                                    :aria-label="showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'"
                                 >
-                                    <component
-                                        :is="showPassword ? EyeOff : Eye"
-                                        class="h-4 w-4"
-                                    />
+                                    <component :is="showPassword ? EyeOff : Eye" class="h-4 w-4" />
                                 </button>
                             </div>
                             <InputError :message="errors.password" />
@@ -129,24 +199,16 @@ const showPassword = ref(false);
 
                     <div class="mt-5 flex items-center justify-between gap-3 text-sm">
                         <Label for="remember" class="flex items-center space-x-2">
-                            <Checkbox id="remember" name="remember" :tabindex="3" />
+                            <Checkbox id="remember" name="remember" :tabindex="4" />
                             <span>Se souvenir de moi</span>
                         </Label>
-                        <TextLink
-                            v-if="canResetPassword"
-                            :href="request()"
-                            class="text-sm"
-                            :tabindex="5"
-                        >
-                            Mot de passe oublie ?
-                        </TextLink>
                     </div>
 
                     <div class="mt-auto space-y-4 pt-6">
                         <Button
                             type="submit"
                             class="h-12 w-full rounded-xl text-base font-semibold"
-                            :tabindex="4"
+                            :tabindex="5"
                             :disabled="processing"
                             data-test="login-button"
                         >
@@ -159,9 +221,7 @@ const showPassword = ref(false);
                             v-if="canRegister"
                         >
                             Pas encore de compte ?
-                            <TextLink :href="register()" :tabindex="6">
-                                S'inscrire
-                            </TextLink>
+                            <TextLink :href="register()" :tabindex="6">S'inscrire</TextLink>
                         </div>
                     </div>
                 </Form>

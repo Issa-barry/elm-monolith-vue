@@ -37,6 +37,9 @@ interface Site {
     enfants_count: number;
     localisation: string | null;
     telephone: string | null;
+    users_count: number;
+    users_names: string;
+    users: Array<{ id: number; name: string }>;
 }
 
 const props = defineProps<{ sites: Site[] }>();
@@ -57,7 +60,8 @@ const mobileFiltered = computed(() => {
         s.code.toLowerCase().includes(q) ||
         s.type_label.toLowerCase().includes(q) ||
         s.statut_label.toLowerCase().includes(q) ||
-        (s.ville ?? '').toLowerCase().includes(q),
+        (s.ville ?? '').toLowerCase().includes(q) ||
+        (s.users_names ?? '').toLowerCase().includes(q),
     );
 });
 
@@ -159,6 +163,9 @@ function confirmDelete(s: Site) {
                                 {{ s.type_label }}
                             </span>
                         </div>
+                        <p class="mt-1 text-[11px] text-muted-foreground">
+                            {{ s.users_count }} user{{ s.users_count !== 1 ? 's' : '' }}
+                        </p>
                     </div>
 
                     <!-- Status dot -->
@@ -240,7 +247,7 @@ function confirmDelete(s: Site) {
                     :value="sites"
                     :paginator="sites.length > 20"
                     :rows="20"
-                    :global-filter-fields="['nom', 'code', 'type_label', 'statut_label', 'ville', 'parent_nom', 'localisation', 'telephone']"
+                    :global-filter-fields="['nom', 'code', 'type_label', 'statut_label', 'ville', 'parent_nom', 'localisation', 'telephone', 'users_names']"
                     v-model:filters="filters"
                     data-key="id"
                     striped-rows
@@ -306,6 +313,24 @@ function confirmDelete(s: Site) {
                     <Column field="parent_nom" header="Parent" style="min-width: 160px">
                         <template #body="{ data }">
                             <span class="text-muted-foreground">{{ data.parent_nom ?? '—' }}</span>
+                        </template>
+                    </Column>
+
+                    <Column field="users_names" header="Users" style="min-width: 220px">
+                        <template #body="{ data }">
+                            <div v-if="data.users_count > 0" class="flex flex-wrap items-center gap-1.5">
+                                <span
+                                    v-for="u in data.users"
+                                    :key="u.id"
+                                    class="inline-flex items-center rounded-full border bg-muted/40 px-2 py-0.5 text-xs"
+                                >
+                                    {{ u.name }}
+                                </span>
+                                <span v-if="data.users_count > data.users.length" class="text-xs text-muted-foreground">
+                                    +{{ data.users_count - data.users.length }}
+                                </span>
+                            </div>
+                            <span v-else class="text-muted-foreground">—</span>
                         </template>
                     </Column>
 

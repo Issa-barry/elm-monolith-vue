@@ -86,6 +86,7 @@
             'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
             'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
             'Noto Color Emoji';
+        -webkit-text-size-adjust: 100%;
     }
 }
 
@@ -186,5 +187,22 @@
 
     body {
         @apply bg-background text-foreground;
+    }
+}
+
+@media (max-width: 768px) {
+    /*
+      Prevent iOS Safari from auto-zooming on form focus (which visually shifts
+      the whole page) by keeping form control font-size at 16px on mobile.
+    */
+    input:not([type='checkbox']):not([type='radio']),
+    textarea,
+    select,
+    .p-inputtext,
+    .p-inputnumber-input,
+    .p-select-label,
+    .p-multiselect-label,
+    .p-datepicker-input {
+        font-size: 16px !important;
     }
 }

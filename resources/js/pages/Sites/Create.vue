@@ -56,7 +56,7 @@ function submit() {
             </div>
         </div>
 
-        <div class="mx-auto max-w-2xl pb-6 sm:p-6">
+        <div class="mx-auto max-w-2xl pt-3 pb-6 sm:p-6">
             <div class="hidden sm:block mx-auto max-w-2xl px-6 pt-6 pb-0">
                 <div class="mb-8">
                     <h1 class="text-2xl font-semibold tracking-tight">Nouveau site</h1>

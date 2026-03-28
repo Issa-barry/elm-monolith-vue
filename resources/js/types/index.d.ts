@@ -14,7 +14,7 @@ export type Resource =
 export type CrudAction = 'create' | 'read' | 'update' | 'delete';
 export type PermissionKey = `${Resource}.${CrudAction}`;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
-export type AppRole = 'super_admin' | 'admin_entreprise' | 'commerciale' | 'comptable';
+export type AppRole = 'super_admin' | 'admin_entreprise' | 'manager' | 'commerciale' | 'comptable' | 'client';
 
 export interface Auth {
     user: User;
@@ -44,14 +44,24 @@ export type AppPageProps<
     sidebarOpen: boolean;
 };
 
-export interface User {
+export interface Organization {
     id: number;
     name: string;
-    email: string;
+    slug: string;
+}
+
+export interface User {
+    id: number;
+    prenom: string;
+    nom: string;
+    name: string;
+    email: string | null;
+    telephone: string | null;
     avatar?: string;
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;
+    organization: Organization | null;
 }
 
 export type BreadcrumbItemType = BreadcrumbItem;

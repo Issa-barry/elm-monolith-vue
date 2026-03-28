@@ -72,6 +72,40 @@ function flagUrl(pays: string) {
 function mapsUrl(lat: number, lng: number) {
     return `https://www.google.com/maps?q=${lat},${lng}`;
 }
+
+function formatPhoneNumber(phone: string) {
+    const raw = phone.trim();
+    const hasPlus = raw.startsWith('+');
+    const digits = raw.replace(/\D/g, '');
+
+    if (!digits) return raw;
+
+    if (digits.startsWith('224') && digits.length === 12) {
+        const local = digits.slice(3);
+        return `+224 ${local.slice(0, 3)} ${local.slice(3, 5)} ${local.slice(5, 7)} ${local.slice(7, 9)}`;
+    }
+
+    if (hasPlus) {
+        const countryCodeLength = digits.length > 11 ? 3 : digits.length > 10 ? 2 : 1;
+        const countryCode = digits.slice(0, countryCodeLength);
+        const rest = digits.slice(countryCodeLength);
+        const grouped = rest.match(/.{1,3}/g)?.join(' ') ?? rest;
+        return `+${countryCode}${grouped ? ` ${grouped}` : ''}`;
+    }
+
+    if (digits.length === 9) {
+        return `${digits.slice(0, 3)} ${digits.slice(3, 5)} ${digits.slice(5, 7)} ${digits.slice(7, 9)}`;
+    }
+
+    return digits.match(/.{1,3}/g)?.join(' ') ?? digits;
+}
+
+function telHref(phone: string) {
+    const raw = phone.trim();
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return `tel:${raw}`;
+    return raw.startsWith('+') ? `tel:+${digits}` : `tel:${digits}`;
+}
 </script>
 
 <template>
@@ -94,7 +128,7 @@ function mapsUrl(lat: number, lng: number) {
             <div v-else class="w-8 shrink-0" />
         </div>
 
-        <div class="flex flex-col gap-6 p-4 sm:p-6 max-w-4xl mx-auto">
+        <div class="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 sm:p-6">
 
             <!-- En-tête -->
             <div class="hidden sm:flex items-start justify-between gap-4">
@@ -103,18 +137,18 @@ function mapsUrl(lat: number, lng: number) {
                         <Building2 class="h-7 w-7 text-muted-foreground" />
                     </div>
                     <div>
-                        <div class="flex items-center gap-2">
-                            <h1 class="text-2xl font-semibold tracking-tight">{{ site.nom }}</h1>
-                            <span class="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-                                {{ site.code }}
+                        <h1 class="text-2xl font-semibold tracking-tight">{{ site.nom }}</h1>
+                        <div class="mt-1 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-muted-foreground">
+                            <span>
+                                Code :
+                                <span class="ml-1 font-mono text-foreground">{{ site.code }}</span>
                             </span>
-                        </div>
-                        <div class="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-                            <span class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
-                                {{ site.type_label }}
+                            <span>
+                                Type :
+                                <span class="ml-1 font-medium text-foreground">{{ site.type_label }}</span>
                             </span>
                             <StatusDot
-                                :label="site.statut_label"
+                                :label="`Statut : ${site.statut_label}`"
                                 :dot-class="site.statut === 'active' ? 'bg-emerald-500' : 'bg-zinc-400'"
                             />
                         </div>
@@ -183,8 +217,8 @@ function mapsUrl(lat: number, lng: number) {
                         <div v-if="site.telephone" class="flex items-center justify-between">
                             <dt class="text-muted-foreground">Téléphone</dt>
                             <dd>
-                                <a :href="`tel:${site.telephone}`" class="font-medium hover:underline">
-                                    {{ site.telephone }}
+                                <a :href="telHref(site.telephone)" class="font-medium hover:underline">
+                                    {{ formatPhoneNumber(site.telephone) }}
                                 </a>
                             </dd>
                         </div>
