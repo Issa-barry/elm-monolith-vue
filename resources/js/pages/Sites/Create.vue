@@ -26,7 +26,7 @@ const form = useForm({
     statut:       'active' as string | null,
     localisation: null as string | null,
     pays:         'Guinée' as string | null,
-    ville:        null as string | null,
+    ville:        'Conakry' as string | null,
     description:  null as string | null,
     parent_id:    null as number | null,
     latitude:     null as number | null,
