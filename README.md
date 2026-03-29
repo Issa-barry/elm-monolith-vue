@@ -7,7 +7,14 @@ git push
 
 ## CI/CD Hostinger (GitHub Actions)
 
-Le deploiement automatique production est configure dans:
+Flux de branches:
+- `dev` -> `pre-prod` -> `main`
+
+CI (qualite + tests) sur `dev`, `pre-prod`, `main`:
+- `.github/workflows/lint.yml`
+- `.github/workflows/tests.yml`
+
+CD (deploiement production) sur `main`:
 - `.github/workflows/deploy-hostinger.yml`
 
 Guide complet:
