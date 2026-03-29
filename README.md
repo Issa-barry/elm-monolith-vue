@@ -1,11 +1,14 @@
 # Eau la maman — Monolithe
+# Sur ton PC
+npm run build
+git add public/build
+git commit -m "build: production"
+git push
 
-Application de gestion interne — Laravel 12 + Inertia.js + Vue 3 + Vite.
-
----
+# Sur le serveur
 
 
-cd ~/domains/usine-eau-api.fr/public_html
+cd ~/domains/eau-la-maman.fr/public_html
 composer2 update
 php artisan migrate:fresh --seed
 php artisan optimize:clear
@@ -66,6 +69,51 @@ php artisan test
 php artisan test tests/Feature/Auth/RegistrationTest.php
 ```
 
+### Tests E2E (Playwright)
+
+```bash
+# 1) Première installation du navigateur E2E (une seule fois)
+npm run e2e:install
+
+# 2) Lancer toute la suite E2E
+npm run e2e
+
+# 3) Mode interactif / debug
+npm run e2e:headed
+npm run e2e:ui
+
+# 4) Voir le rapport HTML après exécution
+npm run e2e:report
+```
+
+Scénarios E2E disponibles :
+
+```bash
+# Smoke
+npx playwright test tests/e2e/smoke.spec.ts
+
+# Produits
+npx playwright test tests/e2e/produit-flow.spec.ts
+
+# Livreurs
+npx playwright test tests/e2e/livreur-flow.spec.ts
+
+# Propriétaires
+npx playwright test tests/e2e/proprietaire-flow.spec.ts
+
+# Véhicules
+npx playwright test tests/e2e/vehicule-flow.spec.ts
+```
+
+Variables d'environnement E2E utiles (optionnelles) :
+
+```bash
+E2E_BASE_URL=http://127.0.0.1:8000
+E2E_PHONE=+33758855039
+E2E_PASSWORD=Staff@2025
+E2E_EMAIL=superadmin@admin.com
+```
+
 ---
 
 ## Déploiement
@@ -100,11 +148,7 @@ php artisan storage:link
 Tu build sur ton PC, tu pousse tout y compris public/build/ :
 
 
-# Sur ton PC
-npm run build
-git add public/build
-git commit -m "build: production"
-git push
+
 
 ### Mises à jour suivantes
 

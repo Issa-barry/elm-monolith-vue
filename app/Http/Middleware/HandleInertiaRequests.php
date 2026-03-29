@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Produit;
+use App\Support\AppVersion;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -64,6 +65,8 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'name' => config('app.name'),
+            'appVersion' => AppVersion::current(),
+            'appVersionLabel' => AppVersion::label(),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user'        => $request->user()?->loadMissing('organization'),
@@ -75,3 +78,4 @@ class HandleInertiaRequests extends Middleware
         ];
     }
 }
+

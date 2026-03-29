@@ -7,6 +7,7 @@ import {
 import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, Car, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-vue-next';
@@ -28,7 +29,11 @@ interface Vehicule {
     type_label: string;
     capacite_packs: number | null;
     proprietaire_nom: string | null;
+    proprietaire_telephone: string | null;
+    proprietaire_code_phone_pays: string | null;
     livreur_nom: string | null;
+    livreur_telephone: string | null;
+    livreur_code_phone_pays: string | null;
     photo_url: string | null;
     is_active: boolean;
 }
@@ -287,14 +292,24 @@ function confirmDelete(v: Vehicule) {
                     <!-- Propriétaire -->
                     <Column field="proprietaire_nom" header="Propriétaire" style="min-width: 180px">
                         <template #body="{ data }">
-                            <span class="text-muted-foreground">{{ data.proprietaire_nom ?? '—' }}</span>
+                            <div class="leading-tight">
+                                <div class="text-muted-foreground">{{ data.proprietaire_nom ?? '�' }}</div>
+                                <div v-if="data.proprietaire_telephone" class="mt-1 text-xs tabular-nums text-muted-foreground/80">
+                                    {{ formatPhoneDisplay(data.proprietaire_telephone, data.proprietaire_code_phone_pays) }}
+                                </div>
+                            </div>
                         </template>
                     </Column>
 
                     <!-- Livreur -->
                     <Column field="livreur_nom" header="Livreur" style="min-width: 180px">
                         <template #body="{ data }">
-                            <span class="text-muted-foreground">{{ data.livreur_nom ?? '—' }}</span>
+                            <div class="leading-tight">
+                                <div class="text-muted-foreground">{{ data.livreur_nom ?? '�' }}</div>
+                                <div v-if="data.livreur_telephone" class="mt-1 text-xs tabular-nums text-muted-foreground/80">
+                                    {{ formatPhoneDisplay(data.livreur_telephone, data.livreur_code_phone_pays) }}
+                                </div>
+                            </div>
                         </template>
                     </Column>
 
@@ -359,3 +374,4 @@ function confirmDelete(v: Vehicule) {
         </div>
     </AppLayout>
 </template>
+

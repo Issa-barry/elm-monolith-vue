@@ -837,7 +837,11 @@ withDefaults(
                 </div>
             </main>
         </div>
-        v : 1.2
+        <p class="mt-8 text-sm text-[#706f6c] dark:text-[#A1A09A]">
+            {{ $page.props.appVersionLabel }}
+        </p>
         <div class="hidden h-14.5 lg:block"></div>
     </div>
 </template>
+
+

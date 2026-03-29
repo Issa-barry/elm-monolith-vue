@@ -15,7 +15,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import { dashboard, home } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
-import { Building2, Car, FileText, HandCoins, LayoutGrid, Layers, Package, ShoppingCart, Users } from 'lucide-vue-next';
+import { Building2, Car, FileText, HandCoins, LayoutGrid, Layers, Package, PackageCheck, ShoppingCart, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -46,6 +46,14 @@ const mainNavItems = computed((): NavItem[] => {
     }
 
  
+
+    if (can('achats.read')) {
+        items.push({
+            title: 'Achats',
+            href: '/achats',
+            icon: PackageCheck,
+        });
+    }
 
     if (can('packings.read')) {
         items.push({

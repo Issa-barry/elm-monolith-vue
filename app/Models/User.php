@@ -59,7 +59,7 @@ class User extends Authenticatable
      */
     public function permissionsMap(): array
     {
-        $resources = ['clients', 'prestataires', 'livreurs', 'proprietaires', 'vehicules', 'sites', 'produits', 'packings', 'ventes', 'users', 'parametres'];
+        $resources = ['clients', 'prestataires', 'livreurs', 'proprietaires', 'vehicules', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres'];
         $actions   = ['create', 'read', 'update', 'delete'];
 
         $map = [];
