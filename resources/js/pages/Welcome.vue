@@ -840,7 +840,7 @@ withDefaults(
          <p class="mt-8 text-sm text-[#706f6c] dark:text-[#A1A09A]">
             {{ $page.props.appVersionLabel }}
         </p>
-        Maldaho
+        ABCD
         <div class="hidden h-14.5 lg:block"></div>
     </div>
 </template>
