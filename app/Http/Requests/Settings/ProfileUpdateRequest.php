@@ -16,7 +16,7 @@ class ProfileUpdateRequest extends FormRequest
             $lower = mb_strtolower($this->prenom, 'UTF-8');
             $data['prenom'] = preg_replace_callback(
                 '/(^|[\s-])(\pL)/u',
-                fn ($m) => $m[1] . mb_strtoupper($m[2], 'UTF-8'),
+                fn ($m) => $m[1].mb_strtoupper($m[2], 'UTF-8'),
                 $lower,
             );
         }
@@ -43,8 +43,8 @@ class ProfileUpdateRequest extends FormRequest
     {
         $rules = [
             'prenom' => ['required', 'string', 'min:2', 'max:100'],
-            'nom'    => ['required', 'string', 'min:2', 'max:100'],
-            'email'  => [
+            'nom' => ['required', 'string', 'min:2', 'max:100'],
+            'email' => [
                 'nullable',
                 'string',
                 'lowercase',

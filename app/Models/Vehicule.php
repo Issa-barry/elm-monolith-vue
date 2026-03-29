@@ -33,13 +33,13 @@ class Vehicule extends Model
     protected function casts(): array
     {
         return [
-            'is_active'                => 'boolean',
+            'is_active' => 'boolean',
             'pris_en_charge_par_usine' => 'boolean',
-            'commission_active'        => 'boolean',
-            'type_vehicule'            => TypeVehicule::class,
-            'capacite_packs'           => 'integer',
-            'taux_commission_livreur'         => 'decimal:2',
-            'taux_commission_proprietaire'    => 'decimal:2',
+            'commission_active' => 'boolean',
+            'type_vehicule' => TypeVehicule::class,
+            'capacite_packs' => 'integer',
+            'taux_commission_livreur' => 'decimal:2',
+            'taux_commission_proprietaire' => 'decimal:2',
         ];
     }
 
@@ -50,7 +50,8 @@ class Vehicule extends Model
         if (empty($this->photo_path)) {
             return null;
         }
-        return '/storage/' . $this->photo_path;
+
+        return '/storage/'.$this->photo_path;
     }
 
     public function getTypeLabelAttribute(): string

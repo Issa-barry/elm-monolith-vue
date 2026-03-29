@@ -20,7 +20,7 @@ class UserSite extends Model
     protected function casts(): array
     {
         return [
-            'role'       => SiteRole::class,
+            'role' => SiteRole::class,
             'is_default' => 'boolean',
         ];
     }

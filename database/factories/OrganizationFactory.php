@@ -15,9 +15,9 @@ class OrganizationFactory extends Factory
         $name = $this->faker->company();
 
         return [
-            'name'      => $name,
-            'slug'      => Str::slug($name) . '-' . $this->faker->unique()->numberBetween(1000, 9999),
-            'siret'     => null,
+            'name' => $name,
+            'slug' => Str::slug($name).'-'.$this->faker->unique()->numberBetween(1000, 9999),
+            'siret' => null,
             'is_active' => true,
         ];
     }

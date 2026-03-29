@@ -33,11 +33,11 @@ class RolesAndPermissionsSeeder extends Seeder
         }
 
         // ── 2. Rôles + matrices de permissions ────────────────────────────────
-        $superAdmin      = Role::firstOrCreate(['name' => 'super_admin']);
+        $superAdmin = Role::firstOrCreate(['name' => 'super_admin']);
         $adminEntreprise = Role::firstOrCreate(['name' => 'admin_entreprise']);
-        $manager         = Role::firstOrCreate(['name' => 'manager']);
-        $commerciale     = Role::firstOrCreate(['name' => 'commerciale']);
-        $comptable       = Role::firstOrCreate(['name' => 'comptable']);
+        $manager = Role::firstOrCreate(['name' => 'manager']);
+        $commerciale = Role::firstOrCreate(['name' => 'commerciale']);
+        $comptable = Role::firstOrCreate(['name' => 'comptable']);
         Role::firstOrCreate(['name' => 'client']);
 
         $superAdmin->syncPermissions(Permission::all());
@@ -46,7 +46,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'clients.create',      'clients.read',      'clients.update',      'clients.delete',
             'prestataires.create', 'prestataires.read', 'prestataires.update', 'prestataires.delete',
             'livreurs.create',     'livreurs.read',     'livreurs.update',     'livreurs.delete',
-            'proprietaires.create','proprietaires.read','proprietaires.update','proprietaires.delete',
+            'proprietaires.create', 'proprietaires.read', 'proprietaires.update', 'proprietaires.delete',
             'vehicules.create',    'vehicules.read',    'vehicules.update',    'vehicules.delete',
             'sites.create',        'sites.read',        'sites.update',        'sites.delete',
             'produits.create',     'produits.read',     'produits.update',     'produits.delete',
@@ -99,52 +99,52 @@ class RolesAndPermissionsSeeder extends Seeder
         // ── 4. Comptes staff ──────────────────────────────────────────────────
         $staff = [
             [
-                'prenom'    => 'Issa',
-                'nom'       => 'BARRY',
+                'prenom' => 'Issa',
+                'nom' => 'BARRY',
                 'telephone' => '+33758855039',
-                'role'      => 'super_admin',
+                'role' => 'super_admin',
             ],
             [
-                'prenom'    => 'Abdoulaye',
-                'nom'       => 'DIALLO',
+                'prenom' => 'Abdoulaye',
+                'nom' => 'DIALLO',
                 'telephone' => '+33769442565',
-                'role'      => 'admin_entreprise',
+                'role' => 'admin_entreprise',
             ],
             [
-                'prenom'    => 'Moussa',
-                'nom'       => 'SIDIBÉ',
+                'prenom' => 'Moussa',
+                'nom' => 'SIDIBÉ',
                 'telephone' => '+224656555520',
-                'role'      => 'admin_entreprise',
+                'role' => 'admin_entreprise',
             ],
             [
-                'prenom'    => 'Thierno Oumar',
-                'nom'       => 'DIALLO',
+                'prenom' => 'Thierno Oumar',
+                'nom' => 'DIALLO',
                 'telephone' => '+224622176056',
-                'role'      => 'manager',
+                'role' => 'manager',
             ],
             [
-                'prenom'    => 'Aminata',
-                'nom'       => 'DIALLO',
+                'prenom' => 'Aminata',
+                'nom' => 'DIALLO',
                 'telephone' => null,
-                'role'      => 'comptable',
+                'role' => 'comptable',
             ],
             [
-                'prenom'    => 'Alpha Oumar',
-                'nom'       => 'CAMARA',
+                'prenom' => 'Alpha Oumar',
+                'nom' => 'CAMARA',
                 'telephone' => null,
-                'role'      => 'commerciale',
+                'role' => 'commerciale',
             ],
             [
-                'prenom'    => 'Elhadj Oumar',
-                'nom'       => 'TALL',
+                'prenom' => 'Elhadj Oumar',
+                'nom' => 'TALL',
                 'telephone' => '+33605751596',
-                'role'      => 'super_admin',
+                'role' => 'super_admin',
             ],
             [
-                'prenom'    => 'Amadou',
-                'nom'       => 'DIALLO',
+                'prenom' => 'Amadou',
+                'nom' => 'DIALLO',
                 'telephone' => '+33754158797',
-                'role'      => 'admin_entreprise',
+                'role' => 'admin_entreprise',
             ],
         ];
 
@@ -154,11 +154,11 @@ class RolesAndPermissionsSeeder extends Seeder
                 : ['prenom' => $data['prenom'], 'nom' => $data['nom']];
 
             $user = User::firstOrCreate($lookup, [
-                'prenom'          => $data['prenom'],
-                'nom'             => $data['nom'],
-                'telephone'       => $data['telephone'],
-                'email'           => null,
-                'password'        => Hash::make(self::PASSWORD),
+                'prenom' => $data['prenom'],
+                'nom' => $data['nom'],
+                'telephone' => $data['telephone'],
+                'email' => null,
+                'password' => Hash::make(self::PASSWORD),
                 'organization_id' => $org->id,
             ]);
 
@@ -179,7 +179,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 ['Issa BARRY',          '+33758855039',  'super_admin',      self::PASSWORD],
                 ['Abdoulaye DIALLO',    '+33769442565',  'admin_entreprise', self::PASSWORD],
                 ['Moussa SIDIBÉ',       '+224656555520', 'admin_entreprise', self::PASSWORD],
-                ['Thierno Oumar DIALLO','+224622176056', 'manager',          self::PASSWORD],
+                ['Thierno Oumar DIALLO', '+224622176056', 'manager',          self::PASSWORD],
                 ['Aminata DIALLO',      '— (à définir)',  'comptable',        self::PASSWORD],
                 ['Alpha Oumar CAMARA',  '— (à définir)',  'commerciale',      self::PASSWORD],
                 ['Elhadj Oumar TALL',   '+33605751596',   'super_admin',      self::PASSWORD],
@@ -191,7 +191,7 @@ class RolesAndPermissionsSeeder extends Seeder
             ['Rôle', 'Permissions'],
             Role::with('permissions')->get()->map(fn ($r) => [
                 $r->name,
-                $r->name === 'super_admin' ? 'Toutes (' . $r->permissions->count() . ')' : $r->permissions->count(),
+                $r->name === 'super_admin' ? 'Toutes ('.$r->permissions->count().')' : $r->permissions->count(),
             ])->toArray()
         );
     }

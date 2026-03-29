@@ -4,14 +4,14 @@ namespace App\Enums;
 
 enum ProduitStatut: string
 {
-    case ACTIF   = 'actif';
+    case ACTIF = 'actif';
     case INACTIF = 'inactif';
     case ARCHIVE = 'archive';
 
     public function label(): string
     {
         return match ($this) {
-            self::ACTIF   => 'Actif',
+            self::ACTIF => 'Actif',
             self::INACTIF => 'Inactif',
             self::ARCHIVE => 'Archivé',
         };
@@ -20,7 +20,7 @@ enum ProduitStatut: string
     public function allowedTransitions(): array
     {
         return match ($this) {
-            self::ACTIF   => [self::INACTIF, self::ARCHIVE],
+            self::ACTIF => [self::INACTIF, self::ARCHIVE],
             self::INACTIF => [self::ACTIF, self::ARCHIVE],
             self::ARCHIVE => [self::ACTIF, self::INACTIF],
         };

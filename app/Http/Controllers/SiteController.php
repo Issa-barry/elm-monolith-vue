@@ -16,24 +16,24 @@ class SiteController extends Controller
     private function siteData(Site $s): array
     {
         return [
-            'id'           => $s->id,
-            'nom'          => $s->nom,
-            'code'         => $s->code,
-            'type'         => $s->type?->value,
-            'type_label'   => $s->type_label,
-            'statut'       => $s->statut?->value,
+            'id' => $s->id,
+            'nom' => $s->nom,
+            'code' => $s->code,
+            'type' => $s->type?->value,
+            'type_label' => $s->type_label,
+            'statut' => $s->statut?->value,
             'statut_label' => $s->statut_label,
             'localisation' => $s->localisation,
-            'pays'         => $s->pays,
-            'ville'        => $s->ville,
-            'quartier'     => $s->quartier,
-            'description'  => $s->description,
-            'parent_id'    => $s->parent_id,
-            'latitude'     => $s->latitude,
-            'longitude'    => $s->longitude,
-            'telephone'    => $s->telephone,
-            'email'        => $s->email,
-            'parent_nom'   => $s->parent?->nom,
+            'pays' => $s->pays,
+            'ville' => $s->ville,
+            'quartier' => $s->quartier,
+            'description' => $s->description,
+            'parent_id' => $s->parent_id,
+            'latitude' => $s->latitude,
+            'longitude' => $s->longitude,
+            'telephone' => $s->telephone,
+            'email' => $s->email,
+            'parent_nom' => $s->parent?->nom,
             'enfants_count' => (int) ($s->enfants_count ?? $s->enfants()->count()),
         ];
     }
@@ -63,19 +63,19 @@ class SiteController extends Controller
         return Inertia::render('Sites/Show', [
             'site' => [
                 ...$this->siteData($site),
-                'enfants'    => $site->enfants->map(fn (Site $e) => [
-                    'id'          => $e->id,
-                    'nom'         => $e->nom,
-                    'code'        => $e->code,
-                    'type_label'  => $e->type_label,
-                    'statut'      => $e->statut?->value,
+                'enfants' => $site->enfants->map(fn (Site $e) => [
+                    'id' => $e->id,
+                    'nom' => $e->nom,
+                    'code' => $e->code,
+                    'type_label' => $e->type_label,
+                    'statut' => $e->statut?->value,
                     'statut_label' => $e->statut_label,
                 ]),
-                'users'      => $site->users->map(fn ($u) => [
-                    'id'    => $u->id,
-                    'name'  => $u->name,
+                'users' => $site->users->map(fn ($u) => [
+                    'id' => $u->id,
+                    'name' => $u->name,
                     'email' => $u->email,
-                    'role'  => $u->pivot->role,
+                    'role' => $u->pivot->role,
                 ]),
             ],
         ]);
@@ -86,8 +86,8 @@ class SiteController extends Controller
         $this->authorize('create', Site::class);
 
         return Inertia::render('Sites/Create', [
-            'types'         => SiteType::options(),
-            'statuts'       => SiteStatut::options(),
+            'types' => SiteType::options(),
+            'statuts' => SiteStatut::options(),
             'parentOptions' => $this->parentOptions(),
         ]);
     }
@@ -97,25 +97,25 @@ class SiteController extends Controller
         $this->authorize('create', Site::class);
 
         $orgId = auth()->user()->organization_id;
-        abort_if(!$orgId, 403, "Votre compte n'est associé à aucune organisation.");
+        abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'nom'         => 'required|string|max:255',
-            'type'        => ['required', Rule::in(array_column(SiteType::cases(), 'value'))],
-            'statut'      => ['nullable', Rule::in(array_column(SiteStatut::cases(), 'value'))],
+            'nom' => 'required|string|max:255',
+            'type' => ['required', Rule::in(array_column(SiteType::cases(), 'value'))],
+            'statut' => ['nullable', Rule::in(array_column(SiteStatut::cases(), 'value'))],
             'localisation' => 'required|string|max:255',
-            'pays'        => 'nullable|string|max:100',
-            'ville'       => 'nullable|string|max:100',
-            'quartier'    => 'nullable|string|max:100',
+            'pays' => 'nullable|string|max:100',
+            'ville' => 'nullable|string|max:100',
+            'quartier' => 'nullable|string|max:100',
             'description' => 'nullable|string',
-            'parent_id'   => [
+            'parent_id' => [
                 'nullable', 'integer',
                 Rule::exists('sites', 'id')->where('organization_id', $orgId),
             ],
-            'latitude'    => 'nullable|numeric|between:-90,90',
-            'longitude'   => 'nullable|numeric|between:-180,180',
-            'telephone'   => 'nullable|string|max:50',
-            'email'       => 'nullable|email|max:255',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
+            'telephone' => 'nullable|string|max:50',
+            'email' => 'nullable|email|max:255',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
@@ -133,9 +133,9 @@ class SiteController extends Controller
         $site->load('parent');
 
         return Inertia::render('Sites/Edit', [
-            'site'          => $this->siteData($site),
-            'types'         => SiteType::options(),
-            'statuts'       => SiteStatut::options(),
+            'site' => $this->siteData($site),
+            'types' => SiteType::options(),
+            'statuts' => SiteStatut::options(),
             'parentOptions' => $this->parentOptions($site->id),
         ]);
     }
@@ -147,29 +147,29 @@ class SiteController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $data = $request->validate([
-            'nom'         => 'required|string|max:255',
-            'code'        => [
+            'nom' => 'required|string|max:255',
+            'code' => [
                 'required', 'string', 'max:50',
                 'regex:/^[A-Z0-9_-]+$/',
                 Rule::unique('sites', 'code')
                     ->where('organization_id', $orgId)
                     ->ignore($site->id),
             ],
-            'type'        => ['required', Rule::in(array_column(SiteType::cases(), 'value'))],
-            'statut'      => ['nullable', Rule::in(array_column(SiteStatut::cases(), 'value'))],
+            'type' => ['required', Rule::in(array_column(SiteType::cases(), 'value'))],
+            'statut' => ['nullable', Rule::in(array_column(SiteStatut::cases(), 'value'))],
             'localisation' => 'required|string|max:255',
-            'pays'        => 'nullable|string|max:100',
-            'ville'       => 'nullable|string|max:100',
-            'quartier'    => 'nullable|string|max:100',
+            'pays' => 'nullable|string|max:100',
+            'ville' => 'nullable|string|max:100',
+            'quartier' => 'nullable|string|max:100',
             'description' => 'nullable|string',
-            'parent_id'   => [
+            'parent_id' => [
                 'nullable', 'integer',
                 Rule::exists('sites', 'id')->where('organization_id', $orgId),
             ],
-            'latitude'    => 'nullable|numeric|between:-90,90',
-            'longitude'   => 'nullable|numeric|between:-180,180',
-            'telephone'   => 'nullable|string|max:50',
-            'email'       => 'nullable|email|max:255',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
+            'telephone' => 'nullable|string|max:50',
+            'email' => 'nullable|email|max:255',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
@@ -215,35 +215,36 @@ class SiteController extends Controller
 
     private function normalizeStrings(array $data): array
     {
-        if (!empty($data['code'])) {
+        if (! empty($data['code'])) {
             $data['code'] = mb_strtoupper(trim($data['code']), 'UTF-8');
         }
-        if (!empty($data['nom'])) {
+        if (! empty($data['nom'])) {
             $data['nom'] = mb_convert_case(mb_strtolower($data['nom']), MB_CASE_TITLE, 'UTF-8');
         }
-        if (!empty($data['ville'])) {
+        if (! empty($data['ville'])) {
             $data['ville'] = mb_convert_case(mb_strtolower($data['ville']), MB_CASE_TITLE, 'UTF-8');
         }
-        if (!empty($data['quartier'])) {
+        if (! empty($data['quartier'])) {
             $data['quartier'] = mb_convert_case(mb_strtolower($data['quartier']), MB_CASE_TITLE, 'UTF-8');
         }
+
         return $data;
     }
 
     private function messages(): array
     {
         return [
-            'nom.required'       => 'Le nom du site est obligatoire.',
-            'nom.max'            => 'Le nom ne peut pas dépasser 255 caractères.',
-            'code.required'      => 'Le code du site est obligatoire.',
-            'code.max'           => 'Le code ne peut pas dépasser 50 caractères.',
-            'code.regex'         => 'Le code ne peut contenir que des majuscules, chiffres, tirets et underscores.',
-            'code.unique'        => 'Ce code est déjà utilisé par un autre site de votre organisation.',
-            'type.required'      => 'Le type de site est obligatoire.',
-            'type.in'            => 'Type de site invalide.',
-            'statut.in'               => 'Statut invalide.',
-            'localisation.required'   => "L'adresse du site est obligatoire.",
-            'parent_id.exists'        => 'Le site parent sélectionné est introuvable.',
+            'nom.required' => 'Le nom du site est obligatoire.',
+            'nom.max' => 'Le nom ne peut pas dépasser 255 caractères.',
+            'code.required' => 'Le code du site est obligatoire.',
+            'code.max' => 'Le code ne peut pas dépasser 50 caractères.',
+            'code.regex' => 'Le code ne peut contenir que des majuscules, chiffres, tirets et underscores.',
+            'code.unique' => 'Ce code est déjà utilisé par un autre site de votre organisation.',
+            'type.required' => 'Le type de site est obligatoire.',
+            'type.in' => 'Type de site invalide.',
+            'statut.in' => 'Statut invalide.',
+            'localisation.required' => "L'adresse du site est obligatoire.",
+            'parent_id.exists' => 'Le site parent sélectionné est introuvable.',
         ];
     }
 }

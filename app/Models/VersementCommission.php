@@ -27,9 +27,9 @@ class VersementCommission extends Model
     protected function casts(): array
     {
         return [
-            'montant'        => 'decimal:2',
+            'montant' => 'decimal:2',
             'date_versement' => 'date:Y-m-d',
-            'mode_paiement'  => ModePaiement::class,
+            'mode_paiement' => ModePaiement::class,
         ];
     }
 
@@ -38,7 +38,7 @@ class VersementCommission extends Model
         static::creating(fn (VersementCommission $v) => $v->created_by = Auth::id());
 
         static::created(fn (VersementCommission $v) => $v->commission->recalculStatut());
-        static::deleted(fn (VersementCommission $v)  => $v->commission->recalculStatut());
+        static::deleted(fn (VersementCommission $v) => $v->commission->recalculStatut());
     }
 
     public function commission(): BelongsTo

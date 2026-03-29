@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use App\Models\Proprietaire;
@@ -47,18 +48,18 @@ class ProprietaireController extends Controller
             ->orderBy('nom')
             ->get()
             ->map(fn (Proprietaire $p) => [
-                'id'         => $p->id,
-                'nom'        => $p->nom,
-                'prenom'     => $p->prenom,
-                'nom_complet'=> trim("{$p->prenom} {$p->nom}"),
-                'email'      => $p->email,
-                'telephone'  => $p->telephone,
+                'id' => $p->id,
+                'nom' => $p->nom,
+                'prenom' => $p->prenom,
+                'nom_complet' => trim("{$p->prenom} {$p->nom}"),
+                'email' => $p->email,
+                'telephone' => $p->telephone,
                 'code_phone_pays' => $p->code_phone_pays,
-                'ville'      => $p->ville,
-                'pays'       => $p->pays,
-                'code_pays'  => $p->code_pays,
-                'adresse'    => $p->adresse,
-                'is_active'  => $p->is_active,
+                'ville' => $p->ville,
+                'pays' => $p->pays,
+                'code_pays' => $p->code_pays,
+                'adresse' => $p->adresse,
+                'is_active' => $p->is_active,
             ]);
 
         return Inertia::render('Proprietaires/Index', [
@@ -78,26 +79,26 @@ class ProprietaireController extends Controller
         $this->authorize('create', Proprietaire::class);
 
         $orgId = auth()->user()->organization_id;
-        abort_if(!$orgId, 403, "Votre compte n'est associé à aucune organisation.");
+        abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'nom'       => 'required|string|max:255',
-            'prenom'    => 'required|string|max:255',
-            'email'     => 'nullable|email:rfc,dns|max:255',
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'email' => 'nullable|email:rfc,dns|max:255',
             'telephone' => ['nullable', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
             'code_pays' => ['nullable', Rule::in(array_keys(PROPRIETAIRE_PAYS))],
-            'ville'     => 'nullable|string|max:100',
-            'adresse'   => 'nullable|string|max:500',
+            'ville' => 'nullable|string|max:100',
+            'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
         ], [
-            'nom.required'      => 'Le nom est obligatoire.',
-            'prenom.required'   => 'Le prénom est obligatoire.',
-            'email.email'       => "L'adresse email est invalide.",
-            'telephone.regex'   => 'Le numéro de téléphone est invalide.',
-            'code_pays.in'      => 'Pays invalide.',
+            'nom.required' => 'Le nom est obligatoire.',
+            'prenom.required' => 'Le prénom est obligatoire.',
+            'email.email' => "L'adresse email est invalide.",
+            'telephone.regex' => 'Le numéro de téléphone est invalide.',
+            'code_pays.in' => 'Pays invalide.',
         ]);
 
-        if (!empty($data['code_pays']) && isset(PROPRIETAIRE_PAYS[$data['code_pays']])) {
+        if (! empty($data['code_pays']) && isset(PROPRIETAIRE_PAYS[$data['code_pays']])) {
             [$data['pays'], $data['code_phone_pays']] = PROPRIETAIRE_PAYS[$data['code_pays']];
         }
 
@@ -124,17 +125,17 @@ class ProprietaireController extends Controller
 
         return Inertia::render('Proprietaires/Edit', [
             'proprietaire' => [
-                'id'              => $proprietaire->id,
-                'nom'             => $proprietaire->nom,
-                'prenom'          => $proprietaire->prenom,
-                'email'           => $proprietaire->email,
-                'telephone'       => $telephone,
-                'adresse'         => $proprietaire->adresse,
-                'ville'           => $proprietaire->ville,
-                'pays'            => $pays,
-                'code_pays'       => $codePays,
+                'id' => $proprietaire->id,
+                'nom' => $proprietaire->nom,
+                'prenom' => $proprietaire->prenom,
+                'email' => $proprietaire->email,
+                'telephone' => $telephone,
+                'adresse' => $proprietaire->adresse,
+                'ville' => $proprietaire->ville,
+                'pays' => $pays,
+                'code_pays' => $codePays,
                 'code_phone_pays' => $codePhonePays,
-                'is_active'       => $proprietaire->is_active,
+                'is_active' => $proprietaire->is_active,
             ],
         ]);
     }
@@ -179,23 +180,23 @@ class ProprietaireController extends Controller
         $this->authorize('update', $proprietaire);
 
         $data = $request->validate([
-            'nom'       => 'required|string|max:255',
-            'prenom'    => 'required|string|max:255',
-            'email'     => 'nullable|email:rfc,dns|max:255',
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'email' => 'nullable|email:rfc,dns|max:255',
             'telephone' => ['nullable', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
             'code_pays' => ['nullable', Rule::in(array_keys(PROPRIETAIRE_PAYS))],
-            'ville'     => 'nullable|string|max:100',
-            'adresse'   => 'nullable|string|max:500',
+            'ville' => 'nullable|string|max:100',
+            'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
         ], [
-            'nom.required'    => 'Le nom est obligatoire.',
+            'nom.required' => 'Le nom est obligatoire.',
             'prenom.required' => 'Le prénom est obligatoire.',
-            'email.email'     => "L'adresse email est invalide.",
+            'email.email' => "L'adresse email est invalide.",
             'telephone.regex' => 'Le numéro de téléphone est invalide.',
-            'code_pays.in'    => 'Pays invalide.',
+            'code_pays.in' => 'Pays invalide.',
         ]);
 
-        if (!empty($data['code_pays']) && isset(PROPRIETAIRE_PAYS[$data['code_pays']])) {
+        if (! empty($data['code_pays']) && isset(PROPRIETAIRE_PAYS[$data['code_pays']])) {
             [$data['pays'], $data['code_phone_pays']] = PROPRIETAIRE_PAYS[$data['code_pays']];
         }
 
@@ -230,43 +231,44 @@ class ProprietaireController extends Controller
 
         if (! $isValidLength) {
             throw ValidationException::withMessages([
-                'telephone' => "Le numero doit contenir {$expectedLength} chiffres (ou " . ($expectedLength + 1) . ' avec un 0 initial).',
+                'telephone' => "Le numero doit contenir {$expectedLength} chiffres (ou ".($expectedLength + 1).' avec un 0 initial).',
             ]);
         }
     }
 
     private function normalizeData(array $data): array
     {
-        if (!empty($data['nom'])) {
+        if (! empty($data['nom'])) {
             $data['nom'] = mb_strtoupper($data['nom'], 'UTF-8');
         }
-        if (!empty($data['prenom'])) {
+        if (! empty($data['prenom'])) {
             $data['prenom'] = mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
         }
-        if (!empty($data['ville'])) {
+        if (! empty($data['ville'])) {
             $data['ville'] = mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
         }
-        if (!empty($data['adresse'])) {
+        if (! empty($data['adresse'])) {
             $data['adresse'] = mb_convert_case(mb_strtolower($data['adresse'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
         }
-        if (!empty($data['telephone'])) {
+        if (! empty($data['telephone'])) {
             $telephone = trim((string) $data['telephone']);
             $telephoneDigits = preg_replace('/\D+/', '', $telephone) ?? '';
 
             if ($telephoneDigits === '') {
                 $data['telephone'] = null;
             } elseif (str_starts_with($telephone, '+')) {
-                $data['telephone'] = '+' . $telephoneDigits;
-            } elseif (!empty($data['code_phone_pays'])) {
+                $data['telephone'] = '+'.$telephoneDigits;
+            } elseif (! empty($data['code_phone_pays'])) {
                 $dialDigits = preg_replace('/\D+/', '', (string) $data['code_phone_pays']) ?? '';
                 $localDigits = preg_replace('/^0/', '', $telephoneDigits);
                 $data['telephone'] = $dialDigits !== ''
-                    ? '+' . $dialDigits . $localDigits
+                    ? '+'.$dialDigits.$localDigits
                     : $telephoneDigits;
             } else {
                 $data['telephone'] = $telephoneDigits;
             }
         }
+
         return $data;
     }
 
@@ -279,4 +281,3 @@ class ProprietaireController extends Controller
             ->with('success', 'Propriétaire supprimé.');
     }
 }
-

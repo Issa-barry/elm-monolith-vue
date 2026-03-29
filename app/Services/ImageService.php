@@ -5,21 +5,23 @@ namespace App\Services;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
+use Intervention\Image\ImageManager;
 
 class ImageService
 {
     private ImageManager $manager;
 
     // Paramètres par défaut
-    private int $maxWidth   = 1200;
-    private int $maxHeight  = 1200;
-    private int $quality    = 80;   // qualité WebP (0-100)
+    private int $maxWidth = 1200;
+
+    private int $maxHeight = 1200;
+
+    private int $quality = 80;   // qualité WebP (0-100)
 
     public function __construct()
     {
-        $this->manager = new ImageManager(new Driver());
+        $this->manager = new ImageManager(new Driver);
     }
 
     /**
@@ -35,8 +37,8 @@ class ImageService
             $image->scaleDown($this->maxWidth, $this->maxHeight);
         }
 
-        $filename = Str::uuid() . '.webp';
-        $path     = $folder . '/' . $filename;
+        $filename = Str::uuid().'.webp';
+        $path = $folder.'/'.$filename;
 
         Storage::disk('public')->put(
             $path,

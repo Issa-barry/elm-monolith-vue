@@ -135,13 +135,9 @@ function usersLabel(count: number): string {
                                                 <p
                                                     class="text-xs text-muted-foreground"
                                                 >
-                                                    {{
-                                                        role.permissions_count
-                                                    }}
+                                                    {{ role.permissions_count }}
                                                     /
-                                                    {{
-                                                        props.totalPerms
-                                                    }}
+                                                    {{ props.totalPerms }}
                                                     permissions
                                                 </p>
                                             </div>

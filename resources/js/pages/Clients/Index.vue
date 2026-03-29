@@ -51,7 +51,12 @@ function destroy(client: Client) {
         rejectLabel: 'Annuler',
         accept: () => {
             router.delete(`/clients/${client.id}`, {
-                onSuccess: () => toast.add({ severity: 'success', summary: 'Client supprimé', life: 3000 }),
+                onSuccess: () =>
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Client supprimé',
+                        life: 3000,
+                    }),
             });
         },
     });
@@ -65,7 +70,12 @@ function destroy(client: Client) {
         <div class="p-4 sm:p-6">
             <div class="mb-4 flex items-center justify-between">
                 <h1 class="text-xl font-semibold">Clients</h1>
-                <Button v-if="can('clients.create')" as="a" href="/clients/create" size="sm">
+                <Button
+                    v-if="can('clients.create')"
+                    as="a"
+                    href="/clients/create"
+                    size="sm"
+                >
                     <Plus class="mr-1 h-4 w-4" />
                     Nouveau
                 </Button>
@@ -85,7 +95,12 @@ function destroy(client: Client) {
 
                 <DataTable
                     :value="clients.data"
-                    :global-filter-fields="['nom', 'prenom', 'email', 'telephone']"
+                    :global-filter-fields="[
+                        'nom',
+                        'prenom',
+                        'email',
+                        'telephone',
+                    ]"
                     :global-filter="search"
                     striped-rows
                     size="small"
@@ -93,8 +108,12 @@ function destroy(client: Client) {
                     <Column header="Client">
                         <template #body="{ data: c }">
                             <div class="flex items-center gap-2">
-                                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                                    <UserRound class="h-4 w-4 text-muted-foreground" />
+                                <div
+                                    class="flex h-8 w-8 items-center justify-center rounded-full bg-muted"
+                                >
+                                    <UserRound
+                                        class="h-4 w-4 text-muted-foreground"
+                                    />
                                 </div>
                                 <span>{{ c.nom }} {{ c.prenom }}</span>
                             </div>
@@ -102,7 +121,7 @@ function destroy(client: Client) {
                     </Column>
                     <Column field="email" header="Email" />
                     <Column field="telephone" header="Téléphone" />
-                    <Column header="" style="width:4rem">
+                    <Column header="" style="width: 4rem">
                         <template #body="{ data: c }">
                             <Button
                                 v-if="can('clients.delete')"
