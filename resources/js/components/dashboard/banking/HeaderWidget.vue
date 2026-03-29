@@ -47,27 +47,44 @@ const initials = computed(() =>
 
 <template>
     <div class="col-span-12">
-        <div class="flex flex-col sm:flex-row items-center gap-6">
-            <div class="flex flex-col sm:flex-row items-center gap-4">
+        <div class="flex flex-col items-center gap-3 sm:flex-row sm:gap-6">
+            <div class="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
                 <div
-                    class="w-16 h-16 flex-shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-semibold"
+                    class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-primary text-base font-semibold text-primary-foreground sm:h-16 sm:w-16 sm:text-xl"
                 >
                     {{ initials }}
                 </div>
                 <div class="flex flex-col items-center sm:items-start">
-                    <h1 class="text-2xl font-semibold tracking-tight">
+                    <h1 class="text-xl font-semibold tracking-tight sm:text-2xl">
                         {{ displayName }}
                     </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
+                    <p class="mt-0.5 text-xs text-muted-foreground sm:mt-1 sm:text-sm">
                         Role : {{ displayRole }}
                     </p>
                 </div>
             </div>
 
-            <div class="flex items-center gap-2 sm:ml-auto">
-                <Button type="button" v-tooltip.bottom="'Télécharger'" icon="pi pi-download" outlined rounded></Button>
-                <Button type="button" v-tooltip.bottom="'Envoyer rapport'" icon="pi pi-send" rounded></Button>
-                <Select v-model="selectedPeriod" :options="periodOptions" class="min-w-56" />
+            <div class="flex items-center gap-1.5 sm:ml-auto sm:gap-2">
+                <Button
+                    type="button"
+                    v-tooltip.bottom="'Telecharger'"
+                    icon="pi pi-download"
+                    outlined
+                    rounded
+                    class="!h-8 !w-8 sm:!h-10 sm:!w-10"
+                />
+                <Button
+                    type="button"
+                    v-tooltip.bottom="'Envoyer rapport'"
+                    icon="pi pi-send"
+                    rounded
+                    class="!h-8 !w-8 sm:!h-10 sm:!w-10"
+                />
+                <Select
+                    v-model="selectedPeriod"
+                    :options="periodOptions"
+                    class="min-w-40 text-xs sm:min-w-56 sm:text-sm"
+                />
             </div>
         </div>
     </div>
