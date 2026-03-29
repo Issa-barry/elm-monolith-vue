@@ -143,7 +143,7 @@ function toggleColumn(action: string) {
     activePermissions.value = next;
 }
 
-function columnCheckedValue(action: string): boolean | 'indeterminate' {
+function _columnCheckedValue(action: string): boolean | 'indeterminate' {
     const s = columnState(action);
     if (s === 'all') return true;
     if (s === 'partial') return 'indeterminate';

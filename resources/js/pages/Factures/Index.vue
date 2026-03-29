@@ -193,7 +193,7 @@ function submitEncaissement() {
 }
 
 // ── Progression ───────────────────────────────────────────────────────────────
-function progressPercent(f: FactureItem): number {
+function _progressPercent(f: FactureItem): number {
     if (f.montant_net <= 0) return 0;
     return Math.min(
         100,

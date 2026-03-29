@@ -16,7 +16,7 @@ interface TypeOption {
     capacite_defaut: number;
 }
 
-const props = defineProps<{
+defineProps<{
     proprietaires: Option[];
     livreurs: Option[];
     types: TypeOption[];

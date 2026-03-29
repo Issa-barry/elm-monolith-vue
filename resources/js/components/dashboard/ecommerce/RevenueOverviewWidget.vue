@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { useLayout } from '@/layout/composables/layout';
 import { ref, watch } from 'vue';
 
@@ -28,7 +28,7 @@ const barOptions = ref({});
 const barData = ref({});
 
 function onWeekChange() {
-    let newBarData = { ...barData.value };
+    const newBarData = { ...barData.value };
     newBarData.datasets[0].data = selectedWeek.value.data[0];
     newBarData.datasets[1].data = selectedWeek.value.data[1];
     barData.value = newBarData;

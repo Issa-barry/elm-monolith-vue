@@ -11,7 +11,7 @@ interface Option {
     label: string;
 }
 
-const props = defineProps<{
+defineProps<{
     types: Option[];
     statuts: Option[];
     parentOptions: Option[];

@@ -52,7 +52,7 @@ const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
 const page = usePage();
-const stockAlertes = computed(
+const _stockAlertes = computed(
     () =>
         (page.props as any).stock_alertes ?? {
             ruptures: 0,
