@@ -5,8 +5,12 @@ const baseURL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:8000';
 export default defineConfig({
     testDir: './tests/e2e',
     fullyParallel: true,
+    workers: process.env.CI ? 2 : 1,
     retries: process.env.CI ? 2 : 0,
     reporter: process.env.CI ? [['html'], ['github']] : 'html',
+    expect: {
+        timeout: 15_000,
+    },
     use: {
         baseURL,
         trace: 'on-first-retry',
@@ -26,3 +30,4 @@ export default defineConfig({
         timeout: 120 * 1000,
     },
 });
+

@@ -14,7 +14,7 @@ class RolesAndPermissionsSeeder extends Seeder
 {
     private const RESOURCES = [
         'clients', 'prestataires', 'livreurs', 'proprietaires',
-        'vehicules', 'sites', 'produits', 'packings', 'ventes', 'users', 'parametres',
+        'vehicules', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres',
     ];
 
     private const ACTIONS = ['create', 'read', 'update', 'delete'];
@@ -52,6 +52,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'produits.create',     'produits.read',     'produits.update',     'produits.delete',
             'packings.create',     'packings.read',     'packings.update',     'packings.delete',
             'ventes.create',       'ventes.read',       'ventes.update',       'ventes.delete',
+            'achats.create',       'achats.read',       'achats.update',       'achats.delete',
             'users.create',        'users.read',        'users.update',
             'parametres.read',     'parametres.update',
         ]);
@@ -66,6 +67,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'produits.read',       'produits.create',   'produits.update',
             'packings.read',       'packings.create',   'packings.update',
             'ventes.create',       'ventes.read',       'ventes.update',
+            'achats.create',       'achats.read',       'achats.update',
             'users.read',
             'parametres.read',
         ]);

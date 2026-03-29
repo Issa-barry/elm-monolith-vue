@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\Client;
+use App\Models\CommandeAchat;
 use App\Models\CommandeVente;
 use App\Models\Livreur;
 use App\Models\Packing;
@@ -13,6 +14,7 @@ use App\Models\User;
 use App\Models\Site;
 use App\Models\Vehicule;
 use App\Policies\ClientPolicy;
+use App\Policies\CommandeAchatPolicy;
 use App\Policies\CommandeVentePolicy;
 use App\Policies\LivreurPolicy;
 use App\Policies\PackingPolicy;
@@ -28,16 +30,17 @@ use Illuminate\Support\Facades\Gate;
 class AuthServiceProvider extends ServiceProvider
 {
     protected $policies = [
-        Client::class       => ClientPolicy::class,
-        Prestataire::class  => PrestatairePolicy::class,
-        Livreur::class      => LivreurPolicy::class,
-        Proprietaire::class => ProprietairePolicy::class,
-        Produit::class      => ProduitPolicy::class,
-        Packing::class      => PackingPolicy::class,
-        User::class         => UserPolicy::class,
-        Vehicule::class     => VehiculePolicy::class,
-        Site::class         => SitePolicy::class,
+        Client::class        => ClientPolicy::class,
+        Prestataire::class   => PrestatairePolicy::class,
+        Livreur::class       => LivreurPolicy::class,
+        Proprietaire::class  => ProprietairePolicy::class,
+        Produit::class       => ProduitPolicy::class,
+        Packing::class       => PackingPolicy::class,
+        User::class          => UserPolicy::class,
+        Vehicule::class      => VehiculePolicy::class,
+        Site::class          => SitePolicy::class,
         CommandeVente::class => CommandeVentePolicy::class,
+        CommandeAchat::class => CommandeAchatPolicy::class,
     ];
 
     public function boot(): void

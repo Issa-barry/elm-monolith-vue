@@ -37,6 +37,19 @@ enum ProduitType: string
         );
     }
 
+    public function isAchetable(): bool
+    {
+        return in_array('prix_achat', $this->requiredPrices(), true);
+    }
+
+    public static function achetableValues(): array
+    {
+        return array_column(
+            array_filter(self::cases(), fn(self $c) => $c->isAchetable()),
+            'value'
+        );
+    }
+
     public function requiredPrices(): array
     {
         return match ($this) {

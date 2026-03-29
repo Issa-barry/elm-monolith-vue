@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
 use App\Http\Controllers\CommissionVenteController;
 use App\Http\Controllers\FactureVenteController;
@@ -43,6 +44,9 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     Route::resource('sites', SiteController::class);
     Route::resource('ventes', CommandeVenteController::class)->except(['edit', 'update']);
     Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
+    Route::resource('achats', CommandeAchatController::class)->except(['edit', 'update']);
+    Route::patch('achats/{achat}/receptionner', [CommandeAchatController::class, 'receptionner'])->name('achats.receptionner');
+    Route::patch('achats/{achat}/annuler', [CommandeAchatController::class, 'annuler'])->name('achats.annuler');
     Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
     Route::get('commissions', [CommissionVenteController::class, 'index'])->name('commissions.index');
     Route::post('commissions/{commission_vente}/versements', [VersementCommissionController::class, 'store'])->name('commissions.versements.store');

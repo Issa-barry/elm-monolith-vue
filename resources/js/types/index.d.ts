@@ -7,8 +7,12 @@ export type Resource =
     | 'prestataires'
     | 'livreurs'
     | 'proprietaires'
+    | 'vehicules'
+    | 'sites'
     | 'produits'
     | 'packings'
+    | 'ventes'
+    | 'achats'
     | 'users'
     | 'parametres';
 export type CrudAction = 'create' | 'read' | 'update' | 'delete';
