@@ -33,6 +33,7 @@ interface Livreur {
     email: string | null;
     telephone: string | null;
     code_phone_pays: string | null;
+    adresse: string | null;
     ville: string | null;
     pays: string | null;
     code_pays: string | null;
@@ -55,8 +56,8 @@ const mobileFiltered = computed(() => {
     return props.livreurs.filter(l =>
         l.nom_complet.toLowerCase().includes(q) ||
         (l.email ?? '').toLowerCase().includes(q) ||
-        (l.ville ?? '').toLowerCase().includes(q) ||
-        (l.pays ?? '').toLowerCase().includes(q),
+        (l.adresse ?? '').toLowerCase().includes(q) ||
+        (l.ville ?? '').toLowerCase().includes(q),
     );
 });
 
@@ -145,10 +146,10 @@ function confirmDelete(l: Livreur) {
                     <div class="min-w-0 flex-1">
                         <div class="truncate font-medium text-sm">{{ l.nom_complet }}</div>
                         <div v-if="l.email" class="truncate text-xs text-muted-foreground">{{ l.email }}</div>
-                        <div v-if="l.ville || l.pays" class="flex items-center gap-1 mt-0.5">
+                        <div v-if="l.adresse || l.ville" class="flex items-center gap-1 mt-0.5">
                             <img v-if="l.code_pays" :src="flagUrl(l.code_pays)" class="h-3 w-auto rounded-sm" />
                             <span class="text-xs text-muted-foreground">
-                                {{ [l.ville, l.pays].filter(Boolean).join(', ') }}
+                                {{ [l.adresse, l.ville].filter(Boolean).join(', ') }}
                             </span>
                         </div>
                     </div>
@@ -226,7 +227,7 @@ function confirmDelete(l: Livreur) {
                     :value="livreurs"
                     :paginator="livreurs.length > 20"
                     :rows="20"
-                    :global-filter-fields="['nom_complet', 'email', 'telephone', 'ville', 'pays']"
+                    :global-filter-fields="['nom_complet', 'email', 'telephone', 'adresse', 'ville']"
                     v-model:filters="filters"
                     data-key="id"
                     striped-rows
@@ -279,7 +280,7 @@ function confirmDelete(l: Livreur) {
                             <div class="flex items-center gap-2">
                                 <img v-if="data.code_pays" :src="flagUrl(data.code_pays)" class="h-4 w-auto rounded-sm shadow-sm" />
                                 <span class="text-muted-foreground">
-                                    {{ [data.ville, data.pays].filter(Boolean).join(', ') || '—' }}
+                                    {{ [data.adresse, data.ville].filter(Boolean).join(', ') || '—' }}
                                 </span>
                             </div>
                         </template>

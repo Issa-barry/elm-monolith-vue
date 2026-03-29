@@ -43,6 +43,7 @@
         "clsx": "^2.1.1",
         "laravel-vite-plugin": "^2.0.0",
         "lucide-vue-next": "^0.468.0",
+        "primeicons": "^7.0.0",
         "primevue": "^4.5.4",
         "quill": "^2.0.3",
         "reka-ui": "^2.4.1",

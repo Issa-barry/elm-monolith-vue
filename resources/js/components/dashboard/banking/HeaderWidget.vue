@@ -2,15 +2,13 @@
 import Button from 'primevue/button';
 import Select from 'primevue/select';
 import Tooltip from 'primevue/tooltip';
-import ArrowDownIcon from '@primevue/icons/arrowdown';
-import ArrowUpIcon from '@primevue/icons/arrowup';
 import { usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const vTooltip = Tooltip;
 const page = usePage();
-const selectedPeriod = ref('Aujourd\'hui');
-const periodOptions = ['Aujourd\'hui', 'Cette semaine', 'Ce mois'];
+const selectedPeriod = ref("Aujourd'hui");
+const periodOptions = ["Aujourd'hui", 'Cette semaine', 'Ce mois'];
 
 const ROLE_LABELS: Record<string, string> = {
     super_admin: 'Super Admin',
@@ -65,32 +63,11 @@ const initials = computed(() =>
                     </p>
                 </div>
             </div>
+
             <div class="flex items-center gap-2 sm:ml-auto">
-                <Button
-                    type="button"
-                    v-tooltip.bottom="'Download'"
-                    class="!h-10 !w-10 !rounded-full !border !border-primary/45 !bg-transparent !p-0 !text-primary hover:!bg-primary/10"
-                >
-                    <template #icon>
-                        <ArrowDownIcon class="h-4 w-4" />
-                    </template>
-                </Button>
-                <Button
-                    type="button"
-                    v-tooltip.bottom="'Send'"
-                    class="!h-10 !w-10 !rounded-full !border !border-primary/35 !bg-primary/10 !p-0 !text-primary hover:!bg-primary/15"
-                >
-                    <template #icon>
-                        <ArrowUpIcon class="h-4 w-4" />
-                    </template>
-                </Button>
-                <Select
-                    v-model="selectedPeriod"
-                    :options="periodOptions"
-                    class="min-w-56"
-                >
-                </Select>
-                  <Button type="button" v-tooltip.bottom="'Exchange'" icon="pi pi-arrows-h" outlined rounded></Button>
+                <Button type="button" v-tooltip.bottom="'Télécharger'" icon="pi pi-download" outlined rounded></Button>
+                <Button type="button" v-tooltip.bottom="'Envoyer rapport'" icon="pi pi-send" rounded></Button>
+                <Select v-model="selectedPeriod" :options="periodOptions" class="min-w-56" />
             </div>
         </div>
     </div>

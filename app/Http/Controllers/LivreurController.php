@@ -55,6 +55,7 @@ class LivreurController extends Controller
                 'email'      => $l->email,
                 'telephone'  => $l->telephone,
                 'code_phone_pays' => $l->code_phone_pays,
+                'adresse'    => $l->adresse,
                 'ville'      => $l->ville,
                 'pays'       => $l->pays,
                 'code_pays'  => $l->code_pays,
