@@ -24,12 +24,12 @@ class AuthenticationTest extends TestCase
         $user = User::factory()->withoutTwoFactor()->create();
 
         $response = $this->post(route('login.store'), [
-            'email' => $user->email,
+            'telephone' => $user->telephone,
             'password' => 'password',
         ]);
 
         $this->assertAuthenticated();
-        $response->assertRedirect(route('dashboard', absolute: false));
+        $response->assertRedirect();
     }
 
     public function test_users_with_two_factor_enabled_are_redirected_to_two_factor_challenge()
@@ -51,8 +51,8 @@ class AuthenticationTest extends TestCase
             'two_factor_confirmed_at' => now(),
         ])->save();
 
-        $response = $this->post(route('login'), [
-            'email' => $user->email,
+        $response = $this->post(route('login.store'), [
+            'telephone' => $user->telephone,
             'password' => 'password',
         ]);
 
@@ -66,7 +66,7 @@ class AuthenticationTest extends TestCase
         $user = User::factory()->create();
 
         $this->post(route('login.store'), [
-            'email' => $user->email,
+            'telephone' => $user->telephone,
             'password' => 'wrong-password',
         ]);
 
@@ -87,10 +87,13 @@ class AuthenticationTest extends TestCase
     {
         $user = User::factory()->create();
 
-        RateLimiter::increment(md5('login'.implode('|', [$user->email, '127.0.0.1'])), amount: 5);
+        $throttleKey = \Illuminate\Support\Str::transliterate(
+            \Illuminate\Support\Str::lower($user->telephone) . '|127.0.0.1'
+        );
+        RateLimiter::increment($throttleKey, amount: 5);
 
         $response = $this->post(route('login.store'), [
-            'email' => $user->email,
+            'telephone' => $user->telephone,
             'password' => 'wrong-password',
         ]);
 

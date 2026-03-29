@@ -19,6 +19,8 @@ class DashboardTest extends TestCase
     public function test_authenticated_users_can_visit_the_dashboard()
     {
         $user = User::factory()->create();
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        $user->assignRole('admin_entreprise');
         $this->actingAs($user);
 
         $response = $this->get(route('dashboard'));
