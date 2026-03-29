@@ -12,7 +12,7 @@ Le deploiement automatique production est configure dans:
 
 Guide complet:
 - `DEPLOY-HOSTINGER-CICD.md`
-
+ 
 # Sur le serveur
 
 
