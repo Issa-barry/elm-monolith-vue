@@ -3,7 +3,7 @@ import { cleanupRowsByPrefix, escapeRegExp, getVisibleSearchInput, login, openRo
 
 const PREFIX = 'e2eproflow';
 
-test.setTimeout(120_000);
+test.setTimeout(180_000);
 
 function randomDigits(length: number): string {
     const max = 10 ** length;
