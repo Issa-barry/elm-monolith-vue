@@ -11,11 +11,11 @@ class ProprietaireFactory extends Factory
     {
         return [
             'organization_id' => Organization::factory(),
-            'nom'             => fake()->lastName(),
-            'prenom'          => fake()->firstName(),
-            'email'           => fake()->unique()->safeEmail(),
-            'telephone'       => fake()->phoneNumber(),
-            'is_active'       => true,
+            'nom' => fake()->lastName(),
+            'prenom' => fake()->firstName(),
+            'email' => fake()->unique()->safeEmail(),
+            'telephone' => fake()->phoneNumber(),
+            'is_active' => true,
         ];
     }
 }

@@ -3,11 +3,12 @@ name: linter
 on:
   pull_request:
     branches:
+      - dev
       - pre-prod
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   quality:
@@ -20,22 +21,30 @@ jobs:
         with:
           php-version: '8.4'
 
-      - name: Install Dependencies
-        run: |
-          composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
-          npm install
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
 
-      - name: Run Pint
-        run: vendor/bin/pint
+      - name: Install PHP dependencies
+        run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
 
-      - name: Format Frontend
-        run: npm run format
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
 
-      - name: Lint Frontend
-        run: npm run lint
+      - name: Install Node dependencies
+        run: npm ci
 
-      # - name: Commit Changes
-      #   uses: stefanzweifel/git-auto-commit-action@v5
-      #   with:
-      #     commit_message: fix code style
-      #     commit_options: '--no-verify'
+      - name: Check PHP code style (Pint)
+        run: vendor/bin/pint --test
+
+      - name: Check frontend formatting (Prettier)
+        run: npm run format:check
+
+      - name: Lint frontend (ESLint)
+        run: npx eslint . --max-warnings 0

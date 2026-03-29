@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use App\Enums\PackingStatut;
@@ -38,11 +39,11 @@ class Packing extends Model
     protected function casts(): array
     {
         return [
-            'date'             => 'date:Y-m-d',
-            'nb_rouleaux'      => 'integer',
+            'date' => 'date:Y-m-d',
+            'nb_rouleaux' => 'integer',
             'prix_par_rouleau' => 'integer',
-            'montant'          => 'integer',
-            'statut'           => PackingStatut::class,
+            'montant' => 'integer',
+            'statut' => PackingStatut::class,
         ];
     }
 
@@ -50,12 +51,12 @@ class Packing extends Model
     {
         static::creating(function (Packing $p) {
             if (empty($p->reference)) {
-                $p->reference = self::TEMP_PREFIX . Str::uuid();
+                $p->reference = self::TEMP_PREFIX.Str::uuid();
             }
             if (empty($p->statut)) {
                 $p->statut = PackingStatut::IMPAYEE;
             }
-            $p->montant = (int)$p->nb_rouleaux * (int)$p->prix_par_rouleau;
+            $p->montant = (int) $p->nb_rouleaux * (int) $p->prix_par_rouleau;
             if (Auth::check()) {
                 $p->created_by = Auth::id();
                 $p->updated_by = Auth::id();
@@ -63,17 +64,17 @@ class Packing extends Model
         });
 
         static::created(function (Packing $p) {
-            if (!str_starts_with((string)$p->reference, self::TEMP_PREFIX)) {
+            if (! str_starts_with((string) $p->reference, self::TEMP_PREFIX)) {
                 return;
             }
-            $ref = 'PACK-' . ($p->created_at ?? now())->format('Ymd') . '-' . str_pad((string)$p->id, 4, '0', STR_PAD_LEFT);
+            $ref = 'PACK-'.($p->created_at ?? now())->format('Ymd').'-'.str_pad((string) $p->id, 4, '0', STR_PAD_LEFT);
             $p->newQueryWithoutScopes()->whereKey($p->id)->update(['reference' => $ref]);
             $p->reference = $ref;
             $p->syncOriginalAttribute('reference');
         });
 
         static::updating(function (Packing $p) {
-            $p->montant = (int)$p->nb_rouleaux * (int)$p->prix_par_rouleau;
+            $p->montant = (int) $p->nb_rouleaux * (int) $p->prix_par_rouleau;
             if (Auth::check()) {
                 $p->updated_by = Auth::id();
             }
@@ -117,12 +118,13 @@ class Packing extends Model
     public function getMontantVerseAttribute(): int
     {
         if (array_key_exists('versements_sum_montant', $this->attributes)) {
-            return (int)$this->attributes['versements_sum_montant'];
+            return (int) $this->attributes['versements_sum_montant'];
         }
         if ($this->relationLoaded('versements')) {
-            return (int)$this->versements->sum('montant');
+            return (int) $this->versements->sum('montant');
         }
-        return (int)$this->versements()->sum('montant');
+
+        return (int) $this->versements()->sum('montant');
     }
 
     public function getMontantRestantAttribute(): int
@@ -149,7 +151,7 @@ class Packing extends Model
         if ($this->statut === PackingStatut::ANNULEE) {
             return false;
         }
-        $verse = (int)$this->versements()->sum('montant');
+        $verse = (int) $this->versements()->sum('montant');
         if ($verse <= 0) {
             $this->statut = PackingStatut::IMPAYEE;
         } elseif ($verse >= $this->montant) {
@@ -157,6 +159,7 @@ class Packing extends Model
         } else {
             $this->statut = PackingStatut::PARTIELLE;
         }
+
         return $this->saveQuietly();
     }
 

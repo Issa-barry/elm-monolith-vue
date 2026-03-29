@@ -23,25 +23,25 @@ class EncaissementVenteController extends Controller
         $montantRestant = $facture_vente->montant_restant;
 
         $data = $request->validate([
-            'montant'           => ['required', 'numeric', 'min:0.01', "max:{$montantRestant}"],
+            'montant' => ['required', 'numeric', 'min:0.01', "max:{$montantRestant}"],
             'date_encaissement' => 'required|date',
-            'mode_paiement'     => ['required', Rule::in(array_column(ModePaiement::cases(), 'value'))],
-            'note'              => 'nullable|string|max:2000',
+            'mode_paiement' => ['required', Rule::in(array_column(ModePaiement::cases(), 'value'))],
+            'note' => 'nullable|string|max:2000',
         ], [
-            'montant.required'           => 'Le montant est obligatoire.',
-            'montant.min'                => 'Le montant doit être supérieur à 0.',
-            'montant.max'                => 'Le montant ne peut pas dépasser le restant dû.',
+            'montant.required' => 'Le montant est obligatoire.',
+            'montant.min' => 'Le montant doit être supérieur à 0.',
+            'montant.max' => 'Le montant ne peut pas dépasser le restant dû.',
             'date_encaissement.required' => 'La date d\'encaissement est obligatoire.',
-            'mode_paiement.required'     => 'Le mode de paiement est obligatoire.',
-            'mode_paiement.in'           => 'Mode de paiement invalide.',
+            'mode_paiement.required' => 'Le mode de paiement est obligatoire.',
+            'mode_paiement.in' => 'Mode de paiement invalide.',
         ]);
 
         $facture_vente->encaissements()->create([
-            'montant'           => $data['montant'],
+            'montant' => $data['montant'],
             'date_encaissement' => $data['date_encaissement'],
-            'mode_paiement'     => $data['mode_paiement'],
-            'note'              => $data['note'] ?? null,
-            'created_by'        => auth()->id(),
+            'mode_paiement' => $data['mode_paiement'],
+            'note' => $data['note'] ?? null,
+            'created_by' => auth()->id(),
         ]);
 
         $facture_vente->recalculStatut();

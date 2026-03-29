@@ -100,7 +100,7 @@ onUnmounted(() => {
                         <div class="mb-4 text-xl font-semibold">
                             Total Factures
                         </div>
-                        <div class="mb-4 text-2xl font-bold">0 GNF </div>
+                        <div class="mb-4 text-2xl font-bold">0 GNF</div>
                         <div class="text-sm">0 facture(s)</div>
                     </div>
                 </div>
@@ -112,8 +112,8 @@ onUnmounted(() => {
                         >Factures payees</span
                     >
                     <span class="mb-3 text-2xl font-bold text-primary"
-                        >0 GNF </span
-                    >
+                        >0 GNF
+                    </span>
                     <span class="text-sm text-muted-foreground"
                         >0 facture(s) payee(s)</span
                     >
@@ -126,8 +126,8 @@ onUnmounted(() => {
                         >Reste a encaisser</span
                     >
                     <span class="mb-3 text-2xl font-bold text-primary"
-                        >0 GNF  </span
-                    >
+                        >0 GNF
+                    </span>
                     <span class="text-sm text-muted-foreground"
                         >0 impayee(s) - 0 annulee(s)</span
                     >
@@ -178,7 +178,7 @@ onUnmounted(() => {
             </svg>
             <div class="relative z-20 text-white">
                 <div class="mb-4 text-xl font-semibold">Total Factures</div>
-                <div class="mb-6 text-2xl font-bold">0 GNF  </div>
+                <div class="mb-6 text-2xl font-bold">0 GNF</div>
                 <div class="text-sm">0 facture(s)</div>
             </div>
         </div>

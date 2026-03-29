@@ -26,9 +26,9 @@ class EncaissementVente extends Model
     protected function casts(): array
     {
         return [
-            'montant'           => 'decimal:2',
+            'montant' => 'decimal:2',
             'date_encaissement' => 'date:Y-m-d',
-            'mode_paiement'     => ModePaiement::class,
+            'mode_paiement' => ModePaiement::class,
         ];
     }
 

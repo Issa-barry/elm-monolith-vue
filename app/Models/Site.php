@@ -36,7 +36,7 @@ class Site extends Model
     protected function casts(): array
     {
         return [
-            'type'   => SiteType::class,
+            'type' => SiteType::class,
             'statut' => SiteStatut::class,
         ];
     }

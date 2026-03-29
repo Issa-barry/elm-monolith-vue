@@ -5,13 +5,13 @@ namespace App\Enums;
 enum SiteRole: string
 {
     case RESPONSABLE = 'responsable';
-    case EMPLOYE     = 'employe';
+    case EMPLOYE = 'employe';
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RESPONSABLE => 'Responsable',
-            self::EMPLOYE     => 'Employé',
+            self::EMPLOYE => 'Employé',
         };
     }
 

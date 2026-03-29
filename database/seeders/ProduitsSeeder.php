@@ -16,35 +16,35 @@ class ProduitsSeeder extends Seeder
 
         $produits = [
             [
-                'nom'        => 'Rouleau',
-                'type'       => ProduitType::MATERIEL->value,
-                'statut'     => ProduitStatut::ACTIF->value,
+                'nom' => 'Rouleau',
+                'type' => ProduitType::MATERIEL->value,
+                'statut' => ProduitStatut::ACTIF->value,
                 'prix_achat' => 300,
                 'prix_vente' => 500,
-                'qte_stock'  => 500,
+                'qte_stock' => 500,
             ],
             [
-                'nom'        => 'Pack de 30',
-                'type'       => ProduitType::FABRICABLE->value,
-                'statut'     => ProduitStatut::ACTIF->value,
+                'nom' => 'Pack de 30',
+                'type' => ProduitType::FABRICABLE->value,
+                'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 4500,
                 'prix_vente' => 5000,
-                'qte_stock'  => 200,
+                'qte_stock' => 200,
             ],
             [
-                'nom'        => 'Pack de 6 bouteilles',
-                'type'       => ProduitType::FABRICABLE->value,
-                'statut'     => ProduitStatut::ACTIF->value,
+                'nom' => 'Pack de 6 bouteilles',
+                'type' => ProduitType::FABRICABLE->value,
+                'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 4500,
                 'prix_vente' => 5000,
-                'qte_stock'  => 150,
+                'qte_stock' => 150,
             ],
         ];
 
         foreach ($produits as $data) {
             Produit::firstOrCreate(
                 [
-                    'nom'             => $data['nom'],
+                    'nom' => $data['nom'],
                     'organization_id' => $org->id,
                 ],
                 [...$data, 'organization_id' => $org->id]

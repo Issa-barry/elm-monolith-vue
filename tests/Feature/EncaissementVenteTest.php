@@ -3,8 +3,8 @@
 namespace Tests\Feature;
 
 use App\Enums\StatutFactureVente;
-use App\Models\CommissionVente;
 use App\Models\CommandeVente;
+use App\Models\CommissionVente;
 use App\Models\FactureVente;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -26,30 +26,31 @@ class EncaissementVenteTest extends TestCase
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
         $user->givePermissionTo('ventes.update');
+
         return $user;
     }
 
     private function creerContexte(): array
     {
-        $org          = Organization::factory()->create();
+        $org = Organization::factory()->create();
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
-        $livreur      = Livreur::factory()->create(['organization_id' => $org->id]);
-        $vehicule     = Vehicule::factory()->create([
-            'organization_id'              => $org->id,
-            'proprietaire_id'              => $proprietaire->id,
-            'livreur_principal_id'         => $livreur->id,
-            'taux_commission_livreur'      => 60,
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'livreur_principal_id' => $livreur->id,
+            'taux_commission_livreur' => 60,
             'taux_commission_proprietaire' => 40,
         ]);
         $commande = CommandeVente::factory()->create([
             'organization_id' => $org->id,
-            'vehicule_id'     => $vehicule->id,
-            'total_commande'  => 5000,
+            'vehicule_id' => $vehicule->id,
+            'total_commande' => 5000,
         ]);
         $facture = FactureVente::factory()->create([
-            'organization_id'   => $org->id,
+            'organization_id' => $org->id,
             'commande_vente_id' => $commande->id,
-            'montant_net'       => 5000,
+            'montant_net' => 5000,
         ]);
         $user = $this->utilisateur($org);
 
@@ -65,9 +66,9 @@ class EncaissementVenteTest extends TestCase
         $this->actingAs($user)->post(
             route('encaissements.store', $facture),
             [
-                'montant'           => 2000,
+                'montant' => 2000,
                 'date_encaissement' => now()->toDateString(),
-                'mode_paiement'     => 'especes',
+                'mode_paiement' => 'especes',
             ]
         );
 
@@ -81,9 +82,9 @@ class EncaissementVenteTest extends TestCase
         $this->actingAs($user)->post(
             route('encaissements.store', $facture),
             [
-                'montant'           => 5000,
+                'montant' => 5000,
                 'date_encaissement' => now()->toDateString(),
-                'mode_paiement'     => 'especes',
+                'mode_paiement' => 'especes',
             ]
         );
 
@@ -98,9 +99,9 @@ class EncaissementVenteTest extends TestCase
         $this->actingAs($user)->post(
             route('encaissements.store', $facture),
             [
-                'montant'           => 5000,
+                'montant' => 5000,
                 'date_encaissement' => now()->toDateString(),
-                'mode_paiement'     => 'especes',
+                'mode_paiement' => 'especes',
             ]
         );
 
@@ -119,9 +120,9 @@ class EncaissementVenteTest extends TestCase
         $this->actingAs($user)->post(
             route('encaissements.store', $facture),
             [
-                'montant'           => 2500,
+                'montant' => 2500,
                 'date_encaissement' => now()->toDateString(),
-                'mode_paiement'     => 'especes',
+                'mode_paiement' => 'especes',
             ]
         );
 
@@ -135,9 +136,9 @@ class EncaissementVenteTest extends TestCase
         $response = $this->actingAs($user)->post(
             route('encaissements.store', $facture),
             [
-                'montant'           => 99999, // dépasse 5000
+                'montant' => 99999, // dépasse 5000
                 'date_encaissement' => now()->toDateString(),
-                'mode_paiement'     => 'especes',
+                'mode_paiement' => 'especes',
             ]
         );
 
@@ -152,9 +153,9 @@ class EncaissementVenteTest extends TestCase
         $response = $this->actingAs($user)->post(
             route('encaissements.store', $facture),
             [
-                'montant'           => 1000,
+                'montant' => 1000,
                 'date_encaissement' => now()->toDateString(),
-                'mode_paiement'     => 'especes',
+                'mode_paiement' => 'especes',
             ]
         );
 

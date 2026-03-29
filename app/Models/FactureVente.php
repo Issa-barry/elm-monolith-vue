@@ -34,8 +34,8 @@ class FactureVente extends Model
     protected function casts(): array
     {
         return [
-            'montant_brut'   => 'decimal:2',
-            'montant_net'    => 'decimal:2',
+            'montant_brut' => 'decimal:2',
+            'montant_net' => 'decimal:2',
             'statut_facture' => StatutFactureVente::class,
         ];
     }
@@ -44,7 +44,7 @@ class FactureVente extends Model
     {
         static::creating(function (FactureVente $f) {
             if (empty($f->reference)) {
-                $f->reference = self::TEMP_PREFIX . Str::uuid();
+                $f->reference = self::TEMP_PREFIX.Str::uuid();
             }
             if (empty($f->statut_facture)) {
                 $f->statut_facture = StatutFactureVente::IMPAYEE;
@@ -52,10 +52,10 @@ class FactureVente extends Model
         });
 
         static::created(function (FactureVente $f) {
-            if (!str_starts_with((string)$f->reference, self::TEMP_PREFIX)) {
+            if (! str_starts_with((string) $f->reference, self::TEMP_PREFIX)) {
                 return;
             }
-            $ref = 'FAC-VNT-' . ($f->created_at ?? now())->format('Ymd') . '-' . str_pad((string)$f->id, 4, '0', STR_PAD_LEFT);
+            $ref = 'FAC-VNT-'.($f->created_at ?? now())->format('Ymd').'-'.str_pad((string) $f->id, 4, '0', STR_PAD_LEFT);
             $f->newQueryWithoutScopes()->whereKey($f->id)->update(['reference' => $ref]);
             $f->reference = $ref;
             $f->syncOriginalAttribute('reference');
@@ -99,14 +99,15 @@ class FactureVente extends Model
     public function getMontantEncaisseAttribute(): float
     {
         if ($this->relationLoaded('encaissements')) {
-            return (float)$this->encaissements->sum('montant');
+            return (float) $this->encaissements->sum('montant');
         }
-        return (float)$this->encaissements()->sum('montant');
+
+        return (float) $this->encaissements()->sum('montant');
     }
 
     public function getMontantRestantAttribute(): float
     {
-        return max(0, (float)$this->montant_net - $this->montant_encaisse);
+        return max(0, (float) $this->montant_net - $this->montant_encaisse);
     }
 
     // ── Méthodes métier ───────────────────────────────────────────────────────
@@ -129,8 +130,8 @@ class FactureVente extends Model
 
         $etaitPayee = $this->isPayee();
 
-        $encaisse = (float)$this->encaissements()->sum('montant');
-        $net      = (float)$this->montant_net;
+        $encaisse = (float) $this->encaissements()->sum('montant');
+        $net = (float) $this->montant_net;
 
         if ($encaisse <= 0) {
             $this->statut_facture = StatutFactureVente::IMPAYEE;
@@ -143,7 +144,7 @@ class FactureVente extends Model
         $saved = $this->saveQuietly();
 
         // Générer la commission au moment où la facture devient PAYEE
-        if (!$etaitPayee && $this->isPayee()) {
+        if (! $etaitPayee && $this->isPayee()) {
             $this->genererCommission();
         }
 
@@ -156,12 +157,12 @@ class FactureVente extends Model
         $this->load('commande.vehicule.livreurPrincipal');
         $commande = $this->commande;
 
-        if (!$commande || !$commande->vehicule_id) {
+        if (! $commande || ! $commande->vehicule_id) {
             return;
         }
 
         $vehicule = $commande->vehicule;
-        if (!$vehicule || $vehicule->taux_commission_livreur <= 0) {
+        if (! $vehicule || $vehicule->taux_commission_livreur <= 0) {
             return;
         }
 
@@ -170,25 +171,25 @@ class FactureVente extends Model
             return;
         }
 
-        $livreur          = $vehicule->livreurPrincipal;
-        $montantCommande  = (float) $commande->total_commande;
-        $tauxLivreur      = (float) $vehicule->taux_commission_livreur;
+        $livreur = $vehicule->livreurPrincipal;
+        $montantCommande = (float) $commande->total_commande;
+        $tauxLivreur = (float) $vehicule->taux_commission_livreur;
         $tauxProprietaire = (float) ($vehicule->taux_commission_proprietaire ?? 0);
-        $partLivreur      = round($montantCommande * ($tauxLivreur / 100), 2);
+        $partLivreur = round($montantCommande * ($tauxLivreur / 100), 2);
         $partProprietaire = round($montantCommande * ($tauxProprietaire / 100), 2);
 
         CommissionVente::create([
-            'organization_id'              => $commande->organization_id,
-            'commande_vente_id'            => $commande->id,
-            'vehicule_id'                  => $vehicule->id,
-            'livreur_id'                   => $livreur?->id,
-            'livreur_nom'                  => $livreur ? trim($livreur->prenom . ' ' . $livreur->nom) : null,
-            'taux_commission'              => $tauxLivreur,
+            'organization_id' => $commande->organization_id,
+            'commande_vente_id' => $commande->id,
+            'vehicule_id' => $vehicule->id,
+            'livreur_id' => $livreur?->id,
+            'livreur_nom' => $livreur ? trim($livreur->prenom.' '.$livreur->nom) : null,
+            'taux_commission' => $tauxLivreur,
             'taux_commission_proprietaire' => $tauxProprietaire,
-            'montant_commande'             => $montantCommande,
-            'montant_commission'           => $partLivreur + $partProprietaire,
-            'montant_part_livreur'         => $partLivreur,
-            'montant_part_proprietaire'    => $partProprietaire,
+            'montant_commande' => $montantCommande,
+            'montant_commission' => $partLivreur + $partProprietaire,
+            'montant_part_livreur' => $partLivreur,
+            'montant_part_proprietaire' => $partProprietaire,
         ]);
     }
 }

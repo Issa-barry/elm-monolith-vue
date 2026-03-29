@@ -1,4 +1,5 @@
 <?php
+
 namespace Database\Seeders;
 
 use App\Models\Organization;
@@ -13,19 +14,19 @@ class ProprietairesSeeder extends Seeder
 
         $proprietaires = [
             [
-                'nom'       => 'Barry',
-                'prenom'    => 'Mamadou',
-                'email'     => 'mamadou.barry@example.com',
+                'nom' => 'Barry',
+                'prenom' => 'Mamadou',
+                'email' => 'mamadou.barry@example.com',
                 'telephone' => '+224621000001',
-                'adresse'   => 'Kaloum, Conakry',
+                'adresse' => 'Kaloum, Conakry',
                 'is_active' => true,
             ],
             [
-                'nom'       => 'Diallo',
-                'prenom'    => 'Fatoumata',
-                'email'     => 'fatoumata.diallo@example.com',
+                'nom' => 'Diallo',
+                'prenom' => 'Fatoumata',
+                'email' => 'fatoumata.diallo@example.com',
                 'telephone' => '+224621000002',
-                'adresse'   => 'Ratoma, Conakry',
+                'adresse' => 'Ratoma, Conakry',
                 'is_active' => true,
             ],
         ];

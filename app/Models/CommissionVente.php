@@ -38,16 +38,16 @@ class CommissionVente extends Model
     protected function casts(): array
     {
         return [
-            'taux_commission'              => 'decimal:2',
+            'taux_commission' => 'decimal:2',
             'taux_commission_proprietaire' => 'decimal:2',
-            'montant_commande'             => 'decimal:2',
-            'montant_commission'           => 'decimal:2',
-            'montant_part_livreur'         => 'decimal:2',
-            'montant_part_proprietaire'    => 'decimal:2',
-            'montant_verse'                => 'decimal:2',
-            'montant_verse_livreur'        => 'decimal:2',
-            'montant_verse_proprietaire'   => 'decimal:2',
-            'statut'                       => StatutCommission::class,
+            'montant_commande' => 'decimal:2',
+            'montant_commission' => 'decimal:2',
+            'montant_part_livreur' => 'decimal:2',
+            'montant_part_proprietaire' => 'decimal:2',
+            'montant_verse' => 'decimal:2',
+            'montant_verse_livreur' => 'decimal:2',
+            'montant_verse_proprietaire' => 'decimal:2',
+            'statut' => StatutCommission::class,
         ];
     }
 
@@ -105,12 +105,12 @@ class CommissionVente extends Model
 
         $verseL = (float) $this->versements()->where('beneficiaire', 'livreur')->sum('montant');
         $verseP = (float) $this->versements()->where('beneficiaire', 'proprietaire')->sum('montant');
-        $verse  = $verseL + $verseP;
-        $total  = (float) $this->montant_commission;
+        $verse = $verseL + $verseP;
+        $total = (float) $this->montant_commission;
 
-        $this->montant_verse                = $verse;
-        $this->montant_verse_livreur        = $verseL;
-        $this->montant_verse_proprietaire   = $verseP;
+        $this->montant_verse = $verse;
+        $this->montant_verse_livreur = $verseL;
+        $this->montant_verse_proprietaire = $verseP;
 
         if ($verse <= 0) {
             $this->statut = StatutCommission::EN_ATTENTE;

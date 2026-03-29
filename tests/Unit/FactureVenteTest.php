@@ -32,9 +32,9 @@ class FactureVenteTest extends TestCase
     {
         $facture = FactureVente::factory()->create(['montant_net' => 5000]);
         $facture->encaissements()->create([
-            'montant'           => 2000,
+            'montant' => 2000,
             'date_encaissement' => now()->toDateString(),
-            'mode_paiement'     => 'especes',
+            'mode_paiement' => 'especes',
         ]);
 
         $facture->recalculStatut();
@@ -46,9 +46,9 @@ class FactureVenteTest extends TestCase
     {
         $facture = FactureVente::factory()->create(['montant_net' => 5000]);
         $facture->encaissements()->create([
-            'montant'           => 5000,
+            'montant' => 5000,
             'date_encaissement' => now()->toDateString(),
-            'mode_paiement'     => 'especes',
+            'mode_paiement' => 'especes',
         ]);
 
         $facture->recalculStatut();
@@ -59,7 +59,7 @@ class FactureVenteTest extends TestCase
     public function test_recalcul_ignore_facture_annulee(): void
     {
         $facture = FactureVente::factory()->create([
-            'montant_net'   => 5000,
+            'montant_net' => 5000,
             'statut_facture' => StatutFactureVente::ANNULEE,
         ]);
 
@@ -72,32 +72,32 @@ class FactureVenteTest extends TestCase
 
     public function test_commission_generee_quand_facture_devient_payee(): void
     {
-        $org          = Organization::factory()->create();
-        $livreur      = Livreur::factory()->create(['organization_id' => $org->id]);
+        $org = Organization::factory()->create();
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
-        $vehicule     = Vehicule::factory()->create([
-            'organization_id'              => $org->id,
-            'proprietaire_id'              => $proprietaire->id,
-            'livreur_principal_id'         => $livreur->id,
-            'taux_commission_livreur'      => 60,
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'livreur_principal_id' => $livreur->id,
+            'taux_commission_livreur' => 60,
             'taux_commission_proprietaire' => 40,
         ]);
         $commande = CommandeVente::factory()->create([
             'organization_id' => $org->id,
-            'vehicule_id'     => $vehicule->id,
-            'total_commande'  => 10000,
+            'vehicule_id' => $vehicule->id,
+            'total_commande' => 10000,
         ]);
         $facture = FactureVente::factory()->create([
-            'organization_id'   => $org->id,
+            'organization_id' => $org->id,
             'commande_vente_id' => $commande->id,
-            'montant_net'       => 10000,
+            'montant_net' => 10000,
         ]);
 
         // Encaissement complet
         $facture->encaissements()->create([
-            'montant'           => 10000,
+            'montant' => 10000,
             'date_encaissement' => now()->toDateString(),
-            'mode_paiement'     => 'especes',
+            'mode_paiement' => 'especes',
         ]);
         $facture->recalculStatut();
 
@@ -112,29 +112,29 @@ class FactureVenteTest extends TestCase
 
     public function test_commission_non_generee_si_taux_zero(): void
     {
-        $org          = Organization::factory()->create();
+        $org = Organization::factory()->create();
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
-        $vehicule     = Vehicule::factory()->create([
-            'organization_id'              => $org->id,
-            'proprietaire_id'              => $proprietaire->id,
-            'taux_commission_livreur'      => 0,
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'taux_commission_livreur' => 0,
             'taux_commission_proprietaire' => 0,
         ]);
         $commande = CommandeVente::factory()->create([
             'organization_id' => $org->id,
-            'vehicule_id'     => $vehicule->id,
-            'total_commande'  => 10000,
+            'vehicule_id' => $vehicule->id,
+            'total_commande' => 10000,
         ]);
         $facture = FactureVente::factory()->create([
-            'organization_id'   => $org->id,
+            'organization_id' => $org->id,
             'commande_vente_id' => $commande->id,
-            'montant_net'       => 10000,
+            'montant_net' => 10000,
         ]);
 
         $facture->encaissements()->create([
-            'montant'           => 10000,
+            'montant' => 10000,
             'date_encaissement' => now()->toDateString(),
-            'mode_paiement'     => 'especes',
+            'mode_paiement' => 'especes',
         ]);
         $facture->recalculStatut();
 
@@ -143,30 +143,30 @@ class FactureVenteTest extends TestCase
 
     public function test_commission_non_dupliquee_si_facture_deja_payee(): void
     {
-        $org          = Organization::factory()->create();
+        $org = Organization::factory()->create();
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
-        $vehicule     = Vehicule::factory()->create([
-            'organization_id'              => $org->id,
-            'proprietaire_id'              => $proprietaire->id,
-            'taux_commission_livreur'      => 60,
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'taux_commission_livreur' => 60,
             'taux_commission_proprietaire' => 40,
         ]);
         $commande = CommandeVente::factory()->create([
             'organization_id' => $org->id,
-            'vehicule_id'     => $vehicule->id,
-            'total_commande'  => 5000,
+            'vehicule_id' => $vehicule->id,
+            'total_commande' => 5000,
         ]);
         $facture = FactureVente::factory()->create([
-            'organization_id'   => $org->id,
+            'organization_id' => $org->id,
             'commande_vente_id' => $commande->id,
-            'montant_net'       => 5000,
+            'montant_net' => 5000,
         ]);
 
         // Premier encaissement → facture payée → commission créée
         $facture->encaissements()->create([
-            'montant'           => 5000,
+            'montant' => 5000,
             'date_encaissement' => now()->toDateString(),
-            'mode_paiement'     => 'especes',
+            'mode_paiement' => 'especes',
         ]);
         $facture->recalculStatut();
 
