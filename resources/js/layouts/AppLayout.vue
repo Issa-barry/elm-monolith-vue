@@ -16,7 +16,11 @@ withDefaults(defineProps<Props>(), {
 </script>
 
 <template>
-    <AppLayout :breadcrumbs="breadcrumbs" :show-header="showHeader" :hide-mobile-header="hideMobileHeader">
+    <AppLayout
+        :breadcrumbs="breadcrumbs"
+        :show-header="showHeader"
+        :hide-mobile-header="hideMobileHeader"
+    >
         <slot />
     </AppLayout>
 </template>

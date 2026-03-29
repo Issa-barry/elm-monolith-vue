@@ -10,17 +10,17 @@ const weeks = ref([
         value: 0,
         data: [
             [65, 59, 80, 81, 56, 55, 40],
-            [28, 48, 40, 19, 86, 27, 90]
-        ]
+            [28, 48, 40, 19, 86, 27, 90],
+        ],
     },
     {
         label: 'This Week',
         value: 1,
         data: [
             [35, 19, 40, 61, 16, 55, 30],
-            [48, 78, 10, 29, 76, 77, 10]
-        ]
-    }
+            [48, 78, 10, 29, 76, 77, 10],
+        ],
+    },
 ]);
 
 const selectedWeek = ref(weeks.value[0]);
@@ -38,7 +38,9 @@ function onWeekChange() {
 function initChart() {
     const documentStyle = getComputedStyle(document.documentElement);
     const textColor = documentStyle.getPropertyValue('--text-color');
-    const textColorSecondary = documentStyle.getPropertyValue('--text-color-secondary');
+    const textColorSecondary = documentStyle.getPropertyValue(
+        '--text-color-secondary',
+    );
     const surfaceBorder = documentStyle.getPropertyValue('--surface-border');
 
     barData.value = {
@@ -46,24 +48,26 @@ function initChart() {
         datasets: [
             {
                 label: 'Revenue',
-                backgroundColor: documentStyle.getPropertyValue('--p-primary-500'),
+                backgroundColor:
+                    documentStyle.getPropertyValue('--p-primary-500'),
                 barThickness: 12,
                 borderRadius: 12,
-                data: selectedWeek.value.data[0]
+                data: selectedWeek.value.data[0],
             },
             {
                 label: 'Profit',
-                backgroundColor: documentStyle.getPropertyValue('--p-primary-200'),
+                backgroundColor:
+                    documentStyle.getPropertyValue('--p-primary-200'),
                 barThickness: 12,
                 borderRadius: 12,
-                data: selectedWeek.value.data[1]
-            }
-        ]
+                data: selectedWeek.value.data[1],
+            },
+        ],
     };
 
     barOptions.value = {
         animation: {
-            duration: 0
+            duration: 0,
         },
         responsive: true,
         maintainAspectRatio: false,
@@ -73,36 +77,36 @@ function initChart() {
                     color: textColor,
                     usePointStyle: true,
                     font: {
-                        weight: 700
+                        weight: 700,
                     },
-                    padding: 28
+                    padding: 28,
                 },
-                position: 'bottom'
-            }
+                position: 'bottom',
+            },
         },
         scales: {
             x: {
                 ticks: {
                     color: textColorSecondary,
                     font: {
-                        weight: 500
-                    }
+                        weight: 500,
+                    },
                 },
                 grid: {
                     display: false,
-                    drawBorder: false
-                }
+                    drawBorder: false,
+                },
             },
             y: {
                 ticks: {
-                    color: textColorSecondary
+                    color: textColorSecondary,
                 },
                 grid: {
                     color: surfaceBorder,
-                    drawBorder: false
-                }
-            }
-        }
+                    drawBorder: false,
+                },
+            },
+        },
     };
 }
 
@@ -111,16 +115,30 @@ watch(
     () => {
         initChart();
     },
-    { immediate: true }
+    { immediate: true },
 );
 </script>
 
 <template>
     <div class="card h-full">
-        <div class="flex items-start justify-between mb-12">
-            <span class="text-surface-900 dark:text-surface-0 text-xl font-semibold">Revenue Overview</span>
-            <Select :options="weeks" v-model="selectedWeek" class="w-40" optionLabel="label" @change="onWeekChange"></Select>
+        <div class="mb-12 flex items-start justify-between">
+            <span
+                class="text-surface-900 dark:text-surface-0 text-xl font-semibold"
+                >Revenue Overview</span
+            >
+            <Select
+                :options="weeks"
+                v-model="selectedWeek"
+                class="w-40"
+                optionLabel="label"
+                @change="onWeekChange"
+            ></Select>
         </div>
-        <Chart type="bar" :height="300" :data="barData" :options="barOptions"></Chart>
+        <Chart
+            type="bar"
+            :height="300"
+            :data="barData"
+            :options="barOptions"
+        ></Chart>
     </div>
 </template>

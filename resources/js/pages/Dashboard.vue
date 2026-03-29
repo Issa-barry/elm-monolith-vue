@@ -1,11 +1,11 @@
 <script setup lang="ts">
+import HeaderWidget from '@/components/dashboard/banking/HeaderWidget.vue';
+import MobileQuickMenu from '@/components/dashboard/banking/MobileQuickMenu.vue';
+import StatsBankingWidget from '@/components/dashboard/banking/StatsBankingWidget.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/vue3';
-import HeaderWidget from '@/components/dashboard/banking/HeaderWidget.vue';
-import StatsBankingWidget from '@/components/dashboard/banking/StatsBankingWidget.vue';
-import MobileQuickMenu from '@/components/dashboard/banking/MobileQuickMenu.vue';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -22,14 +22,11 @@ const breadcrumbs: BreadcrumbItem[] = [
         <div class="flex h-full flex-1 flex-col gap-4 p-4 sm:p-6">
             <HeaderWidget />
 
-            <div class="grid grid-cols-12 gap-8 mt-4">
-                 <StatsBankingWidget />
+            <div class="mt-4 grid grid-cols-12 gap-8">
+                <StatsBankingWidget />
             </div>
 
             <MobileQuickMenu />
-         </div>
-
-         
+        </div>
     </AppLayout>
 </template>
- 

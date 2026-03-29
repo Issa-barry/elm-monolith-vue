@@ -8,11 +8,14 @@ const products = ref([]);
 const salesTableRef = ref(null);
 
 const filterSalesTable = ref({
-    global: { value: null, matchMode: FilterMatchMode.CONTAINS }
+    global: { value: null, matchMode: FilterMatchMode.CONTAINS },
 });
 
 function formatCurrency(value) {
-    return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+    return value.toLocaleString('en-US', {
+        style: 'currency',
+        currency: 'USD',
+    });
 }
 
 function exportCSV() {
@@ -39,41 +42,93 @@ onMounted(() => {
 
 <template>
     <div class="card">
-        <div class="flex flex-col md:flex-row md:items-start md:justify-between mb-4">
-            <div class="text-surface-900 dark:text-surface-0 text-xl font-semibold mb-4 md:mb-0">Recent Sales</div>
+        <div
+            class="mb-4 flex flex-col md:flex-row md:items-start md:justify-between"
+        >
+            <div
+                class="text-surface-900 dark:text-surface-0 mb-4 text-xl font-semibold md:mb-0"
+            >
+                Recent Sales
+            </div>
             <div class="inline-flex items-center">
                 <IconField>
                     <InputIcon class="pi pi-search" />
-                    <InputText type="text" v-model="filterSalesTable.global.value" placeholder="Search" :style="{ borderRadius: '2rem' }" class="w-full" />
+                    <InputText
+                        type="text"
+                        v-model="filterSalesTable.global.value"
+                        placeholder="Search"
+                        :style="{ borderRadius: '2rem' }"
+                        class="w-full"
+                    />
                 </IconField>
-                <Button icon="pi pi-upload" class="mx-4 export-target-button" rounded v-tooltip="'Export'" @click="exportCSV"></Button>
+                <Button
+                    icon="pi pi-upload"
+                    class="export-target-button mx-4"
+                    rounded
+                    v-tooltip="'Export'"
+                    @click="exportCSV"
+                ></Button>
             </div>
         </div>
-        <DataTable ref="salesTableRef" :value="products" dataKey="id" paginator :rows="5" v-model:filters="filterSalesTable">
+        <DataTable
+            ref="salesTableRef"
+            :value="products"
+            dataKey="id"
+            paginator
+            :rows="5"
+            v-model:filters="filterSalesTable"
+        >
             <template #empty> No products found.</template>
-            <Column field="name" header="Name" sortable :headerStyle="{ minWidth: '12rem' }">
+            <Column
+                field="name"
+                header="Name"
+                sortable
+                :headerStyle="{ minWidth: '12rem' }"
+            >
                 <template #body="{ data }">
                     {{ data.name }}
                 </template>
             </Column>
-            <Column field="category" header="Category" sortable :headerStyle="{ minWidth: '10rem' }">
+            <Column
+                field="category"
+                header="Category"
+                sortable
+                :headerStyle="{ minWidth: '10rem' }"
+            >
                 <template #body="{ data }">
                     {{ data.category }}
                 </template>
             </Column>
-            <Column field="price" header="Price" sortable :headerStyle="{ minWidth: '10rem' }">
+            <Column
+                field="price"
+                header="Price"
+                sortable
+                :headerStyle="{ minWidth: '10rem' }"
+            >
                 <template #body="{ data }">
                     {{ formatCurrency(data.price) }}
                 </template>
             </Column>
-            <Column field="inventoryStatus" header="Status" sortable :headerStyle="{ minWidth: '10rem' }">
+            <Column
+                field="inventoryStatus"
+                header="Status"
+                sortable
+                :headerStyle="{ minWidth: '10rem' }"
+            >
                 <template #body="{ data }">
-                    <Tag :severity="getBadgeSeverity(data.inventoryStatus)">{{ data.inventoryStatus }}</Tag>
+                    <Tag :severity="getBadgeSeverity(data.inventoryStatus)">{{
+                        data.inventoryStatus
+                    }}</Tag>
                 </template>
             </Column>
             <Column class="text-center">
                 <template #body>
-                    <Button type="button" icon="pi pi-search" outlined rounded></Button>
+                    <Button
+                        type="button"
+                        icon="pi pi-search"
+                        outlined
+                        rounded
+                    ></Button>
                 </template>
             </Column>
         </DataTable>

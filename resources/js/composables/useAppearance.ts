@@ -1,4 +1,3 @@
-import { onMounted, ref } from 'vue';
 import {
     applyAppThemeColors,
     applyPrimeVuePrimaryColor,
@@ -19,6 +18,7 @@ import {
     type PrimeVueSurfaceName,
     type PrimeVueThemeName,
 } from '@/lib/primevue-theme';
+import { onMounted, ref } from 'vue';
 
 type Appearance = 'light' | 'dark' | 'system';
 
@@ -147,15 +147,18 @@ export function useAppearance() {
         }
 
         const savedPrimeVueTheme = getStoredPrimeVueTheme();
-        primeVueTheme.value = savedPrimeVueTheme ?? resolvePrimeVueThemeFromEnv();
+        primeVueTheme.value =
+            savedPrimeVueTheme ?? resolvePrimeVueThemeFromEnv();
 
         const savedPrimeVuePrimary = getStoredPrimeVuePrimary();
         primeVuePrimary.value =
-            savedPrimeVuePrimary ?? resolvePrimeVuePrimaryFromEnv(primeVueTheme.value);
+            savedPrimeVuePrimary ??
+            resolvePrimeVuePrimaryFromEnv(primeVueTheme.value);
 
         const savedPrimeVueSurface = getStoredPrimeVueSurface();
         primeVueSurface.value =
-            savedPrimeVueSurface ?? resolvePrimeVueSurfaceFromEnv(primeVueTheme.value);
+            savedPrimeVueSurface ??
+            resolvePrimeVueSurfaceFromEnv(primeVueTheme.value);
 
         syncAppThemeColors();
     });

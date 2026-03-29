@@ -1,16 +1,27 @@
 <script setup lang="ts">
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
-    DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-    DropdownMenuSeparator, DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, Car, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    Car,
+    MoreVertical,
+    Pencil,
+    Plus,
+    Search,
+    Trash2,
+} from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import IconField from 'primevue/iconfield';
@@ -46,17 +57,20 @@ const toast = useToast();
 
 const search = ref('');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => { filters.value.global.value = val; });
+watch(search, (val) => {
+    filters.value.global.value = val;
+});
 
 const mobileFiltered = computed(() => {
     const q = search.value.trim().toLowerCase();
     if (!q) return props.vehicules;
-    return props.vehicules.filter(v =>
-        v.nom_vehicule.toLowerCase().includes(q) ||
-        v.immatriculation.toLowerCase().includes(q) ||
-        v.type_label.toLowerCase().includes(q) ||
-        (v.proprietaire_nom ?? '').toLowerCase().includes(q) ||
-        (v.livreur_nom ?? '').toLowerCase().includes(q),
+    return props.vehicules.filter(
+        (v) =>
+            v.nom_vehicule.toLowerCase().includes(q) ||
+            v.immatriculation.toLowerCase().includes(q) ||
+            v.type_label.toLowerCase().includes(q) ||
+            (v.proprietaire_nom ?? '').toLowerCase().includes(q) ||
+            (v.livreur_nom ?? '').toLowerCase().includes(q),
     );
 });
 
@@ -75,12 +89,13 @@ function confirmDelete(v: Vehicule) {
         acceptClass: 'p-button-danger',
         accept: () => {
             router.delete(`/vehicules/${v.id}`, {
-                onSuccess: () => toast.add({
-                    severity: 'success',
-                    summary: 'Supprimé',
-                    detail: `${v.nom_vehicule} a été supprimé.`,
-                    life: 3000,
-                }),
+                onSuccess: () =>
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Supprimé',
+                        detail: `${v.nom_vehicule} a été supprimé.`,
+                        life: 3000,
+                    }),
             });
         },
     });
@@ -91,18 +106,24 @@ function confirmDelete(v: Vehicule) {
     <Head title="Véhicules" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-
         <!-- ── Mobile (< sm) ──────────────────────────────────────────────── -->
         <div class="flex flex-col sm:hidden">
-
             <!-- Sticky header -->
-            <div class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-3 py-2">
+            <div
+                class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-3 py-2"
+            >
                 <Link href="/dashboard">
-                    <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        class="h-8 w-8 shrink-0"
+                    >
                         <ArrowLeft class="h-4 w-4" />
                     </Button>
                 </Link>
-                <span class="flex-1 text-center text-sm font-semibold">Véhicules</span>
+                <span class="flex-1 text-center text-sm font-semibold"
+                    >Véhicules</span
+                >
                 <Link v-if="can('vehicules.create')" href="/vehicules/create">
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
@@ -115,12 +136,14 @@ function confirmDelete(v: Vehicule) {
             <!-- Search -->
             <div class="px-3 py-2">
                 <div class="relative">
-                    <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
                     <input
                         v-model="search"
                         type="search"
                         placeholder="Rechercher..."
-                        class="w-full rounded-lg border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                        class="w-full rounded-lg border bg-background py-2 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
                     />
                 </div>
             </div>
@@ -133,7 +156,9 @@ function confirmDelete(v: Vehicule) {
                     class="flex items-center gap-3.5 px-4 py-3.5 transition-colors active:bg-muted/40"
                 >
                     <!-- Photo or icon -->
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30">
+                    <div
+                        class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30"
+                    >
                         <img
                             v-if="v.photo_url"
                             :src="v.photo_url"
@@ -145,9 +170,15 @@ function confirmDelete(v: Vehicule) {
 
                     <!-- Info -->
                     <div class="min-w-0 flex-1">
-                        <div class="truncate font-medium text-sm">{{ v.nom_vehicule }}</div>
-                        <div class="font-mono text-xs text-muted-foreground">{{ v.immatriculation }}</div>
-                        <span class="mt-0.5 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium">
+                        <div class="truncate text-sm font-medium">
+                            {{ v.nom_vehicule }}
+                        </div>
+                        <div class="font-mono text-xs text-muted-foreground">
+                            {{ v.immatriculation }}
+                        </div>
+                        <span
+                            class="mt-0.5 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium"
+                        >
                             {{ v.type_label }}
                         </span>
                     </div>
@@ -155,28 +186,47 @@ function confirmDelete(v: Vehicule) {
                     <!-- Status dot -->
                     <StatusDot
                         :label="v.is_active ? 'Actif' : 'Inactif'"
-                        :dot-class="v.is_active ? 'bg-emerald-500' : 'bg-zinc-400 dark:bg-zinc-500'"
+                        :dot-class="
+                            v.is_active
+                                ? 'bg-emerald-500'
+                                : 'bg-zinc-400 dark:bg-zinc-500'
+                        "
                         class="shrink-0 text-xs text-muted-foreground"
                     />
 
                     <!-- Dropdown -->
                     <DropdownMenu>
                         <DropdownMenuTrigger as-child>
-                            <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                class="h-8 w-8 shrink-0"
+                            >
                                 <MoreVertical class="h-4 w-4" />
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" class="w-44">
-                            <DropdownMenuItem v-if="can('vehicules.update')" as-child>
-                                <Link :href="`/vehicules/${v.id}/edit`" class="flex items-center gap-2 w-full">
+                            <DropdownMenuItem
+                                v-if="can('vehicules.update')"
+                                as-child
+                            >
+                                <Link
+                                    :href="`/vehicules/${v.id}/edit`"
+                                    class="flex w-full items-center gap-2"
+                                >
                                     <Pencil class="h-4 w-4" />
                                     Modifier
                                 </Link>
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator v-if="can('vehicules.update') && can('vehicules.delete')" />
+                            <DropdownMenuSeparator
+                                v-if="
+                                    can('vehicules.update') &&
+                                    can('vehicules.delete')
+                                "
+                            />
                             <DropdownMenuItem
                                 v-if="can('vehicules.delete')"
-                                class="text-destructive focus:text-destructive cursor-pointer"
+                                class="cursor-pointer text-destructive focus:text-destructive"
                                 @click="confirmDelete(v)"
                             >
                                 <Trash2 class="h-4 w-4" />
@@ -188,7 +238,10 @@ function confirmDelete(v: Vehicule) {
             </div>
 
             <!-- Empty state -->
-            <div v-if="mobileFiltered.length === 0" class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+            <div
+                v-if="mobileFiltered.length === 0"
+                class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+            >
                 <Car class="h-12 w-12 opacity-30" />
                 <p class="text-sm">Aucun véhicule trouvé.</p>
                 <Link v-if="can('vehicules.create')" href="/vehicules/create">
@@ -201,14 +254,17 @@ function confirmDelete(v: Vehicule) {
         </div>
 
         <!-- ── Desktop (≥ sm) ─────────────────────────────────────────────── -->
-        <div class="hidden sm:flex flex-col gap-6 p-6">
-
+        <div class="hidden flex-col gap-6 p-6 sm:flex">
             <!-- En-tête -->
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">Véhicules</h1>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Véhicules
+                    </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ vehicules.length }} véhicule{{ vehicules.length !== 1 ? 's' : '' }}
+                        {{ vehicules.length }} véhicule{{
+                            vehicules.length !== 1 ? 's' : ''
+                        }}
                     </p>
                 </div>
                 <Link v-if="can('vehicules.create')" href="/vehicules/create">
@@ -225,7 +281,13 @@ function confirmDelete(v: Vehicule) {
                     :value="vehicules"
                     :paginator="vehicules.length > 20"
                     :rows="20"
-                    :global-filter-fields="['nom_vehicule', 'immatriculation', 'type_label', 'proprietaire_nom', 'livreur_nom']"
+                    :global-filter-fields="[
+                        'nom_vehicule',
+                        'immatriculation',
+                        'type_label',
+                        'proprietaire_nom',
+                        'livreur_nom',
+                    ]"
                     v-model:filters="filters"
                     data-key="id"
                     striped-rows
@@ -242,83 +304,164 @@ function confirmDelete(v: Vehicule) {
                         <div class="flex items-center gap-3">
                             <IconField class="max-w-sm flex-1">
                                 <InputIcon class="pointer-events-none">
-                                    <Search class="h-4 w-4 text-muted-foreground" />
+                                    <Search
+                                        class="h-4 w-4 text-muted-foreground"
+                                    />
                                 </InputIcon>
-                                <InputText v-model="search" placeholder="Rechercher..." class="w-full text-sm" />
+                                <InputText
+                                    v-model="search"
+                                    placeholder="Rechercher..."
+                                    class="w-full text-sm"
+                                />
                             </IconField>
-                            <span class="text-xs text-muted-foreground">{{ vehicules.length }} résultat{{ vehicules.length !== 1 ? 's' : '' }}</span>
+                            <span class="text-xs text-muted-foreground"
+                                >{{ vehicules.length }} résultat{{
+                                    vehicules.length !== 1 ? 's' : ''
+                                }}</span
+                            >
                         </div>
                     </template>
 
                     <!-- Véhicule -->
-                    <Column field="nom_vehicule" header="Véhicule" sortable style="min-width: 320px">
+                    <Column
+                        field="nom_vehicule"
+                        header="Véhicule"
+                        sortable
+                        style="min-width: 320px"
+                    >
                         <template #body="{ data }">
                             <div class="flex items-center gap-3">
-                                <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30">
+                                <div
+                                    class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30"
+                                >
                                     <img
                                         v-if="data.photo_url"
                                         :src="data.photo_url"
                                         :alt="data.nom_vehicule"
                                         class="h-full w-full object-cover"
                                     />
-                                    <Car v-else class="h-5 w-5 text-muted-foreground" />
+                                    <Car
+                                        v-else
+                                        class="h-5 w-5 text-muted-foreground"
+                                    />
                                 </div>
                                 <div>
-                                    <div class="font-medium">{{ data.nom_vehicule }}</div>
-                                    <div class="font-mono text-xs text-muted-foreground">{{ data.immatriculation }}</div>
+                                    <div class="font-medium">
+                                        {{ data.nom_vehicule }}
+                                    </div>
+                                    <div
+                                        class="font-mono text-xs text-muted-foreground"
+                                    >
+                                        {{ data.immatriculation }}
+                                    </div>
                                 </div>
                             </div>
                         </template>
                     </Column>
 
                     <!-- Type -->
-                    <Column field="type_label" header="Type" sortable style="width: 140px">
+                    <Column
+                        field="type_label"
+                        header="Type"
+                        sortable
+                        style="width: 140px"
+                    >
                         <template #body="{ data }">
-                            <span class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
+                            <span
+                                class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                            >
                                 {{ data.type_label }}
                             </span>
                         </template>
                     </Column>
 
                     <!-- Capacité -->
-                    <Column field="capacite_packs" header="Capacité" sortable style="width: 130px">
+                    <Column
+                        field="capacite_packs"
+                        header="Capacité"
+                        sortable
+                        style="width: 130px"
+                    >
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground whitespace-nowrap">
-                                {{ data.capacite_packs != null ? `${data.capacite_packs} packs` : '—' }}
+                            <span
+                                class="whitespace-nowrap text-muted-foreground tabular-nums"
+                            >
+                                {{
+                                    data.capacite_packs != null
+                                        ? `${data.capacite_packs} packs`
+                                        : '—'
+                                }}
                             </span>
                         </template>
                     </Column>
 
                     <!-- Propriétaire -->
-                    <Column field="proprietaire_nom" header="Propriétaire" style="min-width: 180px">
+                    <Column
+                        field="proprietaire_nom"
+                        header="Propriétaire"
+                        style="min-width: 180px"
+                    >
                         <template #body="{ data }">
                             <div class="leading-tight">
-                                <div class="text-muted-foreground">{{ data.proprietaire_nom ?? '�' }}</div>
-                                <div v-if="data.proprietaire_telephone" class="mt-1 text-xs tabular-nums text-muted-foreground/80">
-                                    {{ formatPhoneDisplay(data.proprietaire_telephone, data.proprietaire_code_phone_pays) }}
+                                <div class="text-muted-foreground">
+                                    {{ data.proprietaire_nom ?? '�' }}
+                                </div>
+                                <div
+                                    v-if="data.proprietaire_telephone"
+                                    class="mt-1 text-xs text-muted-foreground/80 tabular-nums"
+                                >
+                                    {{
+                                        formatPhoneDisplay(
+                                            data.proprietaire_telephone,
+                                            data.proprietaire_code_phone_pays,
+                                        )
+                                    }}
                                 </div>
                             </div>
                         </template>
                     </Column>
 
                     <!-- Livreur -->
-                    <Column field="livreur_nom" header="Livreur" style="min-width: 180px">
+                    <Column
+                        field="livreur_nom"
+                        header="Livreur"
+                        style="min-width: 180px"
+                    >
                         <template #body="{ data }">
                             <div class="leading-tight">
-                                <div class="text-muted-foreground">{{ data.livreur_nom ?? '�' }}</div>
-                                <div v-if="data.livreur_telephone" class="mt-1 text-xs tabular-nums text-muted-foreground/80">
-                                    {{ formatPhoneDisplay(data.livreur_telephone, data.livreur_code_phone_pays) }}
+                                <div class="text-muted-foreground">
+                                    {{ data.livreur_nom ?? '�' }}
+                                </div>
+                                <div
+                                    v-if="data.livreur_telephone"
+                                    class="mt-1 text-xs text-muted-foreground/80 tabular-nums"
+                                >
+                                    {{
+                                        formatPhoneDisplay(
+                                            data.livreur_telephone,
+                                            data.livreur_code_phone_pays,
+                                        )
+                                    }}
                                 </div>
                             </div>
                         </template>
                     </Column>
 
                     <!-- Statut -->
-                    <Column field="is_active" header="Statut" sortable style="width: 110px">
+                    <Column
+                        field="is_active"
+                        header="Statut"
+                        sortable
+                        style="width: 110px"
+                    >
                         <template #body="{ data }">
                             <StatusDot
                                 :label="data.is_active ? 'Actif' : 'Inactif'"
-                                :dot-class="data.is_active ? 'bg-emerald-500' : 'bg-zinc-400 dark:bg-zinc-500'"
+                                :dot-class="
+                                    data.is_active
+                                        ? 'bg-emerald-500'
+                                        : 'bg-zinc-400 dark:bg-zinc-500'
+                                "
                                 class="text-muted-foreground"
                             />
                         </template>
@@ -330,21 +473,39 @@ function confirmDelete(v: Vehicule) {
                             <div class="flex justify-end">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger as-child>
-                                        <Button variant="ghost" size="icon" class="h-8 w-8">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-8 w-8"
+                                        >
                                             <MoreVertical class="h-4 w-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" class="w-44">
-                                        <DropdownMenuItem v-if="can('vehicules.update')" as-child>
-                                            <Link :href="`/vehicules/${data.id}/edit`" class="flex items-center gap-2 w-full">
+                                    <DropdownMenuContent
+                                        align="end"
+                                        class="w-44"
+                                    >
+                                        <DropdownMenuItem
+                                            v-if="can('vehicules.update')"
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="`/vehicules/${data.id}/edit`"
+                                                class="flex w-full items-center gap-2"
+                                            >
                                                 <Pencil class="h-4 w-4" />
                                                 Modifier
                                             </Link>
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator v-if="can('vehicules.update') && can('vehicules.delete')" />
+                                        <DropdownMenuSeparator
+                                            v-if="
+                                                can('vehicules.update') &&
+                                                can('vehicules.delete')
+                                            "
+                                        />
                                         <DropdownMenuItem
                                             v-if="can('vehicules.delete')"
-                                            class="text-destructive focus:text-destructive cursor-pointer"
+                                            class="cursor-pointer text-destructive focus:text-destructive"
                                             @click="confirmDelete(data)"
                                         >
                                             <Trash2 class="h-4 w-4" />
@@ -358,10 +519,15 @@ function confirmDelete(v: Vehicule) {
 
                     <!-- État vide -->
                     <template #empty>
-                        <div class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                        <div
+                            class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+                        >
                             <Car class="h-12 w-12 opacity-30" />
                             <p class="text-sm">Aucun véhicule trouvé.</p>
-                            <Link v-if="can('vehicules.create')" href="/vehicules/create">
+                            <Link
+                                v-if="can('vehicules.create')"
+                                href="/vehicules/create"
+                            >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />
                                     Ajouter le premier véhicule
@@ -374,4 +540,3 @@ function confirmDelete(v: Vehicule) {
         </div>
     </AppLayout>
 </template>
-

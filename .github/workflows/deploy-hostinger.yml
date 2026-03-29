@@ -46,10 +46,15 @@ jobs:
       - name: Build frontend assets
         run: npm run build
 
-      - name: Start SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+      - name: Prepare SSH private key
+        env:
+          HOSTINGER_SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s' "$HOSTINGER_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/hostinger_key
+          chmod 600 ~/.ssh/hostinger_key
+          ssh-keygen -y -f ~/.ssh/hostinger_key > /dev/null
 
       - name: Add Hostinger host key
         run: |
@@ -68,7 +73,7 @@ jobs:
             --exclude 'test-results/' \
             --exclude 'storage/' \
             --exclude '.env' \
-            -e "ssh -p ${{ secrets.HOSTINGER_SSH_PORT }}" \
+            -e "ssh -i ~/.ssh/hostinger_key -o StrictHostKeyChecking=yes -p ${{ secrets.HOSTINGER_SSH_PORT }}" \
             ./ "${{ secrets.HOSTINGER_SSH_USER }}@${{ secrets.HOSTINGER_HOST }}:${{ secrets.HOSTINGER_DEPLOY_PATH }}/"
 
       - name: Run remote Laravel commands
@@ -78,7 +83,7 @@ jobs:
           HOSTINGER_USER: ${{ secrets.HOSTINGER_SSH_USER }}
           HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
         run: |
-          ssh -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash -s" <<'EOF'
+          ssh -i ~/.ssh/hostinger_key -o StrictHostKeyChecking=yes -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash -s" <<'EOF'
           set -euo pipefail
 
           cd "$DEPLOY_PATH"

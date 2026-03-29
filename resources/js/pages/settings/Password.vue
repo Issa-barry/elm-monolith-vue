@@ -46,7 +46,9 @@ const breadcrumbItems: BreadcrumbItem[] = [
                     v-slot="{ errors, processing, recentlySuccessful }"
                 >
                     <div class="grid gap-2">
-                        <Label for="current_password">Mot de passe actuel</Label>
+                        <Label for="current_password"
+                            >Mot de passe actuel</Label
+                        >
                         <Input
                             id="current_password"
                             name="current_password"

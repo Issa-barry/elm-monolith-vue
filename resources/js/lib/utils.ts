@@ -33,7 +33,10 @@ const PHONE_RULES: PhoneRule[] = [
     { countryCode: '231', byLength: { 8: [2, 3, 3] } }, // Liberia
     { countryCode: '232', byLength: { 8: [2, 3, 3] } }, // Sierra Leone
     { countryCode: '971', byLength: { 9: [2, 3, 4] } }, // Émirats arabes unis
-    { countryCode: '33', byLength: { 9: [1, 2, 2, 2, 2], 10: [2, 2, 2, 2, 2] } }, // France
+    {
+        countryCode: '33',
+        byLength: { 9: [1, 2, 2, 2, 2], 10: [2, 2, 2, 2, 2] },
+    }, // France
     { countryCode: '86', byLength: { 11: [3, 4, 4] } }, // Chine
     { countryCode: '91', byLength: { 10: [5, 5] } }, // Inde
 ];
@@ -80,7 +83,8 @@ function detectPhoneRule(digits: string) {
 }
 
 function formatLocalDigits(digits: string, rule?: PhoneRule) {
-    const pattern = (rule?.byLength[digits.length]) ?? COMMON_LOCAL_PATTERNS[digits.length];
+    const pattern =
+        rule?.byLength[digits.length] ?? COMMON_LOCAL_PATTERNS[digits.length];
     return groupDigits(digits, pattern);
 }
 
@@ -98,7 +102,10 @@ function normalizeLocalDigitsWithRule(localDigits: string, rule?: PhoneRule) {
     return localDigits;
 }
 
-export function formatPhoneDisplay(value: string | null | undefined, defaultCountryDialCode?: string | null) {
+export function formatPhoneDisplay(
+    value: string | null | undefined,
+    defaultCountryDialCode?: string | null,
+) {
     if (!value) return '\u2014';
 
     const raw = value.trim();
@@ -121,7 +128,9 @@ export function formatPhoneDisplay(value: string | null | undefined, defaultCoun
 
     const countryCode = sanitizeCountryCode(defaultCountryDialCode);
     if (countryCode) {
-        const rule = PHONE_RULES.find((item) => item.countryCode === countryCode);
+        const rule = PHONE_RULES.find(
+            (item) => item.countryCode === countryCode,
+        );
         const localDigits = normalizeLocalDigitsWithRule(digits, rule);
 
         if (rule) {

@@ -1,6 +1,12 @@
+import type {
+    AppPageProps,
+    AppRole,
+    CrudAction,
+    PermissionKey,
+    Resource,
+} from '@/types';
 import { usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
-import type { AppPageProps, AppRole, CrudAction, PermissionKey, Resource } from '@/types';
 
 export function usePermissions() {
     const page = usePage<AppPageProps>();

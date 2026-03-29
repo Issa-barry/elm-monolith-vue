@@ -1,12 +1,23 @@
 <script setup lang="ts">
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, BadgeCheck, Car, Clock, HandCoins, Hourglass, MapPin, Search, User, X } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    BadgeCheck,
+    Car,
+    Clock,
+    HandCoins,
+    Hourglass,
+    MapPin,
+    Search,
+    User,
+    X,
+} from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
@@ -63,7 +74,10 @@ interface Totaux {
     montant_versees: number;
 }
 
-interface ModePaiementOption { value: string; label: string }
+interface ModePaiementOption {
+    value: string;
+    label: string;
+}
 
 // -- Props ---------------------------------------------------------------------
 const props = defineProps<{
@@ -82,42 +96,49 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // -- Filtres -------------------------------------------------------------------
 const filtres = [
-    { value: 'tous',       label: 'Toutes' },
+    { value: 'tous', label: 'Toutes' },
     { value: 'en_attente', label: 'En attente' },
-    { value: 'partielle',  label: 'Partielles' },
-    { value: 'versee',     label: 'Versees' },
-    { value: 'annulee',    label: 'Annulees' },
+    { value: 'partielle', label: 'Partielles' },
+    { value: 'versee', label: 'Versees' },
+    { value: 'annulee', label: 'Annulees' },
 ];
 
 const periodes = [
     { value: 'today', label: "Aujourd'hui" },
-    { value: 'week',  label: 'Cette semaine' },
+    { value: 'week', label: 'Cette semaine' },
     { value: 'month', label: 'Ce mois' },
-    { value: 'all',   label: 'Tout' },
+    { value: 'all', label: 'Tout' },
 ];
 
 const filtreStatut = ref('tous');
-const search       = ref('');
+const search = ref('');
 
 function setPeriode(p: string) {
-    router.get('/commissions', { periode: p }, { preserveScroll: true, replace: true });
+    router.get(
+        '/commissions',
+        { periode: p },
+        { preserveScroll: true, replace: true },
+    );
 }
 
 const commissionsFiltrees = computed(() => {
     let list = props.commissions;
 
     if (filtreStatut.value !== 'tous') {
-        list = list.filter(c => c.statut === filtreStatut.value);
+        list = list.filter((c) => c.statut === filtreStatut.value);
     }
 
     const q = search.value.toLowerCase().trim();
     if (q) {
-        list = list.filter(c =>
-            (c.commande_reference && c.commande_reference.toLowerCase().includes(q)) ||
-            (c.vehicule_nom       && c.vehicule_nom.toLowerCase().includes(q)) ||
-            (c.immatriculation    && c.immatriculation.toLowerCase().includes(q)) ||
-            (c.livreur_nom        && c.livreur_nom.toLowerCase().includes(q)) ||
-            (c.site_nom           && c.site_nom.toLowerCase().includes(q))
+        list = list.filter(
+            (c) =>
+                (c.commande_reference &&
+                    c.commande_reference.toLowerCase().includes(q)) ||
+                (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
+                (c.immatriculation &&
+                    c.immatriculation.toLowerCase().includes(q)) ||
+                (c.livreur_nom && c.livreur_nom.toLowerCase().includes(q)) ||
+                (c.site_nom && c.site_nom.toLowerCase().includes(q)),
         );
     }
 
@@ -131,30 +152,33 @@ const mobileFiltered = computed(() => {
     const q = mobileSearch.value.toLowerCase().trim();
     let list = props.commissions;
     if (filtreStatut.value !== 'tous') {
-        list = list.filter(c => c.statut === filtreStatut.value);
+        list = list.filter((c) => c.statut === filtreStatut.value);
     }
     if (!q) return list;
-    return list.filter(c =>
-        (c.commande_reference && c.commande_reference.toLowerCase().includes(q)) ||
-        (c.vehicule_nom       && c.vehicule_nom.toLowerCase().includes(q)) ||
-        (c.livreur_nom        && c.livreur_nom.toLowerCase().includes(q)) ||
-        (c.immatriculation    && c.immatriculation.toLowerCase().includes(q))
+    return list.filter(
+        (c) =>
+            (c.commande_reference &&
+                c.commande_reference.toLowerCase().includes(q)) ||
+            (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
+            (c.livreur_nom && c.livreur_nom.toLowerCase().includes(q)) ||
+            (c.immatriculation && c.immatriculation.toLowerCase().includes(q)),
     );
 });
 
 // -- Couleurs statut -----------------------------------------------------------
 const statutColor: Record<string, string> = {
-    en_attente: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-    partielle:  'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    versee:     'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    annulee:    'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
+    en_attente:
+        'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+    partielle: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+    versee: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+    annulee: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
 };
 
 const statutDotColor: Record<string, string> = {
     en_attente: 'bg-amber-500',
-    partielle:  'bg-blue-500',
-    versee:     'bg-emerald-500',
-    annulee:    'bg-zinc-400 dark:bg-zinc-500',
+    partielle: 'bg-blue-500',
+    versee: 'bg-emerald-500',
+    annulee: 'bg-zinc-400 dark:bg-zinc-500',
 };
 
 // -- Formatage -----------------------------------------------------------------
@@ -175,37 +199,41 @@ function formatCompact(val: number): string {
 }
 
 // -- Dialog versement ----------------------------------------------------------
-const dialogVisible     = ref(false);
-const commissionActive  = ref<CommissionItem | null>(null);
+const dialogVisible = ref(false);
+const commissionActive = ref<CommissionItem | null>(null);
 const modePaiementLivreur = ref('especes');
 const dateVersementLivreur = ref(new Date().toISOString().slice(0, 10));
 const modePaiementProprietaire = ref('especes');
 const dateVersementProprietaire = ref(new Date().toISOString().slice(0, 10));
 
 const versementForm = useForm({
-    montant_livreur:       0 as number | null,
-    montant_proprietaire:  0 as number | null,
-    date_versement:        new Date().toISOString().slice(0, 10),
-    mode_paiement:         'especes',
-    note:                  null as string | null,
+    montant_livreur: 0 as number | null,
+    montant_proprietaire: 0 as number | null,
+    date_versement: new Date().toISOString().slice(0, 10),
+    mode_paiement: 'especes',
+    note: null as string | null,
 });
 
-const montantTotalSaisi = computed(() =>
-    (versementForm.montant_livreur ?? 0) + (versementForm.montant_proprietaire ?? 0),
+const montantTotalSaisi = computed(
+    () =>
+        (versementForm.montant_livreur ?? 0) +
+        (versementForm.montant_proprietaire ?? 0),
 );
 
-const canSubmitLivreur = computed(() =>
-    (commissionActive.value?.montant_restant_livreur ?? 0) > 0
-    && (versementForm.montant_livreur ?? 0) > 0
-    && Boolean(modePaiementLivreur.value)
-    && Boolean(dateVersementLivreur.value),
+const canSubmitLivreur = computed(
+    () =>
+        (commissionActive.value?.montant_restant_livreur ?? 0) > 0 &&
+        (versementForm.montant_livreur ?? 0) > 0 &&
+        Boolean(modePaiementLivreur.value) &&
+        Boolean(dateVersementLivreur.value),
 );
 
-const canSubmitProprietaire = computed(() =>
-    (commissionActive.value?.montant_restant_proprietaire ?? 0) > 0
-    && (versementForm.montant_proprietaire ?? 0) > 0
-    && Boolean(modePaiementProprietaire.value)
-    && Boolean(dateVersementProprietaire.value),
+const canSubmitProprietaire = computed(
+    () =>
+        (commissionActive.value?.montant_restant_proprietaire ?? 0) > 0 &&
+        (versementForm.montant_proprietaire ?? 0) > 0 &&
+        Boolean(modePaiementProprietaire.value) &&
+        Boolean(dateVersementProprietaire.value),
 );
 
 function openDialog(c: CommissionItem) {
@@ -228,52 +256,86 @@ function openDialog(c: CommissionItem) {
 function submitVersementLivreur() {
     if (!commissionActive.value) return;
     if (!canSubmitLivreur.value) {
-        versementForm.setError('montant_livreur', 'Saisissez un montant livreur valide.');
+        versementForm.setError(
+            'montant_livreur',
+            'Saisissez un montant livreur valide.',
+        );
         return;
     }
     if (!modePaiementLivreur.value) {
-        versementForm.setError('mode_paiement', 'Choisissez le mode de paiement du livreur.');
+        versementForm.setError(
+            'mode_paiement',
+            'Choisissez le mode de paiement du livreur.',
+        );
         return;
     }
     if (!dateVersementLivreur.value) {
-        versementForm.setError('date_versement', 'Choisissez la date de versement du livreur.');
+        versementForm.setError(
+            'date_versement',
+            'Choisissez la date de versement du livreur.',
+        );
         return;
     }
 
-    versementForm.clearErrors('montant_livreur', 'mode_paiement', 'date_versement');
+    versementForm.clearErrors(
+        'montant_livreur',
+        'mode_paiement',
+        'date_versement',
+    );
     versementForm.mode_paiement = modePaiementLivreur.value;
     versementForm.date_versement = dateVersementLivreur.value;
     const previousMontantProprietaire = versementForm.montant_proprietaire;
     versementForm.montant_proprietaire = 0;
     versementForm.post(`/commissions/${commissionActive.value.id}/versements`, {
-        onSuccess: () => { dialogVisible.value = false; },
-        onFinish: () => { versementForm.montant_proprietaire = previousMontantProprietaire; },
+        onSuccess: () => {
+            dialogVisible.value = false;
+        },
+        onFinish: () => {
+            versementForm.montant_proprietaire = previousMontantProprietaire;
+        },
     });
 }
 
 function submitVersementProprietaire() {
     if (!commissionActive.value) return;
     if (!canSubmitProprietaire.value) {
-        versementForm.setError('montant_proprietaire', 'Saisissez un montant proprietaire valide.');
+        versementForm.setError(
+            'montant_proprietaire',
+            'Saisissez un montant proprietaire valide.',
+        );
         return;
     }
     if (!modePaiementProprietaire.value) {
-        versementForm.setError('mode_paiement', 'Choisissez le mode de paiement du proprietaire.');
+        versementForm.setError(
+            'mode_paiement',
+            'Choisissez le mode de paiement du proprietaire.',
+        );
         return;
     }
     if (!dateVersementProprietaire.value) {
-        versementForm.setError('date_versement', 'Choisissez la date de versement du proprietaire.');
+        versementForm.setError(
+            'date_versement',
+            'Choisissez la date de versement du proprietaire.',
+        );
         return;
     }
 
-    versementForm.clearErrors('montant_proprietaire', 'mode_paiement', 'date_versement');
+    versementForm.clearErrors(
+        'montant_proprietaire',
+        'mode_paiement',
+        'date_versement',
+    );
     versementForm.mode_paiement = modePaiementProprietaire.value;
     versementForm.date_versement = dateVersementProprietaire.value;
     const previousMontantLivreur = versementForm.montant_livreur;
     versementForm.montant_livreur = 0;
     versementForm.post(`/commissions/${commissionActive.value.id}/versements`, {
-        onSuccess: () => { dialogVisible.value = false; },
-        onFinish: () => { versementForm.montant_livreur = previousMontantLivreur; },
+        onSuccess: () => {
+            dialogVisible.value = false;
+        },
+        onFinish: () => {
+            versementForm.montant_livreur = previousMontantLivreur;
+        },
     });
 }
 </script>
@@ -282,13 +344,16 @@ function submitVersementProprietaire() {
     <Head title="Commissions" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-
         <!-- ── MOBILE VIEW ─────────────────────────────────────────────────── -->
         <div class="flex flex-col sm:hidden">
-
             <!-- Sticky header -->
-            <div class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3">
-                <Link href="/dashboard" class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground">
+            <div
+                class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3"
+            >
+                <Link
+                    href="/dashboard"
+                    class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+                >
                     <ArrowLeft class="h-5 w-5" />
                 </Link>
                 <span class="text-base font-semibold">Commissions</span>
@@ -298,35 +363,67 @@ function submitVersementProprietaire() {
             <!-- KPI cards -->
             <div class="grid grid-cols-2 gap-3 p-4">
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Restant à verser</p>
-                    <p class="mt-1 text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ formatCompact(totaux.total_a_verser) }}</p>
+                    <p class="text-xs text-muted-foreground">
+                        Restant à verser
+                    </p>
+                    <p
+                        class="mt-1 text-lg font-bold text-amber-600 tabular-nums dark:text-amber-400"
+                    >
+                        {{ formatCompact(totaux.total_a_verser) }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
                     <p class="text-xs text-muted-foreground">En attente</p>
-                    <p class="mt-1 text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ formatCompact(totaux.montant_en_attente) }}</p>
-                    <p class="text-xs text-muted-foreground">{{ totaux.nb_en_attente }} commission{{ totaux.nb_en_attente > 1 ? 's' : '' }}</p>
+                    <p
+                        class="mt-1 text-lg font-bold text-amber-600 tabular-nums dark:text-amber-400"
+                    >
+                        {{ formatCompact(totaux.montant_en_attente) }}
+                    </p>
+                    <p class="text-xs text-muted-foreground">
+                        {{ totaux.nb_en_attente }} commission{{
+                            totaux.nb_en_attente > 1 ? 's' : ''
+                        }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
                     <p class="text-xs text-muted-foreground">Partielles</p>
-                    <p class="mt-1 text-lg font-bold tabular-nums text-blue-600 dark:text-blue-400">{{ formatCompact(totaux.montant_partielles) }}</p>
-                    <p class="text-xs text-muted-foreground">{{ totaux.nb_partielles }} commission{{ totaux.nb_partielles > 1 ? 's' : '' }}</p>
+                    <p
+                        class="mt-1 text-lg font-bold text-blue-600 tabular-nums dark:text-blue-400"
+                    >
+                        {{ formatCompact(totaux.montant_partielles) }}
+                    </p>
+                    <p class="text-xs text-muted-foreground">
+                        {{ totaux.nb_partielles }} commission{{
+                            totaux.nb_partielles > 1 ? 's' : ''
+                        }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
                     <p class="text-xs text-muted-foreground">Versées</p>
-                    <p class="mt-1 text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ formatCompact(totaux.montant_versees) }}</p>
-                    <p class="text-xs text-muted-foreground">{{ totaux.nb_versees }} commission{{ totaux.nb_versees > 1 ? 's' : '' }}</p>
+                    <p
+                        class="mt-1 text-lg font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
+                    >
+                        {{ formatCompact(totaux.montant_versees) }}
+                    </p>
+                    <p class="text-xs text-muted-foreground">
+                        {{ totaux.nb_versees }} commission{{
+                            totaux.nb_versees > 1 ? 's' : ''
+                        }}
+                    </p>
                 </div>
             </div>
 
             <!-- Search -->
             <div class="border-t border-b px-4 py-2">
                 <div class="relative">
-                    <Search class="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
                     <input
                         v-model="mobileSearch"
                         type="text"
                         placeholder="Commande, véhicule, livreur…"
-                        class="h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                        class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
                     />
                 </div>
             </div>
@@ -339,8 +436,15 @@ function submitVersementProprietaire() {
                     class="flex items-start justify-between gap-3 px-4 py-3"
                 >
                     <div class="min-w-0 flex-1">
-                        <p class="font-medium text-sm">{{ c.vehicule_nom ?? c.livreur_nom ?? '—' }}</p>
-                        <p v-if="c.vehicule_nom && c.livreur_nom" class="text-xs text-muted-foreground">{{ c.livreur_nom }}</p>
+                        <p class="text-sm font-medium">
+                            {{ c.vehicule_nom ?? c.livreur_nom ?? '—' }}
+                        </p>
+                        <p
+                            v-if="c.vehicule_nom && c.livreur_nom"
+                            class="text-xs text-muted-foreground"
+                        >
+                            {{ c.livreur_nom }}
+                        </p>
                         <Link
                             v-if="c.commande_id"
                             :href="`/ventes/${c.commande_id}`"
@@ -348,23 +452,38 @@ function submitVersementProprietaire() {
                         >
                             {{ c.commande_reference ?? '—' }}
                         </Link>
-                        <p class="mt-1 text-sm font-semibold tabular-nums">{{ formatGNF(c.montant_commission) }}</p>
-                        <p v-if="c.montant_restant > 0" class="text-xs font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                        <p class="mt-1 text-sm font-semibold tabular-nums">
+                            {{ formatGNF(c.montant_commission) }}
+                        </p>
+                        <p
+                            v-if="c.montant_restant > 0"
+                            class="text-xs font-semibold text-amber-600 tabular-nums dark:text-amber-400"
+                        >
                             Restant : {{ formatGNF(c.montant_restant) }}
                         </p>
                     </div>
-                    <div class="flex flex-col items-end gap-2 shrink-0">
+                    <div class="flex shrink-0 flex-col items-end gap-2">
                         <StatusDot
                             :label="c.statut_label"
-                            :dot-class="statutDotColor[c.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                            :dot-class="
+                                statutDotColor[c.statut] ??
+                                'bg-zinc-400 dark:bg-zinc-500'
+                            "
                             class="text-xs text-muted-foreground"
                         />
-                        <span class="text-xs tabular-nums text-muted-foreground">{{ c.created_at }}</span>
+                        <span
+                            class="text-xs text-muted-foreground tabular-nums"
+                            >{{ c.created_at }}</span
+                        >
                         <Button
-                            v-if="!c.is_annulee && !c.is_versee && can('ventes.update')"
+                            v-if="
+                                !c.is_annulee &&
+                                !c.is_versee &&
+                                can('ventes.update')
+                            "
                             size="sm"
                             variant="outline"
-                            class="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
+                            class="h-7 border-emerald-300 text-xs text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
                             @click="openDialog(c)"
                         >
                             <HandCoins class="mr-1 h-3.5 w-3.5" />
@@ -375,29 +494,38 @@ function submitVersementProprietaire() {
             </div>
 
             <!-- Empty state -->
-            <div v-if="mobileFiltered.length === 0" class="py-16 text-center text-sm text-muted-foreground">
+            <div
+                v-if="mobileFiltered.length === 0"
+                class="py-16 text-center text-sm text-muted-foreground"
+            >
                 Aucune commission trouvée.
             </div>
         </div>
 
         <!-- ── DESKTOP VIEW ────────────────────────────────────────────────── -->
-        <div class="hidden sm:block w-full space-y-6 p-4 sm:p-6">
-
+        <div class="hidden w-full space-y-6 p-4 sm:block sm:p-6">
             <!-- En-tete -->
             <div>
-                <h1 class="text-2xl font-semibold tracking-tight">Commissions livreurs</h1>
-                <p class="mt-1 text-sm text-muted-foreground">Suivi et versement des commissions sur ventes.</p>
+                <h1 class="text-2xl font-semibold tracking-tight">
+                    Commissions livreurs
+                </h1>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Suivi et versement des commissions sur ventes.
+                </p>
             </div>
 
             <!-- Cartes de synthese -->
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <div class="flex items-center justify-between">
-                        <p class="text-sm text-muted-foreground">Restant a verser</p>
+                        <p class="text-sm text-muted-foreground">
+                            Restant a verser
+                        </p>
                         <HandCoins class="h-4 w-4 text-muted-foreground" />
                     </div>
-                    <p class="mt-2 text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                    <p
+                        class="mt-2 text-2xl font-bold text-amber-600 tabular-nums dark:text-amber-400"
+                    >
                         {{ formatCompact(totaux.total_a_verser) }}
                     </p>
                 </div>
@@ -407,21 +535,35 @@ function submitVersementProprietaire() {
                         <p class="text-sm text-muted-foreground">En attente</p>
                         <Hourglass class="h-4 w-4 text-amber-500" />
                     </div>
-                    <p class="mt-2 text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                    <p
+                        class="mt-2 text-2xl font-bold text-amber-600 tabular-nums dark:text-amber-400"
+                    >
                         {{ formatCompact(totaux.montant_en_attente) }}
                     </p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">{{ totaux.nb_en_attente }} commission{{ totaux.nb_en_attente > 1 ? 's' : '' }}</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ totaux.nb_en_attente }} commission{{
+                            totaux.nb_en_attente > 1 ? 's' : ''
+                        }}
+                    </p>
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <div class="flex items-center justify-between">
-                        <p class="text-sm text-muted-foreground">Partiellement versees</p>
+                        <p class="text-sm text-muted-foreground">
+                            Partiellement versees
+                        </p>
                         <Clock class="h-4 w-4 text-blue-500" />
                     </div>
-                    <p class="mt-2 text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400">
+                    <p
+                        class="mt-2 text-2xl font-bold text-blue-600 tabular-nums dark:text-blue-400"
+                    >
                         {{ formatCompact(totaux.montant_partielles) }}
                     </p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">{{ totaux.nb_partielles }} commission{{ totaux.nb_partielles > 1 ? 's' : '' }}</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ totaux.nb_partielles }} commission{{
+                            totaux.nb_partielles > 1 ? 's' : ''
+                        }}
+                    </p>
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
@@ -429,10 +571,16 @@ function submitVersementProprietaire() {
                         <p class="text-sm text-muted-foreground">Versees</p>
                         <BadgeCheck class="h-4 w-4 text-emerald-500" />
                     </div>
-                    <p class="mt-2 text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    <p
+                        class="mt-2 text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
+                    >
                         {{ formatCompact(totaux.montant_versees) }}
                     </p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">{{ totaux.nb_versees }} commission{{ totaux.nb_versees > 1 ? 's' : '' }}</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ totaux.nb_versees }} commission{{
+                            totaux.nb_versees > 1 ? 's' : ''
+                        }}
+                    </p>
                 </div>
             </div>
 
@@ -441,14 +589,25 @@ function submitVersementProprietaire() {
                 <div class="flex flex-wrap items-center gap-2">
                     <!-- Recherche -->
                     <div class="relative">
-                        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0Z" />
+                        <svg
+                            class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="2"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="m21 21-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0Z"
+                            />
                         </svg>
                         <input
                             v-model="search"
                             type="text"
                             placeholder="Commande, vehicule, livreur..."
-                            class="h-9 w-64 rounded-md border border-input bg-background pl-8 pr-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                            class="h-9 w-64 rounded-md border border-input bg-background pr-3 pl-8 text-sm shadow-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
                         />
                     </div>
 
@@ -477,24 +636,67 @@ function submitVersementProprietaire() {
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="border-b bg-muted/40">
-                                <th class="px-4 py-3 text-left font-medium text-muted-foreground">Commande</th>
-                                <th class="px-4 py-3 text-left font-medium text-muted-foreground">Vehicule</th>
-                                <th class="px-4 py-3 text-left font-medium text-muted-foreground">Livreur</th>
-                                <th class="px-4 py-3 text-left font-medium text-muted-foreground">Site</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Commande</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Commission</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Verse</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Restant</th>
-                                <th class="px-4 py-3 text-center font-medium text-muted-foreground">Statut</th>
-                                <th class="px-4 py-3 text-left font-medium text-muted-foreground">Date</th>
-                                <th v-if="can('ventes.update')" class="px-4 py-3"></th>
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Commande
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Vehicule
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Livreur
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Site
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Commande
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Commission
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Verse
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Restant
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-center font-medium text-muted-foreground"
+                                >
+                                    Statut
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Date
+                                </th>
+                                <th
+                                    v-if="can('ventes.update')"
+                                    class="px-4 py-3"
+                                ></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
                             <tr
                                 v-for="c in commissionsFiltrees"
                                 :key="c.id"
-                                class="hover:bg-muted/10 transition-colors"
+                                class="transition-colors hover:bg-muted/10"
                             >
                                 <td class="px-4 py-3">
                                     <Link
@@ -506,41 +708,89 @@ function submitVersementProprietaire() {
                                     </Link>
                                 </td>
                                 <td class="px-4 py-3">
-                                    <div class="font-medium">{{ c.vehicule_nom ?? '-' }}</div>
-                                    <div v-if="c.immatriculation" class="font-mono text-xs text-muted-foreground">{{ c.immatriculation }}</div>
+                                    <div class="font-medium">
+                                        {{ c.vehicule_nom ?? '-' }}
+                                    </div>
+                                    <div
+                                        v-if="c.immatriculation"
+                                        class="font-mono text-xs text-muted-foreground"
+                                    >
+                                        {{ c.immatriculation }}
+                                    </div>
                                 </td>
-                                <td class="px-4 py-3 font-medium">{{ c.livreur_nom ?? '-' }}</td>
-                                <td class="px-4 py-3 text-muted-foreground">{{ c.site_nom ?? '-' }}</td>
-                                <td class="px-4 py-3 text-right tabular-nums text-muted-foreground">{{ formatGNF(c.montant_commande) }}</td>
-                                <td class="px-4 py-3 text-right tabular-nums font-semibold">{{ formatGNF(c.montant_commission) }}</td>
-                                <td class="px-4 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
-                                    {{ c.montant_verse > 0 ? formatGNF(c.montant_verse) : '-' }}
+                                <td class="px-4 py-3 font-medium">
+                                    {{ c.livreur_nom ?? '-' }}
                                 </td>
-                                <td class="px-4 py-3 text-right tabular-nums"
-                                    :class="c.montant_restant > 0 ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-muted-foreground'">
-                                    {{ c.montant_restant > 0 ? formatGNF(c.montant_restant) : '-' }}
+                                <td class="px-4 py-3 text-muted-foreground">
+                                    {{ c.site_nom ?? '-' }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ formatGNF(c.montant_commande) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right font-semibold tabular-nums"
+                                >
+                                    {{ formatGNF(c.montant_commission) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
+                                >
+                                    {{
+                                        c.montant_verse > 0
+                                            ? formatGNF(c.montant_verse)
+                                            : '-'
+                                    }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right tabular-nums"
+                                    :class="
+                                        c.montant_restant > 0
+                                            ? 'font-semibold text-amber-600 dark:text-amber-400'
+                                            : 'text-muted-foreground'
+                                    "
+                                >
+                                    {{
+                                        c.montant_restant > 0
+                                            ? formatGNF(c.montant_restant)
+                                            : '-'
+                                    }}
                                 </td>
                                 <td class="px-4 py-3 text-center">
                                     <span
                                         class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                        :class="statutColor[c.statut] ?? 'bg-muted text-muted-foreground'"
+                                        :class="
+                                            statutColor[c.statut] ??
+                                            'bg-muted text-muted-foreground'
+                                        "
                                     >
                                         {{ c.statut_label }}
                                     </span>
                                 </td>
-                                <td class="px-4 py-3 text-xs text-muted-foreground tabular-nums">{{ c.created_at }}</td>
-                                <td v-if="can('ventes.update')" class="px-4 py-3 text-right">
+                                <td
+                                    class="px-4 py-3 text-xs text-muted-foreground tabular-nums"
+                                >
+                                    {{ c.created_at }}
+                                </td>
+                                <td
+                                    v-if="can('ventes.update')"
+                                    class="px-4 py-3 text-right"
+                                >
                                     <Button
                                         v-if="!c.is_annulee && !c.is_versee"
                                         size="sm"
                                         variant="outline"
-                                        class="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
+                                        class="h-7 border-emerald-300 text-xs text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
                                         @click="openDialog(c)"
                                     >
                                         <HandCoins class="mr-1.5 h-3.5 w-3.5" />
                                         Verser
                                     </Button>
-                                    <span v-else-if="c.is_versee" class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                                    <span
+                                        v-else-if="c.is_versee"
+                                        class="text-xs font-medium text-emerald-600 dark:text-emerald-400"
+                                    >
                                         Versee
                                     </span>
                                 </td>
@@ -548,7 +798,10 @@ function submitVersementProprietaire() {
                         </tbody>
                     </table>
 
-                    <div v-if="commissionsFiltrees.length === 0" class="py-16 text-center text-sm text-muted-foreground">
+                    <div
+                        v-if="commissionsFiltrees.length === 0"
+                        class="py-16 text-center text-sm text-muted-foreground"
+                    >
                         Aucune commission trouvee.
                     </div>
                 </div>
@@ -565,22 +818,40 @@ function submitVersementProprietaire() {
             pt:content:class="!p-0"
         >
             <div v-if="commissionActive" class="flex flex-col bg-background">
-
                 <div class="border-b bg-muted/20 px-6 py-5">
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <p class="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Versement commission</p>
-                            <p class="mt-1 font-mono text-lg font-semibold leading-none">{{ commissionActive.commande_reference }}</p>
-                            <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                                <span v-if="commissionActive.vehicule_nom" class="inline-flex items-center gap-1.5">
+                            <p
+                                class="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase"
+                            >
+                                Versement commission
+                            </p>
+                            <p
+                                class="mt-1 font-mono text-lg leading-none font-semibold"
+                            >
+                                {{ commissionActive.commande_reference }}
+                            </p>
+                            <div
+                                class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground"
+                            >
+                                <span
+                                    v-if="commissionActive.vehicule_nom"
+                                    class="inline-flex items-center gap-1.5"
+                                >
                                     <Car class="h-3.5 w-3.5" />
                                     {{ commissionActive.vehicule_nom }}
                                 </span>
-                                <span v-if="commissionActive.livreur_nom" class="inline-flex items-center gap-1.5">
+                                <span
+                                    v-if="commissionActive.livreur_nom"
+                                    class="inline-flex items-center gap-1.5"
+                                >
                                     <User class="h-3.5 w-3.5" />
                                     {{ commissionActive.livreur_nom }}
                                 </span>
-                                <span v-if="commissionActive.site_nom" class="inline-flex items-center gap-1.5">
+                                <span
+                                    v-if="commissionActive.site_nom"
+                                    class="inline-flex items-center gap-1.5"
+                                >
                                     <MapPin class="h-3.5 w-3.5" />
                                     {{ commissionActive.site_nom }}
                                 </span>
@@ -599,37 +870,102 @@ function submitVersementProprietaire() {
 
                 <div class="grid gap-3 border-b bg-muted/10 p-4 md:grid-cols-3">
                     <div class="rounded-lg border bg-card p-3">
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        <p
+                            class="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase"
+                        >
                             Livreur - {{ commissionActive.taux_commission }}%
                         </p>
-                        <p class="mt-1.5 text-lg font-bold tabular-nums text-foreground">
-                            {{ formatGNF(commissionActive.montant_part_livreur) }}
+                        <p
+                            class="mt-1.5 text-lg font-bold text-foreground tabular-nums"
+                        >
+                            {{
+                                formatGNF(commissionActive.montant_part_livreur)
+                            }}
                         </p>
-                        <div class="mt-2 flex items-center justify-between text-xs">
-                            <span class="text-muted-foreground">Verse {{ formatGNF(commissionActive.montant_verse_livreur) }}</span>
-                            <span class="font-medium text-foreground">Reste {{ formatGNF(commissionActive.montant_restant_livreur) }}</span>
+                        <div
+                            class="mt-2 flex items-center justify-between text-xs"
+                        >
+                            <span class="text-muted-foreground"
+                                >Verse
+                                {{
+                                    formatGNF(
+                                        commissionActive.montant_verse_livreur,
+                                    )
+                                }}</span
+                            >
+                            <span class="font-medium text-foreground"
+                                >Reste
+                                {{
+                                    formatGNF(
+                                        commissionActive.montant_restant_livreur,
+                                    )
+                                }}</span
+                            >
                         </div>
                     </div>
 
                     <div class="rounded-lg border bg-card p-3">
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                            Proprietaire - {{ commissionActive.taux_commission_proprietaire }}%
+                        <p
+                            class="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase"
+                        >
+                            Proprietaire -
+                            {{ commissionActive.taux_commission_proprietaire }}%
                         </p>
-                        <p class="mt-1.5 text-lg font-bold tabular-nums text-foreground">
-                            {{ formatGNF(commissionActive.montant_part_proprietaire) }}
+                        <p
+                            class="mt-1.5 text-lg font-bold text-foreground tabular-nums"
+                        >
+                            {{
+                                formatGNF(
+                                    commissionActive.montant_part_proprietaire,
+                                )
+                            }}
                         </p>
-                        <div class="mt-2 flex items-center justify-between text-xs">
-                            <span class="text-muted-foreground">Verse {{ formatGNF(commissionActive.montant_verse_proprietaire) }}</span>
-                            <span class="font-medium text-foreground">Reste {{ formatGNF(commissionActive.montant_restant_proprietaire) }}</span>
+                        <div
+                            class="mt-2 flex items-center justify-between text-xs"
+                        >
+                            <span class="text-muted-foreground"
+                                >Verse
+                                {{
+                                    formatGNF(
+                                        commissionActive.montant_verse_proprietaire,
+                                    )
+                                }}</span
+                            >
+                            <span class="font-medium text-foreground"
+                                >Reste
+                                {{
+                                    formatGNF(
+                                        commissionActive.montant_restant_proprietaire,
+                                    )
+                                }}</span
+                            >
                         </div>
                     </div>
 
                     <div class="rounded-lg border bg-card p-3">
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Total commission</p>
-                        <p class="mt-1.5 text-lg font-bold tabular-nums">{{ formatGNF(commissionActive.montant_commission) }}</p>
-                        <div class="mt-2 flex items-center justify-between text-xs">
-                            <span class="text-muted-foreground">Verse {{ formatGNF(commissionActive.montant_verse) }}</span>
-                            <span class="font-semibold text-foreground">Reste {{ formatGNF(commissionActive.montant_restant) }}</span>
+                        <p
+                            class="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase"
+                        >
+                            Total commission
+                        </p>
+                        <p class="mt-1.5 text-lg font-bold tabular-nums">
+                            {{ formatGNF(commissionActive.montant_commission) }}
+                        </p>
+                        <div
+                            class="mt-2 flex items-center justify-between text-xs"
+                        >
+                            <span class="text-muted-foreground"
+                                >Verse
+                                {{
+                                    formatGNF(commissionActive.montant_verse)
+                                }}</span
+                            >
+                            <span class="font-semibold text-foreground"
+                                >Reste
+                                {{
+                                    formatGNF(commissionActive.montant_restant)
+                                }}</span
+                            >
                         </div>
                     </div>
                 </div>
@@ -637,50 +973,90 @@ function submitVersementProprietaire() {
                 <div class="space-y-4 p-5">
                     <div class="space-y-3">
                         <div class="rounded-lg border bg-card p-4">
-                            <Label class="mb-3 block text-sm font-semibold text-foreground">Versement livreur</Label>
-                            <div class="grid gap-3 lg:grid-cols-[minmax(280px,1.7fr)_minmax(180px,1fr)_minmax(170px,1fr)_auto] lg:items-end">
+                            <Label
+                                class="mb-3 block text-sm font-semibold text-foreground"
+                                >Versement livreur</Label
+                            >
+                            <div
+                                class="grid gap-3 lg:grid-cols-[minmax(280px,1.7fr)_minmax(180px,1fr)_minmax(170px,1fr)_auto] lg:items-end"
+                            >
                                 <div>
-                                    <Label class="mb-1.5 block text-xs font-medium">Montant</Label>
+                                    <Label
+                                        class="mb-1.5 block text-xs font-medium"
+                                        >Montant</Label
+                                    >
                                     <InputNumber
-                                        :model-value="versementForm.montant_livreur"
-                                        @update:model-value="versementForm.montant_livreur = $event"
+                                        :model-value="
+                                            versementForm.montant_livreur
+                                        "
+                                        @update:model-value="
+                                            versementForm.montant_livreur =
+                                                $event
+                                        "
                                         :min="0"
-                                        :max="commissionActive.montant_restant_livreur"
+                                        :max="
+                                            commissionActive.montant_restant_livreur
+                                        "
                                         :use-grouping="true"
                                         locale="fr-FR"
                                         suffix=" GNF"
                                         class="w-full"
                                         input-class="w-full h-11 text-right text-lg font-semibold tabular-nums text-foreground"
-                                        :class="{ 'p-invalid': versementForm.errors.montant_livreur }"
+                                        :class="{
+                                            'p-invalid':
+                                                versementForm.errors
+                                                    .montant_livreur,
+                                        }"
                                     />
-                                    <p v-if="versementForm.errors.montant_livreur" class="mt-1 text-xs text-destructive">{{ versementForm.errors.montant_livreur }}</p>
+                                    <p
+                                        v-if="
+                                            versementForm.errors.montant_livreur
+                                        "
+                                        class="mt-1 text-xs text-destructive"
+                                    >
+                                        {{
+                                            versementForm.errors.montant_livreur
+                                        }}
+                                    </p>
                                 </div>
 
                                 <div>
-                                    <Label class="mb-1.5 block text-xs font-medium">Mode de paiement</Label>
+                                    <Label
+                                        class="mb-1.5 block text-xs font-medium"
+                                        >Mode de paiement</Label
+                                    >
                                     <Dropdown
                                         v-model="modePaiementLivreur"
                                         :options="modes_paiement"
                                         option-label="label"
                                         option-value="value"
-                                        class="w-full h-11"
+                                        class="h-11 w-full"
                                     />
                                 </div>
 
                                 <div>
-                                    <Label class="mb-1.5 block text-xs font-medium">Date</Label>
+                                    <Label
+                                        class="mb-1.5 block text-xs font-medium"
+                                        >Date</Label
+                                    >
                                     <InputText
                                         v-model="dateVersementLivreur"
                                         type="date"
-                                        class="w-full h-11"
+                                        class="h-11 w-full"
                                     />
                                 </div>
 
                                 <div class="flex flex-col lg:self-end">
-                                    <Label class="mb-1.5 block text-xs font-medium opacity-0 select-none">Action</Label>
+                                    <Label
+                                        class="mb-1.5 block text-xs font-medium opacity-0 select-none"
+                                        >Action</Label
+                                    >
                                     <Button
                                         class="h-11 min-w-44 gap-2"
-                                        :disabled="versementForm.processing || !canSubmitLivreur"
+                                        :disabled="
+                                            versementForm.processing ||
+                                            !canSubmitLivreur
+                                        "
                                         @click="submitVersementLivreur"
                                     >
                                         <HandCoins class="h-4 w-4" />
@@ -691,50 +1067,92 @@ function submitVersementProprietaire() {
                         </div>
 
                         <div class="rounded-lg border bg-card p-4">
-                            <Label class="mb-3 block text-sm font-semibold text-foreground">Versement proprietaire</Label>
-                            <div class="grid gap-3 lg:grid-cols-[minmax(280px,1.7fr)_minmax(180px,1fr)_minmax(170px,1fr)_auto] lg:items-end">
+                            <Label
+                                class="mb-3 block text-sm font-semibold text-foreground"
+                                >Versement proprietaire</Label
+                            >
+                            <div
+                                class="grid gap-3 lg:grid-cols-[minmax(280px,1.7fr)_minmax(180px,1fr)_minmax(170px,1fr)_auto] lg:items-end"
+                            >
                                 <div>
-                                    <Label class="mb-1.5 block text-xs font-medium">Montant</Label>
+                                    <Label
+                                        class="mb-1.5 block text-xs font-medium"
+                                        >Montant</Label
+                                    >
                                     <InputNumber
-                                        :model-value="versementForm.montant_proprietaire"
-                                        @update:model-value="versementForm.montant_proprietaire = $event"
+                                        :model-value="
+                                            versementForm.montant_proprietaire
+                                        "
+                                        @update:model-value="
+                                            versementForm.montant_proprietaire =
+                                                $event
+                                        "
                                         :min="0"
-                                        :max="commissionActive.montant_restant_proprietaire"
+                                        :max="
+                                            commissionActive.montant_restant_proprietaire
+                                        "
                                         :use-grouping="true"
                                         locale="fr-FR"
                                         suffix=" GNF"
                                         class="w-full"
                                         input-class="w-full h-11 text-right text-lg font-semibold tabular-nums text-foreground"
-                                        :class="{ 'p-invalid': versementForm.errors.montant_proprietaire }"
+                                        :class="{
+                                            'p-invalid':
+                                                versementForm.errors
+                                                    .montant_proprietaire,
+                                        }"
                                     />
-                                    <p v-if="versementForm.errors.montant_proprietaire" class="mt-1 text-xs text-destructive">{{ versementForm.errors.montant_proprietaire }}</p>
+                                    <p
+                                        v-if="
+                                            versementForm.errors
+                                                .montant_proprietaire
+                                        "
+                                        class="mt-1 text-xs text-destructive"
+                                    >
+                                        {{
+                                            versementForm.errors
+                                                .montant_proprietaire
+                                        }}
+                                    </p>
                                 </div>
 
                                 <div>
-                                    <Label class="mb-1.5 block text-xs font-medium">Mode de paiement</Label>
+                                    <Label
+                                        class="mb-1.5 block text-xs font-medium"
+                                        >Mode de paiement</Label
+                                    >
                                     <Dropdown
                                         v-model="modePaiementProprietaire"
                                         :options="modes_paiement"
                                         option-label="label"
                                         option-value="value"
-                                        class="w-full h-11"
+                                        class="h-11 w-full"
                                     />
                                 </div>
 
                                 <div>
-                                    <Label class="mb-1.5 block text-xs font-medium">Date</Label>
+                                    <Label
+                                        class="mb-1.5 block text-xs font-medium"
+                                        >Date</Label
+                                    >
                                     <InputText
                                         v-model="dateVersementProprietaire"
                                         type="date"
-                                        class="w-full h-11"
+                                        class="h-11 w-full"
                                     />
                                 </div>
 
                                 <div class="flex flex-col lg:self-end">
-                                    <Label class="mb-1.5 block text-xs font-medium opacity-0 select-none">Action</Label>
+                                    <Label
+                                        class="mb-1.5 block text-xs font-medium opacity-0 select-none"
+                                        >Action</Label
+                                    >
                                     <Button
                                         class="h-11 min-w-44 gap-2"
-                                        :disabled="versementForm.processing || !canSubmitProprietaire"
+                                        :disabled="
+                                            versementForm.processing ||
+                                            !canSubmitProprietaire
+                                        "
                                         @click="submitVersementProprietaire"
                                     >
                                         <HandCoins class="h-4 w-4" />
@@ -746,19 +1164,39 @@ function submitVersementProprietaire() {
                     </div>
 
                     <div>
-                        <Label class="mb-1.5 block text-sm font-medium">Note</Label>
-                        <InputText v-model="(versementForm.note as string)" class="w-full" placeholder="Remarque optionnelle..." />
+                        <Label class="mb-1.5 block text-sm font-medium"
+                            >Note</Label
+                        >
+                        <InputText
+                            v-model="versementForm.note as string"
+                            class="w-full"
+                            placeholder="Remarque optionnelle..."
+                        />
                     </div>
 
                     <div class="rounded-lg border bg-card p-4">
-                        <div class="mb-3 flex items-center justify-between gap-3">
-                            <Label class="text-sm font-semibold text-foreground">Historique des versements</Label>
+                        <div
+                            class="mb-3 flex items-center justify-between gap-3"
+                        >
+                            <Label class="text-sm font-semibold text-foreground"
+                                >Historique des versements</Label
+                            >
                             <span class="text-xs text-muted-foreground">
-                                {{ commissionActive.versements.length }} versement{{ commissionActive.versements.length > 1 ? 's' : '' }}
+                                {{
+                                    commissionActive.versements.length
+                                }}
+                                versement{{
+                                    commissionActive.versements.length > 1
+                                        ? 's'
+                                        : ''
+                                }}
                             </span>
                         </div>
 
-                        <div v-if="commissionActive.versements.length === 0" class="rounded-md border border-dashed px-3 py-5 text-center text-sm text-muted-foreground">
+                        <div
+                            v-if="commissionActive.versements.length === 0"
+                            class="rounded-md border border-dashed px-3 py-5 text-center text-sm text-muted-foreground"
+                        >
                             Aucun versement enregistre pour cette commission.
                         </div>
 
@@ -766,51 +1204,111 @@ function submitVersementProprietaire() {
                             <table class="w-full text-sm">
                                 <thead>
                                     <tr class="border-b bg-muted/40">
-                                        <th class="px-3 py-2 text-left font-medium text-muted-foreground">Date</th>
-                                        <th class="px-3 py-2 text-left font-medium text-muted-foreground">Beneficiaire</th>
-                                        <th class="px-3 py-2 text-left font-medium text-muted-foreground">Mode</th>
-                                        <th class="px-3 py-2 text-right font-medium text-muted-foreground">Montant</th>
-                                        <th class="px-3 py-2 text-left font-medium text-muted-foreground">Note</th>
-                                        <th class="px-3 py-2 text-left font-medium text-muted-foreground">Saisi par</th>
+                                        <th
+                                            class="px-3 py-2 text-left font-medium text-muted-foreground"
+                                        >
+                                            Date
+                                        </th>
+                                        <th
+                                            class="px-3 py-2 text-left font-medium text-muted-foreground"
+                                        >
+                                            Beneficiaire
+                                        </th>
+                                        <th
+                                            class="px-3 py-2 text-left font-medium text-muted-foreground"
+                                        >
+                                            Mode
+                                        </th>
+                                        <th
+                                            class="px-3 py-2 text-right font-medium text-muted-foreground"
+                                        >
+                                            Montant
+                                        </th>
+                                        <th
+                                            class="px-3 py-2 text-left font-medium text-muted-foreground"
+                                        >
+                                            Note
+                                        </th>
+                                        <th
+                                            class="px-3 py-2 text-left font-medium text-muted-foreground"
+                                        >
+                                            Saisi par
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y">
-                                    <tr v-for="v in commissionActive.versements" :key="v.id">
-                                        <td class="px-3 py-2 text-xs tabular-nums text-muted-foreground">{{ v.date_versement ?? '-' }}</td>
+                                    <tr
+                                        v-for="v in commissionActive.versements"
+                                        :key="v.id"
+                                    >
+                                        <td
+                                            class="px-3 py-2 text-xs text-muted-foreground tabular-nums"
+                                        >
+                                            {{ v.date_versement ?? '-' }}
+                                        </td>
                                         <td class="px-3 py-2">
                                             <span
                                                 class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                                                :class="v.beneficiaire === 'proprietaire'
-                                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-                                                    : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'"
+                                                :class="
+                                                    v.beneficiaire ===
+                                                    'proprietaire'
+                                                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                                                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                                "
                                             >
                                                 {{ v.beneficiaire_label }}
                                             </span>
                                         </td>
-                                        <td class="px-3 py-2 text-muted-foreground">{{ v.mode_paiement }}</td>
-                                        <td class="px-3 py-2 text-right font-semibold tabular-nums">{{ formatGNF(v.montant) }}</td>
-                                        <td class="px-3 py-2 text-muted-foreground">
-                                            <span class="block max-w-[260px] truncate" :title="v.note ?? '-'">{{ v.note ?? '-' }}</span>
+                                        <td
+                                            class="px-3 py-2 text-muted-foreground"
+                                        >
+                                            {{ v.mode_paiement }}
                                         </td>
-                                        <td class="px-3 py-2 text-muted-foreground">{{ v.created_by ?? '-' }}</td>
+                                        <td
+                                            class="px-3 py-2 text-right font-semibold tabular-nums"
+                                        >
+                                            {{ formatGNF(v.montant) }}
+                                        </td>
+                                        <td
+                                            class="px-3 py-2 text-muted-foreground"
+                                        >
+                                            <span
+                                                class="block max-w-[260px] truncate"
+                                                :title="v.note ?? '-'"
+                                                >{{ v.note ?? '-' }}</span
+                                            >
+                                        </td>
+                                        <td
+                                            class="px-3 py-2 text-muted-foreground"
+                                        >
+                                            {{ v.created_by ?? '-' }}
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    <div class="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+                    <div
+                        class="flex flex-wrap items-center justify-between gap-3 border-t pt-4"
+                    >
                         <p class="text-sm text-muted-foreground">
                             Total saisi:
-                            <span class="ml-1 font-semibold text-foreground">{{ formatGNF(montantTotalSaisi) }}</span>
+                            <span class="ml-1 font-semibold text-foreground">{{
+                                formatGNF(montantTotalSaisi)
+                            }}</span>
                         </p>
                         <div class="flex items-center gap-2">
-                            <Button variant="outline" class="px-5" @click="dialogVisible = false">Fermer</Button>
+                            <Button
+                                variant="outline"
+                                class="px-5"
+                                @click="dialogVisible = false"
+                                >Fermer</Button
+                            >
                         </div>
                     </div>
                 </div>
             </div>
         </Dialog>
-
     </AppLayout>
 </template>

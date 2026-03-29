@@ -1,12 +1,15 @@
 <script setup lang="ts">
+import { Spinner } from '@/components/ui/spinner';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
-import { Spinner } from '@/components/ui/spinner';
 import ProduitForm from './partials/ProduitForm.vue';
 
-interface Option { value: string; label: string }
+interface Option {
+    value: string;
+    label: string;
+}
 
 defineProps<{
     types: Option[];
@@ -20,19 +23,19 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const form = useForm({
-    nom:                '',
-    code_fournisseur:   null as string | null,
-    type:               'materiel',
-    statut:             'actif',
-    prix_usine:         null as number | null,
-    prix_vente:         null as number | null,
-    prix_achat:         null as number | null,
-    cout:               null as number | null,
-    qte_stock:          0,
+    nom: '',
+    code_fournisseur: null as string | null,
+    type: 'materiel',
+    statut: 'actif',
+    prix_usine: null as number | null,
+    prix_vente: null as number | null,
+    prix_achat: null as number | null,
+    cout: null as number | null,
+    qte_stock: 0,
     seuil_alerte_stock: null as number | null,
-    description:        null as string | null,
-    is_critique:        false,
-    image:              null as File | null,
+    description: null as string | null,
+    is_critique: false,
+    image: null as File | null,
 });
 
 function submit() {
@@ -44,9 +47,10 @@ function submit() {
     <Head title="Nouveau produit" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-
         <!-- ─── Header mobile ─── -->
-        <div class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden">
+        <div
+            class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
+        >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
                     href="/produits"
@@ -55,15 +59,21 @@ function submit() {
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
                 <div class="text-center">
-                    <h1 class="text-[17px] font-semibold leading-tight">Nouveau produit</h1>
+                    <h1 class="text-[17px] leading-tight font-semibold">
+                        Nouveau produit
+                    </h1>
                 </div>
             </div>
         </div>
 
         <!-- ─── Header desktop ─── -->
-        <div class="hidden sm:block mx-auto max-w-4xl px-6 pt-6 pb-0">
-            <h1 class="text-2xl font-semibold tracking-tight">Nouveau produit</h1>
-            <p class="mt-1 text-sm text-muted-foreground">Ajoutez un produit au catalogue de votre organisation.</p>
+        <div class="mx-auto hidden max-w-4xl px-6 pt-6 pb-0 sm:block">
+            <h1 class="text-2xl font-semibold tracking-tight">
+                Nouveau produit
+            </h1>
+            <p class="mt-1 text-sm text-muted-foreground">
+                Ajoutez un produit au catalogue de votre organisation.
+            </p>
         </div>
 
         <!-- ─── Formulaire ─── -->
@@ -80,7 +90,9 @@ function submit() {
         </div>
 
         <!-- ─── Footer sticky mobile ─── -->
-        <div class="fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden">
+        <div
+            class="fixed right-0 bottom-0 left-0 z-30 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden"
+        >
             <button
                 type="submit"
                 form="produit-form"
@@ -92,6 +104,5 @@ function submit() {
                 {{ form.processing ? 'Enregistrement…' : 'Créer le produit' }}
             </button>
         </div>
-
     </AppLayout>
 </template>

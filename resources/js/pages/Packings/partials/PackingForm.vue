@@ -5,7 +5,6 @@ import { Save } from 'lucide-vue-next';
 import Calendar from 'primevue/calendar';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
-import Textarea from 'primevue/textarea';
 import { computed } from 'vue';
 
 // ── Props / Emits ─────────────────────────────────────────────────────────────
@@ -60,21 +59,29 @@ function fromDate(val: Date | null): string {
 
 <template>
     <form id="packing-form" class="space-y-8" @submit.prevent="emit('submit')">
-
         <!-- Section : Informations ──────────────────────────────────────────── -->
-        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
-            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3
+                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+            >
                 Informations
             </h3>
 
             <div class="grid gap-5 sm:grid-cols-2">
-
                 <!-- Prestataire (pleine largeur) -->
                 <div class="sm:col-span-2">
-                    <Label class="mb-1.5 block">Prestataire <span class="text-destructive">*</span></Label>
+                    <Label class="mb-1.5 block"
+                        >Prestataire
+                        <span class="text-destructive">*</span></Label
+                    >
                     <Dropdown
                         :model-value="form.prestataire_id"
-                        @update:model-value="$emit('update:form', { ...form, prestataire_id: $event })"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                prestataire_id: $event,
+                            })
+                        "
                         :options="prestataires"
                         option-label="label"
                         option-value="value"
@@ -84,30 +91,52 @@ function fromDate(val: Date | null): string {
                         class="w-full"
                         :class="{ 'p-invalid': errors.prestataire_id }"
                     />
-                    <p v-if="errors.prestataire_id" class="mt-1 text-xs text-destructive">{{ errors.prestataire_id }}</p>
+                    <p
+                        v-if="errors.prestataire_id"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.prestataire_id }}
+                    </p>
                 </div>
 
                 <!-- Date -->
                 <div class="sm:col-span-2">
-                    <Label class="mb-1.5 block">Date <span class="text-destructive">*</span></Label>
+                    <Label class="mb-1.5 block"
+                        >Date <span class="text-destructive">*</span></Label
+                    >
                     <Calendar
                         :model-value="toDate(form.date)"
-                        @update:model-value="$emit('update:form', { ...form, date: fromDate($event as Date | null) })"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                date: fromDate($event as Date | null),
+                            })
+                        "
                         date-format="dd/mm/yy"
                         :show-icon="true"
                         class="w-full"
                         input-class="w-full"
                         :class="{ 'p-invalid': errors.date }"
                     />
-                    <p v-if="errors.date" class="mt-1 text-xs text-destructive">{{ errors.date }}</p>
+                    <p v-if="errors.date" class="mt-1 text-xs text-destructive">
+                        {{ errors.date }}
+                    </p>
                 </div>
 
                 <!-- Nb rouleaux -->
                 <div>
-                    <Label class="mb-1.5 block">Nombre de rouleaux <span class="text-destructive">*</span></Label>
+                    <Label class="mb-1.5 block"
+                        >Nombre de rouleaux
+                        <span class="text-destructive">*</span></Label
+                    >
                     <InputNumber
                         :model-value="form.nb_rouleaux"
-                        @update:model-value="$emit('update:form', { ...form, nb_rouleaux: $event })"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                nb_rouleaux: $event,
+                            })
+                        "
                         :min="1"
                         :max="9999999"
                         :use-grouping="true"
@@ -118,15 +147,28 @@ function fromDate(val: Date | null): string {
                         input-class="w-full"
                         :class="{ 'p-invalid': errors.nb_rouleaux }"
                     />
-                    <p v-if="errors.nb_rouleaux" class="mt-1 text-xs text-destructive">{{ errors.nb_rouleaux }}</p>
+                    <p
+                        v-if="errors.nb_rouleaux"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.nb_rouleaux }}
+                    </p>
                 </div>
 
                 <!-- Prix par rouleau -->
                 <div>
-                    <Label class="mb-1.5 block">Prix par rouleau <span class="text-destructive">*</span></Label>
+                    <Label class="mb-1.5 block"
+                        >Prix par rouleau
+                        <span class="text-destructive">*</span></Label
+                    >
                     <InputNumber
                         :model-value="form.prix_par_rouleau"
-                        @update:model-value="$emit('update:form', { ...form, prix_par_rouleau: $event ?? 0 })"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                prix_par_rouleau: $event ?? 0,
+                            })
+                        "
                         :min="0"
                         :max="99999999"
                         :use-grouping="true"
@@ -138,28 +180,33 @@ function fromDate(val: Date | null): string {
                         input-class="w-full"
                         :class="{ 'p-invalid': errors.prix_par_rouleau }"
                     />
-                    <p v-if="errors.prix_par_rouleau" class="mt-1 text-xs text-destructive">{{ errors.prix_par_rouleau }}</p>
+                    <p
+                        v-if="errors.prix_par_rouleau"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.prix_par_rouleau }}
+                    </p>
                 </div>
 
                 <!-- Montant calculé (lecture seule) -->
                 <div class="sm:col-span-2">
                     <Label class="mb-1.5 block">Montant total</Label>
-                    <div class="flex h-10 w-full items-center rounded-md border bg-muted/40 px-3 text-sm font-semibold tabular-nums text-foreground">
+                    <div
+                        class="flex h-10 w-full items-center rounded-md border bg-muted/40 px-3 text-sm font-semibold text-foreground tabular-nums"
+                    >
                         {{ montantCalcule.toLocaleString('fr-FR') }} GNF
                     </div>
-                    <p class="mt-1 text-xs text-muted-foreground">Calculé automatiquement : nb rouleaux × prix par rouleau</p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Calculé automatiquement : nb rouleaux × prix par rouleau
+                    </p>
                 </div>
-
             </div>
         </div>
-
 
         <!-- Pied de formulaire ───────────────────────────────────────────────── -->
         <div class="hidden items-center justify-between sm:flex">
             <a href="/packings">
-                <Button type="button" variant="outline">
-                    Retour
-                </Button>
+                <Button type="button" variant="outline"> Retour </Button>
             </a>
             <Button type="submit" :disabled="processing">
                 <Save class="mr-2 h-4 w-4" />

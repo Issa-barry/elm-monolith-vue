@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatPhoneDisplay } from '@/lib/utils';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 
 interface Props {
@@ -32,35 +32,43 @@ const breadcrumbItems: BreadcrumbItem[] = [
 
 const page = usePage();
 const authUser = computed(() => page.props.auth.user);
-const isSuperAdmin = computed(() => (page.props.auth.roles as string[]).includes('super_admin'));
+const isSuperAdmin = computed(() =>
+    (page.props.auth.roles as string[]).includes('super_admin'),
+);
 
-const prenom    = ref(authUser.value.prenom    ?? '');
-const nom       = ref(authUser.value.nom       ?? '');
-const email     = ref(authUser.value.email     ?? '');
+const prenom = ref(authUser.value.prenom ?? '');
+const nom = ref(authUser.value.nom ?? '');
+const email = ref(authUser.value.email ?? '');
 const telephone = ref(authUser.value.telephone ?? '');
 
 watch(authUser, (u) => {
-    prenom.value    = u.prenom    ?? '';
-    nom.value       = u.nom       ?? '';
-    email.value     = u.email     ?? '';
+    prenom.value = u.prenom ?? '';
+    nom.value = u.nom ?? '';
+    email.value = u.email ?? '';
     telephone.value = u.telephone ?? '';
 });
 
 function formatDate(iso: string | null): string {
     if (!iso) return '—';
-    return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(iso));
+    return new Intl.DateTimeFormat('fr-FR', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+    }).format(new Date(iso));
 }
 
 const ROLE_LABELS: Record<string, string> = {
-    super_admin:      'Super Admin',
+    super_admin: 'Super Admin',
     admin_entreprise: 'Admin entreprise',
-    manager:          'Manager',
-    commerciale:      'Commercial(e)',
-    comptable:        'Comptable',
-    client:           'Client',
+    manager: 'Manager',
+    commerciale: 'Commercial(e)',
+    comptable: 'Comptable',
+    client: 'Client',
 };
 
-const roles = computed(() => (page.props.auth.roles as string[]).map(r => ROLE_LABELS[r] ?? r));
+const roles = computed(() =>
+    (page.props.auth.roles as string[]).map((r) => ROLE_LABELS[r] ?? r),
+);
 </script>
 
 <template>
@@ -81,7 +89,10 @@ const roles = computed(() => (page.props.auth.roles as string[]).map(r => ROLE_L
                 >
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div class="grid gap-2">
-                            <Label for="prenom">Prénom <span class="text-destructive">*</span></Label>
+                            <Label for="prenom"
+                                >Prénom
+                                <span class="text-destructive">*</span></Label
+                            >
                             <Input
                                 id="prenom"
                                 class="mt-1 block w-full"
@@ -95,7 +106,10 @@ const roles = computed(() => (page.props.auth.roles as string[]).map(r => ROLE_L
                         </div>
 
                         <div class="grid gap-2">
-                            <Label for="nom">Nom <span class="text-destructive">*</span></Label>
+                            <Label for="nom"
+                                >Nom
+                                <span class="text-destructive">*</span></Label
+                            >
                             <Input
                                 id="nom"
                                 class="mt-1 block w-full"
@@ -137,7 +151,9 @@ const roles = computed(() => (page.props.auth.roles as string[]).map(r => ROLE_L
                             />
                         </template>
                         <template v-else>
-                            <p class="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+                            <p
+                                class="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground"
+                            >
                                 {{ formatPhoneDisplay(authUser.telephone) }}
                             </p>
                         </template>
@@ -148,7 +164,9 @@ const roles = computed(() => (page.props.auth.roles as string[]).map(r => ROLE_L
                         <!-- Organisation -->
                         <div class="grid gap-2">
                             <Label>Organisation</Label>
-                            <p class="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+                            <p
+                                class="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground"
+                            >
                                 {{ authUser.organization?.name ?? '—' }}
                             </p>
                         </div>
@@ -156,20 +174,29 @@ const roles = computed(() => (page.props.auth.roles as string[]).map(r => ROLE_L
                         <!-- Rôle(s) -->
                         <div class="grid gap-2">
                             <Label>Rôle(s)</Label>
-                            <p class="flex h-9 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm">
+                            <p
+                                class="flex h-9 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm"
+                            >
                                 <span
                                     v-for="role in roles"
                                     :key="role"
                                     class="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
-                                >{{ role }}</span>
-                                <span v-if="!roles.length" class="text-muted-foreground">—</span>
+                                    >{{ role }}</span
+                                >
+                                <span
+                                    v-if="!roles.length"
+                                    class="text-muted-foreground"
+                                    >—</span
+                                >
                             </p>
                         </div>
 
                         <!-- Membre depuis -->
                         <div class="grid gap-2">
                             <Label>Membre depuis</Label>
-                            <p class="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+                            <p
+                                class="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground"
+                            >
                                 {{ formatDate(authUser.created_at) }}
                             </p>
                         </div>
@@ -177,14 +204,24 @@ const roles = computed(() => (page.props.auth.roles as string[]).map(r => ROLE_L
                         <!-- Statut email -->
                         <div class="grid gap-2">
                             <Label>E-mail vérifié</Label>
-                            <p class="flex h-9 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm">
+                            <p
+                                class="flex h-9 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm"
+                            >
                                 <template v-if="authUser.email_verified_at">
-                                    <span class="h-2 w-2 rounded-full bg-green-500"></span>
-                                    <span class="text-muted-foreground">{{ formatDate(authUser.email_verified_at) }}</span>
+                                    <span
+                                        class="h-2 w-2 rounded-full bg-green-500"
+                                    ></span>
+                                    <span class="text-muted-foreground">{{
+                                        formatDate(authUser.email_verified_at)
+                                    }}</span>
                                 </template>
                                 <template v-else>
-                                    <span class="h-2 w-2 rounded-full bg-amber-400"></span>
-                                    <span class="text-muted-foreground">Non vérifié</span>
+                                    <span
+                                        class="h-2 w-2 rounded-full bg-amber-400"
+                                    ></span>
+                                    <span class="text-muted-foreground"
+                                        >Non vérifié</span
+                                    >
                                 </template>
                             </p>
                         </div>
@@ -198,7 +235,8 @@ const roles = computed(() => (page.props.auth.roles as string[]).map(r => ROLE_L
                                 as="button"
                                 class="text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"
                             >
-                                Cliquez ici pour renvoyer l'e-mail de vérification.
+                                Cliquez ici pour renvoyer l'e-mail de
+                                vérification.
                             </Link>
                         </p>
 
@@ -206,7 +244,8 @@ const roles = computed(() => (page.props.auth.roles as string[]).map(r => ROLE_L
                             v-if="status === 'verification-link-sent'"
                             class="mt-2 text-sm font-medium text-green-600"
                         >
-                            Un nouveau lien de vérification a été envoyé à votre adresse e-mail.
+                            Un nouveau lien de vérification a été envoyé à votre
+                            adresse e-mail.
                         </div>
                     </div>
 

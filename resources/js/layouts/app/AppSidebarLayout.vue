@@ -25,7 +25,10 @@ withDefaults(defineProps<Props>(), {
         <AppSidebar />
         <AppContent variant="sidebar" class="overflow-x-hidden rounded-none">
             <div :class="hideMobileHeader ? 'hidden sm:block' : ''">
-                <AppSidebarHeader v-if="showHeader" :breadcrumbs="breadcrumbs" />
+                <AppSidebarHeader
+                    v-if="showHeader"
+                    :breadcrumbs="breadcrumbs"
+                />
             </div>
             <div class="flex w-full flex-1 flex-col">
                 <slot />

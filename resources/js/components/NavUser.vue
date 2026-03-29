@@ -31,7 +31,9 @@ const { isMobile, state } = useSidebar();
                         data-test="sidebar-menu-button"
                     >
                         <UserInfo :user="user" />
-                        <ChevronsUpDown class="ml-auto size-4 text-sidebar-primary" />
+                        <ChevronsUpDown
+                            class="ml-auto size-4 text-sidebar-primary"
+                        />
                     </SidebarMenuButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent

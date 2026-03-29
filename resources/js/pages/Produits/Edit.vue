@@ -1,12 +1,15 @@
 <script setup lang="ts">
+import { Spinner } from '@/components/ui/spinner';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
-import { Spinner } from '@/components/ui/spinner';
 import ProduitForm from './partials/ProduitForm.vue';
 
-interface Option { value: string; label: string }
+interface Option {
+    value: string;
+    label: string;
+}
 
 interface ProduitData {
     id: number;
@@ -39,20 +42,20 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const form = useForm({
-    nom:                props.produit.nom,
-    code_fournisseur:   props.produit.code_fournisseur,
-    type:               props.produit.type,
-    statut:             props.produit.statut,
-    prix_usine:         props.produit.prix_usine,
-    prix_vente:         props.produit.prix_vente,
-    prix_achat:         props.produit.prix_achat,
-    cout:               props.produit.cout,
-    qte_stock:          props.produit.qte_stock,
+    nom: props.produit.nom,
+    code_fournisseur: props.produit.code_fournisseur,
+    type: props.produit.type,
+    statut: props.produit.statut,
+    prix_usine: props.produit.prix_usine,
+    prix_vente: props.produit.prix_vente,
+    prix_achat: props.produit.prix_achat,
+    cout: props.produit.cout,
+    qte_stock: props.produit.qte_stock,
     seuil_alerte_stock: props.produit.seuil_alerte_stock,
-    description:        props.produit.description,
-    is_critique:        props.produit.is_critique,
-    image:              null as File | null,
-    _method:            'PUT',
+    description: props.produit.description,
+    is_critique: props.produit.is_critique,
+    image: null as File | null,
+    _method: 'PUT',
 });
 
 function submit() {
@@ -64,9 +67,10 @@ function submit() {
     <Head :title="`Modifier — ${produit.nom}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-
         <!-- ─── Header mobile ─── -->
-        <div class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden">
+        <div
+            class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
+        >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
                     href="/produits"
@@ -75,16 +79,24 @@ function submit() {
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
                 <div class="text-center">
-                    <h1 class="text-[17px] font-semibold leading-tight">Modifier</h1>
-                    <p class="truncate text-[11px] text-muted-foreground">{{ produit.nom }}</p>
+                    <h1 class="text-[17px] leading-tight font-semibold">
+                        Modifier
+                    </h1>
+                    <p class="truncate text-[11px] text-muted-foreground">
+                        {{ produit.nom }}
+                    </p>
                 </div>
             </div>
         </div>
 
         <!-- ─── Header desktop ─── -->
-        <div class="hidden sm:block mx-auto max-w-4xl px-6 pt-6 pb-0">
-            <h1 class="text-2xl font-semibold tracking-tight">Modifier le produit</h1>
-            <p class="mt-1 text-sm text-muted-foreground">· {{ produit.nom }}</p>
+        <div class="mx-auto hidden max-w-4xl px-6 pt-6 pb-0 sm:block">
+            <h1 class="text-2xl font-semibold tracking-tight">
+                Modifier le produit
+            </h1>
+            <p class="mt-1 text-sm text-muted-foreground">
+                · {{ produit.nom }}
+            </p>
         </div>
 
         <!-- ─── Formulaire ─── -->
@@ -103,7 +115,9 @@ function submit() {
         </div>
 
         <!-- ─── Footer sticky mobile ─── -->
-        <div class="fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden">
+        <div
+            class="fixed right-0 bottom-0 left-0 z-30 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden"
+        >
             <button
                 type="submit"
                 form="produit-form"
@@ -112,9 +126,12 @@ function submit() {
             >
                 <Spinner v-if="form.processing" class="h-4 w-4" />
                 <Save v-else class="h-4 w-4" />
-                {{ form.processing ? 'Enregistrement…' : 'Enregistrer les modifications' }}
+                {{
+                    form.processing
+                        ? 'Enregistrement…'
+                        : 'Enregistrer les modifications'
+                }}
             </button>
         </div>
-
     </AppLayout>
 </template>

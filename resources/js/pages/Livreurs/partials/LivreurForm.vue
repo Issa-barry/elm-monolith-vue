@@ -16,17 +16,71 @@ interface CountryOption {
 }
 
 const PAYS_OPTIONS: CountryOption[] = [
-    { label: 'Guinée',              value: 'Guinée',              code: 'GN', dial: '+224', localLength: 9 },
-    { label: 'Guinée-Bissau',       value: 'Guinée-Bissau',       code: 'GW', dial: '+245', localLength: 7 },
-    { label: 'Sénégal',             value: 'Sénégal',             code: 'SN', dial: '+221', localLength: 9 },
-    { label: 'Mali',                value: 'Mali',                code: 'ML', dial: '+223', localLength: 8 },
-    { label: "Côte d'Ivoire",       value: "Côte d'Ivoire",       code: 'CI', dial: '+225', localLength: 10 },
-    { label: 'Liberia',             value: 'Liberia',             code: 'LR', dial: '+231', localLength: 8 },
-    { label: 'Sierra Leone',        value: 'Sierra Leone',        code: 'SL', dial: '+232', localLength: 8 },
-    { label: 'France',              value: 'France',              code: 'FR', dial: '+33', localLength: 9 },
-    { label: 'Chine',               value: 'Chine',               code: 'CN', dial: '+86', localLength: 11 },
-    { label: 'Émirats arabes unis', value: 'Émirats arabes unis', code: 'AE', dial: '+971', localLength: 9 },
-    { label: 'Inde',                value: 'Inde',                code: 'IN', dial: '+91', localLength: 10 },
+    {
+        label: 'Guinée',
+        value: 'Guinée',
+        code: 'GN',
+        dial: '+224',
+        localLength: 9,
+    },
+    {
+        label: 'Guinée-Bissau',
+        value: 'Guinée-Bissau',
+        code: 'GW',
+        dial: '+245',
+        localLength: 7,
+    },
+    {
+        label: 'Sénégal',
+        value: 'Sénégal',
+        code: 'SN',
+        dial: '+221',
+        localLength: 9,
+    },
+    { label: 'Mali', value: 'Mali', code: 'ML', dial: '+223', localLength: 8 },
+    {
+        label: "Côte d'Ivoire",
+        value: "Côte d'Ivoire",
+        code: 'CI',
+        dial: '+225',
+        localLength: 10,
+    },
+    {
+        label: 'Liberia',
+        value: 'Liberia',
+        code: 'LR',
+        dial: '+231',
+        localLength: 8,
+    },
+    {
+        label: 'Sierra Leone',
+        value: 'Sierra Leone',
+        code: 'SL',
+        dial: '+232',
+        localLength: 8,
+    },
+    {
+        label: 'France',
+        value: 'France',
+        code: 'FR',
+        dial: '+33',
+        localLength: 9,
+    },
+    {
+        label: 'Chine',
+        value: 'Chine',
+        code: 'CN',
+        dial: '+86',
+        localLength: 11,
+    },
+    {
+        label: 'Émirats arabes unis',
+        value: 'Émirats arabes unis',
+        code: 'AE',
+        dial: '+971',
+        localLength: 9,
+    },
+    { label: 'Inde', value: 'Inde', code: 'IN', dial: '+91', localLength: 10 },
 ];
 
 function flagUrl(code: string) {
@@ -54,18 +108,29 @@ const props = defineProps<{
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
 
-const selectedCountry = computed(() => PAYS_OPTIONS.find(c => c.code === props.form.code_pays));
-const selectedPhoneLength = computed(() => selectedCountry.value?.localLength ?? 24);
+const selectedCountry = computed(() =>
+    PAYS_OPTIONS.find((c) => c.code === props.form.code_pays),
+);
+const selectedPhoneLength = computed(
+    () => selectedCountry.value?.localLength ?? 24,
+);
 const phoneMaxLength = computed(() => {
     const digits = String(props.form.telephone ?? '').replace(/\D/g, '');
-    return digits.startsWith('0') ? selectedPhoneLength.value + 1 : selectedPhoneLength.value;
+    return digits.startsWith('0')
+        ? selectedPhoneLength.value + 1
+        : selectedPhoneLength.value;
 });
 
 function onPaysChange(pays: string) {
-    const country = PAYS_OPTIONS.find(c => c.value === pays);
+    const country = PAYS_OPTIONS.find((c) => c.value === pays);
     if (country) {
-        const currentDigits = String(props.form.telephone ?? '').replace(/\D/g, '');
-        const max = currentDigits.startsWith('0') ? country.localLength + 1 : country.localLength;
+        const currentDigits = String(props.form.telephone ?? '').replace(
+            /\D/g,
+            '',
+        );
+        const max = currentDigits.startsWith('0')
+            ? country.localLength + 1
+            : country.localLength;
         emit('update:form', {
             ...props.form,
             pays: country.value,
@@ -77,62 +142,110 @@ function onPaysChange(pays: string) {
 }
 
 function handlePhoneKeydown(e: KeyboardEvent) {
-    const pass = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+    const pass = [
+        'Backspace',
+        'Delete',
+        'Tab',
+        'Escape',
+        'Enter',
+        'ArrowLeft',
+        'ArrowRight',
+        'ArrowUp',
+        'ArrowDown',
+        'Home',
+        'End',
+    ];
     if (pass.includes(e.key)) return;
-    if ((e.ctrlKey || e.metaKey) && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())) return;
+    if (
+        (e.ctrlKey || e.metaKey) &&
+        ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())
+    )
+        return;
     if (!/^\d$/.test(e.key)) e.preventDefault();
 }
 
 function onTelephoneInput(value: string | null | undefined) {
     const raw = String(value ?? '').replace(/\D/g, '');
-    const max = raw.startsWith('0') ? selectedPhoneLength.value + 1 : selectedPhoneLength.value;
+    const max = raw.startsWith('0')
+        ? selectedPhoneLength.value + 1
+        : selectedPhoneLength.value;
     const digits = raw.slice(0, max);
     emit('update:form', { ...props.form, telephone: digits || null });
 }
 </script>
 
 <template>
-    <form id="livreur-form" class="space-y-4 sm:space-y-6" @submit.prevent="emit('submit')">
-
+    <form
+        id="livreur-form"
+        class="space-y-4 sm:space-y-6"
+        @submit.prevent="emit('submit')"
+    >
         <!-- Identité -->
-        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
-            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3
+                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+            >
                 Identité
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
-                    <Label for="prenom" class="mb-1.5 block">Prénom <span class="text-destructive">*</span></Label>
+                    <Label for="prenom" class="mb-1.5 block"
+                        >Prénom <span class="text-destructive">*</span></Label
+                    >
                     <InputText
                         id="prenom"
                         :model-value="form.prenom"
-                        @update:model-value="$emit('update:form', { ...form, prenom: String($event ?? '') })"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                prenom: String($event ?? ''),
+                            })
+                        "
                         class="w-full"
                         :class="{ 'p-invalid': errors.prenom }"
                     />
-                    <p v-if="errors.prenom" class="mt-1 text-xs text-destructive">{{ errors.prenom }}</p>
+                    <p
+                        v-if="errors.prenom"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.prenom }}
+                    </p>
                 </div>
                 <div>
-                    <Label for="nom" class="mb-1.5 block">Nom <span class="text-destructive">*</span></Label>
+                    <Label for="nom" class="mb-1.5 block"
+                        >Nom <span class="text-destructive">*</span></Label
+                    >
                     <InputText
                         id="nom"
                         :model-value="form.nom"
-                        @update:model-value="$emit('update:form', { ...form, nom: String($event ?? '') })"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                nom: String($event ?? ''),
+                            })
+                        "
                         class="w-full"
                         :class="{ 'p-invalid': errors.nom }"
                     />
-                    <p v-if="errors.nom" class="mt-1 text-xs text-destructive">{{ errors.nom }}</p>
+                    <p v-if="errors.nom" class="mt-1 text-xs text-destructive">
+                        {{ errors.nom }}
+                    </p>
                 </div>
             </div>
         </div>
 
         <!-- Localisation -->
-        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
-            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3
+                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+            >
                 Localisation
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
-                    <Label class="mb-1.5 block">Pays <span class="text-destructive">*</span></Label>
+                    <Label class="mb-1.5 block"
+                        >Pays <span class="text-destructive">*</span></Label
+                    >
                     <Dropdown
                         :model-value="form.pays"
                         @update:model-value="onPaysChange($event)"
@@ -145,37 +258,74 @@ function onTelephoneInput(value: string | null | undefined) {
                     >
                         <template #value="{ value }">
                             <div v-if="value" class="flex items-center gap-2">
-                                <img :src="flagUrl(PAYS_OPTIONS.find(c => c.value === value)?.code ?? '')" class="h-4 w-auto rounded-sm shadow-sm" />
+                                <img
+                                    :src="
+                                        flagUrl(
+                                            PAYS_OPTIONS.find(
+                                                (c) => c.value === value,
+                                            )?.code ?? '',
+                                        )
+                                    "
+                                    class="h-4 w-auto rounded-sm shadow-sm"
+                                />
                                 <span>{{ value }}</span>
                             </div>
-                            <span v-else class="text-muted-foreground">Sélectionner…</span>
+                            <span v-else class="text-muted-foreground"
+                                >Sélectionner…</span
+                            >
                         </template>
                         <template #option="{ option }">
                             <div class="flex items-center gap-2">
-                                <img :src="flagUrl(option.code)" :alt="option.label" class="h-4 w-auto rounded-sm shadow-sm" />
+                                <img
+                                    :src="flagUrl(option.code)"
+                                    :alt="option.label"
+                                    class="h-4 w-auto rounded-sm shadow-sm"
+                                />
                                 <span>{{ option.label }}</span>
                             </div>
                         </template>
                     </Dropdown>
-                    <p v-if="errors.code_pays" class="mt-1 text-xs text-destructive">{{ errors.code_pays }}</p>
+                    <p
+                        v-if="errors.code_pays"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.code_pays }}
+                    </p>
                 </div>
                 <div>
-                    <Label for="ville" class="mb-1.5 block">Ville <span class="text-destructive">*</span></Label>
+                    <Label for="ville" class="mb-1.5 block"
+                        >Ville <span class="text-destructive">*</span></Label
+                    >
                     <InputText
                         id="ville"
                         :model-value="form.ville ?? ''"
-                        @update:model-value="$emit('update:form', { ...form, ville: $event || null })"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                ville: $event || null,
+                            })
+                        "
                         class="w-full"
                         :class="{ 'p-invalid': errors.ville }"
                     />
-                    <p v-if="errors.ville" class="mt-1 text-xs text-destructive">{{ errors.ville }}</p>
+                    <p
+                        v-if="errors.ville"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.ville }}
+                    </p>
                 </div>
                 <div class="sm:col-span-2">
                     <Label for="adresse" class="mb-1.5 block">Adresse</Label>
                     <InputText
                         id="adresse"
                         :model-value="form.adresse ?? ''"
-                        @update:model-value="$emit('update:form', { ...form, adresse: $event || null })"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                adresse: $event || null,
+                            })
+                        "
                         class="w-full"
                     />
                 </div>
@@ -183,16 +333,28 @@ function onTelephoneInput(value: string | null | undefined) {
         </div>
 
         <!-- Contact -->
-        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
-            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3
+                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+            >
                 Contact
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
-                    <Label for="telephone" class="mb-1.5 block">Téléphone <span class="text-destructive">*</span></Label>
+                    <Label for="telephone" class="mb-1.5 block"
+                        >Téléphone
+                        <span class="text-destructive">*</span></Label
+                    >
                     <div class="flex gap-2">
-                        <div class="flex h-10 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border bg-muted/40 px-2 font-mono text-sm text-muted-foreground">
-                            <img v-if="selectedCountry" :src="flagUrl(selectedCountry.code)" :alt="selectedCountry.label" class="h-4 w-auto rounded-sm shadow-sm" />
+                        <div
+                            class="flex h-10 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border bg-muted/40 px-2 font-mono text-sm text-muted-foreground"
+                        >
+                            <img
+                                v-if="selectedCountry"
+                                :src="flagUrl(selectedCountry.code)"
+                                :alt="selectedCountry.label"
+                                class="h-4 w-auto rounded-sm shadow-sm"
+                            />
                             <span>{{ form.code_phone_pays ?? '—' }}</span>
                         </div>
                         <InputText
@@ -209,41 +371,69 @@ function onTelephoneInput(value: string | null | undefined) {
                             :class="{ 'p-invalid': errors.telephone }"
                         />
                     </div>
-                    <p v-if="errors.telephone" class="mt-1 text-xs text-destructive">{{ errors.telephone }}</p>
-                    <p v-else class="mt-1 text-xs text-muted-foreground">Saisissez les chiffres sans indicatif</p>
+                    <p
+                        v-if="errors.telephone"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.telephone }}
+                    </p>
+                    <p v-else class="mt-1 text-xs text-muted-foreground">
+                        Saisissez les chiffres sans indicatif
+                    </p>
                 </div>
                 <div>
                     <Label for="email" class="mb-1.5 block">Email</Label>
                     <InputText
                         id="email"
                         :model-value="form.email ?? ''"
-                        @update:model-value="$emit('update:form', { ...form, email: $event || null })"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                email: $event || null,
+                            })
+                        "
                         type="email"
                         class="w-full"
                         :class="{ 'p-invalid': errors.email }"
                     />
-                    <p v-if="errors.email" class="mt-1 text-xs text-destructive">{{ errors.email }}</p>
+                    <p
+                        v-if="errors.email"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.email }}
+                    </p>
                 </div>
             </div>
         </div>
 
         <!-- Statut -->
-        <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
-            <h3 class="mb-4 sm:mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3
+                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+            >
                 Statut
             </h3>
             <div class="flex items-center gap-3">
                 <Checkbox
                     id="is_active"
                     :model-value="Boolean(form.is_active)"
-                    @update:model-value="$emit('update:form', { ...form, is_active: $event === true })"
+                    @update:model-value="
+                        $emit('update:form', {
+                            ...form,
+                            is_active: $event === true,
+                        })
+                    "
                 />
                 <div>
                     <Label for="is_active" class="cursor-pointer font-medium">
                         {{ form.is_active ? 'Actif' : 'Inactif' }}
                     </Label>
                     <p class="text-xs text-muted-foreground">
-                        {{ form.is_active ? 'Décochez pour désactiver ce livreur' : 'Cochez pour activer ce livreur' }}
+                        {{
+                            form.is_active
+                                ? 'Décochez pour désactiver ce livreur'
+                                : 'Cochez pour activer ce livreur'
+                        }}
                     </p>
                 </div>
             </div>
@@ -252,9 +442,7 @@ function onTelephoneInput(value: string | null | undefined) {
         <!-- Pied -->
         <div class="hidden items-center justify-between sm:flex">
             <a href="/livreurs">
-                <Button type="button" variant="outline">
-                    Retour
-                </Button>
+                <Button type="button" variant="outline"> Retour </Button>
             </a>
             <Button type="submit" :disabled="processing">
                 <Save class="mr-2 h-4 w-4" />
@@ -264,4 +452,3 @@ function onTelephoneInput(value: string | null | undefined) {
         <div class="h-20 sm:hidden" />
     </form>
 </template>
-

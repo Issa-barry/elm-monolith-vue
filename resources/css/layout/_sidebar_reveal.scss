@@ -42,7 +42,8 @@
                         border: 2px solid var(--logo-color);
                         background-color: transparent;
                         transition:
-                            background-color var(--layout-section-transition-duration),
+                            background-color
+                                var(--layout-section-transition-duration),
                             transform 0.3s;
                     }
                 }

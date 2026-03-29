@@ -1,5 +1,5 @@
-import '../css/app.css';
 import 'primeicons/primeicons.css';
+import '../css/app.css';
 
 import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
@@ -18,7 +18,8 @@ import {
 } from './lib/primevue-theme';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
-const initialPrimeVueTheme = getStoredPrimeVueTheme() ?? resolvePrimeVueThemeFromEnv();
+const initialPrimeVueTheme =
+    getStoredPrimeVueTheme() ?? resolvePrimeVueThemeFromEnv();
 const { preset: primeVuePreset } = getPrimeVueThemePreset(initialPrimeVueTheme);
 
 // Apply light/dark class before the app mounts to avoid a flash of wrong theme.
@@ -43,7 +44,8 @@ createInertiaApp({
                 },
             });
 
-        const { primary, surface } = applyStoredPrimeVueColors(initialPrimeVueTheme);
+        const { primary, surface } =
+            applyStoredPrimeVueColors(initialPrimeVueTheme);
         applyAppThemeColors(
             primary,
             surface,
