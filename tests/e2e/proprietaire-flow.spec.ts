@@ -11,14 +11,16 @@ function randomDigits(length: number): string {
 }
 
 test.afterEach(async ({ browser }) => {
-    const context = await browser.newContext();
     try {
-        const p = await context.newPage();
-        await cleanupRowsByPrefix(p, '/proprietaires', PREFIX);
+        const context = await browser.newContext();
+        try {
+            const p = await context.newPage();
+            await cleanupRowsByPrefix(p, '/proprietaires', PREFIX);
+        } finally {
+            await context.close().catch(() => undefined);
+        }
     } catch (e) {
         console.warn('E2E cleanup warning (proprietaires):', e);
-    } finally {
-        await context.close().catch(() => undefined);
     }
 });
 
