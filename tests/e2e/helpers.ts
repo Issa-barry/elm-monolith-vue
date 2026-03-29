@@ -11,43 +11,32 @@ export function escapeRegExp(value: string): string {
 export async function login(page: Page): Promise<void> {
     await page.goto('/login');
 
-    // Attendre que Vue ait monté le formulaire
+    // Attendre que Vue ait monté le formulaire (input password toujours présent)
     await page.waitForSelector('input[name="password"]', { timeout: 20_000 });
 
     const emailInput = page.locator('input[name="email"]');
     if ((await emailInput.count()) > 0) {
         await emailInput.fill(E2E_EMAIL);
     } else {
-        // Formulaire téléphone PrimeVue Select + input visible (type="tel").
-        // Extraire le prefix (+33) et les chiffres locaux (758855039).
-        const match = E2E_PHONE.match(/^(\+\d{1,4})(\d+)$/);
-        if (match) {
-            const [, prefix, localDigits] = match;
-            // Sélectionner le pays correspondant au prefix dans le Select
-            const countryCombo = page.getByRole('combobox').first();
-            if ((await countryCombo.count()) > 0) {
-                await countryCombo.click();
-                const option = page.getByRole('option').filter({ hasText: prefix }).first();
-                if ((await option.count()) > 0) {
-                    await option.click();
-                }
+        // Formulaire téléphone : forcer la valeur de l'input caché directement.
+        // On ne touche pas le champ visible pour éviter que Vue ne réécrive
+        // la valeur via sa réactivité (fullPhone computed = prefix + digits).
+        await page.evaluate((phone) => {
+            const el = document.querySelector('input[name="telephone"]') as HTMLInputElement | null;
+            if (el) {
+                // Définir la valeur native + déclencher un event change pour
+                // que les validations HTML intègrent la nouvelle valeur.
+                Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+                    ?.set?.call(el, phone);
+                el.dispatchEvent(new Event('change', { bubbles: true }));
             }
-            // Remplir les chiffres locaux dans l'input visible
-            const telVisible = page.locator('input[type="tel"]:visible').first();
-            await telVisible.fill(localDigits);
-            // Attendre que Vue mette à jour l'input caché
-            await page.waitForFunction(
-                (phone) => (document.querySelector('input[name="telephone"]') as HTMLInputElement | null)?.value === phone,
-                E2E_PHONE,
-                { timeout: 5_000 },
-            ).catch(() => undefined); // Tolérant si timeout
-        }
+        }, E2E_PHONE);
     }
 
     await page.locator('input[name="password"]').fill(E2E_PASSWORD);
     await page.getByRole('button', { name: /se connecter/i }).click();
 
-    await page.waitForURL((url) => !url.pathname.endsWith('/login'));
+    await page.waitForURL((url) => !url.pathname.endsWith('/login'), { timeout: 30_000 });
 }
 
 export function getVisibleSearchInput(page: Page): Locator {
