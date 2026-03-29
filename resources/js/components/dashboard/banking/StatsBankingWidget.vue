@@ -24,28 +24,28 @@
     <div class="col-span-12 md:col-span-6 xl:col-span-4">
         <div class="card h-full">
             <div class="flex items-center justify-between mb-4">
-                <div class="text-surface-900 dark:text-surface-0 text-xl font-semibold">Credit Card</div>
-                <img alt="avatar" src="/demo/images/banking/visa.svg" class="h-4" />
+                <div class="text-foreground text-xl font-semibold">Credit Card</div>
+                <i class="pi pi-credit-card text-primary text-xl"></i>
             </div>
-            <div class="text-surface-600 dark:text-surface-200 mb-1 font-semibold">Debt</div>
+            <div class="text-muted-foreground mb-1 font-semibold">Debt</div>
             <div class="text-2xl text-primary mb-8 font-bold">$1.500,00</div>
             <div class="flex items-center justify-between">
-                <span class="text-surface-900 dark:text-surface-0 text-lg">**** **** **** 1231</span>
-                <span class="text-surface-600 dark:text-surface-200 font-medium text-lg">12/24</span>
+                <span class="text-foreground text-lg">**** **** **** 1231</span>
+                <span class="text-muted-foreground font-medium text-lg">12/24</span>
             </div>
         </div>
     </div>
     <div class="col-span-12 md:col-span-6 xl:col-span-2">
         <div class="card h-full flex flex-col items-center justify-center">
             <i class="pi pi-dollar text-primary !text-4xl mb-6"></i>
-            <span class="text-surface-900 dark:text-surface-0 text-lg mb-6 font-medium">Primary</span>
+            <span class="text-foreground text-lg mb-6 font-medium">Primary</span>
             <span class="text-2xl text-primary font-bold">$24,345.21</span>
         </div>
     </div>
     <div class="col-span-12 md:col-span-6 xl:col-span-2">
         <div class="card h-full flex flex-col items-center justify-center">
             <i class="pi pi-euro text-primary !text-4xl mb-6"></i>
-            <span class="text-surface-900 dark:text-surface-0 text-lg mb-6 font-medium">Currency</span>
+            <span class="text-foreground text-lg mb-6 font-medium">Currency</span>
             <span class="text-2xl text-primary font-bold">$10,416.11</span>
         </div>
     </div>
