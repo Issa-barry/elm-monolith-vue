@@ -34,7 +34,7 @@ const stockAlertes = computed(
             total: 0,
         },
 );
-const produits = computed(() => (page.props as any).produits_alertes ?? []);
+const _produits = computed(() => (page.props as any).produits_alertes ?? []);
 
 function syncThemeState() {
     if (typeof document === 'undefined') return;

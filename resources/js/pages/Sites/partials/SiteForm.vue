@@ -51,7 +51,7 @@ interface FormData {
     email: string | null;
 }
 
-const props = defineProps<{
+defineProps<{
     form: FormData;
     errors: Partial<Record<keyof FormData, string>>;
     processing: boolean;
