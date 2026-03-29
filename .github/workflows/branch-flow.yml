@@ -1,0 +1,31 @@
+name: branch-flow
+
+on:
+  pull_request:
+    branches:
+      - pre-prod
+      - main
+
+jobs:
+  enforce-flow:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate PR branch flow
+        run: |
+          BASE="${{ github.base_ref }}"
+          HEAD="${{ github.head_ref }}"
+
+          echo "PR flow: ${HEAD} -> ${BASE}"
+
+          if [ "$BASE" = "pre-prod" ] && [ "$HEAD" != "dev" ]; then
+            echo "Invalid flow: only 'dev' can be merged into 'pre-prod'."
+            exit 1
+          fi
+
+          if [ "$BASE" = "main" ] && [ "$HEAD" != "pre-prod" ]; then
+            echo "Invalid flow: only 'pre-prod' can be merged into 'main'."
+            exit 1
+          fi
+
+          echo "Branch flow valid."
