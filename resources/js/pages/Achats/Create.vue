@@ -45,17 +45,19 @@ const breadcrumbs: BreadcrumbItem[] = [
 // ── Form ──────────────────────────────────────────────────────────────────────
 const form = useForm({
     prestataire_id: null as number | null,
-    note:           null as string | null,
-    lignes:         [{ produit_id: null, qte: 1, prix_achat: 0, total: 0 }] as LigneForm[],
+    note: null as string | null,
+    lignes: [
+        { produit_id: null, qte: 1, prix_achat: 0, total: 0 },
+    ] as LigneForm[],
 });
 
 // ── Options ───────────────────────────────────────────────────────────────────
 const produitOptions = computed(() =>
-    props.produits.map(p => ({ value: p.id, label: p.nom }))
+    props.produits.map((p) => ({ value: p.id, label: p.nom })),
 );
 
 const prestataireOptions = computed(() =>
-    props.prestataires.map(p => ({ value: p.id, label: p.nom }))
+    props.prestataires.map((p) => ({ value: p.id, label: p.nom })),
 );
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
@@ -73,7 +75,9 @@ function onProduitChange(index: number, produitId: number | null) {
     }
 
     // Si le produit existe déjà sur une autre ligne → fusionner les quantités
-    const existingIndex = form.lignes.findIndex((l, i) => i !== index && l.produit_id === produitId);
+    const existingIndex = form.lignes.findIndex(
+        (l, i) => i !== index && l.produit_id === produitId,
+    );
     if (existingIndex !== -1) {
         const existing = form.lignes[existingIndex];
         existing.qte += form.lignes[index].qte;
@@ -84,7 +88,7 @@ function onProduitChange(index: number, produitId: number | null) {
 
     const ligne = form.lignes[index];
     ligne.produit_id = produitId;
-    const produit = props.produits.find(p => p.id === produitId);
+    const produit = props.produits.find((p) => p.id === produitId);
     ligne.prix_achat = produit ? produit.prix_achat : 0;
     ligne.total = ligne.prix_achat * ligne.qte;
 }
@@ -113,7 +117,7 @@ function removeLigne(index: number) {
 
 // ── Total général ─────────────────────────────────────────────────────────────
 const totalGeneral = computed(() =>
-    form.lignes.reduce((sum, l) => sum + l.total, 0)
+    form.lignes.reduce((sum, l) => sum + l.total, 0),
 );
 
 // ── Reset au montage ──────────────────────────────────────────────────────────
@@ -124,14 +128,15 @@ onMounted(() => {
         const first = props.produits[0];
         form.lignes[0].produit_id = first.id;
         form.lignes[0].prix_achat = first.prix_achat;
-        form.lignes[0].total      = first.prix_achat * form.lignes[0].qte;
+        form.lignes[0].total = first.prix_achat * form.lignes[0].qte;
     }
 });
 
 // ── Validation locale ─────────────────────────────────────────────────────────
-const canSubmit = computed(() =>
-    form.lignes.some(l => l.produit_id !== null && l.qte > 0) &&
-    !form.processing
+const canSubmit = computed(
+    () =>
+        form.lignes.some((l) => l.produit_id !== null && l.qte > 0) &&
+        !form.processing,
 );
 
 // ── Soumission ────────────────────────────────────────────────────────────────
@@ -144,40 +149,50 @@ function submit() {
     <Head title="Nouveau bon de commande" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-
         <!-- Mobile sticky header -->
-        <div class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden">
+        <div
+            class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
+        >
             <div class="relative flex items-center justify-center px-4 py-3">
-                <Link href="/achats" class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95">
+                <Link
+                    href="/achats"
+                    class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
+                >
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
                 <div class="text-center">
-                    <h1 class="text-[17px] font-semibold leading-tight">Nouveau bon de commande</h1>
+                    <h1 class="text-[17px] leading-tight font-semibold">
+                        Nouveau bon de commande
+                    </h1>
                 </div>
             </div>
         </div>
 
         <div class="mx-auto max-w-5xl p-4 sm:p-6">
-
             <div class="mb-6 hidden sm:block">
-                <h1 class="text-2xl font-semibold tracking-tight">Nouveau bon de commande</h1>
+                <h1 class="text-2xl font-semibold tracking-tight">
+                    Nouveau bon de commande
+                </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Créez un bon de commande. Vous pourrez le réceptionner pour mettre à jour le stock.
+                    Créez un bon de commande. Vous pourrez le réceptionner pour
+                    mettre à jour le stock.
                 </p>
             </div>
 
             <form id="achat-form" class="space-y-6" @submit.prevent="submit">
-
                 <!-- En-tête -->
-                <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
-                    <h2 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+                    <h2
+                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
                         Informations générales
                     </h2>
                     <div class="grid gap-4 sm:grid-cols-2">
-
                         <!-- Fournisseur -->
                         <div>
-                            <Label class="mb-1.5 block text-sm">Fournisseur</Label>
+                            <Label class="mb-1.5 block text-sm"
+                                >Fournisseur</Label
+                            >
                             <Dropdown
                                 v-model="form.prestataire_id"
                                 :options="prestataireOptions"
@@ -194,7 +209,7 @@ function submit() {
                         <div>
                             <Label class="mb-1.5 block text-sm">Note</Label>
                             <InputText
-                                v-model="(form.note as string)"
+                                v-model="form.note as string"
                                 placeholder="Référence fournisseur, commentaire…"
                                 class="w-full"
                             />
@@ -203,54 +218,138 @@ function submit() {
                 </div>
 
                 <!-- Lignes de commande -->
-                <div class="rounded-xl border bg-card p-4 sm:p-6 shadow-sm">
-                    <h2 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+                    <h2
+                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
                         Produits à commander
                     </h2>
 
-                    <p v-if="form.errors.lignes" class="mb-3 text-xs text-destructive">{{ form.errors.lignes }}</p>
+                    <p
+                        v-if="form.errors.lignes"
+                        class="mb-3 text-xs text-destructive"
+                    >
+                        {{ form.errors.lignes }}
+                    </p>
 
                     <!-- ── Tableau desktop ── -->
-                    <div class="hidden overflow-hidden rounded-lg border sm:block">
+                    <div
+                        class="hidden overflow-hidden rounded-lg border sm:block"
+                    >
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b bg-muted/40">
-                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Produit</th>
-                                    <th class="px-4 py-2.5 text-center font-medium text-muted-foreground" style="width: 110px">Qté</th>
-                                    <th class="px-4 py-2.5 text-right font-medium text-muted-foreground" style="width: 180px">Prix achat unit.</th>
-                                    <th class="px-4 py-2.5 text-right font-medium text-muted-foreground" style="width: 160px">Total</th>
-                                    <th class="px-4 py-2.5" style="width: 48px"></th>
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Produit
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 110px"
+                                    >
+                                        Qté
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                        style="width: 180px"
+                                    >
+                                        Prix achat unit.
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                        style="width: 160px"
+                                    >
+                                        Total
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5"
+                                        style="width: 48px"
+                                    ></th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
-                                <tr v-for="(ligne, index) in form.lignes" :key="index" class="hover:bg-muted/10">
+                                <tr
+                                    v-for="(ligne, index) in form.lignes"
+                                    :key="index"
+                                    class="hover:bg-muted/10"
+                                >
                                     <td class="px-4 py-3">
                                         <Dropdown
                                             :model-value="ligne.produit_id"
-                                            @update:model-value="onProduitChange(index, $event)"
+                                            @update:model-value="
+                                                onProduitChange(index, $event)
+                                            "
                                             :options="produitOptions"
                                             option-label="label"
                                             option-value="value"
                                             placeholder="Choisir un produit..."
                                             filter
                                             class="w-full"
-                                            :class="{ 'p-invalid': (form.errors as any)[`lignes.${index}.produit_id`] }"
+                                            :class="{
+                                                'p-invalid': (
+                                                    form.errors as any
+                                                )[`lignes.${index}.produit_id`],
+                                            }"
                                         />
-                                        <p v-if="(form.errors as any)[`lignes.${index}.produit_id`]" class="mt-1 text-xs text-destructive">
-                                            {{ (form.errors as any)[`lignes.${index}.produit_id`] }}
+                                        <p
+                                            v-if="
+                                                (form.errors as any)[
+                                                    `lignes.${index}.produit_id`
+                                                ]
+                                            "
+                                            class="mt-1 text-xs text-destructive"
+                                        >
+                                            {{
+                                                (form.errors as any)[
+                                                    `lignes.${index}.produit_id`
+                                                ]
+                                            }}
                                         </p>
                                     </td>
                                     <td class="px-4 py-3">
-                                        <InputNumber :model-value="ligne.qte" @update:model-value="onQteChange(index, $event)" :min="1" :use-grouping="false" class="w-full" input-class="w-full text-center" />
+                                        <InputNumber
+                                            :model-value="ligne.qte"
+                                            @update:model-value="
+                                                onQteChange(index, $event)
+                                            "
+                                            :min="1"
+                                            :use-grouping="false"
+                                            class="w-full"
+                                            input-class="w-full text-center"
+                                        />
                                     </td>
                                     <td class="px-4 py-3">
-                                        <InputNumber :model-value="ligne.prix_achat" @update:model-value="onPrixChange(index, $event)" :min="0" :use-grouping="false" suffix=" GNF" class="w-full" input-class="w-full text-right" />
+                                        <InputNumber
+                                            :model-value="ligne.prix_achat"
+                                            @update:model-value="
+                                                onPrixChange(index, $event)
+                                            "
+                                            :min="0"
+                                            :use-grouping="false"
+                                            suffix=" GNF"
+                                            class="w-full"
+                                            input-class="w-full text-right"
+                                        />
                                     </td>
-                                    <td class="px-4 py-3 text-right tabular-nums font-medium">
-                                        {{ ligne.total > 0 ? formatGNF(ligne.total) : '—' }}
+                                    <td
+                                        class="px-4 py-3 text-right font-medium tabular-nums"
+                                    >
+                                        {{
+                                            ligne.total > 0
+                                                ? formatGNF(ligne.total)
+                                                : '—'
+                                        }}
                                     </td>
                                     <td class="px-4 py-3 text-center">
-                                        <Button type="button" variant="ghost" size="icon" class="h-7 w-7 text-destructive hover:text-destructive" :disabled="form.lignes.length <= 1" @click="removeLigne(index)">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-7 w-7 text-destructive hover:text-destructive"
+                                            :disabled="form.lignes.length <= 1"
+                                            @click="removeLigne(index)"
+                                        >
                                             <Trash2 class="h-4 w-4" />
                                         </Button>
                                     </td>
@@ -268,7 +367,9 @@ function submit() {
                         >
                             <Dropdown
                                 :model-value="ligne.produit_id"
-                                @update:model-value="onProduitChange(index, $event)"
+                                @update:model-value="
+                                    onProduitChange(index, $event)
+                                "
                                 :options="produitOptions"
                                 option-label="label"
                                 option-value="value"
@@ -279,10 +380,16 @@ function submit() {
 
                             <div class="mt-2.5 grid grid-cols-2 gap-2.5">
                                 <div>
-                                    <p class="mb-1 text-[11px] font-medium text-muted-foreground">Quantité</p>
+                                    <p
+                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
+                                    >
+                                        Quantité
+                                    </p>
                                     <InputNumber
                                         :model-value="ligne.qte"
-                                        @update:model-value="onQteChange(index, $event)"
+                                        @update:model-value="
+                                            onQteChange(index, $event)
+                                        "
                                         :min="1"
                                         :use-grouping="false"
                                         class="w-full"
@@ -290,10 +397,16 @@ function submit() {
                                     />
                                 </div>
                                 <div>
-                                    <p class="mb-1 text-[11px] font-medium text-muted-foreground">Prix achat (GNF)</p>
+                                    <p
+                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
+                                    >
+                                        Prix achat (GNF)
+                                    </p>
                                     <InputNumber
                                         :model-value="ligne.prix_achat"
-                                        @update:model-value="onPrixChange(index, $event)"
+                                        @update:model-value="
+                                            onPrixChange(index, $event)
+                                        "
                                         :min="0"
                                         :use-grouping="false"
                                         class="w-full"
@@ -302,11 +415,23 @@ function submit() {
                                 </div>
                             </div>
 
-                            <div class="mt-2.5 flex items-center justify-between">
+                            <div
+                                class="mt-2.5 flex items-center justify-between"
+                            >
                                 <div>
-                                    <p class="text-[11px] text-muted-foreground">Total ligne</p>
-                                    <p class="text-sm font-semibold tabular-nums">
-                                        {{ ligne.total > 0 ? formatGNF(ligne.total) : '—' }}
+                                    <p
+                                        class="text-[11px] text-muted-foreground"
+                                    >
+                                        Total ligne
+                                    </p>
+                                    <p
+                                        class="text-sm font-semibold tabular-nums"
+                                    >
+                                        {{
+                                            ligne.total > 0
+                                                ? formatGNF(ligne.total)
+                                                : '—'
+                                        }}
                                     </p>
                                 </div>
                                 <Button
@@ -325,13 +450,24 @@ function submit() {
 
                     <!-- Ajouter + Total -->
                     <div class="mt-4 flex items-center justify-between">
-                        <Button type="button" variant="outline" size="sm" @click="addLigne">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            @click="addLigne"
+                        >
                             <Plus class="mr-2 h-4 w-4" />
                             Ajouter une ligne
                         </Button>
                         <div class="text-right">
-                            <p class="text-xs uppercase tracking-wider text-muted-foreground">Total commande</p>
-                            <p class="text-2xl font-bold tabular-nums">{{ formatGNF(totalGeneral) }}</p>
+                            <p
+                                class="text-xs tracking-wider text-muted-foreground uppercase"
+                            >
+                                Total commande
+                            </p>
+                            <p class="text-2xl font-bold tabular-nums">
+                                {{ formatGNF(totalGeneral) }}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -340,29 +476,33 @@ function submit() {
                 <div class="h-20 sm:hidden" />
 
                 <!-- Footer desktop -->
-                <div class="hidden sm:flex items-center justify-between">
+                <div class="hidden items-center justify-between sm:flex">
                     <Link href="/achats">
                         <Button type="button" variant="outline">Retour</Button>
                     </Link>
                     <Button type="submit" :disabled="!canSubmit">
-                        {{ form.processing ? 'Enregistrement…' : 'Enregistrer le bon de commande' }}
+                        {{
+                            form.processing
+                                ? 'Enregistrement…'
+                                : 'Enregistrer le bon de commande'
+                        }}
                     </Button>
                 </div>
-
             </form>
         </div>
 
         <!-- Mobile sticky footer -->
-        <div class="fixed bottom-0 left-0 right-0 z-20 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden">
-            <Button
-                class="w-full"
-                :disabled="!canSubmit"
-                @click="submit"
-            >
+        <div
+            class="fixed right-0 bottom-0 left-0 z-20 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden"
+        >
+            <Button class="w-full" :disabled="!canSubmit" @click="submit">
                 <Save class="mr-2 h-4 w-4" />
-                {{ form.processing ? 'Enregistrement…' : 'Enregistrer le bon de commande' }}
+                {{
+                    form.processing
+                        ? 'Enregistrement…'
+                        : 'Enregistrer le bon de commande'
+                }}
             </Button>
         </div>
-
     </AppLayout>
 </template>

@@ -29,15 +29,21 @@ const PAYS: CountryOption[] = [
     { label: 'Sierra Leone', code: 'SL', prefix: '+232', localLength: 8 },
     { label: 'France', code: 'FR', prefix: '+33', localLength: 9 },
     { label: 'Chine', code: 'CN', prefix: '+86', localLength: 11 },
-    { label: 'Émirats arabes unis', code: 'AE', prefix: '+971', localLength: 9 },
+    {
+        label: 'Émirats arabes unis',
+        code: 'AE',
+        prefix: '+971',
+        localLength: 9,
+    },
     { label: 'Inde', code: 'IN', prefix: '+91', localLength: 10 },
 ];
 
 const selectedCountryCode = ref(PAYS[0].code);
 const phoneDigits = ref('');
 
-const selectedPays = computed(() =>
-    PAYS.find((pays) => pays.code === selectedCountryCode.value) ?? PAYS[0],
+const selectedPays = computed(
+    () =>
+        PAYS.find((pays) => pays.code === selectedCountryCode.value) ?? PAYS[0],
 );
 
 const fullPhone = computed(() => {
@@ -50,16 +56,34 @@ function flagUrl(code: string): string {
 }
 
 function handlePhoneKeydown(e: KeyboardEvent) {
-    const pass = ['Backspace','Delete','Tab','Escape','Enter','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'];
+    const pass = [
+        'Backspace',
+        'Delete',
+        'Tab',
+        'Escape',
+        'Enter',
+        'ArrowLeft',
+        'ArrowRight',
+        'ArrowUp',
+        'ArrowDown',
+        'Home',
+        'End',
+    ];
     if (pass.includes(e.key)) return;
-    if ((e.ctrlKey || e.metaKey) && ['a','c','v','x'].includes(e.key.toLowerCase())) return;
+    if (
+        (e.ctrlKey || e.metaKey) &&
+        ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())
+    )
+        return;
     if (!/^\d$/.test(e.key)) e.preventDefault();
 }
 
 function handlePhoneInput(e: Event) {
     const input = e.target as HTMLInputElement;
     const raw = input.value.replace(/\D/g, '');
-    const max = raw.startsWith('0') ? selectedPays.value.localLength + 1 : selectedPays.value.localLength;
+    const max = raw.startsWith('0')
+        ? selectedPays.value.localLength + 1
+        : selectedPays.value.localLength;
     const digits = raw.slice(0, max);
     phoneDigits.value = digits;
     input.value = digits;
@@ -82,7 +106,10 @@ function handlePhoneInput(e: Event) {
             <div class="grid gap-6">
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div class="grid gap-2">
-                        <Label for="prenom">Prénom <span class="text-destructive">*</span></Label>
+                        <Label for="prenom"
+                            >Prénom
+                            <span class="text-destructive">*</span></Label
+                        >
                         <Input
                             id="prenom"
                             type="text"
@@ -97,7 +124,9 @@ function handlePhoneInput(e: Event) {
                         <InputError :message="errors.prenom" />
                     </div>
                     <div class="grid gap-2">
-                        <Label for="nom">Nom <span class="text-destructive">*</span></Label>
+                        <Label for="nom"
+                            >Nom <span class="text-destructive">*</span></Label
+                        >
                         <Input
                             id="nom"
                             type="text"
@@ -112,12 +141,19 @@ function handlePhoneInput(e: Event) {
                     </div>
                 </div>
 
-               
                 <div class="grid gap-2">
                     <Label>Téléphone</Label>
                     <input type="hidden" name="telephone" :value="fullPhone" />
-                    <input type="hidden" name="telephone_country" :value="selectedPays.code" />
-                    <input type="hidden" name="telephone_local" :value="phoneDigits" />
+                    <input
+                        type="hidden"
+                        name="telephone_country"
+                        :value="selectedPays.code"
+                    />
+                    <input
+                        type="hidden"
+                        name="telephone_local"
+                        :value="phoneDigits"
+                    />
 
                     <div class="flex gap-2">
                         <Select
@@ -133,16 +169,31 @@ function handlePhoneInput(e: Event) {
                             }"
                         >
                             <template #value="{ value }">
-                                <div v-if="value" class="flex items-center gap-2">
-                                    <img :src="flagUrl(value)" class="h-4 w-auto rounded-sm shadow-sm" />
-                                    <span class="font-mono text-sm">{{ selectedPays.prefix }}</span>
+                                <div
+                                    v-if="value"
+                                    class="flex items-center gap-2"
+                                >
+                                    <img
+                                        :src="flagUrl(value)"
+                                        class="h-4 w-auto rounded-sm shadow-sm"
+                                    />
+                                    <span class="font-mono text-sm">{{
+                                        selectedPays.prefix
+                                    }}</span>
                                 </div>
                             </template>
                             <template #option="{ option }">
                                 <div class="flex items-center gap-2">
-                                    <img :src="flagUrl(option.code)" :alt="option.label" class="h-4 w-auto rounded-sm shadow-sm" />
+                                    <img
+                                        :src="flagUrl(option.code)"
+                                        :alt="option.label"
+                                        class="h-4 w-auto rounded-sm shadow-sm"
+                                    />
                                     <span>{{ option.label }}</span>
-                                    <span class="ml-auto text-xs text-muted-foreground">{{ option.prefix }}</span>
+                                    <span
+                                        class="ml-auto text-xs text-muted-foreground"
+                                        >{{ option.prefix }}</span
+                                    >
                                 </div>
                             </template>
                         </Select>
@@ -156,18 +207,28 @@ function handlePhoneInput(e: Event) {
                             autocomplete="tel-national"
                             inputmode="numeric"
                             pattern="[0-9]*"
-                            :maxlength="phoneDigits.startsWith('0') ? selectedPays.localLength + 1 : selectedPays.localLength"
+                            :maxlength="
+                                phoneDigits.startsWith('0')
+                                    ? selectedPays.localLength + 1
+                                    : selectedPays.localLength
+                            "
                             :placeholder="`${selectedPays.localLength} chiffres`"
-                            class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm"
+                            class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm"
                         />
                     </div>
-                    <p class="text-xs text-muted-foreground">Saisissez uniquement les chiffres, sans indicatif.</p>
-                    <InputError :message="errors.telephone || errors.telephone_local" />
+                    <p class="text-xs text-muted-foreground">
+                        Saisissez uniquement les chiffres, sans indicatif.
+                    </p>
+                    <InputError
+                        :message="errors.telephone || errors.telephone_local"
+                    />
                 </div>
 
-
                 <div class="grid gap-2">
-                    <Label for="password">Mot de passe <span class="text-destructive">*</span></Label>
+                    <Label for="password"
+                        >Mot de passe
+                        <span class="text-destructive">*</span></Label
+                    >
                     <Input
                         id="password"
                         type="password"
@@ -180,8 +241,7 @@ function handlePhoneInput(e: Event) {
                     <InputError :message="errors.password" />
                 </div>
 
-
-<Button
+                <Button
                     type="submit"
                     class="mt-2 w-full"
                     tabindex="7"
@@ -199,7 +259,8 @@ function handlePhoneInput(e: Event) {
                     :href="login()"
                     class="underline underline-offset-4"
                     :tabindex="8"
-                >Se connecter</TextLink>
+                    >Se connecter</TextLink
+                >
             </div>
         </Form>
     </AuthBase>

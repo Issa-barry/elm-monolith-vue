@@ -66,7 +66,8 @@
                         text-align: center;
                         cursor: pointer;
                         outline: none;
-                        transition: background-color var(--layout-section-transition-duration);
+                        transition: background-color
+                            var(--layout-section-transition-duration);
                         width: auto;
                         height: auto;
                         margin: 0 auto 1rem auto;
@@ -118,7 +119,9 @@
                             }
 
                             &:hover {
-                                background-color: var(--popup-submenu-item-hover-bg-color);
+                                background-color: var(
+                                    --popup-submenu-item-hover-bg-color
+                                );
                             }
                         }
 

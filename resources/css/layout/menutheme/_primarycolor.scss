@@ -1,6 +1,11 @@
 .layout-primarycolor-menu {
     --logo-color: var(--primary-color-text);
-    --menu-bg: linear-gradient(to left top, var(--p-primary-400), var(--p-primary-500), var(--p-primary-600));
+    --menu-bg: linear-gradient(
+        to left top,
+        var(--p-primary-400),
+        var(--p-primary-500),
+        var(--p-primary-600)
+    );
     --root-menuitem-text-color: var(--primary-color-text);
     --menuitem-text-color: var(--primary-color-text);
     --menuitem-icon-color: var(--primary-color-text);
@@ -12,5 +17,10 @@
 
 .layout-dark.layout-primarycolor-menu,
 .layout-dim.layout-primarycolor-menu {
-    --menu-bg: linear-gradient(to left top, var(--p-primary-300), var(--p-primary-400), var(--p-primary-500));
+    --menu-bg: linear-gradient(
+        to left top,
+        var(--p-primary-300),
+        var(--p-primary-400),
+        var(--p-primary-500)
+    );
 }

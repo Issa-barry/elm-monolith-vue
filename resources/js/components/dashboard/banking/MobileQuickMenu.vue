@@ -2,8 +2,9 @@
 import { usePermissions } from '@/composables/usePermissions';
 import { toUrl } from '@/lib/utils';
 import { dashboard } from '@/routes';
-import { Link, usePage } from '@inertiajs/vue3';
 import type { InertiaLinkProps } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
+import type { LucideIcon } from 'lucide-vue-next';
 import {
     Building2,
     Car,
@@ -16,7 +17,6 @@ import {
     Truck,
     UserRound,
 } from 'lucide-vue-next';
-import type { LucideIcon } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 type QuickMenuHref = NonNullable<InertiaLinkProps['href']>;
@@ -31,74 +31,80 @@ interface QuickMenuItem {
 const page = usePage();
 const { can } = usePermissions();
 
-const quickMenuItems = computed((): QuickMenuItem[] => [
-    {
-        title: 'Accueil',
-        href: dashboard().url,
-        icon: House,
-        visible: true,
-    },
-    {
-        title: 'Ventes',
-        href: '/ventes',
-        icon: ShoppingCart,
-        visible: can('ventes.read'),
-    },
-    {
-        title: 'Achats',
-        href: '/achats',
-        icon: PackageCheck,
-        visible: can('achats.read'),
-    },
-    {
-        title: 'Packings',
-        href: '/packings',
-        icon: Layers,
-        visible: can('packings.read'),
-    },
-    {
-        title: 'Prestataires',
-        href: '/prestataires',
-        icon: HandCoins,
-        visible: can('prestataires.read'),
-    },
-    {
-        title: 'Vehicules',
-        href: '/vehicules',
-        icon: Car,
-        visible: can('vehicules.read'),
-    },
-    {
-        title: 'Livreurs',
-        href: '/livreurs',
-        icon: Truck,
-        visible: can('livreurs.read'),
-    },
-    {
-        title: 'Proprietaires',
-        href: '/proprietaires',
-        icon: UserRound,
-        visible: can('proprietaires.read'),
-    },
-    {
-        title: 'Produits',
-        href: '/produits',
-        icon: Package,
-        visible: can('produits.read'),
-    },
-    {
-        title: 'Sites',
-        href: '/sites',
-        icon: Building2,
-        visible: can('sites.read'),
-    },
-].filter((item) => item.visible));
+const quickMenuItems = computed((): QuickMenuItem[] =>
+    [
+        {
+            title: 'Accueil',
+            href: dashboard().url,
+            icon: House,
+            visible: true,
+        },
+        {
+            title: 'Ventes',
+            href: '/ventes',
+            icon: ShoppingCart,
+            visible: can('ventes.read'),
+        },
+        {
+            title: 'Achats',
+            href: '/achats',
+            icon: PackageCheck,
+            visible: can('achats.read'),
+        },
+        {
+            title: 'Packings',
+            href: '/packings',
+            icon: Layers,
+            visible: can('packings.read'),
+        },
+        {
+            title: 'Prestataires',
+            href: '/prestataires',
+            icon: HandCoins,
+            visible: can('prestataires.read'),
+        },
+        {
+            title: 'Vehicules',
+            href: '/vehicules',
+            icon: Car,
+            visible: can('vehicules.read'),
+        },
+        {
+            title: 'Livreurs',
+            href: '/livreurs',
+            icon: Truck,
+            visible: can('livreurs.read'),
+        },
+        {
+            title: 'Proprietaires',
+            href: '/proprietaires',
+            icon: UserRound,
+            visible: can('proprietaires.read'),
+        },
+        {
+            title: 'Produits',
+            href: '/produits',
+            icon: Package,
+            visible: can('produits.read'),
+        },
+        {
+            title: 'Sites',
+            href: '/sites',
+            icon: Building2,
+            visible: can('sites.read'),
+        },
+    ].filter((item) => item.visible),
+);
 
 function isItemActive(href: QuickMenuHref) {
     const url = toUrl(href);
     if (!url) return false;
 
-    return page.url === url || page.url.startsWith(`${url}/`) || page.url.startsWith(`${url}?`);
+    return (
+        page.url === url ||
+        page.url.startsWith(`${url}/`) ||
+        page.url.startsWith(`${url}?`)
+    );
 }
 </script>
 
@@ -117,7 +123,9 @@ function isItemActive(href: QuickMenuHref) {
                 "
             >
                 <component :is="item.icon" class="h-4 w-4" />
-                <span class="text-[11px] font-medium leading-tight">{{ item.title }}</span>
+                <span class="text-[11px] leading-tight font-medium">{{
+                    item.title
+                }}</span>
             </Link>
         </div>
     </div>

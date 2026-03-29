@@ -48,7 +48,8 @@
                         border: 2px solid var(--logo-color);
                         background-color: transparent;
                         transition:
-                            background-color var(--layout-section-transition-duration),
+                            background-color
+                                var(--layout-section-transition-duration),
                             transform 0.3s;
                     }
                 }
@@ -130,7 +131,8 @@
                             .app-logo-normal {
                                 display: inline;
                                 width: 100%;
-                                transition: width 0.3s cubic-bezier(0, 0, 0.2, 1);
+                                transition: width 0.3s
+                                    cubic-bezier(0, 0, 0.2, 1);
                                 transition-delay: 300ms;
                             }
 

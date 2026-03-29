@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import InputError from '@/components/InputError.vue';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
+import InputError from '@/components/InputError.vue';
 import TextLink from '@/components/TextLink.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,10 +14,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import AuthBase from '@/layouts/AuthLayout.vue';
-import { Eye, EyeOff } from 'lucide-vue-next';
 import { home, register } from '@/routes';
 import { store } from '@/routes/login';
 import { Form, Head, Link } from '@inertiajs/vue3';
+import { Eye, EyeOff } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed, ref } from 'vue';
 
@@ -35,25 +35,30 @@ interface CountryOption {
 }
 
 const PAYS: CountryOption[] = [
-    { label: 'Guinée',               code: 'GN', prefix: '+224', localLength: 9  },
-    { label: 'Guinée-Bissau',        code: 'GW', prefix: '+245', localLength: 7  },
-    { label: 'Sénégal',              code: 'SN', prefix: '+221', localLength: 9  },
-    { label: 'Mali',                 code: 'ML', prefix: '+223', localLength: 8  },
-    { label: "Côte d'Ivoire",        code: 'CI', prefix: '+225', localLength: 10 },
-    { label: 'Liberia',              code: 'LR', prefix: '+231', localLength: 8  },
-    { label: 'Sierra Leone',         code: 'SL', prefix: '+232', localLength: 8  },
-    { label: 'France',               code: 'FR', prefix: '+33',  localLength: 9  },
-    { label: 'Chine',                code: 'CN', prefix: '+86',  localLength: 11 },
-    { label: 'Émirats arabes unis',  code: 'AE', prefix: '+971', localLength: 9  },
-    { label: 'Inde',                 code: 'IN', prefix: '+91',  localLength: 10 },
+    { label: 'Guinée', code: 'GN', prefix: '+224', localLength: 9 },
+    { label: 'Guinée-Bissau', code: 'GW', prefix: '+245', localLength: 7 },
+    { label: 'Sénégal', code: 'SN', prefix: '+221', localLength: 9 },
+    { label: 'Mali', code: 'ML', prefix: '+223', localLength: 8 },
+    { label: "Côte d'Ivoire", code: 'CI', prefix: '+225', localLength: 10 },
+    { label: 'Liberia', code: 'LR', prefix: '+231', localLength: 8 },
+    { label: 'Sierra Leone', code: 'SL', prefix: '+232', localLength: 8 },
+    { label: 'France', code: 'FR', prefix: '+33', localLength: 9 },
+    { label: 'Chine', code: 'CN', prefix: '+86', localLength: 11 },
+    {
+        label: 'Émirats arabes unis',
+        code: 'AE',
+        prefix: '+971',
+        localLength: 9,
+    },
+    { label: 'Inde', code: 'IN', prefix: '+91', localLength: 10 },
 ];
 
 const selectedCountryCode = ref(PAYS[0].code);
 const phoneDigits = ref('');
 const showPassword = ref(false);
 
-const selectedPays = computed(() =>
-    PAYS.find((p) => p.code === selectedCountryCode.value) ?? PAYS[0],
+const selectedPays = computed(
+    () => PAYS.find((p) => p.code === selectedCountryCode.value) ?? PAYS[0],
 );
 
 // Si l'utilisateur tape 0xxxxxxxx (format local avec 0 initial), on le strip pour l'international
@@ -71,16 +76,34 @@ function handlePhoneInput(e: Event) {
     const input = e.target as HTMLInputElement;
     const raw = input.value.replace(/\D/g, '');
     // +1 digit autorisé si commence par 0 (ex: 0758855039 = 10 chiffres France)
-    const max = raw.startsWith('0') ? selectedPays.value.localLength + 1 : selectedPays.value.localLength;
+    const max = raw.startsWith('0')
+        ? selectedPays.value.localLength + 1
+        : selectedPays.value.localLength;
     const digits = raw.slice(0, max);
     phoneDigits.value = digits;
     input.value = digits;
 }
 
 function handlePhoneKeydown(e: KeyboardEvent) {
-    const pass = ['Backspace','Delete','Tab','Escape','Enter','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'];
+    const pass = [
+        'Backspace',
+        'Delete',
+        'Tab',
+        'Escape',
+        'Enter',
+        'ArrowLeft',
+        'ArrowRight',
+        'ArrowUp',
+        'ArrowDown',
+        'Home',
+        'End',
+    ];
     if (pass.includes(e.key)) return;
-    if ((e.ctrlKey || e.metaKey) && ['a','c','v','x'].includes(e.key.toLowerCase())) return;
+    if (
+        (e.ctrlKey || e.metaKey) &&
+        ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())
+    )
+        return;
     if (!/^\d$/.test(e.key)) e.preventDefault();
 }
 </script>
@@ -92,7 +115,9 @@ function handlePhoneKeydown(e: KeyboardEvent) {
         <Card
             class="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col border-0 bg-transparent shadow-none md:min-h-0 md:rounded-2xl md:border md:border-border/80 md:bg-card/95 md:shadow-2xl md:shadow-black/8 md:dark:shadow-black/35"
         >
-            <CardHeader class="px-4 pt-10 pb-2 text-center sm:px-6 md:px-8 md:pt-8 md:pb-0">
+            <CardHeader
+                class="px-4 pt-10 pb-2 text-center sm:px-6 md:px-8 md:pt-8 md:pb-0"
+            >
                 <Link
                     :href="home()"
                     class="mx-auto mb-2 flex h-10 w-12 items-center justify-center rounded-md"
@@ -126,7 +151,10 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                     <div class="space-y-5">
                         <!-- Sélecteur pays + numéro -->
                         <div class="space-y-2">
-                            <Label>Numéro de téléphone <span class="text-destructive">*</span></Label>
+                            <Label
+                                >Numéro de téléphone
+                                <span class="text-destructive">*</span></Label
+                            >
                             <div class="flex gap-2">
                                 <Select
                                     v-model="selectedCountryCode"
@@ -137,20 +165,37 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                                     class="shrink-0"
                                     :pt="{
                                         root: { class: 'h-10' },
-                                        label: { class: 'flex items-center py-0 h-10' },
+                                        label: {
+                                            class: 'flex items-center py-0 h-10',
+                                        },
                                     }"
                                 >
                                     <template #value="{ value }">
-                                        <div v-if="value" class="flex items-center gap-2">
-                                            <img :src="flagUrl(value)" class="h-4 w-auto rounded-sm shadow-sm" />
-                                            <span class="font-mono text-sm">{{ selectedPays.prefix }}</span>
+                                        <div
+                                            v-if="value"
+                                            class="flex items-center gap-2"
+                                        >
+                                            <img
+                                                :src="flagUrl(value)"
+                                                class="h-4 w-auto rounded-sm shadow-sm"
+                                            />
+                                            <span class="font-mono text-sm">{{
+                                                selectedPays.prefix
+                                            }}</span>
                                         </div>
                                     </template>
                                     <template #option="{ option }">
                                         <div class="flex items-center gap-2">
-                                            <img :src="flagUrl(option.code)" :alt="option.label" class="h-4 w-auto rounded-sm shadow-sm" />
+                                            <img
+                                                :src="flagUrl(option.code)"
+                                                :alt="option.label"
+                                                class="h-4 w-auto rounded-sm shadow-sm"
+                                            />
                                             <span>{{ option.label }}</span>
-                                            <span class="ml-auto text-xs text-muted-foreground">{{ option.prefix }}</span>
+                                            <span
+                                                class="ml-auto text-xs text-muted-foreground"
+                                                >{{ option.prefix }}</span
+                                            >
                                         </div>
                                     </template>
                                 </Select>
@@ -164,9 +209,13 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                                     autocomplete="tel-national"
                                     inputmode="numeric"
                                     autofocus
-                                    :maxlength="phoneDigits.startsWith('0') ? selectedPays.localLength + 1 : selectedPays.localLength"
+                                    :maxlength="
+                                        phoneDigits.startsWith('0')
+                                            ? selectedPays.localLength + 1
+                                            : selectedPays.localLength
+                                    "
                                     :placeholder="`${selectedPays.localLength} chiffres`"
-                                    class="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    class="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                                 />
                             </div>
                             <InputError :message="errors.telephone" />
@@ -175,7 +224,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                         <!-- Mot de passe -->
                         <div class="space-y-2">
                             <Label for="password">
-                                Mot de passe <span class="text-destructive">*</span>
+                                Mot de passe
+                                <span class="text-destructive">*</span>
                             </Label>
                             <div class="relative">
                                 <input
@@ -186,24 +236,40 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                                     :tabindex="3"
                                     autocomplete="current-password"
                                     placeholder="Mot de passe"
-                                    class="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 pr-10 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    class="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 pr-10 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                                 />
                                 <button
                                     type="button"
                                     class="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
                                     @click="showPassword = !showPassword"
-                                    :aria-label="showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'"
+                                    :aria-label="
+                                        showPassword
+                                            ? 'Masquer le mot de passe'
+                                            : 'Afficher le mot de passe'
+                                    "
                                 >
-                                    <component :is="showPassword ? EyeOff : Eye" class="h-4 w-4" />
+                                    <component
+                                        :is="showPassword ? EyeOff : Eye"
+                                        class="h-4 w-4"
+                                    />
                                 </button>
                             </div>
                             <InputError :message="errors.password" />
                         </div>
                     </div>
 
-                    <div class="mt-5 flex items-center justify-between gap-3 text-sm">
-                        <Label for="remember" class="flex items-center space-x-2">
-                            <Checkbox id="remember" name="remember" :tabindex="4" />
+                    <div
+                        class="mt-5 flex items-center justify-between gap-3 text-sm"
+                    >
+                        <Label
+                            for="remember"
+                            class="flex items-center space-x-2"
+                        >
+                            <Checkbox
+                                id="remember"
+                                name="remember"
+                                :tabindex="4"
+                            />
                             <span>Se souvenir de moi</span>
                         </Label>
                     </div>
@@ -225,7 +291,9 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                             v-if="canRegister"
                         >
                             Pas encore de compte ?
-                            <TextLink :href="register()" :tabindex="6">S'inscrire</TextLink>
+                            <TextLink :href="register()" :tabindex="6"
+                                >S'inscrire</TextLink
+                            >
                         </div>
                     </div>
                 </Form>

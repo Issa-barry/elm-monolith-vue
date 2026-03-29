@@ -7,7 +7,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { edit } from '@/routes/parametres';
 import { type BreadcrumbItem } from '@/types';
-import { useForm, Head } from '@inertiajs/vue3';
+import { Head, useForm } from '@inertiajs/vue3';
 import { Settings } from 'lucide-vue-next';
 import { computed } from 'vue';
 
@@ -35,10 +35,10 @@ const groupeLabels: Record<string, string> = {
 };
 
 const cleLabels: Record<string, string> = {
-    seuil_stock_faible:           'Seuil de stock faible',
-    notifications_stock_actives:  'Alertes de stock faible',
-    prix_rouleau_defaut:          'Prix rouleau par défaut (GNF)',
-    produit_rouleau_id:           'ID produit rouleau',
+    seuil_stock_faible: 'Seuil de stock faible',
+    notifications_stock_actives: 'Alertes de stock faible',
+    prix_rouleau_defaut: 'Prix rouleau par défaut (GNF)',
+    produit_rouleau_id: 'ID produit rouleau',
 };
 
 // ── Regroupement ──────────────────────────────────────────────────────────────
@@ -56,9 +56,12 @@ const forms: Record<number, ReturnType<typeof useForm>> = {};
 
 function getForm(p: Parametre) {
     if (!forms[p.id]) {
-        const initial = p.type === 'boolean'
-            ? (p.valeur_cast ? '1' : '0')
-            : (p.valeur ?? '');
+        const initial =
+            p.type === 'boolean'
+                ? p.valeur_cast
+                    ? '1'
+                    : '0'
+                : (p.valeur ?? '');
         forms[p.id] = useForm({ valeur: initial });
     }
     return forms[p.id];
@@ -93,10 +96,12 @@ function toggleBoolean(p: Parametre) {
                 <div
                     v-for="(params, groupe) in grouped"
                     :key="groupe"
-                    class="rounded-xl border bg-card overflow-hidden"
+                    class="overflow-hidden rounded-xl border bg-card"
                 >
                     <!-- En-tête groupe -->
-                    <div class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3">
+                    <div
+                        class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
+                    >
                         <Settings class="h-4 w-4 text-muted-foreground" />
                         <h3 class="text-sm font-semibold text-foreground">
                             {{ groupeLabels[groupe] ?? groupe }}
@@ -112,33 +117,47 @@ function toggleBoolean(p: Parametre) {
                         >
                             <!-- Label + description -->
                             <div class="min-w-0 flex-1">
-                                <Label :for="`param-${p.id}`" class="text-sm font-medium">
+                                <Label
+                                    :for="`param-${p.id}`"
+                                    class="text-sm font-medium"
+                                >
                                     {{ cleLabels[p.cle] ?? p.cle }}
                                 </Label>
-                                <p v-if="p.description" class="mt-0.5 text-xs text-muted-foreground">
+                                <p
+                                    v-if="p.description"
+                                    class="mt-0.5 text-xs text-muted-foreground"
+                                >
                                     {{ p.description }}
                                 </p>
                             </div>
 
                             <!-- Contrôle -->
-                            <div class="flex items-center gap-2 shrink-0">
+                            <div class="flex shrink-0 items-center gap-2">
                                 <!-- Boolean → toggle -->
                                 <template v-if="p.type === 'boolean'">
                                     <button
                                         :id="`param-${p.id}`"
                                         type="button"
                                         role="switch"
-                                        :aria-checked="getForm(p).valeur === '1'"
-                                        class="relative inline-flex h-6 w-11 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                        :class="getForm(p).valeur === '1'
-                                            ? 'bg-primary'
-                                            : 'bg-input'"
+                                        :aria-checked="
+                                            getForm(p).valeur === '1'
+                                        "
+                                        class="relative inline-flex h-6 w-11 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+                                        :class="
+                                            getForm(p).valeur === '1'
+                                                ? 'bg-primary'
+                                                : 'bg-input'
+                                        "
                                         :disabled="getForm(p).processing"
                                         @click="toggleBoolean(p)"
                                     >
                                         <span
                                             class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
-                                            :class="getForm(p).valeur === '1' ? 'translate-x-5' : 'translate-x-0'"
+                                            :class="
+                                                getForm(p).valeur === '1'
+                                                    ? 'translate-x-5'
+                                                    : 'translate-x-0'
+                                            "
                                         />
                                     </button>
                                 </template>
@@ -148,14 +167,23 @@ function toggleBoolean(p: Parametre) {
                                     <Input
                                         :id="`param-${p.id}`"
                                         v-model="getForm(p).valeur"
-                                        :type="p.type === 'integer' ? 'number' : 'text'"
-                                        :min="p.type === 'integer' ? 0 : undefined"
+                                        :type="
+                                            p.type === 'integer'
+                                                ? 'number'
+                                                : 'text'
+                                        "
+                                        :min="
+                                            p.type === 'integer' ? 0 : undefined
+                                        "
                                         class="w-36 text-right"
                                         @keyup.enter="submit(p)"
                                     />
                                     <Button
                                         size="sm"
-                                        :disabled="getForm(p).processing || !getForm(p).isDirty"
+                                        :disabled="
+                                            getForm(p).processing ||
+                                            !getForm(p).isDirty
+                                        "
                                         @click="submit(p)"
                                     >
                                         Enregistrer
@@ -167,7 +195,10 @@ function toggleBoolean(p: Parametre) {
                 </div>
 
                 <!-- État vide -->
-                <div v-if="Object.keys(grouped).length === 0" class="py-12 text-center text-sm text-muted-foreground">
+                <div
+                    v-if="Object.keys(grouped).length === 0"
+                    class="py-12 text-center text-sm text-muted-foreground"
+                >
                     Aucun paramètre configuré.
                 </div>
             </div>

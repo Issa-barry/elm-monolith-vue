@@ -57,11 +57,14 @@ const passwordInput = useTemplateRef('passwordInput');
                     >
                         <DialogHeader class="space-y-3">
                             <DialogTitle
-                                >Êtes-vous sûr de vouloir supprimer votre compte ?</DialogTitle
+                                >Êtes-vous sûr de vouloir supprimer votre compte
+                                ?</DialogTitle
                             >
                             <DialogDescription>
-                                Une fois votre compte supprimé, toutes ses données seront définitivement effacées.
-                                Veuillez saisir votre mot de passe pour confirmer la suppression.
+                                Une fois votre compte supprimé, toutes ses
+                                données seront définitivement effacées. Veuillez
+                                saisir votre mot de passe pour confirmer la
+                                suppression.
                             </DialogDescription>
                         </DialogHeader>
 

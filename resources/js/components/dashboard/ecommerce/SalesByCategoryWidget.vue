@@ -16,14 +16,22 @@ function initChart() {
         datasets: [
             {
                 data: [300, 50, 100],
-                backgroundColor: [documentStyle.getPropertyValue('--p-primary-700'), documentStyle.getPropertyValue('--p-primary-400'), documentStyle.getPropertyValue('--p-primary-100')],
-                hoverBackgroundColor: [documentStyle.getPropertyValue('--p-primary-600'), documentStyle.getPropertyValue('--p-primary-300'), documentStyle.getPropertyValue('--p-primary-200')]
-            }
-        ]
+                backgroundColor: [
+                    documentStyle.getPropertyValue('--p-primary-700'),
+                    documentStyle.getPropertyValue('--p-primary-400'),
+                    documentStyle.getPropertyValue('--p-primary-100'),
+                ],
+                hoverBackgroundColor: [
+                    documentStyle.getPropertyValue('--p-primary-600'),
+                    documentStyle.getPropertyValue('--p-primary-300'),
+                    documentStyle.getPropertyValue('--p-primary-200'),
+                ],
+            },
+        ],
     };
     pieOptions.value = {
         animation: {
-            duration: 0
+            duration: 0,
         },
         responsive: true,
         maintainAspectRatio: false,
@@ -33,13 +41,13 @@ function initChart() {
                     color: textColor,
                     usePointStyle: true,
                     font: {
-                        weight: 700
+                        weight: 700,
                     },
-                    padding: 28
+                    padding: 28,
                 },
-                position: 'bottom'
-            }
-        }
+                position: 'bottom',
+            },
+        },
     };
 }
 
@@ -48,13 +56,22 @@ watch(
     () => {
         initChart();
     },
-    { immediate: true }
+    { immediate: true },
 );
 </script>
 
 <template>
     <div class="card h-full">
-        <div class="text-surface-900 dark:text-surface-0 text-xl font-semibold mb-12">Sales by Category</div>
-        <Chart type="pie" :data="pieData" :height="300" :options="pieOptions"></Chart>
+        <div
+            class="text-surface-900 dark:text-surface-0 mb-12 text-xl font-semibold"
+        >
+            Sales by Category
+        </div>
+        <Chart
+            type="pie"
+            :data="pieData"
+            :height="300"
+            :options="pieOptions"
+        ></Chart>
     </div>
 </template>

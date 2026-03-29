@@ -17,10 +17,10 @@ const { can } = usePermissions();
 
 const sidebarNavItems = computed((): NavItem[] => {
     const items: NavItem[] = [
-        { title: 'Profil',                href: editProfile() },
-        { title: 'Mot de passe',          href: editPassword() },
+        { title: 'Profil', href: editProfile() },
+        { title: 'Mot de passe', href: editPassword() },
         { title: 'Double authentification', href: show() },
-        { title: 'Apparence',             href: editAppearance() },
+        { title: 'Apparence', href: editAppearance() },
     ];
 
     if (can('users.read')) {
@@ -28,7 +28,10 @@ const sidebarNavItems = computed((): NavItem[] => {
     }
 
     if (can('parametres.update')) {
-        items.push({ title: 'Paramétrage système', href: editParametres().url });
+        items.push({
+            title: 'Paramétrage système',
+            href: editParametres().url,
+        });
     }
 
     return items;
@@ -46,7 +49,9 @@ const currentPath = typeof window !== undefined ? window.location.pathname : '';
 
         <div class="flex flex-col lg:flex-row lg:space-x-12">
             <aside class="w-full lg:w-48">
-                <nav class="flex overflow-x-auto gap-1 sm:flex-col sm:space-y-1 sm:overflow-x-visible pb-2 sm:pb-0">
+                <nav
+                    class="flex gap-1 overflow-x-auto pb-2 sm:flex-col sm:space-y-1 sm:overflow-x-visible sm:pb-0"
+                >
                     <Button
                         v-for="item in sidebarNavItems"
                         :key="toUrl(item.href)"

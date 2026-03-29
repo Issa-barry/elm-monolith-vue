@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button';
 import StatusDot from '@/components/StatusDot.vue';
+import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -8,13 +8,13 @@ import { Head, Link } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowLeft,
+    Factory,
+    Layers,
     Package,
     Pencil,
-    Tag,
-    Layers,
-    TrendingDown,
     ShoppingCart,
-    Factory,
+    Tag,
+    TrendingDown,
     Warehouse,
 } from 'lucide-vue-next';
 
@@ -60,12 +60,16 @@ function formatPrice(val: number | null): string {
 
 function formatDate(iso: string | null): string {
     if (!iso) return '—';
-    return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long', timeStyle: 'short' }).format(new Date(iso));
+    return new Intl.DateTimeFormat('fr-FR', {
+        dateStyle: 'long',
+        timeStyle: 'short',
+    }).format(new Date(iso));
 }
 
 function stockColorClass(produit: Produit): string {
     if (!produit.has_stock) return 'text-muted-foreground';
-    if (produit.qte_stock !== null && produit.qte_stock <= 0) return 'text-destructive';
+    if (produit.qte_stock !== null && produit.qte_stock <= 0)
+        return 'text-destructive';
     if (produit.is_low_stock) return 'text-amber-600';
     return 'text-emerald-600';
 }
@@ -75,9 +79,10 @@ function stockColorClass(produit: Produit): string {
     <Head :title="produit.nom" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-
         <!-- ─── Header mobile ─── -->
-        <div class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden">
+        <div
+            class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
+        >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
                     href="/produits"
@@ -86,8 +91,12 @@ function stockColorClass(produit: Produit): string {
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
                 <div class="text-center">
-                    <h1 class="text-[17px] font-semibold leading-tight">Détail produit</h1>
-                    <p class="truncate text-[11px] text-muted-foreground">{{ produit.nom }}</p>
+                    <h1 class="text-[17px] leading-tight font-semibold">
+                        Détail produit
+                    </h1>
+                    <p class="truncate text-[11px] text-muted-foreground">
+                        {{ produit.nom }}
+                    </p>
                 </div>
                 <Link
                     v-if="can('produits.update')"
@@ -99,10 +108,9 @@ function stockColorClass(produit: Produit): string {
             </div>
         </div>
 
-        <div class="mx-auto max-w-4xl p-4 sm:p-6 space-y-6">
-
+        <div class="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
             <!-- ─── Header desktop ─── -->
-            <div class="hidden sm:flex items-start justify-between">
+            <div class="hidden items-start justify-between sm:flex">
                 <div class="flex items-center gap-3">
                     <Link href="/produits">
                         <Button variant="ghost" size="icon" class="h-9 w-9">
@@ -110,11 +118,20 @@ function stockColorClass(produit: Produit): string {
                         </Button>
                     </Link>
                     <div>
-                        <h1 class="text-2xl font-semibold tracking-tight">{{ produit.nom }}</h1>
-                        <p class="mt-0.5 text-sm text-muted-foreground font-mono">{{ produit.code_interne || '—' }}</p>
+                        <h1 class="text-2xl font-semibold tracking-tight">
+                            {{ produit.nom }}
+                        </h1>
+                        <p
+                            class="mt-0.5 font-mono text-sm text-muted-foreground"
+                        >
+                            {{ produit.code_interne || '—' }}
+                        </p>
                     </div>
                 </div>
-                <Link v-if="can('produits.update')" :href="`/produits/${produit.id}/edit`">
+                <Link
+                    v-if="can('produits.update')"
+                    :href="`/produits/${produit.id}/edit`"
+                >
                     <Button>
                         <Pencil class="mr-2 h-4 w-4" />
                         Modifier
@@ -125,22 +142,39 @@ function stockColorClass(produit: Produit): string {
             <!-- ─── Image + infos principales ─── -->
             <div class="flex gap-5 rounded-xl border bg-card p-5">
                 <!-- Image -->
-                <div class="h-24 w-24 sm:h-32 sm:w-32 shrink-0 overflow-hidden rounded-xl border bg-muted">
-                    <img v-if="produit.image_url" :src="produit.image_url" :alt="produit.nom" class="h-full w-full object-cover" />
-                    <div v-else class="flex h-full w-full items-center justify-center">
+                <div
+                    class="h-24 w-24 shrink-0 overflow-hidden rounded-xl border bg-muted sm:h-32 sm:w-32"
+                >
+                    <img
+                        v-if="produit.image_url"
+                        :src="produit.image_url"
+                        :alt="produit.nom"
+                        class="h-full w-full object-cover"
+                    />
+                    <div
+                        v-else
+                        class="flex h-full w-full items-center justify-center"
+                    >
                         <Package class="h-10 w-10 text-muted-foreground/30" />
                     </div>
                 </div>
 
                 <!-- Infos -->
-                <div class="flex flex-1 flex-col justify-between gap-3 min-w-0">
+                <div class="flex min-w-0 flex-1 flex-col justify-between gap-3">
                     <!-- Nom + critique (mobile seulement) -->
                     <div class="sm:hidden">
                         <div class="flex items-center gap-1.5">
-                            <span class="text-lg font-semibold leading-tight">{{ produit.nom }}</span>
-                            <AlertTriangle v-if="produit.is_critique" class="h-4 w-4 shrink-0 text-amber-500" />
+                            <span class="text-lg leading-tight font-semibold">{{
+                                produit.nom
+                            }}</span>
+                            <AlertTriangle
+                                v-if="produit.is_critique"
+                                class="h-4 w-4 shrink-0 text-amber-500"
+                            />
                         </div>
-                        <span class="font-mono text-xs text-muted-foreground">{{ produit.code_interne || '—' }}</span>
+                        <span class="font-mono text-xs text-muted-foreground">{{
+                            produit.code_interne || '—'
+                        }}</span>
                     </div>
 
                     <!-- Badges -->
@@ -148,16 +182,23 @@ function stockColorClass(produit: Produit): string {
                         <StatusDot
                             :label="produit.statut_label"
                             :dot-class="
-                                produit.statut === 'actif'   ? 'bg-emerald-500' :
-                                produit.statut === 'inactif' ? 'bg-zinc-400 dark:bg-zinc-500' :
-                                'bg-orange-400'
+                                produit.statut === 'actif'
+                                    ? 'bg-emerald-500'
+                                    : produit.statut === 'inactif'
+                                      ? 'bg-zinc-400 dark:bg-zinc-500'
+                                      : 'bg-orange-400'
                             "
                         />
-                        <span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                        <span
+                            class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
+                        >
                             <Layers class="h-3 w-3" />
                             {{ produit.type_label || '—' }}
                         </span>
-                        <span v-if="produit.is_critique" class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+                        <span
+                            v-if="produit.is_critique"
+                            class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                        >
                             <AlertTriangle class="h-3 w-3" />
                             Critique
                         </span>
@@ -166,12 +207,20 @@ function stockColorClass(produit: Produit): string {
                     <!-- Codes -->
                     <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                         <div>
-                            <span class="text-xs text-muted-foreground">Code interne</span>
-                            <p class="font-mono font-semibold">{{ produit.code_interne || '—' }}</p>
+                            <span class="text-xs text-muted-foreground"
+                                >Code interne</span
+                            >
+                            <p class="font-mono font-semibold">
+                                {{ produit.code_interne || '—' }}
+                            </p>
                         </div>
                         <div>
-                            <span class="text-xs text-muted-foreground">Code fournisseur</span>
-                            <p class="font-mono font-semibold">{{ produit.code_fournisseur || '—' }}</p>
+                            <span class="text-xs text-muted-foreground"
+                                >Code fournisseur</span
+                            >
+                            <p class="font-mono font-semibold">
+                                {{ produit.code_fournisseur || '—' }}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -179,93 +228,179 @@ function stockColorClass(produit: Produit): string {
 
             <!-- ─── Stock ─── -->
             <div v-if="produit.has_stock" class="rounded-xl border bg-card p-5">
-                <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                <h2
+                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
+                >
                     <Warehouse class="h-4 w-4" />
                     Stock
                 </h2>
-                <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
                     <div class="rounded-lg bg-muted/50 p-4 text-center">
-                        <p class="text-xs text-muted-foreground mb-1">Quantité actuelle</p>
-                        <p class="text-3xl font-bold tabular-nums" :class="stockColorClass(produit)">
+                        <p class="mb-1 text-xs text-muted-foreground">
+                            Quantité actuelle
+                        </p>
+                        <p
+                            class="text-3xl font-bold tabular-nums"
+                            :class="stockColorClass(produit)"
+                        >
                             {{ produit.qte_stock ?? 0 }}
                         </p>
-                        <div v-if="produit.qte_stock !== null && produit.qte_stock <= 0" class="mt-1 flex items-center justify-center gap-1 text-xs text-destructive">
+                        <div
+                            v-if="
+                                produit.qte_stock !== null &&
+                                produit.qte_stock <= 0
+                            "
+                            class="mt-1 flex items-center justify-center gap-1 text-xs text-destructive"
+                        >
                             <AlertTriangle class="h-3 w-3" /> Rupture
                         </div>
-                        <div v-else-if="produit.is_low_stock" class="mt-1 flex items-center justify-center gap-1 text-xs text-amber-600">
+                        <div
+                            v-else-if="produit.is_low_stock"
+                            class="mt-1 flex items-center justify-center gap-1 text-xs text-amber-600"
+                        >
                             <AlertTriangle class="h-3 w-3" /> Stock faible
                         </div>
                     </div>
                     <div class="rounded-lg bg-muted/50 p-4 text-center">
-                        <p class="text-xs text-muted-foreground mb-1">Seuil d'alerte</p>
-                        <p class="text-3xl font-bold tabular-nums text-foreground">{{ produit.seuil_alerte_stock ?? '—' }}</p>
+                        <p class="mb-1 text-xs text-muted-foreground">
+                            Seuil d'alerte
+                        </p>
+                        <p
+                            class="text-3xl font-bold text-foreground tabular-nums"
+                        >
+                            {{ produit.seuil_alerte_stock ?? '—' }}
+                        </p>
                     </div>
                 </div>
             </div>
 
             <!-- ─── Prix ─── -->
             <div class="rounded-xl border bg-card p-5">
-                <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                <h2
+                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
+                >
                     <Tag class="h-4 w-4" />
                     Tarification
                 </h2>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div v-if="produit.prix_vente !== null" class="rounded-lg bg-muted/50 p-4">
-                        <div class="flex items-center gap-1.5 mb-1">
-                            <ShoppingCart class="h-3.5 w-3.5 text-muted-foreground" />
-                            <span class="text-xs text-muted-foreground">Prix de vente</span>
+                <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <div
+                        v-if="produit.prix_vente !== null"
+                        class="rounded-lg bg-muted/50 p-4"
+                    >
+                        <div class="mb-1 flex items-center gap-1.5">
+                            <ShoppingCart
+                                class="h-3.5 w-3.5 text-muted-foreground"
+                            />
+                            <span class="text-xs text-muted-foreground"
+                                >Prix de vente</span
+                            >
                         </div>
-                        <p class="text-base font-semibold">{{ formatPrice(produit.prix_vente) }}</p>
+                        <p class="text-base font-semibold">
+                            {{ formatPrice(produit.prix_vente) }}
+                        </p>
                     </div>
-                    <div v-if="produit.prix_achat !== null" class="rounded-lg bg-muted/50 p-4">
-                        <div class="flex items-center gap-1.5 mb-1">
-                            <TrendingDown class="h-3.5 w-3.5 text-muted-foreground" />
-                            <span class="text-xs text-muted-foreground">Prix d'achat</span>
+                    <div
+                        v-if="produit.prix_achat !== null"
+                        class="rounded-lg bg-muted/50 p-4"
+                    >
+                        <div class="mb-1 flex items-center gap-1.5">
+                            <TrendingDown
+                                class="h-3.5 w-3.5 text-muted-foreground"
+                            />
+                            <span class="text-xs text-muted-foreground"
+                                >Prix d'achat</span
+                            >
                         </div>
-                        <p class="text-base font-semibold">{{ formatPrice(produit.prix_achat) }}</p>
+                        <p class="text-base font-semibold">
+                            {{ formatPrice(produit.prix_achat) }}
+                        </p>
                     </div>
-                    <div v-if="produit.prix_usine !== null" class="rounded-lg bg-muted/50 p-4">
-                        <div class="flex items-center gap-1.5 mb-1">
-                            <Factory class="h-3.5 w-3.5 text-muted-foreground" />
-                            <span class="text-xs text-muted-foreground">Prix usine</span>
+                    <div
+                        v-if="produit.prix_usine !== null"
+                        class="rounded-lg bg-muted/50 p-4"
+                    >
+                        <div class="mb-1 flex items-center gap-1.5">
+                            <Factory
+                                class="h-3.5 w-3.5 text-muted-foreground"
+                            />
+                            <span class="text-xs text-muted-foreground"
+                                >Prix usine</span
+                            >
                         </div>
-                        <p class="text-base font-semibold">{{ formatPrice(produit.prix_usine) }}</p>
+                        <p class="text-base font-semibold">
+                            {{ formatPrice(produit.prix_usine) }}
+                        </p>
                     </div>
-                    <div v-if="produit.cout !== null" class="rounded-lg bg-muted/50 p-4">
-                        <div class="flex items-center gap-1.5 mb-1">
-                            <span class="text-xs text-muted-foreground">Coût</span>
+                    <div
+                        v-if="produit.cout !== null"
+                        class="rounded-lg bg-muted/50 p-4"
+                    >
+                        <div class="mb-1 flex items-center gap-1.5">
+                            <span class="text-xs text-muted-foreground"
+                                >Coût</span
+                            >
                         </div>
-                        <p class="text-base font-semibold">{{ formatPrice(produit.cout) }}</p>
+                        <p class="text-base font-semibold">
+                            {{ formatPrice(produit.cout) }}
+                        </p>
                     </div>
-                    <div v-if="produit.prix_vente === null && produit.prix_achat === null && produit.prix_usine === null && produit.cout === null"
-                        class="col-span-2 sm:col-span-4 text-sm text-muted-foreground text-center py-4">
+                    <div
+                        v-if="
+                            produit.prix_vente === null &&
+                            produit.prix_achat === null &&
+                            produit.prix_usine === null &&
+                            produit.cout === null
+                        "
+                        class="col-span-2 py-4 text-center text-sm text-muted-foreground sm:col-span-4"
+                    >
                         Aucun tarif renseigné
                     </div>
                 </div>
             </div>
 
             <!-- ─── Description ─── -->
-            <div v-if="produit.description" class="rounded-xl border bg-card p-5">
-                <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Description</h2>
-                <p class="text-sm leading-relaxed whitespace-pre-wrap text-foreground/80">{{ produit.description }}</p>
+            <div
+                v-if="produit.description"
+                class="rounded-xl border bg-card p-5"
+            >
+                <h2
+                    class="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
+                >
+                    Description
+                </h2>
+                <p
+                    class="text-sm leading-relaxed whitespace-pre-wrap text-foreground/80"
+                >
+                    {{ produit.description }}
+                </p>
             </div>
 
             <!-- ─── Méta ─── -->
             <div class="rounded-xl border bg-card p-5">
-                <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Informations</h2>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <h2
+                    class="mb-4 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
+                >
+                    Informations
+                </h2>
+                <div class="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
                     <div>
-                        <span class="text-xs text-muted-foreground">Créé le</span>
-                        <p class="font-medium">{{ formatDate(produit.created_at) }}</p>
+                        <span class="text-xs text-muted-foreground"
+                            >Créé le</span
+                        >
+                        <p class="font-medium">
+                            {{ formatDate(produit.created_at) }}
+                        </p>
                     </div>
                     <div>
-                        <span class="text-xs text-muted-foreground">Mis à jour le</span>
-                        <p class="font-medium">{{ formatDate(produit.updated_at) }}</p>
+                        <span class="text-xs text-muted-foreground"
+                            >Mis à jour le</span
+                        >
+                        <p class="font-medium">
+                            {{ formatDate(produit.updated_at) }}
+                        </p>
                     </div>
                 </div>
             </div>
-
         </div>
-
     </AppLayout>
 </template>

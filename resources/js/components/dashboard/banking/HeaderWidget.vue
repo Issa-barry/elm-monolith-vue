@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import { usePage } from '@inertiajs/vue3';
 import Button from 'primevue/button';
 import Select from 'primevue/select';
 import Tooltip from 'primevue/tooltip';
-import { usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const vTooltip = Tooltip;
@@ -55,10 +55,14 @@ const initials = computed(() =>
                     {{ initials }}
                 </div>
                 <div class="flex flex-col items-center sm:items-start">
-                    <h1 class="text-xl font-semibold tracking-tight sm:text-2xl">
+                    <h1
+                        class="text-xl font-semibold tracking-tight sm:text-2xl"
+                    >
                         {{ displayName }}
                     </h1>
-                    <p class="mt-0.5 text-xs text-muted-foreground sm:mt-1 sm:text-sm">
+                    <p
+                        class="mt-0.5 text-xs text-muted-foreground sm:mt-1 sm:text-sm"
+                    >
                         Role : {{ displayRole }}
                     </p>
                 </div>

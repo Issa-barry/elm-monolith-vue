@@ -23,15 +23,15 @@ const authConfigContent = computed<AuthConfigContent>(() => {
         return {
             title: 'Code de récupération',
             description:
-                'Confirmez l\'accès à votre compte en saisissant l\'un de vos codes de récupération d\'urgence.',
-            toggleText: 'utiliser un code d\'authentification',
+                "Confirmez l'accès à votre compte en saisissant l'un de vos codes de récupération d'urgence.",
+            toggleText: "utiliser un code d'authentification",
         };
     }
 
     return {
-        title: 'Code d\'authentification',
+        title: "Code d'authentification",
         description:
-            'Saisissez le code d\'authentification fourni par votre application d\'authentification.',
+            "Saisissez le code d'authentification fourni par votre application d'authentification.",
         toggleText: 'utiliser un code de récupération',
     };
 });

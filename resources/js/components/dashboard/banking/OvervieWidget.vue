@@ -10,18 +10,28 @@ const chartOptions = ref(null);
 function initChart() {
     const documentStyle = getComputedStyle(document.documentElement);
     const textColor = documentStyle.getPropertyValue('--text-color');
-    const textColorSecondary = documentStyle.getPropertyValue('--text-color-secondary');
+    const textColorSecondary = documentStyle.getPropertyValue(
+        '--text-color-secondary',
+    );
     const surfaceBorder = documentStyle.getPropertyValue('--surface-border');
 
     chartData.value = {
-        labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
+        labels: [
+            'January',
+            'February',
+            'March',
+            'April',
+            'May',
+            'June',
+            'July',
+        ],
         datasets: [
             {
                 label: 'Income',
                 data: [6500, 5900, 8000, 8100, 5600, 5500, 4000],
                 fill: false,
                 tension: 0.4,
-                borderColor: documentStyle.getPropertyValue('--p-green-500')
+                borderColor: documentStyle.getPropertyValue('--p-green-500'),
             },
             {
                 label: 'Expenses',
@@ -29,22 +39,22 @@ function initChart() {
                 fill: true,
                 borderColor: '#6366f1',
                 tension: 0.4,
-                backgroundColor: 'rgba(99,102,220,0.2)'
-            }
-        ]
+                backgroundColor: 'rgba(99,102,220,0.2)',
+            },
+        ],
     };
 
     chartOptions.value = {
         maintainAspectRatio: false,
         aspectRatio: 0.6,
         animation: {
-            duration: 0
+            duration: 0,
         },
         plugins: {
             legend: {
                 labels: {
-                    color: textColor
-                }
+                    color: textColor,
+                },
             },
             tooltip: {
                 callbacks: {
@@ -56,31 +66,34 @@ function initChart() {
                         }
 
                         if (context.parsed.y !== null) {
-                            label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                            label += new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                            }).format(context.parsed.y);
                         }
                         return label;
-                    }
-                }
-            }
+                    },
+                },
+            },
         },
         scales: {
             x: {
                 ticks: {
-                    color: textColorSecondary
+                    color: textColorSecondary,
                 },
                 grid: {
-                    color: surfaceBorder
-                }
+                    color: surfaceBorder,
+                },
             },
             y: {
                 ticks: {
-                    color: textColorSecondary
+                    color: textColorSecondary,
                 },
                 grid: {
-                    color: surfaceBorder
-                }
-            }
-        }
+                    color: surfaceBorder,
+                },
+            },
+        },
     };
 }
 
@@ -89,13 +102,22 @@ watch(
     () => {
         initChart();
     },
-    { immediate: true }
+    { immediate: true },
 );
 </script>
 
 <template>
     <div class="card h-full">
-        <div class="text-surface-900 dark:text-surface-0 text-xl font-semibold mb-4">Overview</div>
-        <Chart type="line" :data="chartData" :options="chartOptions" class="h-[32rem]"></Chart>
+        <div
+            class="text-surface-900 dark:text-surface-0 mb-4 text-xl font-semibold"
+        >
+            Overview
+        </div>
+        <Chart
+            type="line"
+            :data="chartData"
+            :options="chartOptions"
+            class="h-[32rem]"
+        ></Chart>
     </div>
 </template>

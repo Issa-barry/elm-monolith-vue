@@ -78,10 +78,14 @@ const primeVueSurfaceColors = [
         </div>
 
         <div class="space-y-2">
-            <p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <p
+                class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+            >
                 Theme PrimeVue
             </p>
-            <div class="inline-flex gap-1 rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800">
+            <div
+                class="inline-flex gap-1 rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800"
+            >
                 <button
                     v-for="{ value, label } in primeVueThemes"
                     :key="value"
@@ -99,7 +103,9 @@ const primeVueSurfaceColors = [
         </div>
 
         <div class="space-y-2">
-            <p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <p
+                class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+            >
                 Couleur principale
             </p>
             <div class="flex flex-wrap gap-2">
@@ -122,7 +128,9 @@ const primeVueSurfaceColors = [
         </div>
 
         <div class="space-y-2">
-            <p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <p
+                class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+            >
                 Surface
             </p>
             <div class="flex flex-wrap gap-2">

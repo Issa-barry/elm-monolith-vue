@@ -19,7 +19,8 @@
             flex-shrink: 0;
             background-color: transparent;
             border: transparent;
-            transition: background-color var(--layout-section-transition-duration);
+            transition: background-color
+                var(--layout-section-transition-duration);
 
             i {
                 font-size: 1.25rem;
@@ -64,7 +65,8 @@
                     border-radius: 50%;
                     width: 2.5rem;
                     height: 2.5rem;
-                    transition: box-shadow var(--layout-section-transition-duration);
+                    transition: box-shadow
+                        var(--layout-section-transition-duration);
 
                     &:focus {
                         box-shadow: var(--focus-ring);

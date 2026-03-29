@@ -4,7 +4,10 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import PrimeVue from 'primevue/config';
 import { createSSRApp, DefineComponent, h } from 'vue';
 import { renderToString } from 'vue/server-renderer';
-import { getPrimeVueThemePreset, resolvePrimeVueThemeFromEnv } from './lib/primevue-theme';
+import {
+    getPrimeVueThemePreset,
+    resolvePrimeVueThemeFromEnv,
+} from './lib/primevue-theme';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 const initialPrimeVueTheme = resolvePrimeVueThemeFromEnv();

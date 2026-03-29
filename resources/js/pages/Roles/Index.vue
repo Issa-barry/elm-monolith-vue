@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -8,7 +9,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import HeadingSmall from '@/components/HeadingSmall.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -80,7 +80,7 @@ function usersLabel(count: number): string {
 
         <SettingsLayout>
             <!-- Desktop table -->
-            <div class="hidden sm:block space-y-6">
+            <div class="hidden space-y-6 sm:block">
                 <HeadingSmall
                     title="Roles"
                     description="Liste des roles du projet"
@@ -90,23 +90,59 @@ function usersLabel(count: number): string {
                     <div class="overflow-x-auto">
                         <table class="min-w-full text-sm">
                             <thead>
-                                <tr class="border-b bg-muted/20 text-xs uppercase tracking-wide text-muted-foreground">
-                                    <th class="px-6 py-3 text-left font-semibold">Nom du role</th>
-                                    <th class="px-6 py-3 text-left font-semibold">Derniere modification</th>
-                                    <th class="px-6 py-3 text-left font-semibold">Utilisateurs</th>
+                                <tr
+                                    class="border-b bg-muted/20 text-xs tracking-wide text-muted-foreground uppercase"
+                                >
+                                    <th
+                                        class="px-6 py-3 text-left font-semibold"
+                                    >
+                                        Nom du role
+                                    </th>
+                                    <th
+                                        class="px-6 py-3 text-left font-semibold"
+                                    >
+                                        Derniere modification
+                                    </th>
+                                    <th
+                                        class="px-6 py-3 text-left font-semibold"
+                                    >
+                                        Utilisateurs
+                                    </th>
                                     <th class="w-12 px-4 py-3"></th>
                                 </tr>
                             </thead>
 
                             <tbody class="divide-y">
-                                <tr v-for="role in props.roles" :key="role.id" class="hover:bg-muted/20">
+                                <tr
+                                    v-for="role in props.roles"
+                                    :key="role.id"
+                                    class="hover:bg-muted/20"
+                                >
                                     <td class="px-6 py-4">
                                         <div class="flex items-center gap-3">
-                                            <span class="h-2 w-2 rounded-full" :class="roleDotClass(role.name)" />
+                                            <span
+                                                class="h-2 w-2 rounded-full"
+                                                :class="roleDotClass(role.name)"
+                                            />
                                             <div>
-                                                <p class="font-medium">{{ displayRoleName(role.name) }}</p>
-                                                <p class="text-xs text-muted-foreground">
-                                                    {{ role.permissions_count }} / {{ props.totalPerms }} permissions
+                                                <p class="font-medium">
+                                                    {{
+                                                        displayRoleName(
+                                                            role.name,
+                                                        )
+                                                    }}
+                                                </p>
+                                                <p
+                                                    class="text-xs text-muted-foreground"
+                                                >
+                                                    {{
+                                                        role.permissions_count
+                                                    }}
+                                                    /
+                                                    {{
+                                                        props.totalPerms
+                                                    }}
+                                                    permissions
                                                 </p>
                                             </div>
                                         </div>
@@ -123,19 +159,44 @@ function usersLabel(count: number): string {
                                     <td class="px-4 py-4 text-right">
                                         <DropdownMenu>
                                             <DropdownMenuTrigger as-child>
-                                                <Button variant="ghost" size="icon" class="h-8 w-8">
-                                                    <MoreHorizontal class="h-4 w-4" />
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    class="h-8 w-8"
+                                                >
+                                                    <MoreHorizontal
+                                                        class="h-4 w-4"
+                                                    />
                                                 </Button>
                                             </DropdownMenuTrigger>
 
-                                            <DropdownMenuContent align="end" class="w-56">
-                                                <DropdownMenuLabel>Role Management</DropdownMenuLabel>
+                                            <DropdownMenuContent
+                                                align="end"
+                                                class="w-56"
+                                            >
+                                                <DropdownMenuLabel
+                                                    >Role
+                                                    Management</DropdownMenuLabel
+                                                >
                                                 <DropdownMenuSeparator />
 
-                                                <DropdownMenuItem :as-child="true">
-                                                    <Link :href="`/roles/${role.id}/edit`" as="button" class="block w-full">
-                                                        <ShieldCheck class="mr-2 h-4 w-4" />
-                                                        {{ role.name === 'super_admin' ? 'View permissions' : 'Edit permissions' }}
+                                                <DropdownMenuItem
+                                                    :as-child="true"
+                                                >
+                                                    <Link
+                                                        :href="`/roles/${role.id}/edit`"
+                                                        as="button"
+                                                        class="block w-full"
+                                                    >
+                                                        <ShieldCheck
+                                                            class="mr-2 h-4 w-4"
+                                                        />
+                                                        {{
+                                                            role.name ===
+                                                            'super_admin'
+                                                                ? 'View permissions'
+                                                                : 'Edit permissions'
+                                                        }}
                                                     </Link>
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
@@ -149,17 +210,24 @@ function usersLabel(count: number): string {
             </div>
 
             <!-- Mobile list -->
-            <div class="sm:hidden space-y-2">
+            <div class="space-y-2 sm:hidden">
                 <div
                     v-for="role in props.roles"
                     :key="role.id"
                     class="flex items-center justify-between rounded-xl border bg-card px-4 py-3"
                 >
                     <div class="flex items-center gap-3">
-                        <span class="h-2.5 w-2.5 rounded-full shrink-0" :class="roleDotClass(role.name)" />
+                        <span
+                            class="h-2.5 w-2.5 shrink-0 rounded-full"
+                            :class="roleDotClass(role.name)"
+                        />
                         <div>
-                            <p class="font-medium text-sm">{{ displayRoleName(role.name) }}</p>
-                            <p class="text-xs text-muted-foreground">{{ usersLabel(role.users_count) }}</p>
+                            <p class="text-sm font-medium">
+                                {{ displayRoleName(role.name) }}
+                            </p>
+                            <p class="text-xs text-muted-foreground">
+                                {{ usersLabel(role.users_count) }}
+                            </p>
                         </div>
                     </div>
                     <Link :href="`/roles/${role.id}/edit`">

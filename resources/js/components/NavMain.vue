@@ -33,11 +33,18 @@ function isItemActive(href: NavItem['href']) {
     const url = toUrl(href);
     if (!url) return false;
 
-    return page.url === url || page.url.startsWith(`${url}/`) || page.url.startsWith(`${url}?`);
+    return (
+        page.url === url ||
+        page.url.startsWith(`${url}/`) ||
+        page.url.startsWith(`${url}?`)
+    );
 }
 
 function isParentActive(item: NavItem) {
-    return isItemActive(item.href) || !!item.items?.some((subItem) => isItemActive(subItem.href));
+    return (
+        isItemActive(item.href) ||
+        !!item.items?.some((subItem) => isItemActive(subItem.href))
+    );
 }
 
 function menuKey(item: NavItem) {
@@ -80,12 +87,17 @@ function toggleMenu(item: NavItem) {
                         <span
                             v-if="item.badge"
                             class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
-                        >{{ item.badge }}</span>
+                            >{{ item.badge }}</span
+                        >
                     </Link>
                 </SidebarMenuButton>
 
                 <template v-else>
-                    <SidebarMenuButton :is-active="isParentActive(item)" :tooltip="item.title" @click="toggleMenu(item)">
+                    <SidebarMenuButton
+                        :is-active="isParentActive(item)"
+                        :tooltip="item.title"
+                        @click="toggleMenu(item)"
+                    >
                         <component
                             v-if="item.icon"
                             :is="item.icon"
@@ -101,9 +113,18 @@ function toggleMenu(item: NavItem) {
                     </SidebarMenuAction>
 
                     <SidebarMenuSub v-if="isMenuOpen(item)">
-                        <SidebarMenuSubItem v-for="subItem in item.items" :key="`${item.title}-${subItem.title}`">
-                            <SidebarMenuSubButton as-child :is-active="isItemActive(subItem.href)">
-                                <Link :href="subItem.href" @click="closeMobileSidebar">
+                        <SidebarMenuSubItem
+                            v-for="subItem in item.items"
+                            :key="`${item.title}-${subItem.title}`"
+                        >
+                            <SidebarMenuSubButton
+                                as-child
+                                :is-active="isItemActive(subItem.href)"
+                            >
+                                <Link
+                                    :href="subItem.href"
+                                    @click="closeMobileSidebar"
+                                >
                                     <span>{{ subItem.title }}</span>
                                 </Link>
                             </SidebarMenuSubButton>

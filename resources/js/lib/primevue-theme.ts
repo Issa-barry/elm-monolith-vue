@@ -1,10 +1,19 @@
+import {
+    updatePrimaryPalette,
+    updateSurfacePalette,
+    usePreset,
+} from '@primeuix/styled';
 import Aura from '@primeuix/themes/aura';
 import Lara from '@primeuix/themes/lara';
 import Material from '@primeuix/themes/material';
 import Nora from '@primeuix/themes/nora';
-import { updatePrimaryPalette, updateSurfacePalette, usePreset } from '@primeuix/styled';
 
-export type PrimeVueThemeName = 'aura' | 'lara' | 'material' | 'nora' | 'starter';
+export type PrimeVueThemeName =
+    | 'aura'
+    | 'lara'
+    | 'material'
+    | 'nora'
+    | 'starter';
 export type PrimeVuePrimaryName =
     | 'zinc'
     | 'emerald'
@@ -23,7 +32,12 @@ export type PrimeVuePrimaryName =
     | 'amber'
     | 'teal'
     | 'cyan';
-export type PrimeVueSurfaceName = 'zinc' | 'slate' | 'stone' | 'neutral' | 'gray';
+export type PrimeVueSurfaceName =
+    | 'zinc'
+    | 'slate'
+    | 'stone'
+    | 'neutral'
+    | 'gray';
 
 export const PRIMEVUE_THEME_STORAGE_KEY = 'primevue_theme';
 export const PRIMEVUE_PRIMARY_STORAGE_KEY = 'primevue_primary';
@@ -347,7 +361,9 @@ export function normalizePrimeVuePrimary(
 ): PrimeVuePrimaryName {
     const normalized = value?.toLowerCase() as PrimeVuePrimaryName | undefined;
 
-    return normalized && normalized in PRIMARY_PALETTES ? normalized : 'emerald';
+    return normalized && normalized in PRIMARY_PALETTES
+        ? normalized
+        : 'emerald';
 }
 
 export function normalizePrimeVueSurface(
@@ -358,9 +374,10 @@ export function normalizePrimeVueSurface(
     return normalized && normalized in SURFACE_PALETTES ? normalized : 'zinc';
 }
 
-export function getPrimeVueThemePreset(
-    value?: string | null,
-): { name: PrimeVueThemeName; preset: object } {
+export function getPrimeVueThemePreset(value?: string | null): {
+    name: PrimeVueThemeName;
+    preset: object;
+} {
     const name = normalizePrimeVueTheme(value);
 
     return {
@@ -382,14 +399,17 @@ export function getDefaultPrimeVueSurface(
 }
 
 export function resolvePrimeVueThemeFromEnv(): PrimeVueThemeName {
-    return normalizePrimeVueTheme(import.meta.env.VITE_PRIMEVUE_THEME || 'aura');
+    return normalizePrimeVueTheme(
+        import.meta.env.VITE_PRIMEVUE_THEME || 'aura',
+    );
 }
 
 export function resolvePrimeVuePrimaryFromEnv(
     theme: PrimeVueThemeName,
 ): PrimeVuePrimaryName {
     return normalizePrimeVuePrimary(
-        import.meta.env.VITE_PRIMEVUE_PRIMARY || getDefaultPrimeVuePrimary(theme),
+        import.meta.env.VITE_PRIMEVUE_PRIMARY ||
+            getDefaultPrimeVuePrimary(theme),
     );
 }
 
@@ -397,7 +417,8 @@ export function resolvePrimeVueSurfaceFromEnv(
     theme: PrimeVueThemeName,
 ): PrimeVueSurfaceName {
     return normalizePrimeVueSurface(
-        import.meta.env.VITE_PRIMEVUE_SURFACE || getDefaultPrimeVueSurface(theme),
+        import.meta.env.VITE_PRIMEVUE_SURFACE ||
+            getDefaultPrimeVueSurface(theme),
     );
 }
 
@@ -558,17 +579,17 @@ export function applyAppThemeColors(
     });
 }
 
-export function applyStoredPrimeVueColors(
-    theme?: PrimeVueThemeName,
-): {
+export function applyStoredPrimeVueColors(theme?: PrimeVueThemeName): {
     primary: PrimeVuePrimaryName;
     surface: PrimeVueSurfaceName;
 } {
     const currentTheme = theme ?? resolvePrimeVueThemeFromEnv();
     const primary =
-        getStoredPrimeVuePrimary() ?? resolvePrimeVuePrimaryFromEnv(currentTheme);
+        getStoredPrimeVuePrimary() ??
+        resolvePrimeVuePrimaryFromEnv(currentTheme);
     const surface =
-        getStoredPrimeVueSurface() ?? resolvePrimeVueSurfaceFromEnv(currentTheme);
+        getStoredPrimeVueSurface() ??
+        resolvePrimeVueSurfaceFromEnv(currentTheme);
 
     applyPrimeVuePrimaryColor(primary);
     applyPrimeVueSurfaceColor(surface);
