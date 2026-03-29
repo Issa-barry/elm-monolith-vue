@@ -1,8 +1,11 @@
 # Eau la maman — Monolithe
+# Sur ton PC
+npm run build
+git add public/build
+git commit -m "build: production"
+git push
 
-Application de gestion interne — Laravel 12 + Inertia.js + Vue 3 + Vite.
-
----
+# Sur le serveur
 
 
 cd ~/domains/eau-la-maman.fr/public_html
@@ -145,11 +148,7 @@ php artisan storage:link
 Tu build sur ton PC, tu pousse tout y compris public/build/ :
 
 
-# Sur ton PC
-npm run build
-git add public/build
-git commit -m "build: production"
-git push
+
 
 ### Mises à jour suivantes
 

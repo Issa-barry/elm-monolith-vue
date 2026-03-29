@@ -31,10 +31,14 @@ class VehiculeController extends Controller
             'capacite_packs'           => $v->capacite_packs,
             'proprietaire_id'          => $v->proprietaire_id,
             'proprietaire_nom'         => $v->proprietaire ? trim($v->proprietaire->prenom . ' ' . $v->proprietaire->nom) : null,
+            'proprietaire_telephone'   => $v->proprietaire?->telephone,
+            'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
             'livreur_principal_id'     => $v->livreur_principal_id,
             'livreur_nom'              => $v->livreurPrincipal
                                             ? trim($v->livreurPrincipal->prenom . ' ' . $v->livreurPrincipal->nom)
                                             : null,
+            'livreur_telephone'        => $v->livreurPrincipal?->telephone,
+            'livreur_code_phone_pays'  => $v->livreurPrincipal?->code_phone_pays,
             'pris_en_charge_par_usine' => $v->pris_en_charge_par_usine,
             'taux_commission_livreur'         => $v->taux_commission_livreur,
             'taux_commission_proprietaire'    => $v->taux_commission_proprietaire,

@@ -44,6 +44,8 @@ export type AppPageProps<
     T extends Record<string, unknown> = Record<string, unknown>,
 > = T & {
     name: string;
+    appVersion: string;
+    appVersionLabel: string;
     quote: { message: string; author: string };
     auth: Auth;
     sidebarOpen: boolean;
@@ -71,3 +73,4 @@ export interface User {
 }
 
 export type BreadcrumbItemType = BreadcrumbItem;
+
