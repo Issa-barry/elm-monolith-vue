@@ -9,7 +9,10 @@ Flux recommande:
 - `dev` -> `pre-prod` -> `main`
 
 Comportement des workflows:
-- CI (`.github/workflows/lint.yml` et `.github/workflows/tests.yml`) sur `dev`, `pre-prod`, `main`
+- CI (`.github/workflows/lint.yml` et `.github/workflows/tests.yml`) sur Pull Request vers `pre-prod` et `main` (pas de doublon push/pull_request)
+- Controle du flux (`.github/workflows/branch-flow.yml`):
+  - autorise seulement `dev` -> `pre-prod`
+  - autorise seulement `pre-prod` -> `main`
 - CD (`.github/workflows/deploy-hostinger.yml`) uniquement sur `main` (et manuel via `workflow_dispatch`)
 
 ## Ce que fait le pipeline

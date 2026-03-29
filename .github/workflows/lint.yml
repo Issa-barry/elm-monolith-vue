@@ -1,14 +1,8 @@
 name: linter
 
 on:
-  push:
-    branches:
-      - dev
-      - pre-prod
-      - main
   pull_request:
     branches:
-      - dev
       - pre-prod
       - main
 
