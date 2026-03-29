@@ -18,18 +18,30 @@ export async function login(page: Page): Promise<void> {
     if ((await emailInput.count()) > 0) {
         await emailInput.fill(E2E_EMAIL);
     } else {
-        // Formulaire téléphone : l'input caché name="telephone" est géré par Vue.
-        // On remplit le champ visible (type="tel") pour déclencher la réactivité,
-        // puis on force la valeur sur l'input caché.
-        const telVisible = page.locator('input[type="tel"]:visible').first();
-        if ((await telVisible.count()) > 0) {
-            const localDigits = E2E_PHONE.replace(/^\+\d{1,3}/, '').replace(/^0/, '');
+        // Formulaire téléphone PrimeVue Select + input visible (type="tel").
+        // Extraire le prefix (+33) et les chiffres locaux (758855039).
+        const match = E2E_PHONE.match(/^(\+\d{1,4})(\d+)$/);
+        if (match) {
+            const [, prefix, localDigits] = match;
+            // Sélectionner le pays correspondant au prefix dans le Select
+            const countryCombo = page.getByRole('combobox').first();
+            if ((await countryCombo.count()) > 0) {
+                await countryCombo.click();
+                const option = page.getByRole('option').filter({ hasText: prefix }).first();
+                if ((await option.count()) > 0) {
+                    await option.click();
+                }
+            }
+            // Remplir les chiffres locaux dans l'input visible
+            const telVisible = page.locator('input[type="tel"]:visible').first();
             await telVisible.fill(localDigits);
+            // Attendre que Vue mette à jour l'input caché
+            await page.waitForFunction(
+                (phone) => (document.querySelector('input[name="telephone"]') as HTMLInputElement | null)?.value === phone,
+                E2E_PHONE,
+                { timeout: 5_000 },
+            ).catch(() => undefined); // Tolérant si timeout
         }
-        await page.evaluate((phone) => {
-            const hiddenPhone = document.querySelector('input[name="telephone"]') as HTMLInputElement | null;
-            if (hiddenPhone) hiddenPhone.value = phone;
-        }, E2E_PHONE);
     }
 
     await page.locator('input[name="password"]').fill(E2E_PASSWORD);
