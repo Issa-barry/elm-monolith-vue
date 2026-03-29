@@ -23,8 +23,8 @@ interface ProprietaireData {
 }
 
 const props = defineProps<{ proprietaire: ProprietaireData }>();
-const page = usePage<{ flash?: { success?: string } }>();
-const flashSuccess = computed(() => page.props.flash?.success);
+const page = usePage();
+const flashSuccess = computed(() => (page.props as any).flash?.success as string | undefined);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -59,6 +59,19 @@ watch(() => props.proprietaire, (p) => {
         is_active: Boolean(p.is_active),
     });
 }, { deep: true });
+
+function updateForm(data: Omit<ProprietaireData, 'id'>) {
+    form.nom            = data.nom;
+    form.prenom         = data.prenom;
+    form.email          = data.email;
+    form.telephone      = data.telephone;
+    form.adresse        = data.adresse;
+    form.ville          = data.ville;
+    form.pays           = data.pays;
+    form.code_pays      = data.code_pays;
+    form.code_phone_pays = data.code_phone_pays;
+    form.is_active      = data.is_active;
+}
 
 function submit() {
     form.put(`/proprietaires/${props.proprietaire.id}`);
@@ -100,7 +113,7 @@ function submit() {
                 :errors="form.errors"
                 :processing="form.processing"
                 @submit="submit"
-                @update:form="Object.assign(form, $event)"
+                @update:form="updateForm"
             />
         </div>
 

@@ -69,7 +69,7 @@ const initials = computed(() =>
                 <Button
                     type="button"
                     v-tooltip.bottom="'Download'"
-                    class="!h-10 !w-10 !rounded-full !border !border-primary/35 !bg-primary/10 !p-0 !text-primary hover:!bg-primary/15"
+                    class="!h-10 !w-10 !rounded-full !border !border-primary/45 !bg-transparent !p-0 !text-primary hover:!bg-primary/10"
                 >
                     <template #icon>
                         <ArrowDownIcon class="h-4 w-4" />
@@ -90,6 +90,7 @@ const initials = computed(() =>
                     class="min-w-56"
                 >
                 </Select>
+                  <Button type="button" v-tooltip.bottom="'Exchange'" icon="pi pi-arrows-h" outlined rounded></Button>
             </div>
         </div>
     </div>

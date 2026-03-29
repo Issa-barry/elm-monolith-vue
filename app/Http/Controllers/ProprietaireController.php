@@ -246,6 +246,9 @@ class ProprietaireController extends Controller
         if (!empty($data['ville'])) {
             $data['ville'] = mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
         }
+        if (!empty($data['adresse'])) {
+            $data['adresse'] = mb_convert_case(mb_strtolower($data['adresse'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+        }
         if (!empty($data['telephone'])) {
             $telephone = trim((string) $data['telephone']);
             $telephoneDigits = preg_replace('/\D+/', '', $telephone) ?? '';
