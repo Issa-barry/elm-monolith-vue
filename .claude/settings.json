@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const m=require\\(''./public/build/manifest.json''\\); Object.keys\\(m\\).filter\\(k=>k.includes\\(''Client''\\)||k.includes\\(''Produit''\\)\\).forEach\\(k=>console.log\\(k\\)\\)\")",
+      "Bash(node -e \"const m=require\\(''./public/build/manifest.json''\\); Object.keys\\(m\\).filter\\(k=>k.includes\\(''lient''\\)\\).forEach\\(k=>console.log\\(k\\)\\)\")",
+      "Bash(node -e \"const data=[]; process.stdin.on\\(''''data'''',d=>data.push\\(d\\)\\); process.stdin.on\\(''''end'''',\\(\\)=>{const m=JSON.parse\\(data.join\\(''''''''\\)\\); console.log\\(Object.keys\\(m\\).filter\\(k=>k.includes\\(''''lient''''\\)\\).join\\(''''\\\\n''''\\)\\);}\\)\")",
+      "Bash(node -e \"const m=require\\(''./public/build/manifest.json''\\); console.log\\(Object.keys\\(m\\).length + '' entries''\\); Object.keys\\(m\\).filter\\(k=>!k.startsWith\\(''_''\\)\\).sort\\(\\).forEach\\(k=>console.log\\(k\\)\\)\")",
+      "Bash(node -e \"const m=require\\(''./public/build/manifest.json''\\); const keys = Object.keys\\(m\\).filter\\(k => !k.startsWith\\(''_''\\)\\).sort\\(\\); console.log\\(keys.length + '' page entries''\\); keys.forEach\\(k=>console.log\\(k\\)\\)\")",
+      "Bash(./vendor/bin/phpunit tests/Feature/Authorization/ClientAuthorizationTest.php --testdox)"
+    ]
+  }
+}
