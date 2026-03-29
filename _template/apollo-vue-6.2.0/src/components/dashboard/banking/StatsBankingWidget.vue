@@ -20,7 +20,7 @@
                 </div>
             </div>
         </div>
-    </div>
+    </div> 
     <div class="col-span-12 md:col-span-6 xl:col-span-4">
         <div class="card h-full">
             <div class="flex items-center justify-between mb-4">
