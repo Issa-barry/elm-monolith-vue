@@ -33,6 +33,9 @@ interface Proprietaire {
     email: string | null;
     telephone: string | null;
     code_phone_pays: string | null;
+    ville: string | null;
+    pays: string | null;
+    code_pays: string | null;
     adresse: string | null;
     is_active: boolean;
 }
@@ -53,8 +56,9 @@ const mobileFiltered = computed(() => {
     return props.proprietaires.filter(p =>
         p.nom_complet.toLowerCase().includes(q) ||
         (p.email ?? '').toLowerCase().includes(q) ||
-        (p.telephone ?? '').toLowerCase().includes(q) ||
-        (p.adresse ?? '').toLowerCase().includes(q),
+        (p.adresse ?? '').toLowerCase().includes(q) ||
+        (p.ville ?? '').toLowerCase().includes(q) ||
+        (p.pays ?? '').toLowerCase().includes(q),
     );
 });
 
@@ -62,6 +66,22 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Propriétaires', href: '/proprietaires' },
 ];
+
+function flagUrl(code: string) {
+    return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
+}
+
+function formatLocation(adresse: string | null | undefined, ville: string | null | undefined): string {
+    const address = (adresse ?? '').trim();
+    const city = (ville ?? '').trim();
+
+    if (!address && !city) return '-';
+    if (!address) return city;
+    if (!city) return address;
+    if (address.toLowerCase().includes(city.toLowerCase())) return address;
+
+    return `${address}, ${city}`;
+}
 
 function confirmDelete(p: Proprietaire) {
     confirm.require({
@@ -139,7 +159,12 @@ function confirmDelete(p: Proprietaire) {
                     <div class="min-w-0 flex-1">
                         <div class="truncate font-medium text-sm">{{ p.nom_complet }}</div>
                         <div v-if="p.email" class="truncate text-xs text-muted-foreground">{{ p.email }}</div>
-                        <div v-if="p.telephone" class="text-xs text-muted-foreground tabular-nums">{{ formatPhoneDisplay(p.telephone, p.code_phone_pays) }}</div>
+                        <div v-if="p.adresse || p.ville" class="flex items-center gap-1 mt-0.5">
+                            <img v-if="p.code_pays" :src="flagUrl(p.code_pays)" class="h-3 w-auto rounded-sm" />
+                            <span class="text-xs text-muted-foreground">
+                                {{ formatLocation(p.adresse, p.ville) }}
+                            </span>
+                        </div>
                     </div>
 
                     <!-- Status dot -->
@@ -191,7 +216,7 @@ function confirmDelete(p: Proprietaire) {
         </div>
 
         <!-- ── Desktop (≥ sm) ─────────────────────────────────────────────── -->
-        <div class="hidden sm:flex min-h-0 flex-1 flex-col gap-6 p-6">
+        <div class="hidden sm:flex flex-col gap-6 p-6">
 
             <!-- En-tête -->
             <div class="flex items-center justify-between">
@@ -210,20 +235,20 @@ function confirmDelete(p: Proprietaire) {
             </div>
 
             <!-- Tableau -->
-            <div class="flex min-h-0 flex-1 flex-col overflow-hidden border bg-card">
+            <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="proprietaires"
                     :paginator="proprietaires.length > 20"
                     :rows="20"
-                    :global-filter-fields="['nom_complet', 'email', 'telephone', 'adresse']"
+                    :global-filter-fields="['nom_complet', 'email', 'telephone', 'adresse', 'ville', 'pays']"
                     v-model:filters="filters"
                     data-key="id"
                     striped-rows
                     removable-sort
-                    class="h-full text-sm"
+                    class="text-sm"
                     table-class="w-full"
                     :pt="{
-                        root: { class: 'flex h-full w-full flex-col' },
+                        root: { class: 'w-full' },
                         header: { class: 'border-b bg-muted/30 px-4 py-3' },
                         tbody: { class: 'divide-y' },
                     }"
@@ -262,10 +287,15 @@ function confirmDelete(p: Proprietaire) {
                         </template>
                     </Column>
 
-                    <!-- Adresse -->
-                    <Column field="adresse" header="Adresse" style="min-width: 220px">
+                    <!-- Localisation -->
+                    <Column field="adresse" header="Localisation" style="min-width: 220px">
                         <template #body="{ data }">
-                            <span class="text-muted-foreground">{{ data.adresse ?? '—' }}</span>
+                            <div class="flex items-center gap-2">
+                                <img v-if="data.code_pays" :src="flagUrl(data.code_pays)" class="h-4 w-auto rounded-sm shadow-sm" />
+                                <span class="text-muted-foreground">
+                                    {{ formatLocation(data.adresse, data.ville) }}
+                                </span>
+                            </div>
                         </template>
                     </Column>
 
@@ -330,3 +360,4 @@ function confirmDelete(p: Proprietaire) {
         </div>
     </AppLayout>
 </template>
+
