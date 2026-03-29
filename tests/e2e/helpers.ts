@@ -10,6 +10,7 @@ export function escapeRegExp(value: string): string {
 
 export async function login(page: Page): Promise<void> {
     await page.goto('/login');
+    await page.waitForLoadState('networkidle');
 
     const emailInput = page.locator('input[name="email"]');
     if ((await emailInput.count()) > 0) {
