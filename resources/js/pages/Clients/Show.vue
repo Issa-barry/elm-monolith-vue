@@ -23,7 +23,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 </script>
 
 <template>
-    <Head :title="`${client.nom} ${client.prenom ?? ''}`" />
+    <Head>
+        <title>{{ client.nom }} {{ client.prenom ?? '' }}</title>
+    </Head>
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto max-w-2xl p-4 sm:p-6">

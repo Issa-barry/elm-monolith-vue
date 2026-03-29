@@ -64,7 +64,9 @@ function destroy(client: Client) {
 </script>
 
 <template>
-    <Head title="Clients" />
+    <Head>
+        <title>Clients</title>
+    </Head>
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="p-4 sm:p-6">
