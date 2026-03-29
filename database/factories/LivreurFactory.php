@@ -14,7 +14,11 @@ class LivreurFactory extends Factory
             'nom'             => fake()->lastName(),
             'prenom'          => fake()->firstName(),
             'email'           => fake()->unique()->safeEmail(),
-            'telephone'       => fake()->phoneNumber(),
+            'telephone'       => '+224' . fake()->numerify('#########'),
+            'ville'           => fake()->city(),
+            'pays'            => 'Guinée',
+            'code_pays'       => 'GN',
+            'code_phone_pays' => '+224',
             'is_active'       => true,
         ];
     }
