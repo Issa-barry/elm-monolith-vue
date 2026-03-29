@@ -10,13 +10,22 @@ export function escapeRegExp(value: string): string {
 
 export async function login(page: Page): Promise<void> {
     await page.goto('/login');
-    await page.waitForLoadState('networkidle');
+
+    // Attendre que Vue ait monté le formulaire
+    await page.waitForSelector('input[name="password"]', { timeout: 20_000 });
 
     const emailInput = page.locator('input[name="email"]');
     if ((await emailInput.count()) > 0) {
         await emailInput.fill(E2E_EMAIL);
     } else {
-        await expect(page.locator('input[name="telephone"]')).toHaveCount(1);
+        // Formulaire téléphone : l'input caché name="telephone" est géré par Vue.
+        // On remplit le champ visible (type="tel") pour déclencher la réactivité,
+        // puis on force la valeur sur l'input caché.
+        const telVisible = page.locator('input[type="tel"]:visible').first();
+        if ((await telVisible.count()) > 0) {
+            const localDigits = E2E_PHONE.replace(/^\+\d{1,3}/, '').replace(/^0/, '');
+            await telVisible.fill(localDigits);
+        }
         await page.evaluate((phone) => {
             const hiddenPhone = document.querySelector('input[name="telephone"]') as HTMLInputElement | null;
             if (hiddenPhone) hiddenPhone.value = phone;
