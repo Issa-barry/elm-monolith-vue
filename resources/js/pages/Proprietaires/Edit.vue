@@ -2,9 +2,11 @@
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Spinner } from '@/components/ui/spinner';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { CheckCircle } from 'lucide-vue-next';
 import { ArrowLeft, Save } from 'lucide-vue-next';
 import ProprietaireForm from './partials/ProprietaireForm.vue';
+import { computed, watch } from 'vue';
 
 interface ProprietaireData {
     id: number;
@@ -21,6 +23,8 @@ interface ProprietaireData {
 }
 
 const props = defineProps<{ proprietaire: ProprietaireData }>();
+const page = usePage<{ flash?: { success?: string } }>();
+const flashSuccess = computed(() => page.props.flash?.success);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -40,6 +44,21 @@ const form = useForm({
     code_phone_pays: props.proprietaire.code_phone_pays,
     is_active: Boolean(props.proprietaire.is_active),
 });
+
+watch(() => props.proprietaire, (p) => {
+    Object.assign(form, {
+        nom: p.nom,
+        prenom: p.prenom,
+        email: p.email,
+        telephone: p.telephone,
+        adresse: p.adresse,
+        ville: p.ville,
+        pays: p.pays,
+        code_pays: p.code_pays,
+        code_phone_pays: p.code_phone_pays,
+        is_active: Boolean(p.is_active),
+    });
+}, { deep: true });
 
 function submit() {
     form.put(`/proprietaires/${props.proprietaire.id}`);
@@ -69,6 +88,11 @@ function submit() {
                     <h1 class="text-2xl font-semibold tracking-tight">Modifier le propriétaire</h1>
                     <p class="mt-1 text-sm text-muted-foreground font-medium">{{ proprietaire.prenom }} {{ proprietaire.nom }}</p>
                 </div>
+            </div>
+
+            <div v-if="flashSuccess" class="mx-6 mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                <CheckCircle class="h-4 w-4 shrink-0" />
+                {{ flashSuccess }}
             </div>
 
             <ProprietaireForm

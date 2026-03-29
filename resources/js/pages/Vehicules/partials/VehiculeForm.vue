@@ -94,7 +94,8 @@ watch(
                     <Label for="nom_vehicule" class="mb-1.5 block">Nom du véhicule <span class="text-destructive">*</span></Label>
                     <InputText
                         id="nom_vehicule"
-                        v-model="form.nom_vehicule"
+                        :model-value="form.nom_vehicule"
+                        @update:model-value="$emit('update:form', { ...form, nom_vehicule: String($event ?? '') })"
                         class="w-full"
                         :class="{ 'p-invalid': errors.nom_vehicule }"
                     />

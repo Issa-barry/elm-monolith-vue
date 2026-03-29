@@ -116,7 +116,8 @@ function onPaysChange(pays: string) {
                     <Label for="raison_sociale" class="mb-1.5 block">Raison sociale <span class="text-xs text-muted-foreground">(personne morale)</span></Label>
                     <InputText
                         id="raison_sociale"
-                        v-model="form.raison_sociale"
+                        :model-value="form.raison_sociale ?? ''"
+                        @update:model-value="$emit('update:form', { ...form, raison_sociale: $event || null })"
                         class="w-full"
                         :class="{ 'p-invalid': errors.raison_sociale }"
                     />
@@ -128,7 +129,8 @@ function onPaysChange(pays: string) {
                     <Label for="prenom" class="mb-1.5 block">Prénom</Label>
                     <InputText
                         id="prenom"
-                        v-model="form.prenom"
+                        :model-value="form.prenom ?? ''"
+                        @update:model-value="$emit('update:form', { ...form, prenom: $event || null })"
                         class="w-full"
                         :class="{ 'p-invalid': errors.prenom }"
                     />
@@ -140,7 +142,8 @@ function onPaysChange(pays: string) {
                     <Label for="nom" class="mb-1.5 block">Nom</Label>
                     <InputText
                         id="nom"
-                        v-model="form.nom"
+                        :model-value="form.nom ?? ''"
+                        @update:model-value="$emit('update:form', { ...form, nom: $event || null })"
                         class="w-full"
                         :class="{ 'p-invalid': errors.nom }"
                     />
@@ -184,11 +187,21 @@ function onPaysChange(pays: string) {
                 </div>
                 <div>
                     <Label for="ville" class="mb-1.5 block">Ville</Label>
-                    <InputText id="ville" v-model="form.ville" class="w-full" />
+                    <InputText
+                        id="ville"
+                        :model-value="form.ville ?? ''"
+                        @update:model-value="$emit('update:form', { ...form, ville: $event || null })"
+                        class="w-full"
+                    />
                 </div>
                 <div class="sm:col-span-2">
                     <Label for="adresse" class="mb-1.5 block">Adresse</Label>
-                    <InputText id="adresse" v-model="form.adresse" class="w-full" />
+                    <InputText
+                        id="adresse"
+                        :model-value="form.adresse ?? ''"
+                        @update:model-value="$emit('update:form', { ...form, adresse: $event || null })"
+                        class="w-full"
+                    />
                 </div>
             </div>
         </div>
@@ -210,7 +223,8 @@ function onPaysChange(pays: string) {
                         </div>
                         <InputText
                             id="phone"
-                            v-model="form.phone"
+                            :model-value="form.phone ?? ''"
+                            @update:model-value="$emit('update:form', { ...form, phone: $event || null })"
                             class="w-full"
                             :class="{ 'p-invalid': errors.phone }"
                         />
@@ -223,7 +237,8 @@ function onPaysChange(pays: string) {
                     <Label for="email" class="mb-1.5 block">Email</Label>
                     <InputText
                         id="email"
-                        v-model="form.email"
+                        :model-value="form.email ?? ''"
+                        @update:model-value="$emit('update:form', { ...form, email: $event || null })"
                         type="email"
                         class="w-full"
                         :class="{ 'p-invalid': errors.email }"
@@ -257,7 +272,8 @@ function onPaysChange(pays: string) {
                     <Label for="notes" class="mb-1.5 block">Notes</Label>
                     <Textarea
                         id="notes"
-                        v-model="form.notes"
+                        :model-value="form.notes ?? ''"
+                        @update:model-value="$emit('update:form', { ...form, notes: $event || null })"
                         :rows="3"
                         class="w-full resize-none"
                     />
