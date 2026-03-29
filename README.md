@@ -15,7 +15,7 @@ php artisan optimize:clear
 php artisan optimize
 
 php artisan db:seed --class=FakeDataSeeder
-php artisan storage:link
+php artisan storage:link 
 
 
 ## Stack technique
