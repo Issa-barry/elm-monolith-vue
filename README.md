@@ -3,7 +3,7 @@
 npm run build
 git add public/build
 git commit -m "build: production"
-git push 
+git push  
 
 ## CI/CD Hostinger (GitHub Actions)
 
