@@ -54,6 +54,9 @@ class ProprietaireController extends Controller
                 'email'      => $p->email,
                 'telephone'  => $p->telephone,
                 'code_phone_pays' => $p->code_phone_pays,
+                'ville'      => $p->ville,
+                'pays'       => $p->pays,
+                'code_pays'  => $p->code_pays,
                 'adresse'    => $p->adresse,
                 'is_active'  => $p->is_active,
             ]);
@@ -146,19 +149,29 @@ class ProprietaireController extends Controller
             return [null, $codePhonePays, $codePays, $pays];
         }
 
-        if ($codePhonePays && str_starts_with($telephone, $codePhonePays)) {
-            return [substr($telephone, strlen($codePhonePays)), $codePhonePays, $codePays, $pays];
+        $raw = trim($telephone);
+
+        if ($codePhonePays && str_starts_with($raw, $codePhonePays)) {
+            $local = substr($raw, strlen($codePhonePays));
+            $localDigits = preg_replace('/\D+/', '', $local) ?: null;
+
+            return [$localDigits, $codePhonePays, $codePays, $pays];
         }
 
         $sorted = PROPRIETAIRE_PAYS;
         uasort($sorted, fn ($a, $b) => strlen($b[1]) <=> strlen($a[1]));
         foreach ($sorted as $code => [$name, $dial]) {
-            if (str_starts_with($telephone, $dial)) {
-                return [substr($telephone, strlen($dial)), $dial, $code, $name];
+            if (str_starts_with($raw, $dial)) {
+                $local = substr($raw, strlen($dial));
+                $localDigits = preg_replace('/\D+/', '', $local) ?: null;
+
+                return [$localDigits, $dial, $code, $name];
             }
         }
 
-        return [$telephone, $codePhonePays, $codePays, $pays];
+        $digits = preg_replace('/\D+/', '', $raw) ?: null;
+
+        return [$digits, $codePhonePays, $codePays, $pays];
     }
 
     public function update(Request $request, Proprietaire $proprietaire): RedirectResponse
@@ -171,6 +184,7 @@ class ProprietaireController extends Controller
             'email'     => 'nullable|email:rfc,dns|max:255',
             'telephone' => ['nullable', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
             'code_pays' => ['nullable', Rule::in(array_keys(PROPRIETAIRE_PAYS))],
+            'ville'     => 'nullable|string|max:100',
             'adresse'   => 'nullable|string|max:500',
             'is_active' => 'boolean',
         ], [
@@ -191,7 +205,7 @@ class ProprietaireController extends Controller
 
         $proprietaire->update($data);
 
-        return redirect()->route('proprietaires.index')
+        return redirect()->route('proprietaires.edit', $proprietaire)
             ->with('success', 'Propriétaire mis à jour avec succès.');
     }
 
@@ -231,6 +245,9 @@ class ProprietaireController extends Controller
         }
         if (!empty($data['ville'])) {
             $data['ville'] = mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+        }
+        if (!empty($data['adresse'])) {
+            $data['adresse'] = mb_convert_case(mb_strtolower($data['adresse'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
         }
         if (!empty($data['telephone'])) {
             $telephone = trim((string) $data['telephone']);

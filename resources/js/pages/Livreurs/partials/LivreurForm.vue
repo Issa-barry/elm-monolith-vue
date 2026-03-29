@@ -104,7 +104,8 @@ function onTelephoneInput(value: string | null | undefined) {
                     <Label for="prenom" class="mb-1.5 block">Prénom <span class="text-destructive">*</span></Label>
                     <InputText
                         id="prenom"
-                        v-model="form.prenom"
+                        :model-value="form.prenom"
+                        @update:model-value="$emit('update:form', { ...form, prenom: String($event ?? '') })"
                         class="w-full"
                         :class="{ 'p-invalid': errors.prenom }"
                     />
@@ -114,7 +115,8 @@ function onTelephoneInput(value: string | null | undefined) {
                     <Label for="nom" class="mb-1.5 block">Nom <span class="text-destructive">*</span></Label>
                     <InputText
                         id="nom"
-                        v-model="form.nom"
+                        :model-value="form.nom"
+                        @update:model-value="$emit('update:form', { ...form, nom: String($event ?? '') })"
                         class="w-full"
                         :class="{ 'p-invalid': errors.nom }"
                     />
@@ -159,12 +161,23 @@ function onTelephoneInput(value: string | null | undefined) {
                 </div>
                 <div>
                     <Label for="ville" class="mb-1.5 block">Ville <span class="text-destructive">*</span></Label>
-                    <InputText id="ville" v-model="form.ville" class="w-full" :class="{ 'p-invalid': errors.ville }" />
+                    <InputText
+                        id="ville"
+                        :model-value="form.ville ?? ''"
+                        @update:model-value="$emit('update:form', { ...form, ville: $event || null })"
+                        class="w-full"
+                        :class="{ 'p-invalid': errors.ville }"
+                    />
                     <p v-if="errors.ville" class="mt-1 text-xs text-destructive">{{ errors.ville }}</p>
                 </div>
                 <div class="sm:col-span-2">
                     <Label for="adresse" class="mb-1.5 block">Adresse</Label>
-                    <InputText id="adresse" v-model="form.adresse" class="w-full" />
+                    <InputText
+                        id="adresse"
+                        :model-value="form.adresse ?? ''"
+                        @update:model-value="$emit('update:form', { ...form, adresse: $event || null })"
+                        class="w-full"
+                    />
                 </div>
             </div>
         </div>
@@ -203,7 +216,8 @@ function onTelephoneInput(value: string | null | undefined) {
                     <Label for="email" class="mb-1.5 block">Email</Label>
                     <InputText
                         id="email"
-                        v-model="form.email"
+                        :model-value="form.email ?? ''"
+                        @update:model-value="$emit('update:form', { ...form, email: $event || null })"
                         type="email"
                         class="w-full"
                         :class="{ 'p-invalid': errors.email }"
