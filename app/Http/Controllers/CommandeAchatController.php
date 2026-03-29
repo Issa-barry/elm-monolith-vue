@@ -8,8 +8,10 @@ use App\Enums\StatutCommandeAchat;
 use App\Models\CommandeAchat;
 use App\Models\Prestataire;
 use App\Models\Produit;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -226,6 +228,27 @@ class CommandeAchatController extends Controller
         ]);
 
         return back()->with('success', 'Commande annulée.');
+    }
+
+    public function pdf(CommandeAchat $achat): HttpResponse
+    {
+        $this->authorize('view', $achat);
+
+        $achat->load(['prestataire', 'lignes.produit', 'createdBy', 'organization']);
+
+        $createdBy = $achat->createdBy
+            ? trim($achat->createdBy->prenom . ' ' . $achat->createdBy->nom)
+            : '—';
+
+        $pdf = Pdf::loadView('pdf.bon_commande_achat', [
+            'commande'     => $achat,
+            'organisation' => $achat->organization,
+            'createdBy'    => $createdBy,
+        ])->setPaper('a4', 'portrait');
+
+        $filename = $achat->reference . '.pdf';
+
+        return $pdf->download($filename);
     }
 
     public function destroy(CommandeAchat $achat): RedirectResponse

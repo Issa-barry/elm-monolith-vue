@@ -47,6 +47,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     Route::resource('achats', CommandeAchatController::class)->except(['edit', 'update']);
     Route::patch('achats/{achat}/receptionner', [CommandeAchatController::class, 'receptionner'])->name('achats.receptionner');
     Route::patch('achats/{achat}/annuler', [CommandeAchatController::class, 'annuler'])->name('achats.annuler');
+    Route::get('achats/{achat}/pdf', [CommandeAchatController::class, 'pdf'])->name('achats.pdf');
     Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
     Route::get('commissions', [CommissionVenteController::class, 'index'])->name('commissions.index');
     Route::post('commissions/{commission_vente}/versements', [VersementCommissionController::class, 'store'])->name('commissions.versements.store');

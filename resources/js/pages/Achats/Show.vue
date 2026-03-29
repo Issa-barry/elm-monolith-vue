@@ -5,7 +5,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, PackageCheck, XCircle } from 'lucide-vue-next';
+import { ArrowLeft, Download, PackageCheck, XCircle } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import InputNumber from 'primevue/inputnumber';
 import Textarea from 'primevue/textarea';
@@ -157,6 +157,14 @@ function submitAnnuler() {
                 </div>
 
                 <div class="flex items-center gap-2">
+                    <!-- PDF -->
+                    <a :href="`/achats/${commande.id}/pdf`" target="_blank">
+                        <Button variant="outline" size="sm">
+                            <Download class="mr-2 h-4 w-4" />
+                            PDF
+                        </Button>
+                    </a>
+
                     <Button
                         v-if="!commande.is_annulee && !commande.is_receptionnee && can('achats.update')"
                         @click="openReceptionDialog"
@@ -277,6 +285,14 @@ function submitAnnuler() {
             </div>
 
             <!-- Actions mobile ───────────────────────────────────────────────── -->
+            <div class="sm:hidden space-y-3">
+                <a :href="`/achats/${commande.id}/pdf`" target="_blank" class="block">
+                    <Button variant="outline" class="w-full">
+                        <Download class="mr-2 h-4 w-4" />
+                        Télécharger le PDF
+                    </Button>
+                </a>
+            </div>
             <div v-if="!commande.is_annulee && !commande.is_receptionnee && can('achats.update')" class="sm:hidden space-y-3">
                 <Button class="w-full bg-emerald-600 hover:bg-emerald-700 text-white" @click="openReceptionDialog">
                     <PackageCheck class="mr-2 h-4 w-4" />
