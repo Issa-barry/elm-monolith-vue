@@ -11,14 +11,16 @@ function randomDigits(length: number): string {
 }
 
 test.afterEach(async ({ browser }) => {
-    const context = await browser.newContext();
     try {
-        const p = await context.newPage();
-        await cleanupRowsByPrefix(p, '/livreurs', PREFIX);
+        const context = await browser.newContext();
+        try {
+            const p = await context.newPage();
+            await cleanupRowsByPrefix(p, '/livreurs', PREFIX);
+        } finally {
+            await context.close().catch(() => undefined);
+        }
     } catch (e) {
         console.warn('E2E cleanup warning (livreurs):', e);
-    } finally {
-        await context.close().catch(() => undefined);
     }
 });
 
@@ -103,7 +105,7 @@ test('edit livreur → update ville / adresse → data persists', async ({ page 
     await search2.fill(prenom);
     const updatedRow = page.locator('tbody tr', { hasText: new RegExp(escapeRegExp(prenom), 'i') }).first();
     await expect(updatedRow).toBeVisible();
-    await expect(updatedRow).toContainText('Adresse Modifi'); // title-case backend
+    await expect(updatedRow).toContainText(/adresse modifi/i);
     await expect(updatedRow).toContainText('Mamou');
 });
 

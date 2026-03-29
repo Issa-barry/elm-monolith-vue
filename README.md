@@ -3,18 +3,25 @@
 npm run build
 git add public/build
 git commit -m "build: production"
-git push
+git push 
+
+## CI/CD Hostinger (GitHub Actions)
+
+Le deploiement automatique production est configure dans:
+- `.github/workflows/deploy-hostinger.yml`
+
+Guide complet:
+- `DEPLOY-HOSTINGER-CICD.md`
 
 # Sur le serveur
 
 
 cd ~/domains/eau-la-maman.fr/public_html
-composer2 update
-php artisan migrate:fresh --seed
+composer2 install --no-dev --prefer-dist --optimize-autoloader
+php artisan migrate --force
 php artisan optimize:clear
 php artisan optimize
 
-php artisan db:seed --class=FakeDataSeeder
 php artisan storage:link 
 
 
