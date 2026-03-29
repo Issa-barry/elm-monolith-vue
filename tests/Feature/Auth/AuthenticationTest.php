@@ -87,10 +87,13 @@ class AuthenticationTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $throttleKey = \Illuminate\Support\Str::transliterate(
-            \Illuminate\Support\Str::lower($user->telephone) . '|127.0.0.1'
-        );
-        RateLimiter::increment($throttleKey, amount: 5);
+        // Make 5 failed attempts to trigger the rate limit
+        for ($i = 0; $i < 5; $i++) {
+            $this->post(route('login.store'), [
+                'telephone' => $user->telephone,
+                'password' => 'wrong-password',
+            ]);
+        }
 
         $response = $this->post(route('login.store'), [
             'telephone' => $user->telephone,

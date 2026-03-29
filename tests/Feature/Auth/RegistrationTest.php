@@ -155,7 +155,7 @@ class RegistrationTest extends TestCase
         ])->assertRedirect(route('dashboard', absolute: false));
 
         $this->assertAuthenticated();
-        $this->assertDatabaseHas('users', ['prenom' => 'Test', 'nom' => 'User', 'email' => null]);
+        $this->assertDatabaseHas('users', ['prenom' => 'Test', 'nom' => 'USER', 'email' => null]);
     }
 
     public function test_registration_fails_with_invalid_email(): void
