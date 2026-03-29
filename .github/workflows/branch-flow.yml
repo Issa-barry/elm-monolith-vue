@@ -12,9 +12,14 @@ jobs:
 
     steps:
       - name: Validate PR branch flow
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          BASE="${{ github.base_ref }}"
-          HEAD="${{ github.head_ref }}"
+          set -euo pipefail
+
+          BASE="$PR_BASE_REF"
+          HEAD="$PR_HEAD_REF"
 
           echo "PR flow: ${HEAD} -> ${BASE}"
 
