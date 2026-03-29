@@ -83,20 +83,37 @@ jobs:
           HOSTINGER_USER: ${{ secrets.HOSTINGER_SSH_USER }}
           HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
         run: |
-          ssh -i ~/.ssh/hostinger_key -o StrictHostKeyChecking=yes -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash -s" <<'EOF'
+          ssh -i ~/.ssh/hostinger_key -o StrictHostKeyChecking=yes -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash --noprofile --norc -s" <<'EOF'
           set -euo pipefail
 
           cd "$DEPLOY_PATH"
 
           if command -v composer2 >/dev/null 2>&1; then
-            COMPOSER_BIN="composer2"
+            COMPOSER_PATH="$(command -v composer2)"
           else
-            COMPOSER_BIN="composer"
+            COMPOSER_PATH="$(command -v composer)"
           fi
 
-          $COMPOSER_BIN install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
-          php artisan migrate --force
-          php artisan optimize:clear
-          php artisan optimize
-          php artisan storage:link || true
+          PHP_BIN=""
+          for candidate in php8.4 php84 php; do
+            if command -v "$candidate" >/dev/null 2>&1; then
+              candidate_version="$("$candidate" -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || true)"
+              if [ "$candidate_version" = "8.4" ] || [ "$candidate_version" = "8.5" ] || [ "$candidate_version" = "8.6" ]; then
+                PHP_BIN="$candidate"
+                break
+              fi
+            fi
+          done
+
+          if [ -z "$PHP_BIN" ]; then
+            echo "No PHP 8.4+ binary found on server. Current default: $(php -v | head -n 1)"
+            echo "Set Hostinger PHP/CLI to 8.4 or install a php8.4 binary."
+            exit 1
+          fi
+
+          "$PHP_BIN" "$COMPOSER_PATH" install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
+          "$PHP_BIN" artisan migrate --force
+          "$PHP_BIN" artisan optimize:clear
+          "$PHP_BIN" artisan optimize
+          "$PHP_BIN" artisan storage:link || true
           EOF
