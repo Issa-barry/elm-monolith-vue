@@ -34,7 +34,7 @@ php artisan storage:link
 | Auth | Connexion par numéro de téléphone + mot de passe |
 | Tests | PHPUnit (Feature tests) |
 
----
+--- 
 
 ## Installation locale
 
