@@ -3,6 +3,15 @@
 Ce projet inclut maintenant un workflow GitHub Actions:
 - [`.github/workflows/deploy-hostinger.yml`](.github/workflows/deploy-hostinger.yml)
 
+## Strategie de branches
+
+Flux recommande:
+- `dev` -> `pre-prod` -> `main`
+
+Comportement des workflows:
+- CI (`.github/workflows/lint.yml` et `.github/workflows/tests.yml`) sur `dev`, `pre-prod`, `main`
+- CD (`.github/workflows/deploy-hostinger.yml`) uniquement sur `main` (et manuel via `workflow_dispatch`)
+
 ## Ce que fait le pipeline
 
 Sur chaque push sur `main` (ou lancement manuel):
