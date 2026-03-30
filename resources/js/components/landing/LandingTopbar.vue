@@ -108,7 +108,12 @@ onBeforeUnmount(() => {
                     class="text-surface-700 dark:text-surface-100 mt-1 block cursor-pointer lg:hidden"
                     @click="isMobileMenuOpen = !isMobileMenuOpen"
                 >
-                    <i class="pi pi-bars text-2xl" />
+                    <i
+                        :class="[
+                            'pi text-2xl',
+                            isMobileMenuOpen ? 'pi-times' : 'pi-bars',
+                        ]"
+                    />
                 </button>
 
                 <div
@@ -118,7 +123,7 @@ onBeforeUnmount(() => {
                     ]"
                 >
                     <ul
-                        class="text-surface-900 dark:text-surface-0 m-0 flex cursor-pointer list-none flex-col p-0 py-4 select-none lg:w-4/12 lg:flex-row lg:items-center lg:py-0"
+                        class="order-2 text-surface-900 dark:text-surface-0 m-0 flex cursor-pointer list-none flex-col p-0 py-4 select-none lg:order-1 lg:w-4/12 lg:flex-row lg:items-center lg:py-0"
                     >
                         <li ref="productsMenuRef" class="relative">
                             <button
@@ -198,7 +203,7 @@ onBeforeUnmount(() => {
 
                     <button
                         type="button"
-                        class="hidden items-center gap-4 py-2 lg:flex"
+                        class="order-2 hidden items-center gap-4 py-2 lg:order-2 lg:flex"
                         @click="goHome"
                     >
                         <svg
@@ -222,7 +227,7 @@ onBeforeUnmount(() => {
                     </button>
 
                     <div
-                        class="border-surface mt-4 flex border-t py-4 lg:mt-0 lg:block lg:w-4/12 lg:border-t-0 lg:py-0 lg:text-right"
+                        class="order-1 border-surface flex border-b py-4 lg:order-3 lg:block lg:w-4/12 lg:border-t-0 lg:border-b-0 lg:py-0 lg:text-right"
                     >
                         <template v-if="$page.props.auth.user">
                             <Button
@@ -232,19 +237,22 @@ onBeforeUnmount(() => {
                             />
                         </template>
                         <template v-else>
-                            <Button
-                                label="Connexion"
-                                text
-                                rounded
-                                @click="router.visit(login())"
-                            />
-                            <Button
-                                v-if="canRegister"
-                                label="Inscription"
-                                rounded
-                                class="ml-4"
-                                @click="router.visit(register())"
-                            />
+                            <div class="flex w-full flex-col items-stretch gap-2 lg:flex-row lg:justify-end">
+                                <Button
+                                    v-if="canRegister"
+                                    label="Inscription"
+                                    rounded
+                                    class="w-full justify-center rounded-full font-semibold lg:w-auto"
+                                    @click="router.visit(register())"
+                                />
+                                <Button
+                                    label="Connexion"
+                                    outlined
+                                    rounded
+                                    class="w-full justify-center rounded-full font-semibold lg:w-auto"
+                                    @click="router.visit(login())"
+                                />
+                            </div>
                         </template>
                     </div>
                 </div>

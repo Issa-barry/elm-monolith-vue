@@ -10,7 +10,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useAppearance } from '@/composables/useAppearance';
 import type { BreadcrumbItemType } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
-import { AlertTriangle, Bell, Moon, Package, Sun } from 'lucide-vue-next';
+import { AlertTriangle, Bell, MessageSquare, Moon, Package, Sun } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 
 withDefaults(
@@ -35,6 +35,7 @@ const stockAlertes = computed(
         },
 );
 const _produits = computed(() => (page.props as any).produits_alertes ?? []);
+const contactMessagesNonLus = computed(() => (page.props as any).contact_messages_non_lus ?? 0);
 
 function syncThemeState() {
     if (typeof document === 'undefined') return;
@@ -84,9 +85,9 @@ onMounted(() => {
                     >
                         <Bell class="h-5 w-5" />
                         <span
-                            v-if="stockAlertes.total > 0"
+                            v-if="stockAlertes.total + contactMessagesNonLus > 0"
                             class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-0.5 text-[10px] font-bold text-destructive-foreground"
-                            >{{ stockAlertes.total }}</span
+                            >{{ stockAlertes.total + contactMessagesNonLus }}</span
                         >
                         <span class="sr-only">Notifications</span>
                     </Button>
@@ -99,16 +100,16 @@ onMounted(() => {
                     >
                         <span class="text-sm font-semibold">Notifications</span>
                         <span
-                            v-if="stockAlertes.total > 0"
+                            v-if="stockAlertes.total + contactMessagesNonLus > 0"
                             class="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold text-destructive-foreground"
                         >
-                            {{ stockAlertes.total }}
+                            {{ stockAlertes.total + contactMessagesNonLus }}
                         </span>
                     </div>
 
                     <!-- Aucune notif -->
                     <div
-                        v-if="stockAlertes.total === 0"
+                        v-if="stockAlertes.total + contactMessagesNonLus === 0"
                         class="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground"
                     >
                         <Bell class="h-8 w-8 opacity-20" />
@@ -156,9 +157,32 @@ onMounted(() => {
                         </Link>
                     </div>
 
+                    <!-- Messages contact -->
+                    <div v-if="contactMessagesNonLus > 0" class="border-b">
+                        <div
+                            class="flex items-center gap-2 bg-blue-50 px-4 py-2 dark:bg-blue-950/20"
+                        >
+                            <MessageSquare
+                                class="h-3.5 w-3.5 text-blue-500"
+                            />
+                            <span
+                                class="text-xs font-semibold text-blue-700 dark:text-blue-400"
+                                >Messages contact ({{
+                                    contactMessagesNonLus
+                                }})</span
+                            >
+                        </div>
+                        <Link
+                            href="/contact-messages"
+                            class="block px-4 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+                        >
+                            Voir les messages →
+                        </Link>
+                    </div>
+
                     <!-- Footer -->
                     <div
-                        v-if="stockAlertes.total > 0"
+                        v-if="stockAlertes.total + contactMessagesNonLus > 0"
                         class="border-t px-4 py-2"
                     >
                         <Link
