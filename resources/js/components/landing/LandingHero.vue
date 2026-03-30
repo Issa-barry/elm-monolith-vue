@@ -1,116 +1,47 @@
 <script setup lang="ts">
-import { login, register } from '@/routes';
-import { Link } from '@inertiajs/vue3';
-
-withDefaults(
-    defineProps<{
-        canRegister: boolean;
-    }>(),
-    {
-        canRegister: true,
-    },
-);
+import { router } from '@inertiajs/vue3';
+import Button from 'primevue/button';
 </script>
 
 <template>
-    <section
-        class="rounded-3xl border border-slate-200 bg-white px-6 py-10 lg:px-12 lg:py-14"
-    >
-        <div class="grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-center">
-            <div>
-                <p
-                    class="inline-flex items-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold tracking-[0.2em] text-slate-700 uppercase"
-                >
-                    Mission GBALAN
-                </p>
-                <h1
-                    class="mt-4 text-4xl leading-tight font-bold text-slate-950 md:text-5xl"
-                >
-                    Une landing claire pour lancer ton produit comme une mission
-                    orbitale.
+    <section class="w-full bg-slate-900 px-6 py-12 lg:px-20 lg:py-16">
+        <div class="flex flex-col-reverse items-center gap-12 lg:flex-row">
+            <div class="flex-1 p-2 lg:p-4">
+                <h1 class="mb-4 text-4xl leading-tight font-bold text-white md:text-5xl">
+                    L'eau minerale qui vous accompagne chaque jour
+                    <span class="text-primary underline">a Matoto</span>
                 </h1>
-                <p
-                    class="mt-5 max-w-2xl text-base leading-relaxed text-slate-700"
-                >
-                    Concentre tes visiteurs sur l'essentiel: proposition de
-                    valeur, benefices concrets et appel a l'action immediat.
-                    Cette base est pensee pour evoluer vite.
+                <p class="mb-8 text-xl leading-normal text-slate-300">
+                    Eau la maman, marque du groupe GBALAN, propose de l'eau minerale en sachet et bientot en bouteille.
                 </p>
-
-                <div class="mt-8 flex flex-wrap gap-3">
-                    <Link
-                        :href="login()"
-                        class="inline-flex items-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-                    >
-                        Demander une demo
-                    </Link>
-                    <Link
-                        v-if="canRegister"
-                        :href="register()"
-                        class="inline-flex items-center rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-900 hover:border-slate-950"
-                    >
-                        Creer un compte
-                    </Link>
-                    <a
-                        href="#landing-section"
-                        class="inline-flex items-center rounded-full border border-transparent px-4 py-3 text-sm font-semibold text-slate-700 underline decoration-slate-400 underline-offset-4 hover:text-slate-950"
-                    >
-                        Explorer la section
-                    </a>
-                </div>
+                <ul class="flex list-none flex-col gap-4">
+                    <li class="flex items-center gap-2">
+                        <i class="pi pi-check-circle text-primary text-xl" />
+                        <span class="text-slate-300 leading-normal">Production locale avec un controle qualite rigoureux.</span>
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <i class="pi pi-check-circle text-primary text-xl" />
+                        <span class="text-slate-300 leading-normal">Distribution rapide a Matoto et dans les zones voisines.</span>
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <i class="pi pi-check-circle text-primary text-xl" />
+                        <span class="text-slate-300 leading-normal">Ouvert aux partenariats revendeurs, fournisseurs et investisseurs.</span>
+                    </li>
+                </ul>
+                <Button
+                    label="Nous contacter"
+                    rounded
+                    size="large"
+                    class="mt-12"
+                    @click="router.visit('/contact')"
+                />
             </div>
-
-            <div class="rounded-2xl border border-slate-200 bg-white p-6">
-                <p
-                    class="text-sm font-semibold tracking-[0.18em] text-slate-500 uppercase"
-                >
-                    Cockpit
-                </p>
-                <div class="mt-5 grid gap-4 sm:grid-cols-2">
-                    <div
-                        class="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                    >
-                        <p
-                            class="text-xs tracking-[0.14em] text-slate-500 uppercase"
-                        >
-                            Conversion
-                        </p>
-                        <p class="mt-2 text-2xl font-bold text-slate-950">
-                            +38%
-                        </p>
-                        <p class="mt-1 text-xs text-slate-600">
-                            apres redesign de la page d'accueil
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                    >
-                        <p
-                            class="text-xs tracking-[0.14em] text-slate-500 uppercase"
-                        >
-                            Temps moyen
-                        </p>
-                        <p class="mt-2 text-2xl font-bold text-slate-950">
-                            4m 12s
-                        </p>
-                        <p class="mt-1 text-xs text-slate-600">
-                            passe sur la landing
-                        </p>
-                    </div>
-                </div>
-                <div
-                    class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
-                >
-                    <p
-                        class="text-xs tracking-[0.14em] text-slate-500 uppercase"
-                    >
-                        Etat de mission
-                    </p>
-                    <p class="mt-2 text-sm font-medium text-slate-900">
-                        Pret pour le decollage. Ajoute ton contenu metier et
-                        publie.
-                    </p>
-                </div>
+            <div class="flex-1 overflow-hidden text-center lg:text-right">
+                <img
+                    src="https://fqjltiegiezfetthbags.supabase.co/storage/v1/render/image/public/block.images/blocks/hero/Illustrations.svg"
+                    alt="Hero illustration"
+                    class="mx-auto w-full max-w-md lg:mr-0 lg:ml-auto lg:w-auto lg:max-w-xl"
+                />
             </div>
         </div>
     </section>

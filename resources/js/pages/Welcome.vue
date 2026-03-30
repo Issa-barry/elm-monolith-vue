@@ -19,8 +19,8 @@ withDefaults(
     <Head title="Welcome" />
     <div class="min-h-screen bg-white font-sans text-slate-900">
         <LandingTopbar :can-register="canRegister" />
+        <LandingHero />
         <div class="mx-auto w-full max-w-6xl px-6 py-8 lg:px-8">
-            <LandingHero :can-register="canRegister" />
             <LandingSection />
             <LandingFooter :version-label="$page.props.appVersionLabel" />
         </div>
