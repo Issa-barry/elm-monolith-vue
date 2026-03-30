@@ -4,6 +4,7 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
 use App\Http\Controllers\CommissionVenteController;
+use App\Http\Controllers\ContactController;
 use App\Http\Controllers\EncaissementVenteController;
 use App\Http\Controllers\FactureVenteController;
 use App\Http\Controllers\LivreurController;
@@ -27,12 +28,16 @@ Route::get('/contact', function () {
     return Inertia::render('Contact');
 })->name('contact');
 
+Route::post('contact', [ContactController::class, 'store'])->name('contact.store');
+
 Route::get('dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable'])->name('dashboard');
 
 // Espace staff
 Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commerciale|comptable'])->group(function () {
+    Route::get('contact-messages/unread-count', [ContactController::class, 'unreadCount'])->name('contact-messages.unread-count');
+    Route::patch('contact-messages/{contactMessage}/read', [ContactController::class, 'markRead'])->name('contact-messages.read');
     Route::resource('clients', ClientController::class);
     Route::resource('prestataires', PrestataireController::class);
     Route::resource('produits', ProduitController::class);

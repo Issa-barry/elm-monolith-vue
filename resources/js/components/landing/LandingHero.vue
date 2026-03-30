@@ -10,8 +10,8 @@ import Button from 'primevue/button';
                 <h1
                     class="mb-4 text-4xl leading-tight font-bold text-white md:text-5xl"
                 >
+                    <span class="text-primary underline">Eau la maman.</span>
                     L'eau minerale qui vous accompagne chaque jour
-                    <span class="text-primary underline">a Matoto</span>
                 </h1>
                 <p class="mb-8 text-xl leading-normal text-slate-300">
                     Eau la maman, marque du groupe GBALAN, propose de l'eau
