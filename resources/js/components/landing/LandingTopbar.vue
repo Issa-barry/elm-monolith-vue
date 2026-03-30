@@ -28,6 +28,12 @@ const toggleProducts = () => {
     isProductsOpen.value = !isProductsOpen.value;
 };
 
+const goHome = () => {
+    closeProductMenus();
+    isMobileMenuOpen.value = false;
+    router.visit('/');
+};
+
 const onDocumentClick = (event: MouseEvent) => {
     const target = event.target as Node | null;
 
@@ -55,7 +61,11 @@ onBeforeUnmount(() => {
             <div
                 class="relative flex w-full items-center justify-between bg-white px-6 py-4 shadow lg:static lg:px-12 dark:bg-slate-900"
             >
-                <div class="flex items-center gap-4 py-2 lg:hidden">
+                <button
+                    type="button"
+                    class="flex items-center gap-4 py-2 lg:hidden"
+                    @click="goHome"
+                >
                     <svg
                         width="32"
                         height="32"
@@ -74,7 +84,7 @@ onBeforeUnmount(() => {
                         class="text-surface-900 dark:text-surface-0 text-xl font-medium"
                         >Eau la maman</span
                     >
-                </div>
+                </button>
 
                 <button
                     type="button"
@@ -169,7 +179,11 @@ onBeforeUnmount(() => {
                         </li>
                     </ul>
 
-                    <div class="hidden items-center gap-4 py-2 lg:flex">
+                    <button
+                        type="button"
+                        class="hidden items-center gap-4 py-2 lg:flex"
+                        @click="goHome"
+                    >
                         <svg
                             width="32"
                             height="32"
@@ -188,7 +202,7 @@ onBeforeUnmount(() => {
                             class="text-surface-900 dark:text-surface-0 text-xl font-medium"
                             >Eau la maman</span
                         >
-                    </div>
+                    </button>
 
                     <div
                         class="border-surface mt-4 flex border-t py-4 lg:mt-0 lg:block lg:w-4/12 lg:border-t-0 lg:py-0 lg:text-right"

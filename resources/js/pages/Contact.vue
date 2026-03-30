@@ -2,6 +2,10 @@
 import LandingFooter from '@/components/landing/LandingFooter.vue';
 import LandingTopbar from '@/components/landing/LandingTopbar.vue';
 import { Head } from '@inertiajs/vue3';
+import Button from 'primevue/button';
+import InputText from 'primevue/inputtext';
+import Textarea from 'primevue/textarea';
+import { ref } from 'vue';
 
 withDefaults(
     defineProps<{
@@ -11,6 +15,13 @@ withDefaults(
         canRegister: true,
     },
 );
+
+const contact = ref({
+    name: '',
+    email: '',
+    phone: '',
+    message: '',
+});
 </script>
 
 <template>
@@ -18,106 +29,110 @@ withDefaults(
     <div class="min-h-screen bg-slate-50 font-sans text-slate-900">
         <LandingTopbar :can-register="canRegister" />
 
-        <main class="overflow-hidden">
-            <section class="bg-white py-14 lg:py-20">
-                <div class="mx-auto w-full max-w-6xl px-6 md:px-12 lg:px-16">
-                    <div
-                        class="flex flex-col items-start gap-10 lg:flex-row lg:gap-14"
+        <main>
+            <section class="bg-white px-6 py-20 md:px-12 lg:px-20">
+                <div
+                    class="mx-auto flex w-full max-w-6xl flex-col-reverse gap-12 lg:flex-row"
+                >
+                    <form
+                        class="flex w-full flex-1 flex-col gap-4"
+                        @submit.prevent
                     >
-                        <div class="w-full flex-1">
-                        <p
-                            class="mb-4 text-base leading-normal font-medium tracking-wide text-slate-900 uppercase"
-                        >
-                            Contactez-nous
-                        </p>
-                        <h1
-                            class="mb-4 text-3xl leading-tight font-bold text-slate-900 md:text-4xl"
-                        >
-                            RESTONS EN CONTACT
-                        </h1>
-                        <p class="max-w-xl text-base leading-relaxed text-slate-700">
-                            Notre equipe est disponible pour les partenariats, la
-                            distribution, les livraisons et toute demande liee a
-                            Eau la maman.
-                        </p>
-                    </div>
-
-                        <div
-                            class="grid w-full flex-1 grid-cols-1 gap-6 md:grid-cols-2"
-                        >
-                        <article class="flex items-start gap-4">
-                            <div
-                                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100"
+                        <div class="flex flex-col gap-2">
+                            <label
+                                for="name"
+                                class="font-medium text-slate-800"
+                                >Nom / Entreprise</label
                             >
-                                <i
-                                    class="pi pi-inbox text-xl leading-none text-slate-900"
-                                />
-                            </div>
-                            <div>
-                                <p
-                                    class="text-lg leading-tight font-medium text-slate-900"
-                                >
-                                    Email
-                                </p>
-                                <p class="text-sm leading-relaxed text-slate-700">
-                                    contact@eaulamaman.com
-                                </p>
-                            </div>
-                        </article>
-
-                        <article class="flex items-start gap-4">
-                            <div
-                                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100"
-                            >
-                                <i
-                                    class="pi pi-whatsapp text-xl leading-none text-slate-900"
-                                />
-                            </div>
-                            <div>
-                                <p
-                                    class="text-lg leading-tight font-medium text-slate-900"
-                                >
-                                    WhatsApp
-                                </p>
-                                <p class="text-sm leading-relaxed text-slate-700">
-                                    +224 620 00 00 00
-                                </p>
-                            </div>
-                        </article>
-
-                        <article class="flex items-start gap-4 md:col-span-2">
-                            <div
-                                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100"
-                            >
-                                <i
-                                    class="pi pi-map-marker text-xl leading-none text-slate-900"
-                                />
-                            </div>
-                            <div>
-                                <p
-                                    class="text-lg leading-tight font-medium text-slate-900"
-                                >
-                                    Adresse
-                                </p>
-                                <p class="text-sm leading-relaxed text-slate-700">
-                                    Conakry, Matoto, Guinée
-                                </p>
-                            </div>
-                        </article>
+                            <InputText id="name" v-model="contact.name" />
                         </div>
+
+                        <div class="flex flex-col gap-2">
+                            <label
+                                for="email"
+                                class="font-medium text-slate-800"
+                                >Email</label
+                            >
+                            <InputText id="email" v-model="contact.email" />
+                        </div>
+
+                        <div class="flex flex-col gap-2">
+                            <label
+                                for="phone"
+                                class="font-medium text-slate-800"
+                                >Numero de telephone *</label
+                            >
+                            <InputText
+                                id="phone"
+                                v-model="contact.phone"
+                                required
+                            />
+                        </div>
+
+                        <div class="flex flex-col gap-2">
+                            <label
+                                for="message"
+                                class="font-medium text-slate-800"
+                                >Message *</label
+                            >
+                            <Textarea
+                                id="message"
+                                v-model="contact.message"
+                                rows="5"
+                                cols="30"
+                                required
+                            />
+                        </div>
+
+                        <Button
+                            label="Envoyer le message"
+                            icon="pi pi-send"
+                            class="w-fit"
+                            type="submit"
+                        />
+                    </form>
+
+                    <div
+                        class="relative flex w-full flex-1 flex-col gap-12 overflow-hidden"
+                    >
+                        <div class="flex flex-col gap-4">
+                            <h1 class="text-4xl font-medium text-slate-900">
+                                Contactez-nous
+                            </h1>
+                            <p class="leading-normal text-slate-700">
+                                Notre equipe est disponible pour les
+                                partenariats, la distribution, les livraisons
+                                et toute demande liee a Eau la maman.
+                            </p>
+                        </div>
+
+                        <a
+                            href="https://maps.google.com/?q=Conakry%20Matoto%20Guinee"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="inline-flex cursor-pointer items-center gap-2 font-bold text-primary no-underline"
+                        >
+                            <span>Voir l'adresse sur Google Maps</span>
+                            <i class="pi pi-arrow-right" />
+                        </a>
+
+                        <ul class="m-0 list-none p-0 text-slate-700">
+                            <li class="mb-4 flex items-center">
+                                <i class="pi pi-whatsapp mr-4 text-lg leading-none" />
+                                <span>+224 620 00 00 00</span>
+                            </li>
+                            <li class="mb-4 flex items-center">
+                                <i class="pi pi-inbox mr-4 text-lg leading-none" />
+                                <span>contact@eaulamaman.com</span>
+                            </li>
+                            <li class="flex items-center">
+                                <i class="pi pi-map-marker mr-4 text-lg leading-none" />
+                                <span>Conakry, Matoto, Guinee</span>
+                            </li>
+                        </ul>
                     </div>
                 </div>
             </section>
-
-            <div class="h-80 w-full bg-slate-200 md:h-[26rem]">
-                <iframe
-                    title="Carte Matoto Conakry"
-                    src="https://maps.google.com/maps?q=Matoto%2C%20Conakry&t=&z=13&ie=UTF8&iwloc=&output=embed"
-                    class="h-full w-full border-0"
-                    loading="lazy"
-                    referrerpolicy="no-referrer-when-downgrade"
-                />
-            </div>
 
             <div class="mx-auto w-full max-w-6xl px-6 py-8 lg:px-8">
                 <LandingFooter :version-label="$page.props.appVersionLabel" />
