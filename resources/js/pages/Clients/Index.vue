@@ -54,7 +54,8 @@ function destroy(client: Client) {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
-                        summary: 'Client supprimé',
+                        summary: 'Supprimé',
+                        detail: `${client.nom}${client.prenom ? ' ' + client.prenom : ''} a été supprimé.`,
                         life: 3000,
                     }),
             });

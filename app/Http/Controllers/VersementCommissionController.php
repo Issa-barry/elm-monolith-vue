@@ -14,12 +14,12 @@ class VersementCommissionController extends Controller
 {
     public function store(Request $request, CommissionVente $commission_vente): RedirectResponse
     {
-        abort_if($commission_vente->isAnnulee(), 422, 'Cette commission est annulee.');
-        abort_if($commission_vente->isVersee(), 422, 'Cette commission est deja entierement versee.');
+        abort_if($commission_vente->isAnnulee(), 422, 'Cette commission est annulée.');
+        abort_if($commission_vente->isVersee(), 422, 'Cette commission est déjà entièrement versée.');
         abort_unless(
             $commission_vente->organization_id === auth()->user()->organization_id,
             403,
-            'Acces refuse.'
+            'Accès refusé.'
         );
 
         $restantL = $commission_vente->montant_restant_livreur;
@@ -32,8 +32,8 @@ class VersementCommissionController extends Controller
             'mode_paiement' => ['required', Rule::in(array_column(ModePaiement::cases(), 'value'))],
             'note' => 'nullable|string|max:2000',
         ], [
-            'montant_livreur.max' => 'Le montant livreur depasse le restant du.',
-            'montant_proprietaire.max' => 'Le montant proprietaire depasse le restant du.',
+            'montant_livreur.max' => 'Le montant livreur dépasse le restant dû.',
+            'montant_proprietaire.max' => 'Le montant propriétaire dépasse le restant dû.',
             'date_versement.required' => 'La date est obligatoire.',
             'mode_paiement.required' => 'Le mode de paiement est obligatoire.',
         ]);
@@ -43,7 +43,7 @@ class VersementCommissionController extends Controller
 
         if ($montantLivreur <= 0 && $montantProprietaire <= 0) {
             throw ValidationException::withMessages([
-                'montant_livreur' => 'Saisissez un montant pour le livreur ou le proprietaire.',
+                'montant_livreur' => 'Saisissez un montant pour le livreur ou le propriétaire.',
             ]);
         }
 
@@ -69,7 +69,7 @@ class VersementCommissionController extends Controller
             ]);
         }
 
-        return redirect()->back()->with('success', 'Versement enregistre.');
+        return redirect()->back()->with('success', 'Versement enregistré.');
     }
 
     public function destroy(VersementCommission $versement_commission): RedirectResponse
@@ -77,11 +77,11 @@ class VersementCommissionController extends Controller
         abort_unless(
             $versement_commission->commission->organization_id === auth()->user()->organization_id,
             403,
-            'Acces refuse.'
+            'Accès refusé.'
         );
 
         $versement_commission->delete();
 
-        return redirect()->back()->with('success', 'Versement supprime.');
+        return redirect()->back()->with('success', 'Versement supprimé.');
     }
 }

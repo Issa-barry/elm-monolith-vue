@@ -113,8 +113,8 @@ function confirmDelete(produit: Produit) {
                 onSuccess: () => {
                     toast.add({
                         severity: 'success',
-                        summary: 'Supprime',
-                        detail: `${produit.nom} a ete supprime.`,
+                        summary: 'Supprimé',
+                        detail: `${produit.nom} a été supprimé.`,
                         life: 3000,
                     });
                 },
@@ -232,7 +232,10 @@ function confirmDelete(produit: Produit) {
                             <div
                                 class="h-10 w-10 overflow-hidden rounded-lg border bg-muted"
                                 :class="data.image_url ? 'cursor-zoom-in' : ''"
-                                @click="data.image_url && openLightbox(data.image_url, data.nom)"
+                                @click="
+                                    data.image_url &&
+                                    openLightbox(data.image_url, data.nom)
+                                "
                             >
                                 <img
                                     v-if="data.image_url"
@@ -483,7 +486,9 @@ function confirmDelete(produit: Produit) {
                         :alt="lightboxAlt"
                         class="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl"
                     />
-                    <p class="mt-2 text-center text-sm text-white/70">{{ lightboxAlt }}</p>
+                    <p class="mt-2 text-center text-sm text-white/70">
+                        {{ lightboxAlt }}
+                    </p>
                 </div>
             </div>
         </Teleport>
