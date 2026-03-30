@@ -205,3 +205,5 @@ git commit -m "build: production"
 git push
 ```
  
+# code coverage : 
+php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text
