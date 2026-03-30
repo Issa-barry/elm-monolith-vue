@@ -39,9 +39,7 @@ const contact = ref({
                         @submit.prevent
                     >
                         <div class="flex flex-col gap-2">
-                            <label
-                                for="name"
-                                class="font-medium text-slate-800"
+                            <label for="name" class="font-medium text-slate-800"
                                 >Nom / Entreprise</label
                             >
                             <InputText id="name" v-model="contact.name" />
@@ -101,8 +99,8 @@ const contact = ref({
                             </h1>
                             <p class="leading-normal text-slate-700">
                                 Notre equipe est disponible pour les
-                                partenariats, la distribution, les livraisons
-                                et toute demande liee a Eau la maman.
+                                partenariats, la distribution, les livraisons et
+                                toute demande liee a Eau la maman.
                             </p>
                         </div>
 
@@ -118,15 +116,21 @@ const contact = ref({
 
                         <ul class="m-0 list-none p-0 text-slate-700">
                             <li class="mb-4 flex items-center">
-                                <i class="pi pi-whatsapp mr-4 text-lg leading-none" />
+                                <i
+                                    class="pi pi-whatsapp mr-4 text-lg leading-none"
+                                />
                                 <span>+224 620 00 00 00</span>
                             </li>
                             <li class="mb-4 flex items-center">
-                                <i class="pi pi-inbox mr-4 text-lg leading-none" />
+                                <i
+                                    class="pi pi-inbox mr-4 text-lg leading-none"
+                                />
                                 <span>contact@eaulamaman.com</span>
                             </li>
                             <li class="flex items-center">
-                                <i class="pi pi-map-marker mr-4 text-lg leading-none" />
+                                <i
+                                    class="pi pi-map-marker mr-4 text-lg leading-none"
+                                />
                                 <span>Conakry, Matoto, Guinee</span>
                             </li>
                         </ul>

@@ -7,25 +7,37 @@ import Button from 'primevue/button';
     <section class="w-full bg-slate-900 px-6 py-12 lg:px-20 lg:py-16">
         <div class="flex flex-col-reverse items-center gap-12 lg:flex-row">
             <div class="flex-1 p-2 lg:p-4">
-                <h1 class="mb-4 text-4xl leading-tight font-bold text-white md:text-5xl">
+                <h1
+                    class="mb-4 text-4xl leading-tight font-bold text-white md:text-5xl"
+                >
                     L'eau minerale qui vous accompagne chaque jour
                     <span class="text-primary underline">a Matoto</span>
                 </h1>
                 <p class="mb-8 text-xl leading-normal text-slate-300">
-                    Eau la maman, marque du groupe GBALAN, propose de l'eau minerale en sachet et bientot en bouteille.
+                    Eau la maman, marque du groupe GBALAN, propose de l'eau
+                    minerale en sachet et bientot en bouteille.
                 </p>
                 <ul class="flex list-none flex-col gap-4">
                     <li class="flex items-center gap-2">
-                        <i class="pi pi-check-circle text-primary text-xl" />
-                        <span class="text-slate-300 leading-normal">Production locale avec un controle qualite rigoureux.</span>
+                        <i class="pi pi-check-circle text-xl text-primary" />
+                        <span class="leading-normal text-slate-300"
+                            >Production locale avec un controle qualite
+                            rigoureux.</span
+                        >
                     </li>
                     <li class="flex items-center gap-2">
-                        <i class="pi pi-check-circle text-primary text-xl" />
-                        <span class="text-slate-300 leading-normal">Distribution rapide a Matoto et dans les zones voisines.</span>
+                        <i class="pi pi-check-circle text-xl text-primary" />
+                        <span class="leading-normal text-slate-300"
+                            >Distribution rapide a Matoto et dans les zones
+                            voisines.</span
+                        >
                     </li>
                     <li class="flex items-center gap-2">
-                        <i class="pi pi-check-circle text-primary text-xl" />
-                        <span class="text-slate-300 leading-normal">Ouvert aux partenariats revendeurs, fournisseurs et investisseurs.</span>
+                        <i class="pi pi-check-circle text-xl text-primary" />
+                        <span class="leading-normal text-slate-300"
+                            >Ouvert aux partenariats revendeurs, fournisseurs et
+                            investisseurs.</span
+                        >
                     </li>
                 </ul>
                 <Button

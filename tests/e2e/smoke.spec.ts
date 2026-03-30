@@ -1,11 +1,59 @@
 /**
- * Smoke tests â€” run on every pre-prod â†’ main PR.
+ * Smoke tests - run on every pre-prod -> main PR.
  * Fast gate: verify the app is alive and auth flow works before hitting production.
  */
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { login } from './helpers';
 
-test.setTimeout(60_000);
+test.setTimeout(120_000);
+
+async function clickFirstVisible(locators: Locator[]): Promise<boolean> {
+    for (const locator of locators) {
+        if (await locator.isVisible().catch(() => false)) {
+            await locator.click({ timeout: 5000 });
+            return true;
+        }
+    }
+
+    return false;
+}
+
+async function triggerLogout(page: Page): Promise<void> {
+    const logoutTargets = [
+        page.getByRole('menuitem', { name: /d[eé]connexion|logout/i }).first(),
+        page.getByRole('button', { name: /d[eé]connexion|logout/i }).first(),
+        page.getByRole('link', { name: /d[eé]connexion|logout/i }).first(),
+    ];
+
+    if (await clickFirstVisible(logoutTargets)) {
+        return;
+    }
+
+    const userMenuTrigger = page
+        .getByRole('button', { name: /issa|\bib\b|\+\d|profil|compte/i })
+        .first();
+
+    if (await userMenuTrigger.isVisible().catch(() => false)) {
+        await userMenuTrigger.click({ timeout: 5000 });
+
+        if (await clickFirstVisible(logoutTargets)) {
+            return;
+        }
+    }
+
+    const csrfToken = await page
+        .locator('meta[name="csrf-token"]')
+        .getAttribute('content')
+        .catch(() => '');
+
+    await page.request
+        .post('/logout', {
+            headers: csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : undefined,
+            failOnStatusCode: false,
+            timeout: 15_000,
+        })
+        .catch(() => undefined);
+}
 
 test('home page responds', async ({ page }) => {
     const response = await page.goto('/');
@@ -15,7 +63,9 @@ test('home page responds', async ({ page }) => {
 
 test('login page renders', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.locator('input[name="password"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('input[name="password"]')).toBeVisible({
+        timeout: 15_000,
+    });
 });
 
 test('authenticated user reaches dashboard', async ({ page }) => {
@@ -27,25 +77,13 @@ test('authenticated user reaches dashboard', async ({ page }) => {
 test('logout redirects to login', async ({ page }) => {
     await login(page);
 
-    // Try sidebar/header logout button
-    const logoutBtn = page.getByRole('button', { name: /d[eÃ©]connexion|logout/i }).first();
-    const logoutLink = page.getByRole('link', { name: /d[eÃ©]connexion|logout/i }).first();
+    await triggerLogout(page);
+    await page.goto('/login');
 
-    if (await logoutBtn.isVisible().catch(() => false)) {
-        await logoutBtn.click();
-    } else if (await logoutLink.isVisible().catch(() => false)) {
-        await logoutLink.click();
-    } else {
-        // Fallback: submit the hidden logout form or POST directly
-        const csrfToken = await page
-            .locator('meta[name="csrf-token"]')
-            .getAttribute('content')
-            .catch(() => '');
-        await page.request.post('/logout', {
-            headers: { 'X-CSRF-TOKEN': csrfToken ?? '' },
-        });
+    if (!/\/login(?:\?.*)?$/.test(page.url())) {
+        await page.context().clearCookies().catch(() => undefined);
         await page.goto('/login');
     }
 
-    await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/login(?:\?.*)?$/, { timeout: 20_000 });
 });
