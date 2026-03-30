@@ -155,6 +155,8 @@ jobs:
           "$PHP_BIN" artisan optimize:clear
           "$PHP_BIN" artisan optimize
           "$PHP_BIN" artisan storage:link || true
+          # Supprime les fichiers legacy qui ne doivent plus exister
+          rm -f resources/views/welcome.blade.php
           "$PHP_BIN" artisan up
           EOF
 
