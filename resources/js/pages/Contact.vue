@@ -28,7 +28,7 @@ const form = useForm({
 });
 
 function submit() {
-    form.post(route('contact.store'), {
+    form.post('/contact', {
         onSuccess: () => form.reset(),
     });
 }
@@ -97,7 +97,8 @@ function submit() {
                             <label
                                 for="phone"
                                 class="font-medium text-slate-800"
-                                >Numero de telephone *</label
+                                >Numero de telephone
+                                <span class="text-red-500">*</span></label
                             >
                             <InputText
                                 id="phone"
@@ -116,7 +117,8 @@ function submit() {
                             <label
                                 for="message"
                                 class="font-medium text-slate-800"
-                                >Message *</label
+                                >Message
+                                <span class="text-red-500">*</span></label
                             >
                             <Textarea
                                 id="message"

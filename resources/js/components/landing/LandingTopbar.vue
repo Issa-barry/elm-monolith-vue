@@ -73,10 +73,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <header class="sticky top-0 z-50 w-full bg-white dark:bg-slate-900">
+    <header class="sticky top-0 z-50 w-full bg-background text-foreground">
         <div class="resize-container-1 w-full">
             <div
-                class="relative flex w-full items-center justify-between bg-white px-6 py-4 shadow lg:static lg:px-12 dark:bg-slate-900"
+                class="relative flex w-full items-center justify-between border-b border-border bg-background px-6 py-4 shadow-sm lg:static lg:px-12"
             >
                 <button
                     type="button"
@@ -97,15 +97,14 @@ onBeforeUnmount(() => {
                             class="fill-primary"
                         />
                     </svg>
-                    <span
-                        class="text-surface-900 dark:text-surface-0 text-xl font-medium"
+                    <span class="text-xl font-medium text-foreground"
                         >Eau la maman</span
                     >
                 </button>
 
                 <button
                     type="button"
-                    class="text-surface-700 dark:text-surface-100 mt-1 block cursor-pointer lg:hidden"
+                    class="mt-1 block cursor-pointer text-foreground/80 lg:hidden"
                     @click="isMobileMenuOpen = !isMobileMenuOpen"
                 >
                     <i
@@ -118,12 +117,12 @@ onBeforeUnmount(() => {
 
                 <div
                     :class="[
-                        'absolute top-full left-0 z-20 w-full grow items-center justify-between bg-white px-6 shadow lg:static lg:flex lg:px-0 lg:shadow-none dark:bg-slate-900',
+                        'absolute top-full left-0 z-20 w-full grow items-center justify-between bg-background px-6 shadow lg:static lg:flex lg:px-0 lg:shadow-none',
                         isMobileMenuOpen ? 'block' : 'hidden',
                     ]"
                 >
                     <ul
-                        class="text-surface-900 dark:text-surface-0 order-2 m-0 flex cursor-pointer list-none flex-col p-0 py-4 select-none lg:order-1 lg:w-4/12 lg:flex-row lg:items-center lg:py-0"
+                        class="order-2 m-0 flex cursor-pointer list-none flex-col p-0 py-4 text-foreground select-none lg:order-1 lg:w-4/12 lg:flex-row lg:items-center lg:py-0"
                     >
                         <li ref="productsMenuRef" class="relative">
                             <button
@@ -137,13 +136,13 @@ onBeforeUnmount(() => {
 
                             <ul
                                 :class="[
-                                    'shadow-0 rounded-border m-0 list-none bg-white p-1 lg:absolute lg:top-20 lg:w-60 lg:shadow dark:bg-slate-900',
+                                    'shadow-0 rounded-border m-0 list-none border border-border bg-background p-1 lg:absolute lg:top-20 lg:w-60 lg:shadow',
                                     isProductsOpen ? 'block' : 'hidden',
                                 ]"
                             >
                                 <li>
                                     <a
-                                        class="hover:bg-surface-100 dark:hover:bg-surface-800 flex items-center gap-2 rounded px-4 py-2 transition-colors duration-150"
+                                        class="flex items-center gap-2 rounded px-4 py-2 transition-colors duration-150 hover:bg-muted"
                                     >
                                         <i class="pi pi-shop" />
                                         <span>Devenir revendeur</span>
@@ -151,7 +150,7 @@ onBeforeUnmount(() => {
                                 </li>
                                 <li>
                                     <a
-                                        class="hover:bg-surface-100 dark:hover:bg-surface-800 flex items-center gap-2 rounded px-4 py-2 transition-colors duration-150"
+                                        class="flex items-center gap-2 rounded px-4 py-2 transition-colors duration-150 hover:bg-muted"
                                     >
                                         <i class="pi pi-briefcase" />
                                         <span>Fournisseur</span>
@@ -159,7 +158,7 @@ onBeforeUnmount(() => {
                                 </li>
                                 <li>
                                     <a
-                                        class="hover:bg-surface-100 dark:hover:bg-surface-800 flex items-center gap-2 rounded px-4 py-2 transition-colors duration-150"
+                                        class="flex items-center gap-2 rounded px-4 py-2 transition-colors duration-150 hover:bg-muted"
                                     >
                                         <i class="pi pi-chart-line" />
                                         <span>Vous voulez investir</span>
@@ -167,7 +166,7 @@ onBeforeUnmount(() => {
                                 </li>
                                 <li>
                                     <a
-                                        class="hover:bg-surface-100 dark:hover:bg-surface-800 flex items-center gap-2 rounded px-4 py-2 transition-colors duration-150"
+                                        class="flex items-center gap-2 rounded px-4 py-2 transition-colors duration-150 hover:bg-muted"
                                     >
                                         <i class="pi pi-truck" />
                                         <span>
@@ -220,14 +219,13 @@ onBeforeUnmount(() => {
                                 class="fill-primary"
                             />
                         </svg>
-                        <span
-                            class="text-surface-900 dark:text-surface-0 text-xl font-medium"
+                        <span class="text-xl font-medium text-foreground"
                             >Eau la maman</span
                         >
                     </button>
 
                     <div
-                        class="border-surface order-1 flex border-b py-4 lg:order-3 lg:block lg:w-4/12 lg:border-t-0 lg:border-b-0 lg:py-0 lg:text-right"
+                        class="order-1 flex border-b border-border py-4 lg:order-3 lg:block lg:w-4/12 lg:border-t-0 lg:border-b-0 lg:py-0 lg:text-right"
                     >
                         <template v-if="$page.props.auth.user">
                             <Button
