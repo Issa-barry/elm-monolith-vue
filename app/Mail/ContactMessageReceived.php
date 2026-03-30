@@ -9,7 +9,6 @@ use Illuminate\Mail\Mailables\Envelope;
 
 class ContactMessageReceived extends Mailable
 {
-
     public function __construct(public ContactMessage $message) {}
 
     public function envelope(): Envelope
