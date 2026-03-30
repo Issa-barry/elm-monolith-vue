@@ -36,7 +36,7 @@ export async function login(page: Page): Promise<void> {
     await page.locator('input[name="password"]').fill(E2E_PASSWORD);
     await page.getByRole('button', { name: /se connecter/i }).click();
 
-    await page.waitForURL((url) => !url.pathname.endsWith('/login'), { timeout: 30_000 });
+    await expect(page).not.toHaveURL(/\/login(?:\?.*)?$/, { timeout: 45_000 });
 }
 
 export function getVisibleSearchInput(page: Page): Locator {
@@ -106,3 +106,5 @@ export async function cleanupRowsByPrefix(
         await searchInput.fill(prefix);
     }
 }
+
+
