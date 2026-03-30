@@ -38,17 +38,17 @@ const goToProductsSection = () => {
     closeProductMenus();
     isMobileMenuOpen.value = false;
 
-    if (window.location.pathname === '/') {
+    if (globalThis.location.pathname === '/') {
         const section = document.getElementById('landing-section');
 
         if (section) {
             section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            window.history.replaceState(null, '', '/#landing-section');
+            globalThis.history.replaceState(null, '', '/#landing-section');
             return;
         }
     }
 
-    window.location.href = '/#landing-section';
+    globalThis.location.href = '/#landing-section';
 };
 
 const onDocumentClick = (event: MouseEvent) => {

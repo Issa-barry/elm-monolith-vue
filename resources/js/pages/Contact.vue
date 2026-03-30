@@ -25,7 +25,9 @@ const contact = ref({
 </script>
 
 <template>
-    <Head title="Contact" />
+    <Head>
+        <title>Contact</title>
+    </Head>
     <div class="min-h-screen bg-slate-50 font-sans text-slate-900">
         <LandingTopbar :can-register="canRegister" />
 

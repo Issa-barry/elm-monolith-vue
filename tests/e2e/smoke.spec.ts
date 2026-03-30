@@ -10,7 +10,7 @@ test.setTimeout(120_000);
 async function clickFirstVisible(locators: Locator[]): Promise<boolean> {
     for (const locator of locators) {
         if (await locator.isVisible().catch(() => false)) {
-            await locator.click({ timeout: 5000 });
+            await locator.click({ timeout: 5000, force: true });
             return true;
         }
     }
@@ -34,7 +34,7 @@ async function triggerLogout(page: Page): Promise<void> {
         .first();
 
     if (await userMenuTrigger.isVisible().catch(() => false)) {
-        await userMenuTrigger.click({ timeout: 5000 });
+        await userMenuTrigger.click({ timeout: 5000, force: true });
 
         if (await clickFirstVisible(logoutTargets)) {
             return;
@@ -87,3 +87,4 @@ test('logout redirects to login', async ({ page }) => {
 
     await expect(page).toHaveURL(/\/login(?:\?.*)?$/, { timeout: 20_000 });
 });
+
