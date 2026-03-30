@@ -21,6 +21,7 @@ import {
     Plus,
     Search,
     Trash2,
+    X,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
@@ -29,8 +30,27 @@ import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProduitsMobile from './partials/ProduitsMobile.vue';
+
+const lightboxUrl = ref<string | null>(null);
+const lightboxAlt = ref('');
+
+function openLightbox(url: string, alt: string) {
+    lightboxUrl.value = url;
+    lightboxAlt.value = alt;
+}
+
+function closeLightbox() {
+    lightboxUrl.value = null;
+}
+
+function onKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') closeLightbox();
+}
+
+onMounted(() => document.addEventListener('keydown', onKeydown));
+onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
 
 interface Produit {
     id: number;
@@ -211,6 +231,8 @@ function confirmDelete(produit: Produit) {
                         <template #body="{ data }">
                             <div
                                 class="h-10 w-10 overflow-hidden rounded-lg border bg-muted"
+                                :class="data.image_url ? 'cursor-zoom-in' : ''"
+                                @click="data.image_url && openLightbox(data.image_url, data.nom)"
                             >
                                 <img
                                     v-if="data.image_url"
@@ -441,5 +463,29 @@ function confirmDelete(produit: Produit) {
                 :on-delete="confirmDelete"
             />
         </div>
+        <!-- Lightbox -->
+        <Teleport to="body">
+            <div
+                v-if="lightboxUrl"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+                @click.self="closeLightbox"
+            >
+                <div class="relative max-h-full max-w-3xl">
+                    <button
+                        type="button"
+                        class="absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+                        @click="closeLightbox"
+                    >
+                        <X class="h-5 w-5" />
+                    </button>
+                    <img
+                        :src="lightboxUrl"
+                        :alt="lightboxAlt"
+                        class="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl"
+                    />
+                    <p class="mt-2 text-center text-sm text-white/70">{{ lightboxAlt }}</p>
+                </div>
+            </div>
+        </Teleport>
     </AppLayout>
 </template>
