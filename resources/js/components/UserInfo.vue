@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useInitials } from '@/composables/useInitials';
-import { formatPhoneDisplay } from '@/lib/utils';
-import type { User } from '@/types';
+import type { AppPageProps, AppRole, User } from '@/types';
+import { usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
 interface Props {
@@ -15,11 +15,33 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const { getInitials } = useInitials();
+const page = usePage<AppPageProps>();
 
-// Compute whether we should show the avatar image
+const ROLE_LABELS: Record<AppRole, string> = {
+    super_admin: 'Super administrateur',
+    admin_entreprise: 'Administrateur entreprise',
+    manager: 'Manager',
+    commerciale: 'Commercial',
+    comptable: 'Comptable',
+    client: 'Client',
+};
+
 const showAvatar = computed(
     () => props.user.avatar && props.user.avatar !== '',
 );
+
+const roleLabel = computed(() => {
+    const firstRole = page.props.auth.roles?.[0];
+    return firstRole ? (ROLE_LABELS[firstRole] ?? firstRole) : 'Aucun role';
+});
+
+const subtitle = computed(() => {
+    if (props.showEmail) {
+        return props.user.email || roleLabel.value;
+    }
+
+    return roleLabel.value;
+});
 </script>
 
 <template>
@@ -39,9 +61,7 @@ const showAvatar = computed(
             >{{ user.prenom }} {{ user.nom }}</span
         >
         <span class="truncate text-xs text-muted-foreground">{{
-            user.telephone
-                ? formatPhoneDisplay(user.telephone)
-                : (user.email ?? '—')
+            subtitle
         }}</span>
     </div>
 </template>
