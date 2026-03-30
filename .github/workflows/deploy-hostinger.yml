@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: production-deploy
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -46,6 +46,14 @@ jobs:
       - name: Build frontend assets
         run: npm run build
 
+      - name: Verify build artifacts
+        run: |
+          if [ ! -f public/build/manifest.json ]; then
+            echo "❌ Build failed: public/build/manifest.json not found"
+            exit 1
+          fi
+          echo "✅ Build artifacts verified"
+
       - name: Prepare SSH private key
         env:
           HOSTINGER_SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
@@ -60,6 +68,16 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -p "${{ secrets.HOSTINGER_SSH_PORT }}" -H "${{ secrets.HOSTINGER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Enable maintenance mode
+        env:
+          HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
+          HOSTINGER_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          HOSTINGER_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/hostinger_key -o StrictHostKeyChecking=yes -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" \
+            "cd '$HOSTINGER_DEPLOY_PATH' && php artisan down --retry=10 || true"
 
       - name: Sync files to server
         run: |
@@ -137,4 +155,16 @@ jobs:
           "$PHP_BIN" artisan optimize:clear
           "$PHP_BIN" artisan optimize
           "$PHP_BIN" artisan storage:link || true
+          "$PHP_BIN" artisan up
           EOF
+
+      - name: Restore site if deploy failed
+        if: failure()
+        env:
+          HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
+          HOSTINGER_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          HOSTINGER_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/hostinger_key -o StrictHostKeyChecking=yes -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" \
+            "cd '$HOSTINGER_DEPLOY_PATH' && php artisan up || true"
