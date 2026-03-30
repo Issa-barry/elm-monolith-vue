@@ -21,20 +21,21 @@ class VersementCommissionTest extends TestCase
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
         $user->givePermissionTo('ventes.update');
+
         return $user;
     }
 
     private function commissionPourOrg(Organization $org): CommissionVente
     {
         return CommissionVente::factory()->create([
-            'organization_id'              => $org->id,
-            'montant_commission'           => 5000,
-            'montant_part_livreur'         => 3000,
-            'montant_part_proprietaire'    => 2000,
-            'montant_verse'                => 0,
-            'montant_verse_livreur'        => 0,
-            'montant_verse_proprietaire'   => 0,
-            'statut'                       => StatutCommission::EN_ATTENTE,
+            'organization_id' => $org->id,
+            'montant_commission' => 5000,
+            'montant_part_livreur' => 3000,
+            'montant_part_proprietaire' => 2000,
+            'montant_verse' => 0,
+            'montant_verse_livreur' => 0,
+            'montant_verse_proprietaire' => 0,
+            'statut' => StatutCommission::EN_ATTENTE,
         ]);
     }
 
@@ -42,68 +43,68 @@ class VersementCommissionTest extends TestCase
 
     public function test_versement_livreur_seul_est_enregistre(): void
     {
-        $org        = Organization::factory()->create();
-        $user       = $this->utilisateur($org);
+        $org = Organization::factory()->create();
+        $user = $this->utilisateur($org);
         $commission = $this->commissionPourOrg($org);
 
         $response = $this->actingAs($user)->post(
             route('commissions.versements.store', $commission),
             [
-                'montant_livreur'      => 3000,
+                'montant_livreur' => 3000,
                 'montant_proprietaire' => 0,
-                'date_versement'       => now()->toDateString(),
-                'mode_paiement'        => 'especes',
+                'date_versement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
             ]
         );
 
         $response->assertRedirect();
         $this->assertDatabaseHas('versements_commissions', [
             'commission_vente_id' => $commission->id,
-            'montant'             => 3000,
-            'beneficiaire'        => 'livreur',
+            'montant' => 3000,
+            'beneficiaire' => 'livreur',
         ]);
         $this->assertEquals(3000.0, (float) $commission->fresh()->montant_verse_livreur);
-        $this->assertEquals(0.0,    (float) $commission->fresh()->montant_verse_proprietaire);
+        $this->assertEquals(0.0, (float) $commission->fresh()->montant_verse_proprietaire);
     }
 
     public function test_versement_proprietaire_seul_est_enregistre(): void
     {
-        $org        = Organization::factory()->create();
-        $user       = $this->utilisateur($org);
+        $org = Organization::factory()->create();
+        $user = $this->utilisateur($org);
         $commission = $this->commissionPourOrg($org);
 
         $this->actingAs($user)->post(
             route('commissions.versements.store', $commission),
             [
-                'montant_livreur'      => 0,
+                'montant_livreur' => 0,
                 'montant_proprietaire' => 2000,
-                'date_versement'       => now()->toDateString(),
-                'mode_paiement'        => 'virement',
+                'date_versement' => now()->toDateString(),
+                'mode_paiement' => 'virement',
             ]
         );
 
         $this->assertDatabaseHas('versements_commissions', [
             'commission_vente_id' => $commission->id,
-            'montant'             => 2000,
-            'beneficiaire'        => 'proprietaire',
+            'montant' => 2000,
+            'beneficiaire' => 'proprietaire',
         ]);
-        $this->assertEquals(0.0,    (float) $commission->fresh()->montant_verse_livreur);
+        $this->assertEquals(0.0, (float) $commission->fresh()->montant_verse_livreur);
         $this->assertEquals(2000.0, (float) $commission->fresh()->montant_verse_proprietaire);
     }
 
     public function test_versement_les_deux_cree_deux_enregistrements(): void
     {
-        $org        = Organization::factory()->create();
-        $user       = $this->utilisateur($org);
+        $org = Organization::factory()->create();
+        $user = $this->utilisateur($org);
         $commission = $this->commissionPourOrg($org);
 
         $this->actingAs($user)->post(
             route('commissions.versements.store', $commission),
             [
-                'montant_livreur'      => 3000,
+                'montant_livreur' => 3000,
                 'montant_proprietaire' => 2000,
-                'date_versement'       => now()->toDateString(),
-                'mode_paiement'        => 'especes',
+                'date_versement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
             ]
         );
 
@@ -116,17 +117,17 @@ class VersementCommissionTest extends TestCase
 
     public function test_versement_partiel_met_statut_partielle(): void
     {
-        $org        = Organization::factory()->create();
-        $user       = $this->utilisateur($org);
+        $org = Organization::factory()->create();
+        $user = $this->utilisateur($org);
         $commission = $this->commissionPourOrg($org);
 
         $this->actingAs($user)->post(
             route('commissions.versements.store', $commission),
             [
-                'montant_livreur'      => 1500,
+                'montant_livreur' => 1500,
                 'montant_proprietaire' => 0,
-                'date_versement'       => now()->toDateString(),
-                'mode_paiement'        => 'especes',
+                'date_versement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
             ]
         );
 
@@ -135,17 +136,17 @@ class VersementCommissionTest extends TestCase
 
     public function test_versement_rejete_si_montant_depasse_restant(): void
     {
-        $org        = Organization::factory()->create();
-        $user       = $this->utilisateur($org);
+        $org = Organization::factory()->create();
+        $user = $this->utilisateur($org);
         $commission = $this->commissionPourOrg($org);
 
         $response = $this->actingAs($user)->post(
             route('commissions.versements.store', $commission),
             [
-                'montant_livreur'      => 9999, // dépasse 3000
+                'montant_livreur' => 9999, // dépasse 3000
                 'montant_proprietaire' => 0,
-                'date_versement'       => now()->toDateString(),
-                'mode_paiement'        => 'especes',
+                'date_versement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
             ]
         );
 
@@ -155,17 +156,17 @@ class VersementCommissionTest extends TestCase
 
     public function test_versement_rejete_si_les_deux_montants_sont_zero(): void
     {
-        $org        = Organization::factory()->create();
-        $user       = $this->utilisateur($org);
+        $org = Organization::factory()->create();
+        $user = $this->utilisateur($org);
         $commission = $this->commissionPourOrg($org);
 
         $response = $this->actingAs($user)->post(
             route('commissions.versements.store', $commission),
             [
-                'montant_livreur'      => 0,
+                'montant_livreur' => 0,
                 'montant_proprietaire' => 0,
-                'date_versement'       => now()->toDateString(),
-                'mode_paiement'        => 'especes',
+                'date_versement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
             ]
         );
 
@@ -175,18 +176,18 @@ class VersementCommissionTest extends TestCase
 
     public function test_versement_refuse_si_commission_annulee(): void
     {
-        $org        = Organization::factory()->create();
-        $user       = $this->utilisateur($org);
+        $org = Organization::factory()->create();
+        $user = $this->utilisateur($org);
         $commission = $this->commissionPourOrg($org);
         $commission->update(['statut' => StatutCommission::ANNULEE]);
 
         $response = $this->actingAs($user)->post(
             route('commissions.versements.store', $commission),
             [
-                'montant_livreur'      => 1000,
+                'montant_livreur' => 1000,
                 'montant_proprietaire' => 0,
-                'date_versement'       => now()->toDateString(),
-                'mode_paiement'        => 'especes',
+                'date_versement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
             ]
         );
 
@@ -195,19 +196,19 @@ class VersementCommissionTest extends TestCase
 
     public function test_versement_refuse_si_autre_organisation(): void
     {
-        $autreOrg   = Organization::factory()->create();
+        $autreOrg = Organization::factory()->create();
         $commission = $this->commissionPourOrg($autreOrg);
 
         $monOrg = Organization::factory()->create();
-        $user   = $this->utilisateur($monOrg);
+        $user = $this->utilisateur($monOrg);
 
         $response = $this->actingAs($user)->post(
             route('commissions.versements.store', $commission),
             [
-                'montant_livreur'      => 1000,
+                'montant_livreur' => 1000,
                 'montant_proprietaire' => 0,
-                'date_versement'       => now()->toDateString(),
-                'mode_paiement'        => 'especes',
+                'date_versement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
             ]
         );
 
@@ -218,15 +219,15 @@ class VersementCommissionTest extends TestCase
 
     public function test_versement_supprime_recalcule_statut(): void
     {
-        $org        = Organization::factory()->create();
-        $user       = $this->utilisateur($org);
+        $org = Organization::factory()->create();
+        $user = $this->utilisateur($org);
         $commission = $this->commissionPourOrg($org);
 
         $versement = $commission->versements()->create([
-            'montant'        => 3000,
-            'beneficiaire'   => 'livreur',
+            'montant' => 3000,
+            'beneficiaire' => 'livreur',
             'date_versement' => now()->toDateString(),
-            'mode_paiement'  => 'especes',
+            'mode_paiement' => 'especes',
         ]);
         $commission->recalculStatut();
 

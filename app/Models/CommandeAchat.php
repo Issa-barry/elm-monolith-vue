@@ -39,8 +39,8 @@ class CommandeAchat extends Model
     {
         return [
             'total_commande' => 'decimal:2',
-            'statut'         => StatutCommandeAchat::class,
-            'annulee_at'     => 'datetime',
+            'statut' => StatutCommandeAchat::class,
+            'annulee_at' => 'datetime',
         ];
     }
 
@@ -48,7 +48,7 @@ class CommandeAchat extends Model
     {
         static::creating(function (CommandeAchat $c) {
             if (empty($c->reference)) {
-                $c->reference = self::TEMP_PREFIX . Str::uuid();
+                $c->reference = self::TEMP_PREFIX.Str::uuid();
             }
             if (empty($c->statut)) {
                 $c->statut = StatutCommandeAchat::EN_COURS;
@@ -60,10 +60,10 @@ class CommandeAchat extends Model
         });
 
         static::created(function (CommandeAchat $c) {
-            if (!str_starts_with((string) $c->reference, self::TEMP_PREFIX)) {
+            if (! str_starts_with((string) $c->reference, self::TEMP_PREFIX)) {
                 return;
             }
-            $ref = 'ACH-' . ($c->created_at ?? now())->format('Ymd') . '-' . str_pad((string) $c->id, 4, '0', STR_PAD_LEFT);
+            $ref = 'ACH-'.($c->created_at ?? now())->format('Ymd').'-'.str_pad((string) $c->id, 4, '0', STR_PAD_LEFT);
             $c->newQueryWithoutScopes()->whereKey($c->id)->update(['reference' => $ref]);
             $c->reference = $ref;
             $c->syncOriginalAttribute('reference');

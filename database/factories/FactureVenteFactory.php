@@ -14,11 +14,11 @@ class FactureVenteFactory extends Factory
         $montant = fake()->numberBetween(5000, 100000);
 
         return [
-            'organization_id'  => Organization::factory(),
+            'organization_id' => Organization::factory(),
             'commande_vente_id' => CommandeVente::factory(),
-            'montant_brut'     => $montant,
-            'montant_net'      => $montant,
-            'statut_facture'   => StatutFactureVente::IMPAYEE,
+            'montant_brut' => $montant,
+            'montant_net' => $montant,
+            'statut_facture' => StatutFactureVente::IMPAYEE,
         ];
     }
 

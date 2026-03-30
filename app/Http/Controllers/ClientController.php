@@ -32,11 +32,11 @@ class ClientController extends Controller
         $this->authorize('create', Client::class);
 
         $data = $request->validate([
-            'nom'       => 'required|string|max:255',
-            'prenom'    => 'required|string|max:255',
-            'email'     => 'nullable|email|max:255',
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'email' => 'nullable|email|max:255',
             'telephone' => 'nullable|string|max:20',
-            'adresse'   => 'nullable|string',
+            'adresse' => 'nullable|string',
         ]);
 
         Client::create([
@@ -52,11 +52,11 @@ class ClientController extends Controller
         $this->authorize('update', $client);
 
         $data = $request->validate([
-            'nom'       => 'sometimes|string|max:255',
-            'prenom'    => 'sometimes|string|max:255',
-            'email'     => 'nullable|email|max:255',
+            'nom' => 'sometimes|string|max:255',
+            'prenom' => 'sometimes|string|max:255',
+            'email' => 'nullable|email|max:255',
             'telephone' => 'nullable|string|max:20',
-            'adresse'   => 'nullable|string',
+            'adresse' => 'nullable|string',
         ]);
 
         $client->update($data);

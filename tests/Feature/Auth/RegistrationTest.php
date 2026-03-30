@@ -32,15 +32,15 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => 'Test',
-            'nom'    => 'User',
-            'email'                 => 'test@example.com',
+            'nom' => 'User',
+            'email' => 'test@example.com',
             'password' => 'Password@123',
         ])->assertRedirect(route('dashboard', absolute: false));
 
         $this->assertAuthenticated();
 
         $this->assertDatabaseHas('users', [
-            'email'     => 'test@example.com',
+            'email' => 'test@example.com',
             'telephone' => null,
         ]);
 
@@ -52,16 +52,16 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => 'Mamadou',
-            'nom'    => 'Diallo',
-            'email'                 => 'mamadou@example.com',
-            'telephone'             => '+224620000000',
-            'telephone_country'     => 'GN',
-            'telephone_local'       => '620000000',
+            'nom' => 'Diallo',
+            'email' => 'mamadou@example.com',
+            'telephone' => '+224620000000',
+            'telephone_country' => 'GN',
+            'telephone_local' => '620000000',
             'password' => 'Password@123',
         ])->assertRedirect(route('dashboard', absolute: false));
 
         $this->assertDatabaseHas('users', [
-            'email'     => 'mamadou@example.com',
+            'email' => 'mamadou@example.com',
             'telephone' => '+224620000000',
         ]);
     }
@@ -70,11 +70,11 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => 'Fatou',
-            'nom'    => 'Diop',
-            'email'                 => 'fatou@example.com',
-            'telephone'             => '+221701234567',
-            'telephone_country'     => 'SN',
-            'telephone_local'       => '701234567',
+            'nom' => 'Diop',
+            'email' => 'fatou@example.com',
+            'telephone' => '+221701234567',
+            'telephone_country' => 'SN',
+            'telephone_local' => '701234567',
             'password' => 'Password@123',
         ])->assertRedirect(route('dashboard', absolute: false));
 
@@ -87,11 +87,11 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => 'Jean',
-            'nom'    => 'Dupont',
-            'email'                 => 'jean@example.com',
-            'telephone'             => '+33612345678',
-            'telephone_country'     => 'FR',
-            'telephone_local'       => '612345678',
+            'nom' => 'Dupont',
+            'email' => 'jean@example.com',
+            'telephone' => '+33612345678',
+            'telephone_country' => 'FR',
+            'telephone_local' => '612345678',
             'password' => 'Password@123',
         ])->assertRedirect(route('dashboard', absolute: false));
 
@@ -106,8 +106,8 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => '',
-            'nom'    => 'User',
-            'email'  => 'test@example.com',
+            'nom' => 'User',
+            'email' => 'test@example.com',
             'password' => 'Password@123',
         ])->assertSessionHasErrors('prenom');
 
@@ -118,8 +118,8 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => 'A',
-            'nom'    => 'User',
-            'email'  => 'test@example.com',
+            'nom' => 'User',
+            'email' => 'test@example.com',
             'password' => 'Password@123',
         ])->assertSessionHasErrors('prenom');
     }
@@ -128,8 +128,8 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => 'Test',
-            'nom'    => 'B',
-            'email'  => 'test@example.com',
+            'nom' => 'B',
+            'email' => 'test@example.com',
             'password' => 'Password@123',
         ])->assertSessionHasErrors('nom');
     }
@@ -138,8 +138,8 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => 'Test',
-            'nom'    => '',
-            'email'  => 'test@example.com',
+            'nom' => '',
+            'email' => 'test@example.com',
             'password' => 'Password@123',
         ])->assertSessionHasErrors('nom');
 
@@ -149,8 +149,8 @@ class RegistrationTest extends TestCase
     public function test_registration_succeeds_without_email(): void
     {
         $this->post(route('register.store'), [
-            'prenom'   => 'Test',
-            'nom'      => 'User',
+            'prenom' => 'Test',
+            'nom' => 'User',
             'password' => 'Password@123',
         ])->assertRedirect(route('dashboard', absolute: false));
 
@@ -162,8 +162,8 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => 'Test',
-            'nom'    => 'User',
-            'email'                 => 'not-an-email',
+            'nom' => 'User',
+            'email' => 'not-an-email',
             'password' => 'Password@123',
         ])->assertSessionHasErrors('email');
     }
@@ -174,8 +174,8 @@ class RegistrationTest extends TestCase
 
         $this->post(route('register.store'), [
             'prenom' => 'Test',
-            'nom'    => 'User',
-            'email'                 => 'existing@example.com',
+            'nom' => 'User',
+            'email' => 'existing@example.com',
             'password' => 'Password@123',
         ])->assertSessionHasErrors('email');
 
@@ -188,9 +188,9 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => 'Test',
-            'nom'    => 'User',
-            'email'                 => 'test@example.com',
-            'password'              => '',
+            'nom' => 'User',
+            'email' => 'test@example.com',
+            'password' => '',
             'password_confirmation' => '',
         ])->assertSessionHasErrors('password');
     }
@@ -198,9 +198,9 @@ class RegistrationTest extends TestCase
     public function test_registration_fails_with_password_too_short(): void
     {
         $this->post(route('register.store'), [
-            'prenom'   => 'Test',
-            'nom'      => 'User',
-            'email'    => 'test@example.com',
+            'prenom' => 'Test',
+            'nom' => 'User',
+            'email' => 'test@example.com',
             'password' => 'Abc@123',
         ])->assertSessionHasErrors('password');
     }
@@ -208,9 +208,9 @@ class RegistrationTest extends TestCase
     public function test_registration_fails_without_uppercase(): void
     {
         $this->post(route('register.store'), [
-            'prenom'   => 'Test',
-            'nom'      => 'User',
-            'email'    => 'test@example.com',
+            'prenom' => 'Test',
+            'nom' => 'User',
+            'email' => 'test@example.com',
             'password' => 'password@123',
         ])->assertSessionHasErrors('password');
     }
@@ -218,9 +218,9 @@ class RegistrationTest extends TestCase
     public function test_registration_fails_without_symbol(): void
     {
         $this->post(route('register.store'), [
-            'prenom'   => 'Test',
-            'nom'      => 'User',
-            'email'    => 'test@example.com',
+            'prenom' => 'Test',
+            'nom' => 'User',
+            'email' => 'test@example.com',
             'password' => 'Password123',
         ])->assertSessionHasErrors('password');
     }
@@ -228,9 +228,9 @@ class RegistrationTest extends TestCase
     public function test_registration_succeeds_without_password_confirmation(): void
     {
         $this->post(route('register.store'), [
-            'prenom'   => 'Test',
-            'nom'      => 'User',
-            'email'    => 'test@example.com',
+            'prenom' => 'Test',
+            'nom' => 'User',
+            'email' => 'test@example.com',
             'password' => 'Password@123',
         ])->assertRedirect(route('dashboard', absolute: false));
 
@@ -243,10 +243,10 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => 'Test',
-            'nom'    => 'User',
-            'email'                 => 'test@example.com',
-            'telephone_country'     => 'XX',
-            'telephone_local'       => '123456789',
+            'nom' => 'User',
+            'email' => 'test@example.com',
+            'telephone_country' => 'XX',
+            'telephone_local' => '123456789',
             'password' => 'Password@123',
         ])->assertSessionHasErrors('telephone_country');
     }
@@ -256,10 +256,10 @@ class RegistrationTest extends TestCase
         // Guinée attend 9 chiffres
         $this->post(route('register.store'), [
             'prenom' => 'Test',
-            'nom'    => 'User',
-            'email'                 => 'test@example.com',
-            'telephone_country'     => 'GN',
-            'telephone_local'       => '12345',
+            'nom' => 'User',
+            'email' => 'test@example.com',
+            'telephone_country' => 'GN',
+            'telephone_local' => '12345',
             'password' => 'Password@123',
         ])->assertSessionHasErrors('telephone');
     }
@@ -269,10 +269,10 @@ class RegistrationTest extends TestCase
         // Guinée-Bissau attend 7 chiffres
         $this->post(route('register.store'), [
             'prenom' => 'Test',
-            'nom'    => 'User',
-            'email'                 => 'test@example.com',
-            'telephone_country'     => 'GW',
-            'telephone_local'       => '12345678901',
+            'nom' => 'User',
+            'email' => 'test@example.com',
+            'telephone_country' => 'GW',
+            'telephone_local' => '12345678901',
             'password' => 'Password@123',
         ])->assertSessionHasErrors('telephone');
     }
@@ -281,10 +281,10 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => 'Test',
-            'nom'    => 'User',
-            'email'                 => 'test@example.com',
-            'telephone_country'     => 'GN',
-            'telephone_local'       => 'abc123def',
+            'nom' => 'User',
+            'email' => 'test@example.com',
+            'telephone_country' => 'GN',
+            'telephone_local' => 'abc123def',
             'password' => 'Password@123',
         ])->assertSessionHasErrors('telephone_local');
     }
@@ -295,8 +295,8 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => 'Test',
-            'nom'    => 'User',
-            'email'                 => 'test@example.com',
+            'nom' => 'User',
+            'email' => 'test@example.com',
             'password' => 'Password@123',
         ]);
 
@@ -309,8 +309,8 @@ class RegistrationTest extends TestCase
     {
         $this->post(route('register.store'), [
             'prenom' => 'Test',
-            'nom'    => 'User',
-            'email'                 => 'test@example.com',
+            'nom' => 'User',
+            'email' => 'test@example.com',
             'password' => 'Password@123',
         ]);
 

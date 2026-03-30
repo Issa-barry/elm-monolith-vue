@@ -24,10 +24,10 @@ class CommandeAchatLigne extends Model
     protected function casts(): array
     {
         return [
-            'qte'                 => 'integer',
-            'qte_recue'           => 'integer',
+            'qte' => 'integer',
+            'qte_recue' => 'integer',
             'prix_achat_snapshot' => 'decimal:2',
-            'total_ligne'         => 'decimal:2',
+            'total_ligne' => 'decimal:2',
         ];
     }
 

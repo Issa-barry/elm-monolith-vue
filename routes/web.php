@@ -4,21 +4,20 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
 use App\Http\Controllers\CommissionVenteController;
-use App\Http\Controllers\FactureVenteController;
-use App\Http\Controllers\VersementCommissionController;
 use App\Http\Controllers\EncaissementVenteController;
+use App\Http\Controllers\FactureVenteController;
 use App\Http\Controllers\LivreurController;
-use App\Http\Controllers\SiteController;
-use App\Http\Controllers\VehiculeController;
 use App\Http\Controllers\PackingController;
-use App\Http\Controllers\ProprietaireController;
 use App\Http\Controllers\PrestataireController;
 use App\Http\Controllers\ProduitController;
+use App\Http\Controllers\ProprietaireController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\SiteController;
+use App\Http\Controllers\VehiculeController;
+use App\Http\Controllers\VersementCommissionController;
 use App\Http\Controllers\VersementController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use Laravel\Fortify\Features;
 
 Route::get('/', function () {
     return Inertia::render('Welcome');

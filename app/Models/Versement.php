@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -19,7 +20,7 @@ class Versement extends Model
     ];
 
     protected $casts = [
-        'date'    => 'date:Y-m-d',
+        'date' => 'date:Y-m-d',
         'montant' => 'integer',
     ];
 

@@ -10,7 +10,9 @@ Flux recommande:
 
 Comportement des workflows:
 - CI (`.github/workflows/lint.yml` et `.github/workflows/tests.yml`) sur Pull Request vers `pre-prod` et `main` (pas de doublon push/pull_request)
-  - `tests.yml` execute `phpunit` puis les E2E Playwright
+  - `tests.yml`:
+    - PR `dev -> pre-prod`: `phpunit` + E2E Playwright complets
+    - PR `pre-prod -> main`: `phpunit` + E2E smoke
 - Controle du flux (`.github/workflows/branch-flow.yml`):
   - autorise seulement `dev` -> `pre-prod`
   - autorise seulement `pre-prod` -> `main`

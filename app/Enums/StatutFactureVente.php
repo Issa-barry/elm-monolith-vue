@@ -6,15 +6,15 @@ enum StatutFactureVente: string
 {
     case IMPAYEE = 'impayee';
     case PARTIEL = 'partiel';
-    case PAYEE   = 'payee';
+    case PAYEE = 'payee';
     case ANNULEE = 'annulee';
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::IMPAYEE => 'Impayée',
             self::PARTIEL => 'Partiel',
-            self::PAYEE   => 'Payée',
+            self::PAYEE => 'Payée',
             self::ANNULEE => 'Annulée',
         };
     }
@@ -22,7 +22,7 @@ enum StatutFactureVente: string
     public static function options(): array
     {
         return array_map(
-            fn(self $case) => ['value' => $case->value, 'label' => $case->label()],
+            fn (self $case) => ['value' => $case->value, 'label' => $case->label()],
             self::cases()
         );
     }

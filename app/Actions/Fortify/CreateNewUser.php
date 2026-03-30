@@ -34,13 +34,13 @@ class CreateNewUser implements CreatesNewUsers
     public function create(array $input): User
     {
         $validated = Validator::make($input, [
-            'prenom'    => ['required', 'string', 'min:2', 'max:100'],
-            'nom'       => ['required', 'string', 'min:2', 'max:100'],
-            'email'     => ['nullable', 'string', 'email', 'max:255', Rule::unique(User::class)],
+            'prenom' => ['required', 'string', 'min:2', 'max:100'],
+            'nom' => ['required', 'string', 'min:2', 'max:100'],
+            'email' => ['nullable', 'string', 'email', 'max:255', Rule::unique(User::class)],
             'telephone' => ['nullable', 'string', 'max:30'],
             'telephone_country' => ['nullable', 'string', Rule::in(array_keys(self::PHONE_BY_COUNTRY))],
-            'telephone_local'   => ['nullable', 'string', 'regex:/^\d*$/', 'max:15'],
-            'password'  => ['required', 'string', \Illuminate\Validation\Rules\Password::default()],
+            'telephone_local' => ['nullable', 'string', 'regex:/^\d*$/', 'max:15'],
+            'password' => ['required', 'string', \Illuminate\Validation\Rules\Password::default()],
         ], [
             'telephone_local.regex' => 'Saisissez uniquement des chiffres pour le numéro.',
         ])->validate();
@@ -48,11 +48,11 @@ class CreateNewUser implements CreatesNewUsers
         $telephone = $this->resolveTelephone($validated);
 
         $user = User::create([
-            'prenom'    => self::formatPrenom($validated['prenom']),
-            'nom'       => mb_strtoupper($validated['nom']),
-            'email'     => isset($validated['email']) ? mb_strtolower($validated['email']) : null,
+            'prenom' => self::formatPrenom($validated['prenom']),
+            'nom' => mb_strtoupper($validated['nom']),
+            'email' => isset($validated['email']) ? mb_strtolower($validated['email']) : null,
             'telephone' => $telephone,
-            'password'  => $validated['password'],
+            'password' => $validated['password'],
         ]);
 
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
@@ -68,7 +68,7 @@ class CreateNewUser implements CreatesNewUsers
         // Capitalize first letter after start-of-string, space or hyphen
         return preg_replace_callback(
             '/(^|[\s-])(\pL)/u',
-            fn ($m) => $m[1] . mb_strtoupper($m[2], 'UTF-8'),
+            fn ($m) => $m[1].mb_strtoupper($m[2], 'UTF-8'),
             $lower,
         );
     }

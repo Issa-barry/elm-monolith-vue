@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use App\Enums\PackingStatut;
@@ -16,21 +17,21 @@ class PackingController extends Controller
     private function packingData(Packing $p): array
     {
         return [
-            'id'               => $p->id,
-            'reference'        => $p->reference,
-            'prestataire_id'   => $p->prestataire_id,
-            'prestataire_nom'  => $p->prestataire_nom,
-            'date'             => $p->date?->toDateString(),
-            'nb_rouleaux'      => $p->nb_rouleaux,
+            'id' => $p->id,
+            'reference' => $p->reference,
+            'prestataire_id' => $p->prestataire_id,
+            'prestataire_nom' => $p->prestataire_nom,
+            'date' => $p->date?->toDateString(),
+            'nb_rouleaux' => $p->nb_rouleaux,
             'prix_par_rouleau' => $p->prix_par_rouleau,
-            'montant'          => $p->montant,
-            'montant_verse'    => $p->montant_verse,
-            'montant_restant'  => $p->montant_restant,
-            'statut'           => $p->statut?->value,
-            'statut_label'     => $p->statut_label,
-            'notes'            => $p->notes,
-            'can_edit'         => $p->peutEtreModifie(),
-            'can_cancel'       => $p->peutEtreAnnule(),
+            'montant' => $p->montant,
+            'montant_verse' => $p->montant_verse,
+            'montant_restant' => $p->montant_restant,
+            'statut' => $p->statut?->value,
+            'statut_label' => $p->statut_label,
+            'notes' => $p->notes,
+            'can_edit' => $p->peutEtreModifie(),
+            'can_cancel' => $p->peutEtreAnnule(),
         ];
     }
 
@@ -44,7 +45,7 @@ class PackingController extends Controller
             ->orderByDesc('date')
             ->orderByDesc('id')
             ->get()
-            ->map(fn(Packing $p) => $this->packingData($p));
+            ->map(fn (Packing $p) => $this->packingData($p));
 
         return Inertia::render('Packings/Index', [
             'packings' => $packings,
@@ -59,15 +60,15 @@ class PackingController extends Controller
             ->where('is_active', true)
             ->orderBy('nom')
             ->get()
-            ->map(fn(Prestataire $p) => [
+            ->map(fn (Prestataire $p) => [
                 'value' => $p->id,
                 'label' => $p->nom_complet ?? $p->reference,
             ]);
 
         return Inertia::render('Packings/Create', [
             'prestataires' => $prestataires,
-            'prix_defaut'  => Parametre::getPrixRouleauDefaut(auth()->user()->organization_id),
-            'statuts'      => PackingStatut::options(),
+            'prix_defaut' => Parametre::getPrixRouleauDefaut(auth()->user()->organization_id),
+            'statuts' => PackingStatut::options(),
         ]);
     }
 
@@ -76,23 +77,23 @@ class PackingController extends Controller
         $this->authorize('create', Packing::class);
 
         $orgId = auth()->user()->organization_id;
-        abort_if(!$orgId, 403, 'Votre compte n\'est associé à aucune organisation.');
+        abort_if(! $orgId, 403, 'Votre compte n\'est associé à aucune organisation.');
 
         $data = $request->validate([
-            'prestataire_id'   => ['required', 'integer', Rule::exists('prestataires', 'id')->where('organization_id', $orgId)],
-            'date'             => 'required|date',
-            'nb_rouleaux'      => 'required|integer|min:1|max:9999999',
+            'prestataire_id' => ['required', 'integer', Rule::exists('prestataires', 'id')->where('organization_id', $orgId)],
+            'date' => 'required|date',
+            'nb_rouleaux' => 'required|integer|min:1|max:9999999',
             'prix_par_rouleau' => 'required|integer|min:0|max:99999999',
-            'statut'           => ['nullable', Rule::in([PackingStatut::IMPAYEE->value, PackingStatut::ANNULEE->value])],
-            'notes'            => 'nullable|string|max:5000',
+            'statut' => ['nullable', Rule::in([PackingStatut::IMPAYEE->value, PackingStatut::ANNULEE->value])],
+            'notes' => 'nullable|string|max:5000',
         ], [
-            'prestataire_id.required'   => 'Le prestataire est obligatoire.',
-            'prestataire_id.exists'     => 'Le prestataire sélectionné est introuvable.',
-            'date.required'             => 'La date est obligatoire.',
-            'nb_rouleaux.required'      => 'Le nombre de rouleaux est obligatoire.',
-            'nb_rouleaux.min'           => 'Le nombre de rouleaux doit être supérieur à 0.',
+            'prestataire_id.required' => 'Le prestataire est obligatoire.',
+            'prestataire_id.exists' => 'Le prestataire sélectionné est introuvable.',
+            'date.required' => 'La date est obligatoire.',
+            'nb_rouleaux.required' => 'Le nombre de rouleaux est obligatoire.',
+            'nb_rouleaux.min' => 'Le nombre de rouleaux doit être supérieur à 0.',
             'prix_par_rouleau.required' => 'Le prix par rouleau est obligatoire.',
-            'statut.in'                 => 'Statut invalide à la création.',
+            'statut.in' => 'Statut invalide à la création.',
         ]);
 
         $packing = Packing::create([
@@ -111,17 +112,17 @@ class PackingController extends Controller
         $packing->load(['prestataire', 'versements.creator']);
         $packing->loadSum('versements', 'montant');
 
-        $versements = $packing->versements->map(fn($v) => [
-            'id'         => $v->id,
-            'date'       => $v->date?->toDateString(),
-            'montant'    => $v->montant,
-            'notes'      => $v->notes,
+        $versements = $packing->versements->map(fn ($v) => [
+            'id' => $v->id,
+            'date' => $v->date?->toDateString(),
+            'montant' => $v->montant,
+            'notes' => $v->notes,
             'created_by' => $v->creator?->name,
             'created_at' => $v->created_at?->toISOString(),
         ]);
 
         return Inertia::render('Packings/Show', [
-            'packing'    => $this->packingData($packing),
+            'packing' => $this->packingData($packing),
             'versements' => $versements,
         ]);
     }
@@ -137,13 +138,13 @@ class PackingController extends Controller
             ->where('is_active', true)
             ->orderBy('nom')
             ->get()
-            ->map(fn(Prestataire $p) => [
+            ->map(fn (Prestataire $p) => [
                 'value' => $p->id,
                 'label' => $p->nom_complet ?? $p->reference,
             ]);
 
         return Inertia::render('Packings/Edit', [
-            'packing'      => $this->packingData($packing),
+            'packing' => $this->packingData($packing),
             'prestataires' => $prestataires,
         ]);
     }
@@ -156,17 +157,17 @@ class PackingController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $data = $request->validate([
-            'prestataire_id'   => ['required', 'integer', Rule::exists('prestataires', 'id')->where('organization_id', $orgId)],
-            'date'             => 'required|date',
-            'nb_rouleaux'      => 'required|integer|min:1|max:9999999',
+            'prestataire_id' => ['required', 'integer', Rule::exists('prestataires', 'id')->where('organization_id', $orgId)],
+            'date' => 'required|date',
+            'nb_rouleaux' => 'required|integer|min:1|max:9999999',
             'prix_par_rouleau' => 'required|integer|min:0|max:99999999',
-            'notes'            => 'nullable|string|max:5000',
+            'notes' => 'nullable|string|max:5000',
         ], [
-            'prestataire_id.required'   => 'Le prestataire est obligatoire.',
-            'prestataire_id.exists'     => 'Le prestataire sélectionné est introuvable.',
-            'date.required'             => 'La date est obligatoire.',
-            'nb_rouleaux.required'      => 'Le nombre de rouleaux est obligatoire.',
-            'nb_rouleaux.min'           => 'Le nombre de rouleaux doit être supérieur à 0.',
+            'prestataire_id.required' => 'Le prestataire est obligatoire.',
+            'prestataire_id.exists' => 'Le prestataire sélectionné est introuvable.',
+            'date.required' => 'La date est obligatoire.',
+            'nb_rouleaux.required' => 'Le nombre de rouleaux est obligatoire.',
+            'nb_rouleaux.min' => 'Le nombre de rouleaux doit être supérieur à 0.',
             'prix_par_rouleau.required' => 'Le prix par rouleau est obligatoire.',
         ]);
 

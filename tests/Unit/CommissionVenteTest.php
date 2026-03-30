@@ -4,7 +4,6 @@ namespace Tests\Unit;
 
 use App\Enums\StatutCommission;
 use App\Models\CommissionVente;
-use App\Models\VersementCommission;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -17,7 +16,7 @@ class CommissionVenteTest extends TestCase
     public function test_montant_restant_livreur_est_calcule_correctement(): void
     {
         $commission = CommissionVente::factory()->create([
-            'montant_part_livreur'  => 3000,
+            'montant_part_livreur' => 3000,
             'montant_verse_livreur' => 1000,
         ]);
 
@@ -27,7 +26,7 @@ class CommissionVenteTest extends TestCase
     public function test_montant_restant_proprietaire_est_calcule_correctement(): void
     {
         $commission = CommissionVente::factory()->create([
-            'montant_part_proprietaire'  => 2000,
+            'montant_part_proprietaire' => 2000,
             'montant_verse_proprietaire' => 2000,
         ]);
 
@@ -37,7 +36,7 @@ class CommissionVenteTest extends TestCase
     public function test_montant_restant_ne_peut_pas_etre_negatif(): void
     {
         $commission = CommissionVente::factory()->create([
-            'montant_part_livreur'  => 1000,
+            'montant_part_livreur' => 1000,
             'montant_verse_livreur' => 1500, // plus que la part
         ]);
 
@@ -47,8 +46,8 @@ class CommissionVenteTest extends TestCase
     public function test_montant_restant_total_est_somme_des_deux_parts(): void
     {
         $commission = CommissionVente::factory()->create([
-            'montant_commission'         => 5000,
-            'montant_verse'              => 1000,
+            'montant_commission' => 5000,
+            'montant_verse' => 1000,
         ]);
 
         $this->assertEquals(4000.0, $commission->montant_restant);
@@ -60,8 +59,8 @@ class CommissionVenteTest extends TestCase
     {
         $commission = CommissionVente::factory()->create([
             'montant_commission' => 5000,
-            'montant_verse'      => 0,
-            'statut'             => StatutCommission::EN_ATTENTE,
+            'montant_verse' => 0,
+            'statut' => StatutCommission::EN_ATTENTE,
         ]);
 
         $commission->recalculStatut();
@@ -72,16 +71,16 @@ class CommissionVenteTest extends TestCase
     public function test_statut_passe_partielle_si_versement_partiel(): void
     {
         $commission = CommissionVente::factory()->create([
-            'montant_commission'        => 5000,
-            'montant_part_livreur'      => 3000,
+            'montant_commission' => 5000,
+            'montant_part_livreur' => 3000,
             'montant_part_proprietaire' => 2000,
         ]);
 
         $commission->versements()->create([
-            'montant'        => 1000,
-            'beneficiaire'   => 'livreur',
+            'montant' => 1000,
+            'beneficiaire' => 'livreur',
             'date_versement' => now()->toDateString(),
-            'mode_paiement'  => 'especes',
+            'mode_paiement' => 'especes',
         ]);
 
         $commission->recalculStatut();
@@ -96,8 +95,8 @@ class CommissionVenteTest extends TestCase
     public function test_statut_passe_versee_quand_tout_est_verse(): void
     {
         $commission = CommissionVente::factory()->create([
-            'montant_commission'        => 5000,
-            'montant_part_livreur'      => 3000,
+            'montant_commission' => 5000,
+            'montant_part_livreur' => 3000,
             'montant_part_proprietaire' => 2000,
         ]);
 
@@ -130,8 +129,8 @@ class CommissionVenteTest extends TestCase
     public function test_versements_par_beneficiaire_sont_comptes_separement(): void
     {
         $commission = CommissionVente::factory()->create([
-            'montant_commission'        => 5000,
-            'montant_part_livreur'      => 3000,
+            'montant_commission' => 5000,
+            'montant_part_livreur' => 3000,
             'montant_part_proprietaire' => 2000,
         ]);
 
@@ -145,7 +144,7 @@ class CommissionVenteTest extends TestCase
         $fresh = $commission->fresh();
 
         $this->assertEquals(3000.0, (float) $fresh->montant_verse_livreur);
-        $this->assertEquals(800.0,  (float) $fresh->montant_verse_proprietaire);
+        $this->assertEquals(800.0, (float) $fresh->montant_verse_proprietaire);
         $this->assertEquals(3800.0, (float) $fresh->montant_verse);
         $this->assertEquals(StatutCommission::PARTIELLE, $fresh->statut);
     }

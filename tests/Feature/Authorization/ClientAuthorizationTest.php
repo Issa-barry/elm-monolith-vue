@@ -14,6 +14,7 @@ class ClientAuthorizationTest extends TestCase
     use RefreshDatabase;
 
     private Organization $org;
+
     private Organization $otherOrg;
 
     protected function setUp(): void
@@ -22,7 +23,7 @@ class ClientAuthorizationTest extends TestCase
 
         $this->seed(RolesAndPermissionsSeeder::class);
 
-        $this->org      = Organization::factory()->create();
+        $this->org = Organization::factory()->create();
         $this->otherOrg = Organization::factory()->create();
     }
 
@@ -54,7 +55,7 @@ class ClientAuthorizationTest extends TestCase
 
     public function test_super_admin_peut_supprimer_client_autre_org(): void
     {
-        $admin  = $this->makeUser('super_admin');
+        $admin = $this->makeUser('super_admin');
         $client = Client::factory()->create(['organization_id' => $this->otherOrg->id]);
 
         $this->actingAs($admin)
@@ -75,7 +76,7 @@ class ClientAuthorizationTest extends TestCase
 
     public function test_admin_entreprise_ne_peut_pas_supprimer_client_autre_org(): void
     {
-        $admin  = $this->makeUser('admin_entreprise', $this->org->id);
+        $admin = $this->makeUser('admin_entreprise', $this->org->id);
         $client = Client::factory()->create(['organization_id' => $this->otherOrg->id]);
 
         $this->actingAs($admin)
@@ -96,7 +97,7 @@ class ClientAuthorizationTest extends TestCase
 
     public function test_commerciale_ne_peut_pas_supprimer_client(): void
     {
-        $user   = $this->makeUser('commerciale', $this->org->id);
+        $user = $this->makeUser('commerciale', $this->org->id);
         $client = Client::factory()->create(['organization_id' => $this->org->id]);
 
         $this->actingAs($user)
@@ -106,7 +107,7 @@ class ClientAuthorizationTest extends TestCase
 
     public function test_commerciale_ne_peut_pas_voir_client_autre_org(): void
     {
-        $user   = $this->makeUser('commerciale', $this->org->id);
+        $user = $this->makeUser('commerciale', $this->org->id);
         $client = Client::factory()->create(['organization_id' => $this->otherOrg->id]);
 
         $this->actingAs($user)
@@ -131,7 +132,7 @@ class ClientAuthorizationTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('clients.store'), [
-                'nom'    => 'Test',
+                'nom' => 'Test',
                 'prenom' => 'Comptable',
             ])
             ->assertForbidden();
@@ -139,7 +140,7 @@ class ClientAuthorizationTest extends TestCase
 
     public function test_comptable_ne_peut_pas_modifier_client(): void
     {
-        $user   = $this->makeUser('comptable', $this->org->id);
+        $user = $this->makeUser('comptable', $this->org->id);
         $client = Client::factory()->create(['organization_id' => $this->org->id]);
 
         $this->actingAs($user)
@@ -151,7 +152,7 @@ class ClientAuthorizationTest extends TestCase
 
     public function test_admin_entreprise_ne_peut_pas_voir_detail_client_autre_org(): void
     {
-        $admin  = $this->makeUser('admin_entreprise', $this->org->id);
+        $admin = $this->makeUser('admin_entreprise', $this->org->id);
         $client = Client::factory()->create(['organization_id' => $this->otherOrg->id]);
 
         $this->actingAs($admin)
@@ -164,7 +165,7 @@ class ClientAuthorizationTest extends TestCase
     public function test_comptable_permissions_map_coherente(): void
     {
         $user = $this->makeUser('comptable', $this->org->id);
-        $map  = $user->permissionsMap();
+        $map = $user->permissionsMap();
 
         $this->assertTrue($map['clients.read']);
         $this->assertFalse($map['clients.create']);
@@ -174,7 +175,7 @@ class ClientAuthorizationTest extends TestCase
     public function test_super_admin_a_toutes_permissions_a_true(): void
     {
         $admin = $this->makeUser('super_admin');
-        $map   = $admin->permissionsMap();
+        $map = $admin->permissionsMap();
 
         foreach ($map as $key => $value) {
             $this->assertTrue($value, "Permission {$key} devrait être true pour super_admin");

@@ -36,7 +36,7 @@ class Prestataire extends Model
     protected function casts(): array
     {
         return [
-            'type'      => PrestataireType::class,
+            'type' => PrestataireType::class,
             'is_active' => 'boolean',
         ];
     }
@@ -52,18 +52,18 @@ class Prestataire extends Model
             if (empty($p->type)) {
                 $p->type = PrestataireType::FOURNISSEUR;
             }
-            $p->code_pays       = self::normalizeIsoCountryCode($p->code_pays) ?? 'GN';
+            $p->code_pays = self::normalizeIsoCountryCode($p->code_pays) ?? 'GN';
             $p->code_phone_pays = self::normalizeDialCode($p->code_phone_pays) ?? '+224';
-            $p->phone           = self::normalizePhoneE164($p->phone, $p->code_phone_pays);
+            $p->phone = self::normalizePhoneE164($p->phone, $p->code_phone_pays);
             if (empty($p->pays)) {
                 $p->pays = 'Guinée';
             }
         });
 
         static::updating(function (Prestataire $p) {
-            $p->code_pays       = self::normalizeIsoCountryCode($p->code_pays) ?? 'GN';
+            $p->code_pays = self::normalizeIsoCountryCode($p->code_pays) ?? 'GN';
             $p->code_phone_pays = self::normalizeDialCode($p->code_phone_pays) ?? '+224';
-            $p->phone           = self::normalizePhoneE164($p->phone, $p->code_phone_pays);
+            $p->phone = self::normalizePhoneE164($p->phone, $p->code_phone_pays);
         });
     }
 
@@ -73,8 +73,8 @@ class Prestataire extends Model
     {
         do {
             $letters = strtoupper(substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, 2));
-            $digits  = str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
-            $ref     = 'P' . $letters . $digits;
+            $digits = str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
+            $ref = 'P'.$letters.$digits;
         } while (self::withTrashed()->where('reference', $ref)->exists());
 
         return $ref;
@@ -129,6 +129,7 @@ class Prestataire extends Model
             return $this->raison_sociale;
         }
         $full = trim(implode(' ', array_filter([$this->prenom, $this->nom])));
+
         return $full !== '' ? $full : null;
     }
 
@@ -154,6 +155,7 @@ class Prestataire extends Model
     public function scopeParType(Builder $q, PrestataireType|string $type): Builder
     {
         $value = $type instanceof PrestataireType ? $type->value : $type;
+
         return $q->where('type', $value);
     }
 
@@ -161,48 +163,73 @@ class Prestataire extends Model
 
     public static function normalizeEmail(mixed $value): ?string
     {
-        if ($value === null) return null;
+        if ($value === null) {
+            return null;
+        }
         $v = trim((string) $value);
+
         return $v !== '' ? strtolower($v) : null;
     }
 
     public static function normalizeIsoCountryCode(mixed $value): ?string
     {
-        if ($value === null) return null;
+        if ($value === null) {
+            return null;
+        }
         $v = preg_replace('/[^A-Z]/', '', strtoupper(trim((string) $value))) ?? '';
+
         return $v !== '' ? substr($v, 0, 2) : null;
     }
 
     public static function normalizeDialCode(mixed $value): ?string
     {
-        if ($value === null) return null;
+        if ($value === null) {
+            return null;
+        }
         $v = trim((string) $value);
-        if ($v === '') return null;
-        if (str_starts_with($v, '00')) $v = '+' . substr($v, 2);
+        if ($v === '') {
+            return null;
+        }
+        if (str_starts_with($v, '00')) {
+            $v = '+'.substr($v, 2);
+        }
         $digits = preg_replace('/\D/', '', $v) ?? '';
-        return $digits !== '' ? '+' . substr($digits, 0, 4) : null;
+
+        return $digits !== '' ? '+'.substr($digits, 0, 4) : null;
     }
 
     public static function normalizePhoneE164(mixed $value, mixed $dialCode = null): ?string
     {
-        if ($value === null) return null;
+        if ($value === null) {
+            return null;
+        }
         $phone = trim((string) $value);
-        if ($phone === '') return null;
-        if (str_starts_with($phone, '00')) $phone = '+' . substr($phone, 2);
+        if ($phone === '') {
+            return null;
+        }
+        if (str_starts_with($phone, '00')) {
+            $phone = '+'.substr($phone, 2);
+        }
         if (! str_starts_with($phone, '+')) {
             $local = ltrim(preg_replace('/\D/', '', $phone) ?? '', '0');
-            $cc    = self::normalizeDialCode($dialCode) ?? '+224';
-            $phone = $local !== '' ? $cc . $local : null;
+            $cc = self::normalizeDialCode($dialCode) ?? '+224';
+            $phone = $local !== '' ? $cc.$local : null;
         }
-        if ($phone === null) return null;
+        if ($phone === null) {
+            return null;
+        }
         $digits = preg_replace('/\D/', '', ltrim($phone, '+')) ?? '';
-        return $digits !== '' ? '+' . $digits : null;
+
+        return $digits !== '' ? '+'.$digits : null;
     }
 
     private static function normalizeIdentity(mixed $value): ?string
     {
-        if ($value === null) return null;
+        if ($value === null) {
+            return null;
+        }
         $v = trim(preg_replace('/\s+/u', ' ', (string) $value) ?? '');
+
         return $v !== '' ? $v : null;
     }
 }

@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use App\Enums\PackingStatut;
@@ -16,14 +17,14 @@ class VersementController extends Controller
         abort_if($packing->montant_restant <= 0, 422, 'Ce packing est déjà entièrement payé.');
 
         $data = $request->validate([
-            'date'    => 'required|date',
-            'montant' => 'required|integer|min:1|max:' . $packing->montant_restant,
-            'notes'   => 'nullable|string|max:1000',
+            'date' => 'required|date',
+            'montant' => 'required|integer|min:1|max:'.$packing->montant_restant,
+            'notes' => 'nullable|string|max:1000',
         ], [
-            'date.required'    => 'La date est obligatoire.',
+            'date.required' => 'La date est obligatoire.',
             'montant.required' => 'Le montant est obligatoire.',
-            'montant.min'      => 'Le montant doit être supérieur à 0.',
-            'montant.max'      => "Le montant ne peut pas dépasser le restant dû ({$packing->montant_restant} GNF).",
+            'montant.min' => 'Le montant doit être supérieur à 0.',
+            'montant.max' => "Le montant ne peut pas dépasser le restant dû ({$packing->montant_restant} GNF).",
         ]);
 
         $packing->versements()->create($data);
