@@ -19,9 +19,12 @@ withDefaults(
         <LandingTopbar :can-register="canRegister" />
 
         <main class="overflow-hidden">
-            <section class="bg-white px-6 py-14 md:px-12 lg:px-20 lg:py-20">
-                <div class="flex flex-col items-start gap-10 lg:flex-row lg:gap-14">
-                    <div class="w-full flex-1">
+            <section class="bg-white py-14 lg:py-20">
+                <div class="mx-auto w-full max-w-6xl px-6 md:px-12 lg:px-16">
+                    <div
+                        class="flex flex-col items-start gap-10 lg:flex-row lg:gap-14"
+                    >
+                        <div class="w-full flex-1">
                         <p
                             class="mb-4 text-base leading-normal font-medium tracking-wide text-slate-900 uppercase"
                         >
@@ -39,9 +42,9 @@ withDefaults(
                         </p>
                     </div>
 
-                    <div
-                        class="grid w-full flex-1 grid-cols-1 gap-6 md:grid-cols-2"
-                    >
+                        <div
+                            class="grid w-full flex-1 grid-cols-1 gap-6 md:grid-cols-2"
+                        >
                         <article class="flex items-start gap-4">
                             <div
                                 class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100"
@@ -101,22 +104,20 @@ withDefaults(
                                 </p>
                             </div>
                         </article>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <a
-                href="https://maps.google.com/?q=Conakry%20Matoto%20Guin%C3%A9e"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="block"
-            >
-                <img
-                    alt="Carte de localisation"
-                    src="https://fqjltiegiezfetthbags.supabase.co/storage/v1/render/image/public/block.images/blocks/contact/map-3.jpg"
-                    class="h-80 w-full object-cover md:h-[26rem]"
+            <div class="h-80 w-full bg-slate-200 md:h-[26rem]">
+                <iframe
+                    title="Carte Matoto Conakry"
+                    src="https://maps.google.com/maps?q=Matoto%2C%20Conakry&t=&z=13&ie=UTF8&iwloc=&output=embed"
+                    class="h-full w-full border-0"
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"
                 />
-            </a>
+            </div>
 
             <div class="mx-auto w-full max-w-6xl px-6 py-8 lg:px-8">
                 <LandingFooter :version-label="$page.props.appVersionLabel" />
