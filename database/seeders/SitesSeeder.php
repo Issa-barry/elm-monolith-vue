@@ -18,13 +18,13 @@ class SitesSeeder extends Seeder
         $siege = Site::firstOrCreate(
             ['nom' => 'Matoto', 'organization_id' => $org->id],
             [
-                'nom'             => 'Matoto',
-                'type'            => SiteType::SIEGE->value,
-                'statut'          => SiteStatut::ACTIVE->value,
-                'ville'           => 'Conakry',
-                'pays'            => 'Guinée',
-                'localisation'    => 'Matoto, Conakry',
-                'telephone'       => '+224620000002',
+                'nom' => 'Matoto',
+                'type' => SiteType::SIEGE->value,
+                'statut' => SiteStatut::ACTIVE->value,
+                'ville' => 'Conakry',
+                'pays' => 'Guinée',
+                'localisation' => 'Matoto, Conakry',
+                'telephone' => '+224620000002',
                 'organization_id' => $org->id,
             ]
         );
@@ -33,14 +33,14 @@ class SitesSeeder extends Seeder
         Site::firstOrCreate(
             ['nom' => 'Kouria', 'organization_id' => $org->id],
             [
-                'nom'             => 'Kouria',
-                'type'            => SiteType::USINE->value,
-                'statut'          => SiteStatut::ACTIVE->value,
-                'ville'           => 'Conakry',
-                'pays'            => 'Guinée',
-                'localisation'    => 'Kouria, Conakry',
-                'telephone'       => '+224620000001',
-                'parent_id'       => $siege->id,
+                'nom' => 'Kouria',
+                'type' => SiteType::USINE->value,
+                'statut' => SiteStatut::ACTIVE->value,
+                'ville' => 'Conakry',
+                'pays' => 'Guinée',
+                'localisation' => 'Kouria, Conakry',
+                'telephone' => '+224620000001',
+                'parent_id' => $siege->id,
                 'organization_id' => $org->id,
             ]
         );

@@ -4,17 +4,17 @@ namespace App\Enums;
 
 enum ProduitType: string
 {
-    case MATERIEL    = 'materiel';
-    case SERVICE     = 'service';
-    case FABRICABLE  = 'fabricable';
+    case MATERIEL = 'materiel';
+    case SERVICE = 'service';
+    case FABRICABLE = 'fabricable';
     case ACHAT_VENTE = 'achat_vente';
 
     public function label(): string
     {
         return match ($this) {
-            self::MATERIEL    => 'Matériel',
-            self::SERVICE     => 'Service',
-            self::FABRICABLE  => 'Fabricable',
+            self::MATERIEL => 'Matériel',
+            self::SERVICE => 'Service',
+            self::FABRICABLE => 'Fabricable',
             self::ACHAT_VENTE => 'Achat / Vente',
         };
     }
@@ -32,7 +32,7 @@ enum ProduitType: string
     public static function vendableValues(): array
     {
         return array_column(
-            array_filter(self::cases(), fn(self $c) => $c->isVendable()),
+            array_filter(self::cases(), fn (self $c) => $c->isVendable()),
             'value'
         );
     }
@@ -45,7 +45,7 @@ enum ProduitType: string
     public static function achetableValues(): array
     {
         return array_column(
-            array_filter(self::cases(), fn(self $c) => $c->isAchetable()),
+            array_filter(self::cases(), fn (self $c) => $c->isAchetable()),
             'value'
         );
     }
@@ -53,9 +53,9 @@ enum ProduitType: string
     public function requiredPrices(): array
     {
         return match ($this) {
-            self::MATERIEL    => ['prix_achat'],
-            self::SERVICE     => [],
-            self::FABRICABLE  => ['prix_usine', 'prix_vente'],
+            self::MATERIEL => ['prix_achat'],
+            self::SERVICE => [],
+            self::FABRICABLE => ['prix_usine', 'prix_vente'],
             self::ACHAT_VENTE => ['prix_achat', 'prix_vente'],
         };
     }

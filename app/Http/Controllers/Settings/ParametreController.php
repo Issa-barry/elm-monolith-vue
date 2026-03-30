@@ -21,13 +21,13 @@ class ParametreController extends Controller
             ->orderBy('groupe')
             ->orderBy('cle')
             ->get()
-            ->map(fn(Parametre $p) => [
-                'id'          => $p->id,
-                'cle'         => $p->cle,
-                'valeur'      => $p->valeur,
+            ->map(fn (Parametre $p) => [
+                'id' => $p->id,
+                'cle' => $p->cle,
+                'valeur' => $p->valeur,
                 'valeur_cast' => Parametre::castValue($p->valeur, $p->type),
-                'type'        => $p->type,
-                'groupe'      => $p->groupe,
+                'type' => $p->type,
+                'groupe' => $p->groupe,
                 'description' => $p->description,
             ]);
 
@@ -44,8 +44,8 @@ class ParametreController extends Controller
         $rules = match ($parametre->type) {
             Parametre::TYPE_INTEGER => ['valeur' => 'required|integer|min:0|max:9999999'],
             Parametre::TYPE_BOOLEAN => ['valeur' => 'required|boolean'],
-            Parametre::TYPE_JSON    => ['valeur' => 'required|json'],
-            default                 => ['valeur' => 'required|string|max:1000'],
+            Parametre::TYPE_JSON => ['valeur' => 'required|json'],
+            default => ['valeur' => 'required|string|max:1000'],
         };
 
         $validated = $request->validate($rules);

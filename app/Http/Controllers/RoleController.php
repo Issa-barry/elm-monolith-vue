@@ -6,30 +6,30 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
-use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
 class RoleController extends Controller
 {
     private const RESOURCES = ['clients', 'prestataires', 'livreurs', 'proprietaires', 'vehicules', 'sites', 'produits', 'packings', 'ventes', 'users', 'parametres'];
-    private const ACTIONS   = ['create', 'read', 'update', 'delete'];
+
+    private const ACTIONS = ['create', 'read', 'update', 'delete'];
 
     public function index(): Response
     {
         abort_unless(auth()->user()->can('users.read'), 403);
 
         $roles = Role::withCount(['users', 'permissions'])->get()->map(fn (Role $role) => [
-            'id'                => $role->id,
-            'name'              => $role->name,
-            'users_count'       => $role->users_count,
+            'id' => $role->id,
+            'name' => $role->name,
+            'users_count' => $role->users_count,
             'permissions_count' => $role->permissions_count,
-            'updated_at'        => $role->updated_at?->toISOString(),
+            'updated_at' => $role->updated_at?->toISOString(),
         ]);
 
         return Inertia::render('Roles/Index', [
-            'roles'         => $roles,
-            'totalPerms'    => count(self::RESOURCES) * count(self::ACTIONS),
+            'roles' => $roles,
+            'totalPerms' => count(self::RESOURCES) * count(self::ACTIONS),
         ]);
     }
 
@@ -44,13 +44,13 @@ class RoleController extends Controller
 
         return Inertia::render('Roles/Edit', [
             'role' => [
-                'id'          => $role->id,
-                'name'        => $role->name,
+                'id' => $role->id,
+                'name' => $role->name,
                 'permissions' => $role->permissions->pluck('name')->values(),
                 'users_count' => $role->users()->count(),
             ],
             'resources' => $resources,
-            'actions'   => self::ACTIONS,
+            'actions' => self::ACTIONS,
         ]);
     }
 
@@ -65,7 +65,7 @@ class RoleController extends Controller
         }
 
         $permissions = $request->validate([
-            'permissions'   => 'array',
+            'permissions' => 'array',
             'permissions.*' => 'string|exists:permissions,name',
         ])['permissions'] ?? [];
 

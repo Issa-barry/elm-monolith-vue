@@ -11,7 +11,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, TwoFactorAuthenticatable, HasRoles;
+    use HasFactory, HasRoles, Notifiable, TwoFactorAuthenticatable;
 
     protected $fillable = [
         'prenom',
@@ -60,13 +60,13 @@ class User extends Authenticatable
     public function permissionsMap(): array
     {
         $resources = ['clients', 'prestataires', 'livreurs', 'proprietaires', 'vehicules', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres'];
-        $actions   = ['create', 'read', 'update', 'delete'];
+        $actions = ['create', 'read', 'update', 'delete'];
 
         $map = [];
         foreach ($resources as $resource) {
             foreach ($actions as $action) {
-                $key        = "{$resource}.{$action}";
-                $map[$key]  = $this->isSuperAdmin() || $this->can($key);
+                $key = "{$resource}.{$action}";
+                $map[$key] = $this->isSuperAdmin() || $this->can($key);
             }
         }
 

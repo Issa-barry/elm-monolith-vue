@@ -1182,9 +1182,7 @@ function submitVersementProprietaire() {
                                 >Historique des versements</Label
                             >
                             <span class="text-xs text-muted-foreground">
-                                {{
-                                    commissionActive.versements.length
-                                }}
+                                {{ commissionActive.versements.length }}
                                 versement{{
                                     commissionActive.versements.length > 1
                                         ? 's'

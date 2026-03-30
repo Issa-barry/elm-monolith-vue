@@ -14,13 +14,13 @@ class ClientFactory extends Factory
     {
         return [
             'organization_id' => Organization::factory(),
-            'user_id'         => null,
-            'nom'             => $this->faker->lastName(),
-            'prenom'          => $this->faker->firstName(),
-            'email'           => $this->faker->optional()->safeEmail(),
-            'telephone'       => $this->faker->optional()->phoneNumber(),
-            'adresse'         => $this->faker->optional()->address(),
-            'is_active'       => true,
+            'user_id' => null,
+            'nom' => $this->faker->lastName(),
+            'prenom' => $this->faker->firstName(),
+            'email' => $this->faker->optional()->safeEmail(),
+            'telephone' => $this->faker->optional()->phoneNumber(),
+            'adresse' => $this->faker->optional()->address(),
+            'is_active' => true,
         ];
     }
 }

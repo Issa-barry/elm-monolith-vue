@@ -11,7 +11,7 @@ enum PrestataireType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::MACHINISTE => 'Machiniste',
             self::MECANICIEN => 'Mécanicien',
             self::CONSULTANT => 'Consultant',

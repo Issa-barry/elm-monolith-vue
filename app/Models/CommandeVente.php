@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\StatutCommandeVente;
-use App\Enums\StatutFactureVente;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -42,8 +41,8 @@ class CommandeVente extends Model
     {
         return [
             'total_commande' => 'decimal:2',
-            'statut'         => StatutCommandeVente::class,
-            'annulee_at'     => 'datetime',
+            'statut' => StatutCommandeVente::class,
+            'annulee_at' => 'datetime',
         ];
     }
 
@@ -51,7 +50,7 @@ class CommandeVente extends Model
     {
         static::creating(function (CommandeVente $c) {
             if (empty($c->reference)) {
-                $c->reference = self::TEMP_PREFIX . Str::uuid();
+                $c->reference = self::TEMP_PREFIX.Str::uuid();
             }
             if (empty($c->statut)) {
                 $c->statut = StatutCommandeVente::EN_COURS;
@@ -63,10 +62,10 @@ class CommandeVente extends Model
         });
 
         static::created(function (CommandeVente $c) {
-            if (!str_starts_with((string)$c->reference, self::TEMP_PREFIX)) {
+            if (! str_starts_with((string) $c->reference, self::TEMP_PREFIX)) {
                 return;
             }
-            $ref = 'VNT-' . ($c->created_at ?? now())->format('Ymd') . '-' . str_pad((string)$c->id, 4, '0', STR_PAD_LEFT);
+            $ref = 'VNT-'.($c->created_at ?? now())->format('Ymd').'-'.str_pad((string) $c->id, 4, '0', STR_PAD_LEFT);
             $c->newQueryWithoutScopes()->whereKey($c->id)->update(['reference' => $ref]);
             $c->reference = $ref;
             $c->syncOriginalAttribute('reference');
@@ -142,7 +141,7 @@ class CommandeVente extends Model
 
     public function getMontantLabel(): string
     {
-        return number_format((float)$this->total_commande, 0, ',', ' ') . ' GNF';
+        return number_format((float) $this->total_commande, 0, ',', ' ').' GNF';
     }
 
     public function cloturerSiComplete(): bool
@@ -151,13 +150,15 @@ class CommandeVente extends Model
             return false;
         }
         $facture = $this->facture ?? $this->load('facture')->facture;
-        if (!$facture) {
+        if (! $facture) {
             return false;
         }
         if ($facture->isPayee()) {
             $this->statut = StatutCommandeVente::CLOTUREE;
+
             return $this->saveQuietly();
         }
+
         return false;
     }
 }

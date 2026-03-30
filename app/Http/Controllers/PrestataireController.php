@@ -35,19 +35,19 @@ class PrestataireController extends Controller
             ->orderBy('nom')
             ->get()
             ->map(fn (Prestataire $p) => [
-                'id'            => $p->id,
-                'reference'     => $p->reference,
-                'nom_complet'   => $p->nom_complet,
-                'nom'           => $p->nom,
-                'prenom'        => $p->prenom,
-                'raison_sociale'=> $p->raison_sociale,
-                'email'         => $p->email,
-                'phone'         => $p->phone,
+                'id' => $p->id,
+                'reference' => $p->reference,
+                'nom_complet' => $p->nom_complet,
+                'nom' => $p->nom,
+                'prenom' => $p->prenom,
+                'raison_sociale' => $p->raison_sociale,
+                'email' => $p->email,
+                'phone' => $p->phone,
                 'code_phone_pays' => $p->code_phone_pays,
-                'ville'         => $p->ville,
-                'type'          => $p->type?->value,
-                'type_label'    => $p->type_label,
-                'is_active'     => $p->is_active,
+                'ville' => $p->ville,
+                'type' => $p->type?->value,
+                'type_label' => $p->type_label,
+                'is_active' => $p->is_active,
             ]);
 
         return Inertia::render('Prestataires/Index', [
@@ -72,17 +72,17 @@ class PrestataireController extends Controller
         abort_if(! $orgId, 403, 'Votre compte n\'est associé à aucune organisation.');
 
         $data = $request->validate([
-            'nom'            => 'nullable|string|max:255|required_without:raison_sociale',
-            'prenom'         => 'nullable|string|max:255|required_without:raison_sociale',
+            'nom' => 'nullable|string|max:255|required_without:raison_sociale',
+            'prenom' => 'nullable|string|max:255|required_without:raison_sociale',
             'raison_sociale' => 'nullable|string|max:255',
-            'email'          => 'nullable|email:rfc,dns|max:255',
-            'phone'          => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
-            'code_pays'      => ['nullable', Rule::in(array_keys(PRESTATAIRE_PAYS))],
-            'ville'          => 'nullable|string|max:100',
-            'adresse'        => 'nullable|string',
-            'type'           => ['required', Rule::enum(PrestataireType::class)],
-            'notes'          => 'nullable|string',
-            'is_active'      => 'boolean',
+            'email' => 'nullable|email:rfc,dns|max:255',
+            'phone' => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
+            'code_pays' => ['nullable', Rule::in(array_keys(PRESTATAIRE_PAYS))],
+            'ville' => 'nullable|string|max:100',
+            'adresse' => 'nullable|string',
+            'type' => ['required', Rule::enum(PrestataireType::class)],
+            'notes' => 'nullable|string',
+            'is_active' => 'boolean',
         ]);
 
         // Dériver pays et indicatif depuis code_pays (source unique)
@@ -111,21 +111,21 @@ class PrestataireController extends Controller
 
         return Inertia::render('Prestataires/Edit', [
             'prestataire' => [
-                'id'             => $prestataire->id,
-                'reference'      => $prestataire->reference,
-                'nom'            => $prestataire->nom,
-                'prenom'         => $prestataire->prenom,
+                'id' => $prestataire->id,
+                'reference' => $prestataire->reference,
+                'nom' => $prestataire->nom,
+                'prenom' => $prestataire->prenom,
                 'raison_sociale' => $prestataire->raison_sociale,
-                'email'          => $prestataire->email,
-                'phone'          => $phone,
-                'code_phone_pays'=> $codePhonePays,
-                'code_pays'      => $codePays,
-                'pays'           => $pays,
-                'ville'          => $prestataire->ville,
-                'adresse'        => $prestataire->adresse,
-                'type'           => $prestataire->type?->value,
-                'notes'          => $prestataire->notes,
-                'is_active'      => $prestataire->is_active,
+                'email' => $prestataire->email,
+                'phone' => $phone,
+                'code_phone_pays' => $codePhonePays,
+                'code_pays' => $codePays,
+                'pays' => $pays,
+                'ville' => $prestataire->ville,
+                'adresse' => $prestataire->adresse,
+                'type' => $prestataire->type?->value,
+                'notes' => $prestataire->notes,
+                'is_active' => $prestataire->is_active,
             ],
             'types' => PrestataireType::options(),
         ]);
@@ -146,6 +146,7 @@ class PrestataireController extends Controller
                 return [substr($phone, strlen($dial)), $dial, $code, $name];
             }
         }
+
         return [$phone, $codePhonePays, $codePays, $pays];
     }
 
@@ -154,17 +155,17 @@ class PrestataireController extends Controller
         $this->authorize('update', $prestataire);
 
         $data = $request->validate([
-            'nom'            => 'nullable|string|max:255|required_without:raison_sociale',
-            'prenom'         => 'nullable|string|max:255|required_without:raison_sociale',
+            'nom' => 'nullable|string|max:255|required_without:raison_sociale',
+            'prenom' => 'nullable|string|max:255|required_without:raison_sociale',
             'raison_sociale' => 'nullable|string|max:255',
-            'email'          => 'nullable|email:rfc,dns|max:255',
-            'phone'          => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
-            'code_pays'      => ['nullable', Rule::in(array_keys(PRESTATAIRE_PAYS))],
-            'ville'          => 'nullable|string|max:100',
-            'adresse'        => 'nullable|string',
-            'type'           => ['required', Rule::enum(PrestataireType::class)],
-            'notes'          => 'nullable|string',
-            'is_active'      => 'boolean',
+            'email' => 'nullable|email:rfc,dns|max:255',
+            'phone' => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
+            'code_pays' => ['nullable', Rule::in(array_keys(PRESTATAIRE_PAYS))],
+            'ville' => 'nullable|string|max:100',
+            'adresse' => 'nullable|string',
+            'type' => ['required', Rule::enum(PrestataireType::class)],
+            'notes' => 'nullable|string',
+            'is_active' => 'boolean',
         ]);
 
         // Dériver pays et indicatif depuis code_pays (source unique)
@@ -182,24 +183,25 @@ class PrestataireController extends Controller
 
     private function normalizeData(array $data): array
     {
-        if (!empty($data['nom'])) {
+        if (! empty($data['nom'])) {
             $data['nom'] = mb_strtoupper($data['nom'], 'UTF-8');
         }
-        if (!empty($data['prenom'])) {
+        if (! empty($data['prenom'])) {
             $data['prenom'] = mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
         }
-        if (!empty($data['raison_sociale'])) {
+        if (! empty($data['raison_sociale'])) {
             $data['raison_sociale'] = mb_convert_case(mb_strtolower($data['raison_sociale'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
         }
-        if (!empty($data['ville'])) {
+        if (! empty($data['ville'])) {
             $data['ville'] = mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
         }
-        if (!empty($data['code_phone_pays']) && !empty($data['phone'])) {
+        if (! empty($data['code_phone_pays']) && ! empty($data['phone'])) {
             $tel = (string) $data['phone'];
-            if (!str_starts_with($tel, '+')) {
-                $data['phone'] = $data['code_phone_pays'] . ltrim($tel, '0');
+            if (! str_starts_with($tel, '+')) {
+                $data['phone'] = $data['code_phone_pays'].ltrim($tel, '0');
             }
         }
+
         return $data;
     }
 

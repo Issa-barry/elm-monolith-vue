@@ -28,18 +28,18 @@ class CommandeAchatController extends Controller
             ->orderByDesc('created_at')
             ->get()
             ->map(fn (CommandeAchat $c) => [
-                'id'              => $c->id,
-                'reference'       => $c->reference,
-                'statut'          => $c->statut?->value,
-                'statut_label'    => $c->statut_label,
-                'total_commande'  => (float) $c->total_commande,
+                'id' => $c->id,
+                'reference' => $c->reference,
+                'statut' => $c->statut?->value,
+                'statut_label' => $c->statut_label,
+                'total_commande' => (float) $c->total_commande,
                 'prestataire_nom' => $c->prestataire?->nom,
-                'note'            => $c->note,
-                'created_at'      => $c->created_at?->format('d/m/Y'),
-                'is_annulee'      => $c->isAnnulee(),
+                'note' => $c->note,
+                'created_at' => $c->created_at?->format('d/m/Y'),
+                'is_annulee' => $c->isAnnulee(),
                 'is_receptionnee' => $c->isReceptionnee(),
-                'qte_commandee'   => $c->lignes->sum('qte'),
-                'qte_recue'       => $c->lignes->sum('qte_recue'),
+                'qte_commandee' => $c->lignes->sum('qte'),
+                'qte_recue' => $c->lignes->sum('qte_recue'),
             ]);
 
         return Inertia::render('Achats/Index', [
@@ -59,9 +59,9 @@ class CommandeAchatController extends Controller
             ->orderBy('nom')
             ->get()
             ->map(fn (Produit $p) => [
-                'id'        => $p->id,
-                'nom'       => $p->nom,
-                'prix_achat'=> (int) $p->prix_achat,
+                'id' => $p->id,
+                'nom' => $p->nom,
+                'prix_achat' => (int) $p->prix_achat,
                 'qte_stock' => $p->qte_stock,
             ]);
 
@@ -69,12 +69,12 @@ class CommandeAchatController extends Controller
             ->orderBy('nom')
             ->get()
             ->map(fn (Prestataire $p) => [
-                'id'  => $p->id,
+                'id' => $p->id,
                 'nom' => $p->nom,
             ]);
 
         return Inertia::render('Achats/Create', [
-            'produits'     => $produits,
+            'produits' => $produits,
             'prestataires' => $prestataires,
         ]);
     }
@@ -84,39 +84,39 @@ class CommandeAchatController extends Controller
         $this->authorize('create', CommandeAchat::class);
 
         $orgId = auth()->user()->organization_id;
-        abort_if(!$orgId, 403, "Votre compte n'est associé à aucune organisation.");
+        abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'prestataire_id'       => 'nullable|exists:prestataires,id',
-            'note'                 => 'nullable|string|max:1000',
-            'lignes'               => 'required|array|min:1',
-            'lignes.*.produit_id'  => 'required|exists:produits,id',
-            'lignes.*.qte'         => 'required|integer|min:1',
-            'lignes.*.prix_achat'  => 'required|numeric|min:0',
+            'prestataire_id' => 'nullable|exists:prestataires,id',
+            'note' => 'nullable|string|max:1000',
+            'lignes' => 'required|array|min:1',
+            'lignes.*.produit_id' => 'required|exists:produits,id',
+            'lignes.*.qte' => 'required|integer|min:1',
+            'lignes.*.prix_achat' => 'required|numeric|min:0',
         ], [
-            'lignes.required'              => 'Au moins une ligne est requise.',
-            'lignes.min'                   => 'Au moins une ligne est requise.',
+            'lignes.required' => 'Au moins une ligne est requise.',
+            'lignes.min' => 'Au moins une ligne est requise.',
             'lignes.*.produit_id.required' => 'Le produit est obligatoire.',
-            'lignes.*.produit_id.exists'   => 'Produit introuvable.',
-            'lignes.*.qte.required'        => 'La quantité est obligatoire.',
-            'lignes.*.qte.min'             => 'La quantité doit être supérieure à 0.',
+            'lignes.*.produit_id.exists' => 'Produit introuvable.',
+            'lignes.*.qte.required' => 'La quantité est obligatoire.',
+            'lignes.*.qte.min' => 'La quantité doit être supérieure à 0.',
             'lignes.*.prix_achat.required' => "Le prix d'achat est obligatoire.",
-            'lignes.*.prix_achat.min'      => "Le prix d'achat ne peut pas être négatif.",
+            'lignes.*.prix_achat.min' => "Le prix d'achat ne peut pas être négatif.",
         ]);
 
-        $lignesData    = [];
+        $lignesData = [];
         $totalCommande = 0;
 
         foreach ($data['lignes'] as $ligne) {
-            $qte        = (int) $ligne['qte'];
-            $prixAchat  = (float) $ligne['prix_achat'];
+            $qte = (int) $ligne['qte'];
+            $prixAchat = (float) $ligne['prix_achat'];
             $totalLigne = $qte * $prixAchat;
 
             $lignesData[] = [
-                'produit_id'          => $ligne['produit_id'],
-                'qte'                 => $qte,
+                'produit_id' => $ligne['produit_id'],
+                'qte' => $qte,
                 'prix_achat_snapshot' => $prixAchat,
-                'total_ligne'         => $totalLigne,
+                'total_ligne' => $totalLigne,
             ];
 
             $totalCommande += $totalLigne;
@@ -124,9 +124,9 @@ class CommandeAchatController extends Controller
 
         $commande = CommandeAchat::create([
             'organization_id' => $orgId,
-            'prestataire_id'  => $data['prestataire_id'] ?? null,
-            'note'            => $data['note'] ?? null,
-            'total_commande'  => $totalCommande,
+            'prestataire_id' => $data['prestataire_id'] ?? null,
+            'note' => $data['note'] ?? null,
+            'total_commande' => $totalCommande,
         ]);
 
         foreach ($lignesData as $ligneDatum) {
@@ -144,33 +144,33 @@ class CommandeAchatController extends Controller
         $achat->load(['prestataire', 'lignes.produit', 'createdBy']);
 
         $lignes = $achat->lignes->map(fn ($l) => [
-            'id'                  => $l->id,
-            'produit_id'          => $l->produit_id,
-            'produit_nom'         => $l->produit?->nom,
-            'qte'                 => $l->qte,
-            'qte_recue'           => $l->qte_recue,
+            'id' => $l->id,
+            'produit_id' => $l->produit_id,
+            'produit_nom' => $l->produit?->nom,
+            'qte' => $l->qte,
+            'qte_recue' => $l->qte_recue,
             'prix_achat_snapshot' => (float) $l->prix_achat_snapshot,
-            'total_ligne'         => (float) $l->total_ligne,
+            'total_ligne' => (float) $l->total_ligne,
         ]);
 
         return Inertia::render('Achats/Show', [
             'commande' => [
-                'id'              => $achat->id,
-                'reference'       => $achat->reference,
-                'statut'          => $achat->statut?->value,
-                'statut_label'    => $achat->statut_label,
-                'total_commande'  => (float) $achat->total_commande,
+                'id' => $achat->id,
+                'reference' => $achat->reference,
+                'statut' => $achat->statut?->value,
+                'statut_label' => $achat->statut_label,
+                'total_commande' => (float) $achat->total_commande,
                 'prestataire_nom' => $achat->prestataire?->nom,
-                'note'            => $achat->note,
-                'motif_annulation'=> $achat->motif_annulation,
-                'annulee_at'      => $achat->annulee_at?->toISOString(),
-                'is_annulee'      => $achat->isAnnulee(),
+                'note' => $achat->note,
+                'motif_annulation' => $achat->motif_annulation,
+                'annulee_at' => $achat->annulee_at?->toISOString(),
+                'is_annulee' => $achat->isAnnulee(),
                 'is_receptionnee' => $achat->isReceptionnee(),
-                'created_at'      => $achat->created_at?->format('d/m/Y'),
-                'created_by'      => $achat->createdBy
-                    ? trim($achat->createdBy->prenom . ' ' . $achat->createdBy->nom)
+                'created_at' => $achat->created_at?->format('d/m/Y'),
+                'created_by' => $achat->createdBy
+                    ? trim($achat->createdBy->prenom.' '.$achat->createdBy->nom)
                     : null,
-                'lignes'          => $lignes,
+                'lignes' => $lignes,
             ],
         ]);
     }
@@ -185,8 +185,8 @@ class CommandeAchatController extends Controller
         $achat->load('lignes.produit');
 
         $data = $request->validate([
-            'lignes'          => 'required|array',
-            'lignes.*.id'     => 'required|integer',
+            'lignes' => 'required|array',
+            'lignes.*.id' => 'required|integer',
             'lignes.*.qte_recue' => 'required|integer|min:0',
         ]);
 
@@ -221,10 +221,10 @@ class CommandeAchatController extends Controller
         abort_if($achat->isReceptionnee(), 422, "Impossible d'annuler une commande déjà réceptionnée.");
 
         $achat->update([
-            'statut'           => StatutCommandeAchat::ANNULEE,
+            'statut' => StatutCommandeAchat::ANNULEE,
             'motif_annulation' => $data['motif_annulation'],
-            'annulee_at'       => now(),
-            'annulee_par'      => auth()->id(),
+            'annulee_at' => now(),
+            'annulee_par' => auth()->id(),
         ]);
 
         return back()->with('success', 'Commande annulée.');
@@ -237,16 +237,16 @@ class CommandeAchatController extends Controller
         $achat->load(['prestataire', 'lignes.produit', 'createdBy', 'organization']);
 
         $createdBy = $achat->createdBy
-            ? trim($achat->createdBy->prenom . ' ' . $achat->createdBy->nom)
+            ? trim($achat->createdBy->prenom.' '.$achat->createdBy->nom)
             : '—';
 
         $pdf = Pdf::loadView('pdf.bon_commande_achat', [
-            'commande'     => $achat,
+            'commande' => $achat,
             'organisation' => $achat->organization,
-            'createdBy'    => $createdBy,
+            'createdBy' => $createdBy,
         ])->setPaper('a4', 'portrait');
 
-        $filename = $achat->reference . '.pdf';
+        $filename = $achat->reference.'.pdf';
 
         return $pdf->download($filename);
     }

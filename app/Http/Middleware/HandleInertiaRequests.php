@@ -37,12 +37,12 @@ class HandleInertiaRequests extends Middleware
             ->get(['id', 'qte_stock', 'seuil_alerte_stock', 'type', 'organization_id']);
 
         $ruptures = $produits->filter(fn ($p) => $p->type?->hasStock() && $p->qte_stock <= 0)->count();
-        $faibles  = $produits->filter(fn ($p) => $p->type?->hasStock() && $p->is_low_stock)->count();
+        $faibles = $produits->filter(fn ($p) => $p->type?->hasStock() && $p->is_low_stock)->count();
 
         return [
             'ruptures' => $ruptures,
-            'faibles'  => $faibles,
-            'total'    => $ruptures + $faibles,
+            'faibles' => $faibles,
+            'total' => $ruptures + $faibles,
         ];
     }
 
@@ -69,14 +69,13 @@ class HandleInertiaRequests extends Middleware
             'appVersionLabel' => AppVersion::label(),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
-                'user'        => $request->user()?->loadMissing('organization'),
+                'user' => $request->user()?->loadMissing('organization'),
                 'permissions' => $request->user()?->permissionsMap() ?? [],
-                'roles'       => $request->user()?->getRoleNames() ?? [],
+                'roles' => $request->user()?->getRoleNames() ?? [],
             ],
-            'sidebarOpen'   => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'stock_alertes' => $this->stockAlertes($request),
-            'flash'         => ['success' => $request->session()->get('success')],
+            'flash' => ['success' => $request->session()->get('success')],
         ];
     }
 }
-

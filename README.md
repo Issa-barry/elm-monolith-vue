@@ -10,11 +10,13 @@ git push
 Flux de branches:
 - `dev` -> `pre-prod` -> `main`
 
-CI (qualite + tests) sur `dev`, `pre-prod`, `main`:
+CI (qualite + tests) sur Pull Request vers `pre-prod` et `main`:
 - `.github/workflows/lint.yml`
 - `.github/workflows/tests.yml`
   - `ci`: PHPUnit
-  - `e2e`: Playwright (Chromium)
+  - `e2e`:
+    - PR `dev -> pre-prod`: suite Playwright complete
+    - PR `pre-prod -> main`: smoke test Playwright
 
 Controle du flux de branches:
 - `.github/workflows/branch-flow.yml`
