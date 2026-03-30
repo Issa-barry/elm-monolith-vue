@@ -14,21 +14,12 @@ withDefaults(
 
 <template>
     <section
-        class="relative overflow-hidden rounded-3xl border border-white/70 bg-white px-6 py-10 shadow-[0_24px_80px_-35px_rgba(15,23,42,0.55)] lg:px-12 lg:py-14"
+        class="rounded-3xl border border-slate-200 bg-white px-6 py-10 lg:px-12 lg:py-14"
     >
-        <div
-            class="pointer-events-none absolute -top-20 -right-16 h-56 w-56 rounded-full bg-[#f59e0b]/20 blur-3xl"
-        />
-        <div
-            class="pointer-events-none absolute -bottom-24 -left-10 h-60 w-60 rounded-full bg-[#0f172a]/15 blur-3xl"
-        />
-
-        <div
-            class="relative grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-center"
-        >
+        <div class="grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-center">
             <div>
                 <p
-                    class="inline-flex items-center rounded-full border border-slate-300/80 bg-white/70 px-3 py-1 text-xs font-semibold tracking-[0.2em] text-slate-700 uppercase"
+                    class="inline-flex items-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold tracking-[0.2em] text-slate-700 uppercase"
                 >
                     Mission GBALAN
                 </p>
@@ -49,29 +40,27 @@ withDefaults(
                 <div class="mt-8 flex flex-wrap gap-3">
                     <Link
                         :href="login()"
-                        class="inline-flex items-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                        class="inline-flex items-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800"
                     >
                         Demander une demo
                     </Link>
                     <Link
                         v-if="canRegister"
                         :href="register()"
-                        class="inline-flex items-center rounded-full border border-slate-300 bg-white/80 px-6 py-3 text-sm font-semibold text-slate-900 transition hover:border-slate-950"
+                        class="inline-flex items-center rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-900 hover:border-slate-950"
                     >
                         Creer un compte
                     </Link>
                     <a
                         href="#landing-section"
-                        class="inline-flex items-center rounded-full border border-transparent px-4 py-3 text-sm font-semibold text-slate-700 underline decoration-slate-400 underline-offset-4 transition hover:text-slate-950"
+                        class="inline-flex items-center rounded-full border border-transparent px-4 py-3 text-sm font-semibold text-slate-700 underline decoration-slate-400 underline-offset-4 hover:text-slate-950"
                     >
                         Explorer la section
                     </a>
                 </div>
             </div>
 
-            <div
-                class="rounded-2xl border border-white/80 bg-white/75 p-6 backdrop-blur"
-            >
+            <div class="rounded-2xl border border-slate-200 bg-white p-6">
                 <p
                     class="text-sm font-semibold tracking-[0.18em] text-slate-500 uppercase"
                 >

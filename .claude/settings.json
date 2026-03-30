@@ -51,7 +51,8 @@
       "Bash(/c/laragon/bin/php/php-8.5.1-nts-Win32-vs17-x64/php.exe vendor/bin/pint tests/Unit/EnumsTest.php tests/Unit/AppVersionTest.php tests/Unit/ModelTest.php tests/Feature/PolicyTest.php tests/Feature/LoginResponseTest.php tests/Feature/CreateNewUserTest.php tests/Feature/CommandeAchatTest.php tests/Feature/CommandeVenteTest.php tests/Feature/RoleTest.php tests/Feature/SiteTest.php)",
       "Bash(grep -l 'private function user' c:/laragon/www/elm-monolithe/tests/Feature/*.php c:/laragon/www/elm-monolithe/tests/Feature/**/*.php)",
       "Bash(grep -h \"private function user\\\\|private function org\\\\|private function actingAsAdmin\\\\|Permission::firstOrCreate\\\\|Role::firstOrCreate\\\\|Organization::factory\" c:/laragon/www/elm-monolithe/tests/Feature/*.php)",
-      "Bash(grep -h \"private function userWith\" c:/laragon/www/elm-monolithe/tests/Feature/*.php)"
+      "Bash(grep -h \"private function userWith\" c:/laragon/www/elm-monolithe/tests/Feature/*.php)",
+      "Bash(gh run:*)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"
