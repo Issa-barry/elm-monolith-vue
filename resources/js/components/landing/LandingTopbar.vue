@@ -28,6 +28,29 @@ const toggleProducts = () => {
     isProductsOpen.value = !isProductsOpen.value;
 };
 
+const goHome = () => {
+    closeProductMenus();
+    isMobileMenuOpen.value = false;
+    router.visit('/');
+};
+
+const goToProductsSection = () => {
+    closeProductMenus();
+    isMobileMenuOpen.value = false;
+
+    if (globalThis.location.pathname === '/') {
+        const section = document.getElementById('landing-section');
+
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            globalThis.history.replaceState(null, '', '/#landing-section');
+            return;
+        }
+    }
+
+    globalThis.location.href = '/#landing-section';
+};
+
 const onDocumentClick = (event: MouseEvent) => {
     const target = event.target as Node | null;
 
@@ -55,7 +78,11 @@ onBeforeUnmount(() => {
             <div
                 class="relative flex w-full items-center justify-between bg-white px-6 py-4 shadow lg:static lg:px-12 dark:bg-slate-900"
             >
-                <div class="flex items-center gap-4 py-2 lg:hidden">
+                <button
+                    type="button"
+                    class="flex items-center gap-4 py-2 lg:hidden"
+                    @click="goHome"
+                >
                     <svg
                         width="32"
                         height="32"
@@ -74,7 +101,7 @@ onBeforeUnmount(() => {
                         class="text-surface-900 dark:text-surface-0 text-xl font-medium"
                         >Eau la maman</span
                     >
-                </div>
+                </button>
 
                 <button
                     type="button"
@@ -150,7 +177,7 @@ onBeforeUnmount(() => {
                         <li>
                             <a
                                 class="flex px-0 py-2 font-medium transition-colors duration-150 hover:text-primary lg:px-4"
-                                @click="closeProductMenus"
+                                @click="goToProductsSection"
                             >
                                 <span>Produits</span>
                             </a>
@@ -159,14 +186,21 @@ onBeforeUnmount(() => {
                         <li>
                             <a
                                 class="flex px-0 py-2 font-medium transition-colors duration-150 hover:text-primary lg:px-4"
-                                @click="closeProductMenus"
+                                @click="
+                                    closeProductMenus();
+                                    router.visit('/contact');
+                                "
                             >
                                 <span>Contact</span>
                             </a>
                         </li>
                     </ul>
 
-                    <div class="hidden items-center gap-4 py-2 lg:flex">
+                    <button
+                        type="button"
+                        class="hidden items-center gap-4 py-2 lg:flex"
+                        @click="goHome"
+                    >
                         <svg
                             width="32"
                             height="32"
@@ -185,7 +219,7 @@ onBeforeUnmount(() => {
                             class="text-surface-900 dark:text-surface-0 text-xl font-medium"
                             >Eau la maman</span
                         >
-                    </div>
+                    </button>
 
                     <div
                         class="border-surface mt-4 flex border-t py-4 lg:mt-0 lg:block lg:w-4/12 lg:border-t-0 lg:py-0 lg:text-right"
