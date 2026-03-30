@@ -16,17 +16,8 @@ withDefaults(
 </script>
 
 <template>
-    <Head title="Welcome">
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link
-            rel="stylesheet"
-            href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
-        />
-    </Head>
-    <div
-        class="min-h-screen bg-slate-50 [font-family:'Manrope',sans-serif] text-slate-900"
-    >
+    <Head title="Welcome" />
+    <div class="min-h-screen bg-slate-50 font-sans text-slate-900">
         <LandingTopbar :can-register="canRegister" />
         <div class="mx-auto w-full max-w-6xl px-6 py-8 lg:px-8">
             <LandingHero :can-register="canRegister" />

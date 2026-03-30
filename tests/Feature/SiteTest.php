@@ -248,4 +248,24 @@ class SiteTest extends TestCase
             ->delete(route('sites.destroy', $site))
             ->assertStatus(403);
     }
+
+    // ── show with children ────────────────────────────────────────────────────
+
+    public function test_show_displays_children_sites(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermissions($org);
+        $parent = $this->makeSite($org);
+        $child = Site::create([
+            'organization_id' => $org->id,
+            'nom' => 'Site Enfant',
+            'type' => 'agence',
+            'localisation' => 'Kindia',
+            'parent_id' => $parent->id,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('sites.show', $parent))
+            ->assertStatus(200);
+    }
 }

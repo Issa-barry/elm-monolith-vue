@@ -131,4 +131,25 @@ class RoleTest extends TestCase
             ->put(route('roles.update', $superAdminRole), ['permissions' => []])
             ->assertRedirect();
     }
+
+    public function test_update_as_super_admin_can_set_users_permissions(): void
+    {
+        $org = Organization::factory()->create();
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'users.read', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'users.create', 'guard_name' => 'web']);
+
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('super_admin');
+
+        $role = Role::firstOrCreate(['name' => 'editeur', 'guard_name' => 'web']);
+
+        $this->actingAs($user)
+            ->put(route('roles.update', $role), [
+                'permissions' => ['users.read', 'users.create'],
+            ])
+            ->assertRedirect();
+
+        $this->assertTrue($role->fresh()->hasPermissionTo('users.read'));
+    }
 }
