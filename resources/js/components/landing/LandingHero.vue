@@ -5,7 +5,7 @@ import Button from 'primevue/button';
 
 <template>
     <section class="w-full bg-slate-900 px-6 py-12 lg:px-20 lg:py-16">
-        <div class="flex flex-col-reverse items-center gap-12 lg:flex-row">
+        <div class="flex flex-col items-center gap-12 lg:flex-row">
             <div class="flex-1 p-2 lg:p-4">
                 <h1
                     class="mb-4 text-4xl leading-tight font-bold text-white md:text-5xl"

@@ -19,7 +19,7 @@ import { store } from '@/routes/login';
 import { Form, Head, Link } from '@inertiajs/vue3';
 import { Eye, EyeOff } from 'lucide-vue-next';
 import Select from 'primevue/select';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 defineProps<{
     status?: string;
@@ -53,7 +53,15 @@ const PAYS: CountryOption[] = [
     { label: 'Inde', code: 'IN', prefix: '+91', localLength: 10 },
 ];
 
-const selectedCountryCode = ref(PAYS[0].code);
+const STORAGE_KEY = 'login_country_code';
+const savedCode = globalThis.localStorage?.getItem(STORAGE_KEY) ?? PAYS[0].code;
+const selectedCountryCode = ref(
+    PAYS.some((p) => p.code === savedCode) ? savedCode : PAYS[0].code,
+);
+
+watch(selectedCountryCode, (code) => {
+    globalThis.localStorage?.setItem(STORAGE_KEY, code);
+});
 const phoneDigits = ref('');
 const showPassword = ref(false);
 
