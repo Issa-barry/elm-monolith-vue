@@ -311,4 +311,39 @@ class CommandeVenteTest extends TestCase
             ->delete(route('ventes.destroy', $commande))
             ->assertStatus(403);
     }
+
+    // ── annuler with encaissement ─────────────────────────────────────────────
+
+    public function test_annuler_returns_422_if_encaissement_exists(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermissions($org);
+        ['site' => $site, 'produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($org);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $org->id,
+            'site_id' => $site->id,
+            'statut' => StatutCommandeVente::EN_COURS,
+        ]);
+
+        $facture = \App\Models\FactureVente::create([
+            'organization_id' => $org->id,
+            'commande_vente_id' => $commande->id,
+            'montant_brut' => 5000,
+            'montant_net' => 5000,
+        ]);
+
+        \App\Models\EncaissementVente::create([
+            'facture_vente_id' => $facture->id,
+            'montant' => 5000,
+            'date_encaissement' => now()->toDateString(),
+            'mode_paiement' => 'especes',
+        ]);
+
+        $this->actingAs($user)
+            ->patch(route('ventes.annuler', $commande), [
+                'motif_annulation' => 'Test annulation avec encaissement',
+            ])
+            ->assertStatus(422);
+    }
 }

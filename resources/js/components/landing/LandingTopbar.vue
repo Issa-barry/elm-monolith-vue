@@ -152,7 +152,7 @@ onBeforeUnmount(() => {
                                 class="flex px-0 py-2 font-medium transition-colors duration-150 hover:text-primary lg:px-4"
                                 @click="closeProductMenus"
                             >
-                                <span>FAQ</span>
+                                <span>Produits</span>
                             </a>
                         </li>
 
@@ -161,7 +161,7 @@ onBeforeUnmount(() => {
                                 class="flex px-0 py-2 font-medium transition-colors duration-150 hover:text-primary lg:px-4"
                                 @click="closeProductMenus"
                             >
-                                <span>Produits</span>
+                                <span>Contact</span>
                             </a>
                         </li>
                     </ul>

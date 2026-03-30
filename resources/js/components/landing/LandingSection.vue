@@ -29,9 +29,7 @@ const cards = [
             >
                 Section
             </p>
-            <h2
-                class="mt-2 [font-family:'Space_Grotesk',sans-serif] text-3xl font-bold text-slate-950"
-            >
+            <h2 class="mt-2 text-3xl font-bold text-slate-950">
                 Une structure simple qui convertit.
             </h2>
             <p class="mt-3 text-slate-700">
@@ -46,9 +44,7 @@ const cards = [
                 :key="card.title"
                 class="rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-0.5 hover:shadow-md"
             >
-                <h3
-                    class="[font-family:'Space_Grotesk',sans-serif] text-xl font-semibold text-slate-950"
-                >
+                <h3 class="text-xl font-semibold text-slate-950">
                     {{ card.title }}
                 </h3>
                 <p class="mt-2 text-sm leading-relaxed text-slate-700">
