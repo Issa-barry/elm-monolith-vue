@@ -32,7 +32,20 @@
       "Bash(vendor/bin/phpunit --colors=never)",
       "Bash(php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text=/tmp/coverage.txt --colors=never)",
       "Read(//tmp/**)",
-      "Bash(start c:/laragon/www/elm-monolithe/coverage-report/index.html)"
+      "Bash(start c:/laragon/www/elm-monolithe/coverage-report/index.html)",
+      "Bash(cat /c/laragon/www/elm-monolithe/tests/Feature/Authorization/*.php)",
+      "Bash(/c/laragon/bin/php/php-8.5.1-nts-Win32-vs17-x64/php.exe vendor/bin/pint tests/Unit/EnumsTest.php tests/Unit/AppVersionTest.php tests/Unit/ModelTest.php tests/Feature/PolicyTest.php tests/Feature/LoginResponseTest.php tests/Feature/CreateNewUserTest.php)",
+      "Bash(/c/laragon/bin/php/php-8.5.1-nts-Win32-vs17-x64/php.exe vendor/bin/phpunit tests/Unit/EnumsTest.php --no-coverage)",
+      "Bash(/c/laragon/bin/php/php-8.5.1-nts-Win32-vs17-x64/php.exe vendor/bin/phpunit tests/Unit/AppVersionTest.php --no-coverage)",
+      "Bash(/c/laragon/bin/php/php-8.5.1-nts-Win32-vs17-x64/php.exe vendor/bin/phpunit tests/Unit/ModelTest.php --no-coverage)",
+      "Bash(/c/laragon/bin/php/php-8.5.1-nts-Win32-vs17-x64/php.exe vendor/bin/phpunit tests/Feature/PolicyTest.php --no-coverage)",
+      "Bash(/c/laragon/bin/php/php-8.5.1-nts-Win32-vs17-x64/php.exe vendor/bin/phpunit tests/Feature/LoginResponseTest.php --no-coverage)",
+      "Bash(cat /c/laragon/www/elm-monolithe/tests/Feature/Auth/*.php)",
+      "Bash(/c/laragon/bin/php/php-8.5.1-nts-Win32-vs17-x64/php.exe vendor/bin/phpunit tests/Feature/CreateNewUserTest.php --no-coverage)",
+      "Bash(/c/laragon/bin/php/php-8.5.1-nts-Win32-vs17-x64/php.exe vendor/bin/phpunit tests/Feature/CommandeAchatTest.php --no-coverage)",
+      "Bash(/c/laragon/bin/php/php-8.5.1-nts-Win32-vs17-x64/php.exe vendor/bin/phpunit tests/Feature/CommandeVenteTest.php --no-coverage)",
+      "Bash(/c/laragon/bin/php/php-8.5.1-nts-Win32-vs17-x64/php.exe vendor/bin/phpunit tests/Feature/RoleTest.php tests/Feature/SiteTest.php --no-coverage)",
+      "Bash(/c/laragon/bin/php/php-8.5.1-nts-Win32-vs17-x64/php.exe vendor/bin/phpunit --no-coverage)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"

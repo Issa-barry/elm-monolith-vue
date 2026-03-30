@@ -33,7 +33,7 @@ withDefaults(
                     Mission GBALAN
                 </p>
                 <h1
-                    class="mt-4 [font-family:'Space_Grotesk',sans-serif] text-4xl leading-tight font-bold text-slate-950 md:text-5xl"
+                    class="mt-4 text-4xl leading-tight font-bold text-slate-950 md:text-5xl"
                 >
                     Une landing claire pour lancer ton produit comme une mission
                     orbitale.
@@ -86,9 +86,7 @@ withDefaults(
                         >
                             Conversion
                         </p>
-                        <p
-                            class="mt-2 [font-family:'Space_Grotesk',sans-serif] text-2xl font-bold text-slate-950"
-                        >
+                        <p class="mt-2 text-2xl font-bold text-slate-950">
                             +38%
                         </p>
                         <p class="mt-1 text-xs text-slate-600">
@@ -103,9 +101,7 @@ withDefaults(
                         >
                             Temps moyen
                         </p>
-                        <p
-                            class="mt-2 [font-family:'Space_Grotesk',sans-serif] text-2xl font-bold text-slate-950"
-                        >
+                        <p class="mt-2 text-2xl font-bold text-slate-950">
                             4m 12s
                         </p>
                         <p class="mt-1 text-xs text-slate-600">

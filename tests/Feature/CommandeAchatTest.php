@@ -296,4 +296,31 @@ class CommandeAchatTest extends TestCase
             ->delete(route('achats.destroy', $commande))
             ->assertStatus(403);
     }
+
+    // ── pdf ───────────────────────────────────────────────────────────────────
+
+    public function test_pdf_returns_200_with_pdf_content_type(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermissions($org);
+        $commande = $this->makeCommande($org);
+
+        $response = $this->actingAs($user)
+            ->get(route('achats.pdf', $commande));
+
+        $response->assertStatus(200);
+        $this->assertStringContainsString('application/pdf', $response->headers->get('Content-Type'));
+    }
+
+    public function test_pdf_returns_403_for_other_organization(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermissions($org);
+        $otherOrg = Organization::factory()->create();
+        $commande = $this->makeCommande($otherOrg);
+
+        $this->actingAs($user)
+            ->get(route('achats.pdf', $commande))
+            ->assertStatus(403);
+    }
 }
