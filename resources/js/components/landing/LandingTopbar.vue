@@ -159,7 +159,10 @@ onBeforeUnmount(() => {
                         <li>
                             <a
                                 class="flex px-0 py-2 font-medium transition-colors duration-150 hover:text-primary lg:px-4"
-                                @click="closeProductMenus"
+                                @click="
+                                    closeProductMenus();
+                                    router.visit('/contact');
+                                "
                             >
                                 <span>Contact</span>
                             </a>
