@@ -53,7 +53,14 @@
       "Bash(grep -h \"private function user\\\\|private function org\\\\|private function actingAsAdmin\\\\|Permission::firstOrCreate\\\\|Role::firstOrCreate\\\\|Organization::factory\" c:/laragon/www/elm-monolithe/tests/Feature/*.php)",
       "Bash(grep -h \"private function userWith\" c:/laragon/www/elm-monolithe/tests/Feature/*.php)",
       "Bash(gh run:*)",
-      "Bash(vendor/bin/pint --test tests/Concerns/CreatesStaffUser.php)"
+      "Bash(vendor/bin/pint --test tests/Concerns/CreatesStaffUser.php)",
+      "Bash(grep -r \"bell\\\\|notification\\\\|Notification\" c:/laragon/www/elm-monolithe/resources/js --include=*.vue --include=*.ts --include=*.js)",
+      "Bash(find c:/laragon/www/elm-monolithe/app -type f -name *.php)",
+      "Bash(vendor/bin/pint app/Http/Controllers/ContactController.php app/Http/Middleware/HandleInertiaRequests.php app/Models/ContactMessage.php app/Mail/ContactMessageReceived.php database/migrations/2026_03_30_000001_create_contact_messages_table.php database/factories/ContactMessageFactory.php tests/Feature/ContactTest.php routes/web.php config/mail.php)",
+      "Bash(vendor/bin/phpunit --no-coverage tests/Feature/ContactTest.php)",
+      "Bash(vendor/bin/phpunit tests/Feature/ContactTest.php --no-coverage)",
+      "Bash(vendor/bin/phpunit tests/Feature/ContactTest.php --no-coverage --filter=mark_read)",
+      "Bash(vendor/bin/phpunit --no-coverage)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"

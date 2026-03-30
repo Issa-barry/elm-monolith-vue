@@ -46,6 +46,22 @@ class HandleInertiaRequests extends Middleware
         ];
     }
 
+    private function contactMessagesNonLus(Request $request): int
+    {
+        $user = $request->user();
+        if (! $user || ! $user->organization_id) {
+            return 0;
+        }
+
+        if (! $user->hasAnyRole(['super_admin', 'admin_entreprise', 'manager'])) {
+            return 0;
+        }
+
+        return \App\Models\ContactMessage::where('organization_id', $user->organization_id)
+            ->whereNull('read_at')
+            ->count();
+    }
+
     public function version(Request $request): ?string
     {
         return parent::version($request);
@@ -75,6 +91,7 @@ class HandleInertiaRequests extends Middleware
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'stock_alertes' => $this->stockAlertes($request),
+            'contact_messages_non_lus' => $this->contactMessagesNonLus($request),
             'flash' => ['success' => $request->session()->get('success')],
         ];
     }

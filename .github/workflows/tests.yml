@@ -63,7 +63,7 @@ jobs:
   e2e:
     name: E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -88,11 +88,21 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-chromium-
+
       - name: Install Node dependencies
         run: npm ci
 
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
 
       - name: Prepare Laravel environment
         run: |
@@ -104,22 +114,19 @@ jobs:
       - name: Build assets
         run: npm run build
 
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
-
       # dev → pre-prod : full E2E suite
       - name: Run full E2E tests
         if: github.base_ref == 'pre-prod'
         env:
           E2E_BASE_URL: http://127.0.0.1:8080
-        run: npx playwright test --workers=1
+        run: npx playwright test --workers=2
 
       # pre-prod → main : smoke tests only (fast gate before production)
       - name: Run smoke E2E tests
         if: github.base_ref == 'main'
         env:
           E2E_BASE_URL: http://127.0.0.1:8080
-        run: npx playwright test tests/e2e/smoke.spec.ts --workers=1
+        run: npx playwright test tests/e2e/smoke.spec.ts --workers=2
 
       - name: Upload Playwright report
         if: always()

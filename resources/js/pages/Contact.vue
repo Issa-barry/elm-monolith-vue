@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import LandingFooter from '@/components/landing/LandingFooter.vue';
 import LandingTopbar from '@/components/landing/LandingTopbar.vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, useForm, usePage } from '@inertiajs/vue3';
+import { CheckCircle } from 'lucide-vue-next';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
-import { ref } from 'vue';
+import { computed } from 'vue';
 
 withDefaults(
     defineProps<{
@@ -16,12 +17,21 @@ withDefaults(
     },
 );
 
-const contact = ref({
+const page = usePage();
+const flash = computed(() => (page.props as any).flash as { success?: string });
+
+const form = useForm({
     name: '',
     email: '',
     phone: '',
     message: '',
 });
+
+function submit() {
+    form.post(route('contact.store'), {
+        onSuccess: () => form.reset(),
+    });
+}
 </script>
 
 <template>
@@ -36,15 +46,36 @@ const contact = ref({
                 <div
                     class="mx-auto flex w-full max-w-6xl flex-col-reverse gap-12 lg:flex-row"
                 >
+                    <!-- Success state -->
+                    <div
+                        v-if="flash.success"
+                        class="flex w-full flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-green-200 bg-green-50 p-10 text-center"
+                    >
+                        <CheckCircle class="h-12 w-12 text-green-500" />
+                        <p class="text-lg font-semibold text-green-700">
+                            Message envoyé !
+                        </p>
+                        <p class="text-sm text-green-600">
+                            {{ flash.success }}
+                        </p>
+                    </div>
+
                     <form
+                        v-else
                         class="flex w-full flex-1 flex-col gap-4"
-                        @submit.prevent
+                        @submit.prevent="submit"
                     >
                         <div class="flex flex-col gap-2">
                             <label for="name" class="font-medium text-slate-800"
                                 >Nom / Entreprise</label
                             >
-                            <InputText id="name" v-model="contact.name" />
+                            <InputText id="name" v-model="form.name" />
+                            <p
+                                v-if="form.errors.name"
+                                class="text-sm text-red-600"
+                            >
+                                {{ form.errors.name }}
+                            </p>
                         </div>
 
                         <div class="flex flex-col gap-2">
@@ -53,7 +84,13 @@ const contact = ref({
                                 class="font-medium text-slate-800"
                                 >Email</label
                             >
-                            <InputText id="email" v-model="contact.email" />
+                            <InputText id="email" v-model="form.email" />
+                            <p
+                                v-if="form.errors.email"
+                                class="text-sm text-red-600"
+                            >
+                                {{ form.errors.email }}
+                            </p>
                         </div>
 
                         <div class="flex flex-col gap-2">
@@ -64,9 +101,15 @@ const contact = ref({
                             >
                             <InputText
                                 id="phone"
-                                v-model="contact.phone"
+                                v-model="form.phone"
                                 required
                             />
+                            <p
+                                v-if="form.errors.phone"
+                                class="text-sm text-red-600"
+                            >
+                                {{ form.errors.phone }}
+                            </p>
                         </div>
 
                         <div class="flex flex-col gap-2">
@@ -77,11 +120,17 @@ const contact = ref({
                             >
                             <Textarea
                                 id="message"
-                                v-model="contact.message"
+                                v-model="form.message"
                                 rows="5"
                                 cols="30"
                                 required
                             />
+                            <p
+                                v-if="form.errors.message"
+                                class="text-sm text-red-600"
+                            >
+                                {{ form.errors.message }}
+                            </p>
                         </div>
 
                         <Button
@@ -89,6 +138,7 @@ const contact = ref({
                             icon="pi pi-send"
                             class="w-fit"
                             type="submit"
+                            :loading="form.processing"
                         />
                     </form>
 
