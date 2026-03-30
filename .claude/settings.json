@@ -62,7 +62,8 @@
       "Bash(vendor/bin/phpunit tests/Feature/ContactTest.php --no-coverage --filter=mark_read)",
       "Bash(vendor/bin/phpunit --no-coverage)",
       "Bash(head -10 echo \"---\" grep -rn \"contact.store\\\\|contact''''\" c:/laragon/www/elm-monolithe/routes/web.php)",
-      "Bash(head -10 echo \"---\" grep -rn \"ZiggyVue\\\\|ziggy\" c:/laragon/www/elm-monolithe/resources/js/ --include=\"*.ts\")"
+      "Bash(head -10 echo \"---\" grep -rn \"ZiggyVue\\\\|ziggy\" c:/laragon/www/elm-monolithe/resources/js/ --include=\"*.ts\")",
+      "Bash(grep -l \"messages\\\\s*=>\" /c/laragon/www/elm-monolithe/app/Http/Controllers/*.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"
