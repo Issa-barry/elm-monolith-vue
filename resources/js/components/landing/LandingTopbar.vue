@@ -34,6 +34,23 @@ const goHome = () => {
     router.visit('/');
 };
 
+const goToProductsSection = () => {
+    closeProductMenus();
+    isMobileMenuOpen.value = false;
+
+    if (window.location.pathname === '/') {
+        const section = document.getElementById('landing-section');
+
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            window.history.replaceState(null, '', '/#landing-section');
+            return;
+        }
+    }
+
+    window.location.href = '/#landing-section';
+};
+
 const onDocumentClick = (event: MouseEvent) => {
     const target = event.target as Node | null;
 
@@ -160,7 +177,7 @@ onBeforeUnmount(() => {
                         <li>
                             <a
                                 class="flex px-0 py-2 font-medium transition-colors duration-150 hover:text-primary lg:px-4"
-                                @click="closeProductMenus"
+                                @click="goToProductsSection"
                             >
                                 <span>Produits</span>
                             </a>
