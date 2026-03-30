@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <title>Dashboard for C:\laragon\www\elm-monolithe\app\Policies</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="../_css/bootstrap.min.css?v=11.0.12" rel="stylesheet" type="text/css">
+  <link href="../_css/nv.d3.min.css?v=11.0.12" rel="stylesheet" type="text/css">
+  <link href="../_css/style.css?v=11.0.12" rel="stylesheet" type="text/css">
+  <link href="../_css/custom.css" rel="stylesheet" type="text/css">
+ </head>
+ <body>
+  <header>
+   <div class="container-fluid">
+    <div class="row">
+     <div class="col-md-12">
+      <nav aria-label="breadcrumb">
+       <ol class="breadcrumb">
+         <li class="breadcrumb-item"><a href="../index.html">C:\laragon\www\elm-monolithe\app</a></li>
+         <li class="breadcrumb-item"><a href="index.html">Policies</a></li>
+         <li class="breadcrumb-item active">(Dashboard)</li>
+
+       </ol>
+      </nav>
+     </div>
+    </div>
+   </div>
+  </header>
+  <div class="container-fluid">
+   <div class="row">
+    <div class="col-md-12">
+     <h2>Classes</h2>
+    </div>
+   </div>
+   <div class="row">
+    <div class="col-md-6">
+     <h3>Coverage Distribution</h3>
+     <div id="classCoverageDistribution" style="height: 300px;">
+       <svg></svg>
+     </div>
+    </div>
+    <div class="col-md-6">
+     <h3>Complexity</h3>
+     <div id="classComplexity" style="height: 300px;">
+       <svg></svg>
+     </div>
+    </div>
+   </div>
+   <div class="row">
+    <div class="col-md-6">
+     <h3>Insufficient Coverage</h3>
+     <div class="scrollbox">
+      <table class="table">
+       <thead>
+        <tr>
+         <th>Class</th>
+         <th class="text-right">Coverage</th>
+        </tr>
+       </thead>
+       <tbody>
+       <tr><td><a href="CommandeAchatPolicy.php.html#8">App\Policies\CommandeAchatPolicy</a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="CommandeVentePolicy.php.html#8">App\Policies\CommandeVentePolicy</a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="LivreurPolicy.php.html#8">App\Policies\LivreurPolicy</a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="PackingPolicy.php.html#8">App\Policies\PackingPolicy</a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="PrestatairePolicy.php.html#8">App\Policies\PrestatairePolicy</a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="ProduitPolicy.php.html#8">App\Policies\ProduitPolicy</a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="ProprietairePolicy.php.html#8">App\Policies\ProprietairePolicy</a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="SitePolicy.php.html#8">App\Policies\SitePolicy</a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="UserPolicy.php.html#7">App\Policies\UserPolicy</a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="VehiculePolicy.php.html#8">App\Policies\VehiculePolicy</a></td><td class="text-right">0%</td></tr>
+
+       </tbody>
+      </table>
+     </div>
+    </div>
+    <div class="col-md-6">
+     <h3>Project Risks</h3>
+     <div class="scrollbox">
+      <table class="table">
+       <thead>
+        <tr>
+         <th>Class</th>
+         <th class="text-right"><abbr title="Change Risk Anti-Patterns (CRAP) Index">CRAP</abbr></th>
+        </tr>
+       </thead>
+       <tbody>
+       <tr><td><a href="CommandeAchatPolicy.php.html#8">App\Policies\CommandeAchatPolicy</a></td><td class="text-right">90</td></tr>
+       <tr><td><a href="CommandeVentePolicy.php.html#8">App\Policies\CommandeVentePolicy</a></td><td class="text-right">90</td></tr>
+       <tr><td><a href="LivreurPolicy.php.html#8">App\Policies\LivreurPolicy</a></td><td class="text-right">90</td></tr>
+       <tr><td><a href="PrestatairePolicy.php.html#8">App\Policies\PrestatairePolicy</a></td><td class="text-right">90</td></tr>
+       <tr><td><a href="ProprietairePolicy.php.html#8">App\Policies\ProprietairePolicy</a></td><td class="text-right">90</td></tr>
+       <tr><td><a href="SitePolicy.php.html#8">App\Policies\SitePolicy</a></td><td class="text-right">90</td></tr>
+       <tr><td><a href="VehiculePolicy.php.html#8">App\Policies\VehiculePolicy</a></td><td class="text-right">90</td></tr>
+       <tr><td><a href="PackingPolicy.php.html#8">App\Policies\PackingPolicy</a></td><td class="text-right">72</td></tr>
+       <tr><td><a href="ProduitPolicy.php.html#8">App\Policies\ProduitPolicy</a></td><td class="text-right">72</td></tr>
+       <tr><td><a href="UserPolicy.php.html#7">App\Policies\UserPolicy</a></td><td class="text-right">72</td></tr>
+
+       </tbody>
+      </table>
+     </div>
+    </div>
+   </div>
+   <div class="row">
+    <div class="col-md-12">
+     <h2>Methods</h2>
+    </div>
+   </div>
+   <div class="row">
+    <div class="col-md-6">
+     <h3>Coverage Distribution</h3>
+     <div id="methodCoverageDistribution" style="height: 300px;">
+       <svg></svg>
+     </div>
+    </div>
+    <div class="col-md-6">
+     <h3>Complexity</h3>
+     <div id="methodComplexity" style="height: 300px;">
+       <svg></svg>
+     </div>
+    </div>
+   </div>
+   <div class="row">
+    <div class="col-md-6">
+     <h3>Insufficient Coverage</h3>
+     <div class="scrollbox">
+      <table class="table">
+       <thead>
+        <tr>
+         <th>Method</th>
+         <th class="text-right">Coverage</th>
+        </tr>
+       </thead>
+       <tbody>
+       <tr><td><a href="CommandeAchatPolicy.php.html#10"><abbr title="App\Policies\CommandeAchatPolicy::viewAny">viewAny</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="CommandeAchatPolicy.php.html#15"><abbr title="App\Policies\CommandeAchatPolicy::view">view</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="CommandeAchatPolicy.php.html#21"><abbr title="App\Policies\CommandeAchatPolicy::create">create</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="CommandeAchatPolicy.php.html#26"><abbr title="App\Policies\CommandeAchatPolicy::update">update</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="CommandeAchatPolicy.php.html#32"><abbr title="App\Policies\CommandeAchatPolicy::delete">delete</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="CommandeAchatPolicy.php.html#38"><abbr title="App\Policies\CommandeAchatPolicy::sameOrganization">sameOrganization</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="CommandeVentePolicy.php.html#10"><abbr title="App\Policies\CommandeVentePolicy::viewAny">viewAny</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="CommandeVentePolicy.php.html#15"><abbr title="App\Policies\CommandeVentePolicy::view">view</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="CommandeVentePolicy.php.html#21"><abbr title="App\Policies\CommandeVentePolicy::create">create</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="CommandeVentePolicy.php.html#26"><abbr title="App\Policies\CommandeVentePolicy::update">update</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="CommandeVentePolicy.php.html#32"><abbr title="App\Policies\CommandeVentePolicy::delete">delete</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="CommandeVentePolicy.php.html#38"><abbr title="App\Policies\CommandeVentePolicy::sameOrganization">sameOrganization</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="LivreurPolicy.php.html#10"><abbr title="App\Policies\LivreurPolicy::viewAny">viewAny</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="LivreurPolicy.php.html#15"><abbr title="App\Policies\LivreurPolicy::view">view</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="LivreurPolicy.php.html#21"><abbr title="App\Policies\LivreurPolicy::create">create</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="LivreurPolicy.php.html#26"><abbr title="App\Policies\LivreurPolicy::update">update</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="LivreurPolicy.php.html#32"><abbr title="App\Policies\LivreurPolicy::delete">delete</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="LivreurPolicy.php.html#38"><abbr title="App\Policies\LivreurPolicy::sameOrganization">sameOrganization</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="PackingPolicy.php.html#10"><abbr title="App\Policies\PackingPolicy::viewAny">viewAny</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="PackingPolicy.php.html#15"><abbr title="App\Policies\PackingPolicy::view">view</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="PackingPolicy.php.html#20"><abbr title="App\Policies\PackingPolicy::create">create</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="PackingPolicy.php.html#25"><abbr title="App\Policies\PackingPolicy::update">update</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="PackingPolicy.php.html#30"><abbr title="App\Policies\PackingPolicy::delete">delete</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="PrestatairePolicy.php.html#10"><abbr title="App\Policies\PrestatairePolicy::viewAny">viewAny</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="PrestatairePolicy.php.html#15"><abbr title="App\Policies\PrestatairePolicy::view">view</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="PrestatairePolicy.php.html#21"><abbr title="App\Policies\PrestatairePolicy::create">create</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="PrestatairePolicy.php.html#26"><abbr title="App\Policies\PrestatairePolicy::update">update</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="PrestatairePolicy.php.html#32"><abbr title="App\Policies\PrestatairePolicy::delete">delete</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="PrestatairePolicy.php.html#38"><abbr title="App\Policies\PrestatairePolicy::sameOrganization">sameOrganization</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="ProduitPolicy.php.html#10"><abbr title="App\Policies\ProduitPolicy::viewAny">viewAny</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="ProduitPolicy.php.html#15"><abbr title="App\Policies\ProduitPolicy::view">view</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="ProduitPolicy.php.html#21"><abbr title="App\Policies\ProduitPolicy::create">create</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="ProduitPolicy.php.html#26"><abbr title="App\Policies\ProduitPolicy::update">update</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="ProduitPolicy.php.html#32"><abbr title="App\Policies\ProduitPolicy::delete">delete</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="ProprietairePolicy.php.html#10"><abbr title="App\Policies\ProprietairePolicy::viewAny">viewAny</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="ProprietairePolicy.php.html#15"><abbr title="App\Policies\ProprietairePolicy::view">view</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="ProprietairePolicy.php.html#21"><abbr title="App\Policies\ProprietairePolicy::create">create</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="ProprietairePolicy.php.html#26"><abbr title="App\Policies\ProprietairePolicy::update">update</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="ProprietairePolicy.php.html#32"><abbr title="App\Policies\ProprietairePolicy::delete">delete</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="ProprietairePolicy.php.html#38"><abbr title="App\Policies\ProprietairePolicy::sameOrganization">sameOrganization</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="SitePolicy.php.html#10"><abbr title="App\Policies\SitePolicy::viewAny">viewAny</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="SitePolicy.php.html#15"><abbr title="App\Policies\SitePolicy::view">view</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="SitePolicy.php.html#21"><abbr title="App\Policies\SitePolicy::create">create</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="SitePolicy.php.html#26"><abbr title="App\Policies\SitePolicy::update">update</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="SitePolicy.php.html#32"><abbr title="App\Policies\SitePolicy::delete">delete</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="SitePolicy.php.html#38"><abbr title="App\Policies\SitePolicy::sameOrganization">sameOrganization</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="UserPolicy.php.html#9"><abbr title="App\Policies\UserPolicy::viewAny">viewAny</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="UserPolicy.php.html#14"><abbr title="App\Policies\UserPolicy::view">view</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="UserPolicy.php.html#20"><abbr title="App\Policies\UserPolicy::create">create</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="UserPolicy.php.html#25"><abbr title="App\Policies\UserPolicy::update">update</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="UserPolicy.php.html#31"><abbr title="App\Policies\UserPolicy::delete">delete</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="VehiculePolicy.php.html#10"><abbr title="App\Policies\VehiculePolicy::viewAny">viewAny</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="VehiculePolicy.php.html#15"><abbr title="App\Policies\VehiculePolicy::view">view</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="VehiculePolicy.php.html#21"><abbr title="App\Policies\VehiculePolicy::create">create</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="VehiculePolicy.php.html#26"><abbr title="App\Policies\VehiculePolicy::update">update</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="VehiculePolicy.php.html#32"><abbr title="App\Policies\VehiculePolicy::delete">delete</abbr></a></td><td class="text-right">0%</td></tr>
+       <tr><td><a href="VehiculePolicy.php.html#38"><abbr title="App\Policies\VehiculePolicy::sameOrganization">sameOrganization</abbr></a></td><td class="text-right">0%</td></tr>
+
+       </tbody>
+      </table>
+     </div>
+    </div>
+    <div class="col-md-6">
+     <h3>Project Risks</h3>
+     <div class="scrollbox">
+      <table class="table">
+       <thead>
+        <tr>
+         <th>Method</th>
+         <th class="text-right"><abbr title="Change Risk Anti-Patterns (CRAP) Index">CRAP</abbr></th>
+        </tr>
+       </thead>
+       <tbody>
+       <tr><td><a href="CommandeAchatPolicy.php.html#15"><abbr title="App\Policies\CommandeAchatPolicy::view">view</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="CommandeAchatPolicy.php.html#26"><abbr title="App\Policies\CommandeAchatPolicy::update">update</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="CommandeAchatPolicy.php.html#32"><abbr title="App\Policies\CommandeAchatPolicy::delete">delete</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="CommandeVentePolicy.php.html#15"><abbr title="App\Policies\CommandeVentePolicy::view">view</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="CommandeVentePolicy.php.html#26"><abbr title="App\Policies\CommandeVentePolicy::update">update</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="CommandeVentePolicy.php.html#32"><abbr title="App\Policies\CommandeVentePolicy::delete">delete</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="LivreurPolicy.php.html#15"><abbr title="App\Policies\LivreurPolicy::view">view</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="LivreurPolicy.php.html#26"><abbr title="App\Policies\LivreurPolicy::update">update</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="LivreurPolicy.php.html#32"><abbr title="App\Policies\LivreurPolicy::delete">delete</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="PackingPolicy.php.html#15"><abbr title="App\Policies\PackingPolicy::view">view</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="PackingPolicy.php.html#25"><abbr title="App\Policies\PackingPolicy::update">update</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="PackingPolicy.php.html#30"><abbr title="App\Policies\PackingPolicy::delete">delete</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="PrestatairePolicy.php.html#15"><abbr title="App\Policies\PrestatairePolicy::view">view</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="PrestatairePolicy.php.html#26"><abbr title="App\Policies\PrestatairePolicy::update">update</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="PrestatairePolicy.php.html#32"><abbr title="App\Policies\PrestatairePolicy::delete">delete</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="ProduitPolicy.php.html#15"><abbr title="App\Policies\ProduitPolicy::view">view</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="ProduitPolicy.php.html#26"><abbr title="App\Policies\ProduitPolicy::update">update</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="ProduitPolicy.php.html#32"><abbr title="App\Policies\ProduitPolicy::delete">delete</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="ProprietairePolicy.php.html#15"><abbr title="App\Policies\ProprietairePolicy::view">view</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="ProprietairePolicy.php.html#26"><abbr title="App\Policies\ProprietairePolicy::update">update</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="ProprietairePolicy.php.html#32"><abbr title="App\Policies\ProprietairePolicy::delete">delete</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="SitePolicy.php.html#15"><abbr title="App\Policies\SitePolicy::view">view</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="SitePolicy.php.html#26"><abbr title="App\Policies\SitePolicy::update">update</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="SitePolicy.php.html#32"><abbr title="App\Policies\SitePolicy::delete">delete</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="UserPolicy.php.html#14"><abbr title="App\Policies\UserPolicy::view">view</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="UserPolicy.php.html#25"><abbr title="App\Policies\UserPolicy::update">update</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="UserPolicy.php.html#31"><abbr title="App\Policies\UserPolicy::delete">delete</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="VehiculePolicy.php.html#15"><abbr title="App\Policies\VehiculePolicy::view">view</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="VehiculePolicy.php.html#26"><abbr title="App\Policies\VehiculePolicy::update">update</abbr></a></td><td class="text-right">6</td></tr>
+       <tr><td><a href="VehiculePolicy.php.html#32"><abbr title="App\Policies\VehiculePolicy::delete">delete</abbr></a></td><td class="text-right">6</td></tr>
+
+       </tbody>
+      </table>
+     </div>
+    </div>
+   </div>
+   <footer>
+    <hr/>
+    <p>
+     <small>Generated by <a href="https://github.com/sebastianbergmann/php-code-coverage" target="_top">php-code-coverage 11.0.12</a> using <a href="https://www.php.net/" target="_top">PHP 8.5.1</a> and <a href="https://phpunit.de/">PHPUnit 11.5.55</a> at Mon Mar 30 10:01:38 UTC 2026.</small>
+    </p>
+   </footer>
+  </div>
+  <script src="../_js/jquery.min.js?v=11.0.12" type="text/javascript"></script>
+  <script src="../_js/d3.min.js?v=11.0.12" type="text/javascript"></script>
+  <script src="../_js/nv.d3.min.js?v=11.0.12" type="text/javascript"></script>
+  <script type="text/javascript">
+$(document).ready(function() {
+  nv.addGraph(function() {
+    var chart = nv.models.multiBarChart();
+    chart.tooltips(false)
+      .showControls(false)
+      .showLegend(false)
+      .reduceXTicks(false)
+      .staggerLabels(true)
+      .yAxis.tickFormat(d3.format('d'));
+
+    d3.select('#classCoverageDistribution svg')
+      .datum(getCoverageDistributionData([10,0,0,0,0,0,0,0,0,0,0,1], "Class Coverage"))
+      .transition().duration(500).call(chart);
+
+    nv.utils.windowResize(chart.update);
+
+    return chart;
+  });
+
+  nv.addGraph(function() {
+    var chart = nv.models.multiBarChart();
+    chart.tooltips(false)
+      .showControls(false)
+      .showLegend(false)
+      .reduceXTicks(false)
+      .staggerLabels(true)
+      .yAxis.tickFormat(d3.format('d'));
+
+    d3.select('#methodCoverageDistribution svg')
+      .datum(getCoverageDistributionData([57,0,0,0,0,0,0,0,0,0,0,6], "Method Coverage"))
+      .transition().duration(500).call(chart);
+
+    nv.utils.windowResize(chart.update);
+
+    return chart;
+  });
+
+  function getCoverageDistributionData(data, label) {
+    var labels = [
+      '0%',
+      '0-10%',
+      '10-20%',
+      '20-30%',
+      '30-40%',
+      '40-50%',
+      '50-60%',
+      '60-70%',
+      '70-80%',
+      '80-90%',
+      '90-100%',
+      '100%'
+    ];
+    var values = [];
+    $.each(labels, function(key) {
+      values.push({x: labels[key], y: data[key]});
+    });
+
+    return [
+      {
+        key: label,
+        values: values,
+        color: "#4572A7"
+      }
+    ];
+  }
+  nv.addGraph(function() {
+    var chart = nv.models.scatterChart()
+      .showDistX(true)
+      .showDistY(true)
+      .showLegend(false)
+      .forceX([0, 100]);
+    chart.tooltipContent(function(graph) {
+      return '<p>' + graph.point.class + '</p>';
+    });
+
+    chart.xAxis.axisLabel('Code Coverage (in percent)');
+    chart.yAxis.axisLabel('Cyclomatic Complexity');
+
+    d3.select('#classComplexity svg')
+      .datum(getComplexityData([[100,9,"<a href=\"ClientPolicy.php.html#8\">App\\Policies\\ClientPolicy<\/a>"],[0,9,"<a href=\"CommandeAchatPolicy.php.html#8\">App\\Policies\\CommandeAchatPolicy<\/a>"],[0,9,"<a href=\"CommandeVentePolicy.php.html#8\">App\\Policies\\CommandeVentePolicy<\/a>"],[0,9,"<a href=\"LivreurPolicy.php.html#8\">App\\Policies\\LivreurPolicy<\/a>"],[0,8,"<a href=\"PackingPolicy.php.html#8\">App\\Policies\\PackingPolicy<\/a>"],[0,9,"<a href=\"PrestatairePolicy.php.html#8\">App\\Policies\\PrestatairePolicy<\/a>"],[0,8,"<a href=\"ProduitPolicy.php.html#8\">App\\Policies\\ProduitPolicy<\/a>"],[0,9,"<a href=\"ProprietairePolicy.php.html#8\">App\\Policies\\ProprietairePolicy<\/a>"],[0,9,"<a href=\"SitePolicy.php.html#8\">App\\Policies\\SitePolicy<\/a>"],[0,8,"<a href=\"UserPolicy.php.html#7\">App\\Policies\\UserPolicy<\/a>"],[0,9,"<a href=\"VehiculePolicy.php.html#8\">App\\Policies\\VehiculePolicy<\/a>"]], 'Class Complexity'))
+      .transition()
+      .duration(500)
+      .call(chart);
+
+    nv.utils.windowResize(chart.update);
+
+    return chart;
+  });
+
+  nv.addGraph(function() {
+    var chart = nv.models.scatterChart()
+      .showDistX(true)
+      .showDistY(true)
+      .showLegend(false)
+      .forceX([0, 100]);
+    chart.tooltipContent(function(graph) {
+      return '<p>' + graph.point.class + '</p>';
+    });
+
+    chart.xAxis.axisLabel('Code Coverage (in percent)');
+    chart.yAxis.axisLabel('Method Complexity');
+
+    d3.select('#methodComplexity svg')
+      .datum(getComplexityData([[100,1,"<a href=\"ClientPolicy.php.html#10\">App\\Policies\\ClientPolicy::viewAny<\/a>"],[100,2,"<a href=\"ClientPolicy.php.html#15\">App\\Policies\\ClientPolicy::view<\/a>"],[100,1,"<a href=\"ClientPolicy.php.html#21\">App\\Policies\\ClientPolicy::create<\/a>"],[100,2,"<a href=\"ClientPolicy.php.html#26\">App\\Policies\\ClientPolicy::update<\/a>"],[100,2,"<a href=\"ClientPolicy.php.html#32\">App\\Policies\\ClientPolicy::delete<\/a>"],[100,1,"<a href=\"ClientPolicy.php.html#38\">App\\Policies\\ClientPolicy::sameOrganization<\/a>"],[0,1,"<a href=\"CommandeAchatPolicy.php.html#10\">App\\Policies\\CommandeAchatPolicy::viewAny<\/a>"],[0,2,"<a href=\"CommandeAchatPolicy.php.html#15\">App\\Policies\\CommandeAchatPolicy::view<\/a>"],[0,1,"<a href=\"CommandeAchatPolicy.php.html#21\">App\\Policies\\CommandeAchatPolicy::create<\/a>"],[0,2,"<a href=\"CommandeAchatPolicy.php.html#26\">App\\Policies\\CommandeAchatPolicy::update<\/a>"],[0,2,"<a href=\"CommandeAchatPolicy.php.html#32\">App\\Policies\\CommandeAchatPolicy::delete<\/a>"],[0,1,"<a href=\"CommandeAchatPolicy.php.html#38\">App\\Policies\\CommandeAchatPolicy::sameOrganization<\/a>"],[0,1,"<a href=\"CommandeVentePolicy.php.html#10\">App\\Policies\\CommandeVentePolicy::viewAny<\/a>"],[0,2,"<a href=\"CommandeVentePolicy.php.html#15\">App\\Policies\\CommandeVentePolicy::view<\/a>"],[0,1,"<a href=\"CommandeVentePolicy.php.html#21\">App\\Policies\\CommandeVentePolicy::create<\/a>"],[0,2,"<a href=\"CommandeVentePolicy.php.html#26\">App\\Policies\\CommandeVentePolicy::update<\/a>"],[0,2,"<a href=\"CommandeVentePolicy.php.html#32\">App\\Policies\\CommandeVentePolicy::delete<\/a>"],[0,1,"<a href=\"CommandeVentePolicy.php.html#38\">App\\Policies\\CommandeVentePolicy::sameOrganization<\/a>"],[0,1,"<a href=\"LivreurPolicy.php.html#10\">App\\Policies\\LivreurPolicy::viewAny<\/a>"],[0,2,"<a href=\"LivreurPolicy.php.html#15\">App\\Policies\\LivreurPolicy::view<\/a>"],[0,1,"<a href=\"LivreurPolicy.php.html#21\">App\\Policies\\LivreurPolicy::create<\/a>"],[0,2,"<a href=\"LivreurPolicy.php.html#26\">App\\Policies\\LivreurPolicy::update<\/a>"],[0,2,"<a href=\"LivreurPolicy.php.html#32\">App\\Policies\\LivreurPolicy::delete<\/a>"],[0,1,"<a href=\"LivreurPolicy.php.html#38\">App\\Policies\\LivreurPolicy::sameOrganization<\/a>"],[0,1,"<a href=\"PackingPolicy.php.html#10\">App\\Policies\\PackingPolicy::viewAny<\/a>"],[0,2,"<a href=\"PackingPolicy.php.html#15\">App\\Policies\\PackingPolicy::view<\/a>"],[0,1,"<a href=\"PackingPolicy.php.html#20\">App\\Policies\\PackingPolicy::create<\/a>"],[0,2,"<a href=\"PackingPolicy.php.html#25\">App\\Policies\\PackingPolicy::update<\/a>"],[0,2,"<a href=\"PackingPolicy.php.html#30\">App\\Policies\\PackingPolicy::delete<\/a>"],[0,1,"<a href=\"PrestatairePolicy.php.html#10\">App\\Policies\\PrestatairePolicy::viewAny<\/a>"],[0,2,"<a href=\"PrestatairePolicy.php.html#15\">App\\Policies\\PrestatairePolicy::view<\/a>"],[0,1,"<a href=\"PrestatairePolicy.php.html#21\">App\\Policies\\PrestatairePolicy::create<\/a>"],[0,2,"<a href=\"PrestatairePolicy.php.html#26\">App\\Policies\\PrestatairePolicy::update<\/a>"],[0,2,"<a href=\"PrestatairePolicy.php.html#32\">App\\Policies\\PrestatairePolicy::delete<\/a>"],[0,1,"<a href=\"PrestatairePolicy.php.html#38\">App\\Policies\\PrestatairePolicy::sameOrganization<\/a>"],[0,1,"<a href=\"ProduitPolicy.php.html#10\">App\\Policies\\ProduitPolicy::viewAny<\/a>"],[0,2,"<a href=\"ProduitPolicy.php.html#15\">App\\Policies\\ProduitPolicy::view<\/a>"],[0,1,"<a href=\"ProduitPolicy.php.html#21\">App\\Policies\\ProduitPolicy::create<\/a>"],[0,2,"<a href=\"ProduitPolicy.php.html#26\">App\\Policies\\ProduitPolicy::update<\/a>"],[0,2,"<a href=\"ProduitPolicy.php.html#32\">App\\Policies\\ProduitPolicy::delete<\/a>"],[0,1,"<a href=\"ProprietairePolicy.php.html#10\">App\\Policies\\ProprietairePolicy::viewAny<\/a>"],[0,2,"<a href=\"ProprietairePolicy.php.html#15\">App\\Policies\\ProprietairePolicy::view<\/a>"],[0,1,"<a href=\"ProprietairePolicy.php.html#21\">App\\Policies\\ProprietairePolicy::create<\/a>"],[0,2,"<a href=\"ProprietairePolicy.php.html#26\">App\\Policies\\ProprietairePolicy::update<\/a>"],[0,2,"<a href=\"ProprietairePolicy.php.html#32\">App\\Policies\\ProprietairePolicy::delete<\/a>"],[0,1,"<a href=\"ProprietairePolicy.php.html#38\">App\\Policies\\ProprietairePolicy::sameOrganization<\/a>"],[0,1,"<a href=\"SitePolicy.php.html#10\">App\\Policies\\SitePolicy::viewAny<\/a>"],[0,2,"<a href=\"SitePolicy.php.html#15\">App\\Policies\\SitePolicy::view<\/a>"],[0,1,"<a href=\"SitePolicy.php.html#21\">App\\Policies\\SitePolicy::create<\/a>"],[0,2,"<a href=\"SitePolicy.php.html#26\">App\\Policies\\SitePolicy::update<\/a>"],[0,2,"<a href=\"SitePolicy.php.html#32\">App\\Policies\\SitePolicy::delete<\/a>"],[0,1,"<a href=\"SitePolicy.php.html#38\">App\\Policies\\SitePolicy::sameOrganization<\/a>"],[0,1,"<a href=\"UserPolicy.php.html#9\">App\\Policies\\UserPolicy::viewAny<\/a>"],[0,2,"<a href=\"UserPolicy.php.html#14\">App\\Policies\\UserPolicy::view<\/a>"],[0,1,"<a href=\"UserPolicy.php.html#20\">App\\Policies\\UserPolicy::create<\/a>"],[0,2,"<a href=\"UserPolicy.php.html#25\">App\\Policies\\UserPolicy::update<\/a>"],[0,2,"<a href=\"UserPolicy.php.html#31\">App\\Policies\\UserPolicy::delete<\/a>"],[0,1,"<a href=\"VehiculePolicy.php.html#10\">App\\Policies\\VehiculePolicy::viewAny<\/a>"],[0,2,"<a href=\"VehiculePolicy.php.html#15\">App\\Policies\\VehiculePolicy::view<\/a>"],[0,1,"<a href=\"VehiculePolicy.php.html#21\">App\\Policies\\VehiculePolicy::create<\/a>"],[0,2,"<a href=\"VehiculePolicy.php.html#26\">App\\Policies\\VehiculePolicy::update<\/a>"],[0,2,"<a href=\"VehiculePolicy.php.html#32\">App\\Policies\\VehiculePolicy::delete<\/a>"],[0,1,"<a href=\"VehiculePolicy.php.html#38\">App\\Policies\\VehiculePolicy::sameOrganization<\/a>"]], 'Method Complexity'))
+      .transition()
+      .duration(500)
+      .call(chart);
+
+    nv.utils.windowResize(chart.update);
+
+    return chart;
+  });
+
+  function getComplexityData(data, label) {
+    var values = [];
+    $.each(data, function(key) {
+      var value = Math.round(data[key][0]*100) / 100;
+      values.push({
+        x: value,
+        y: data[key][1],
+        class: data[key][2],
+        size: 0.05,
+        shape: 'diamond'
+      });
+    });
+
+    return [
+      {
+        key: label,
+        values: values,
+        color: "#4572A7"
+      }
+    ];
+  }
+});
+  </script>
+ </body>
+</html>
