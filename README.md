@@ -13,6 +13,12 @@ Flux de branches:
 CI (qualite + tests) sur `dev`, `pre-prod`, `main`:
 - `.github/workflows/lint.yml`
 - `.github/workflows/tests.yml`
+  - `ci`: PHPUnit
+  - `e2e`: Playwright (Chromium)
+
+Controle du flux de branches:
+- `.github/workflows/branch-flow.yml`
+- Autorise uniquement: `dev -> pre-prod` puis `pre-prod -> main`
 
 CD (deploiement production) sur `main`:
 - `.github/workflows/deploy-hostinger.yml`

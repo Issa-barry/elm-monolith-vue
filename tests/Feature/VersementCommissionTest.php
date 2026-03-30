@@ -17,7 +17,9 @@ class VersementCommissionTest extends TestCase
     private function utilisateur(Organization $org): User
     {
         Permission::firstOrCreate(['name' => 'ventes.update', 'guard_name' => 'web']);
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('admin_entreprise');
         $user->givePermissionTo('ventes.update');
         return $user;
     }
