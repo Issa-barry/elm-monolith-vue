@@ -10,7 +10,14 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useAppearance } from '@/composables/useAppearance';
 import type { BreadcrumbItemType } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
-import { AlertTriangle, Bell, MessageSquare, Moon, Package, Sun } from 'lucide-vue-next';
+import {
+    AlertTriangle,
+    Bell,
+    MessageSquare,
+    Moon,
+    Package,
+    Sun,
+} from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 
 withDefaults(
@@ -35,7 +42,9 @@ const stockAlertes = computed(
         },
 );
 const _produits = computed(() => (page.props as any).produits_alertes ?? []);
-const contactMessagesNonLus = computed(() => (page.props as any).contact_messages_non_lus ?? 0);
+const contactMessagesNonLus = computed(
+    () => (page.props as any).contact_messages_non_lus ?? 0,
+);
 
 function syncThemeState() {
     if (typeof document === 'undefined') return;
@@ -85,9 +94,13 @@ onMounted(() => {
                     >
                         <Bell class="h-5 w-5" />
                         <span
-                            v-if="stockAlertes.total + contactMessagesNonLus > 0"
+                            v-if="
+                                stockAlertes.total + contactMessagesNonLus > 0
+                            "
                             class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-0.5 text-[10px] font-bold text-destructive-foreground"
-                            >{{ stockAlertes.total + contactMessagesNonLus }}</span
+                            >{{
+                                stockAlertes.total + contactMessagesNonLus
+                            }}</span
                         >
                         <span class="sr-only">Notifications</span>
                     </Button>
@@ -100,7 +113,9 @@ onMounted(() => {
                     >
                         <span class="text-sm font-semibold">Notifications</span>
                         <span
-                            v-if="stockAlertes.total + contactMessagesNonLus > 0"
+                            v-if="
+                                stockAlertes.total + contactMessagesNonLus > 0
+                            "
                             class="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold text-destructive-foreground"
                         >
                             {{ stockAlertes.total + contactMessagesNonLus }}
@@ -162,9 +177,7 @@ onMounted(() => {
                         <div
                             class="flex items-center gap-2 bg-blue-50 px-4 py-2 dark:bg-blue-950/20"
                         >
-                            <MessageSquare
-                                class="h-3.5 w-3.5 text-blue-500"
-                            />
+                            <MessageSquare class="h-3.5 w-3.5 text-blue-500" />
                             <span
                                 class="text-xs font-semibold text-blue-700 dark:text-blue-400"
                                 >Messages contact ({{

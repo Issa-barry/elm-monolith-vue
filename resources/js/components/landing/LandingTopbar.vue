@@ -123,7 +123,7 @@ onBeforeUnmount(() => {
                     ]"
                 >
                     <ul
-                        class="order-2 text-surface-900 dark:text-surface-0 m-0 flex cursor-pointer list-none flex-col p-0 py-4 select-none lg:order-1 lg:w-4/12 lg:flex-row lg:items-center lg:py-0"
+                        class="text-surface-900 dark:text-surface-0 order-2 m-0 flex cursor-pointer list-none flex-col p-0 py-4 select-none lg:order-1 lg:w-4/12 lg:flex-row lg:items-center lg:py-0"
                     >
                         <li ref="productsMenuRef" class="relative">
                             <button
@@ -227,7 +227,7 @@ onBeforeUnmount(() => {
                     </button>
 
                     <div
-                        class="order-1 border-surface flex border-b py-4 lg:order-3 lg:block lg:w-4/12 lg:border-t-0 lg:border-b-0 lg:py-0 lg:text-right"
+                        class="border-surface order-1 flex border-b py-4 lg:order-3 lg:block lg:w-4/12 lg:border-t-0 lg:border-b-0 lg:py-0 lg:text-right"
                     >
                         <template v-if="$page.props.auth.user">
                             <Button
@@ -237,19 +237,21 @@ onBeforeUnmount(() => {
                             />
                         </template>
                         <template v-else>
-                            <div class="flex w-full flex-col items-stretch gap-2 lg:flex-row lg:justify-end">
+                            <div
+                                class="flex w-full flex-col items-stretch gap-2 lg:flex-row lg:justify-end"
+                            >
                                 <Button
                                     v-if="canRegister"
                                     label="Inscription"
                                     rounded
-                                    class="w-full justify-center rounded-full font-semibold lg:w-auto"
+                                    class="w-full justify-center rounded-full font-semibold lg:w-auto lg:px-7 lg:py-2 lg:text-sm"
                                     @click="router.visit(register())"
                                 />
                                 <Button
                                     label="Connexion"
                                     outlined
                                     rounded
-                                    class="w-full justify-center rounded-full font-semibold lg:w-auto"
+                                    class="w-full justify-center rounded-full font-semibold lg:w-auto lg:px-7 lg:py-2 lg:text-sm"
                                     @click="router.visit(login())"
                                 />
                             </div>

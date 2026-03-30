@@ -11,7 +11,7 @@ class ContactMessage extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'email', 'phone', 'message', 'organization_id'];
+    protected $fillable = ['name', 'email', 'phone', 'message', 'organization_id', 'read_at'];
 
     protected $casts = [
         'read_at' => 'datetime',

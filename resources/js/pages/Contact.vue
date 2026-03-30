@@ -55,7 +55,9 @@ function submit() {
                         <p class="text-lg font-semibold text-green-700">
                             Message envoyé !
                         </p>
-                        <p class="text-sm text-green-600">{{ flash.success }}</p>
+                        <p class="text-sm text-green-600">
+                            {{ flash.success }}
+                        </p>
                     </div>
 
                     <form
