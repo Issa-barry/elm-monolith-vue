@@ -9,7 +9,7 @@ use Spatie\Permission\Models\Role;
 
 trait CreatesStaffUser
 {
-    protected function staffUser(Organization $org = null, string $role = 'admin_entreprise'): User
+    protected function staffUser(?Organization $org = null, string $role = 'admin_entreprise'): User
     {
         Role::firstOrCreate(['name' => $role, 'guard_name' => 'web']);
         $org ??= Organization::factory()->create();
@@ -32,7 +32,7 @@ trait CreatesStaffUser
         return $user;
     }
 
-    protected function clientUser(Organization $org = null): User
+    protected function clientUser(?Organization $org = null): User
     {
         Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
         $org ??= Organization::factory()->create();
@@ -42,7 +42,7 @@ trait CreatesStaffUser
         return $user;
     }
 
-    protected function superAdminUser(Organization $org = null): User
+    protected function superAdminUser(?Organization $org = null): User
     {
         Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
         $org ??= Organization::factory()->create();
