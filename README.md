@@ -207,3 +207,9 @@ git push
  
 # code coverage : 
 php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text
+
+# magic 
+composer2 update
+php artisan migrate:fresh --seed
+php artisan optimize:clear
+php artisan optimize

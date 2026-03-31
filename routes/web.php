@@ -47,6 +47,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     Route::post('packings/{packing}/versements', [VersementController::class, 'store'])->name('packings.versements.store');
     Route::delete('packings/{packing}/versements/{versement}', [VersementController::class, 'destroy'])->name('packings.versements.destroy');
     Route::resource('users', UserController::class)->except(['show']);
+    Route::put('users/{user}/password', [UserController::class, 'updatePassword'])->name('users.update-password');
     Route::resource('roles', RoleController::class)->only(['index', 'edit', 'update']);
     Route::resource('proprietaires', ProprietaireController::class);
     Route::resource('livreurs', LivreurController::class);

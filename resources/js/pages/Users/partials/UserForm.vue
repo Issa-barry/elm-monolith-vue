@@ -2,7 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Save } from 'lucide-vue-next';
+import { ArrowLeft, ArrowRight, Save } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
@@ -10,6 +10,11 @@ import { computed } from 'vue';
 
 interface RoleOption {
     value: string;
+    label: string;
+}
+
+interface SiteOption {
+    value: number;
     label: string;
 }
 
@@ -81,7 +86,10 @@ const props = defineProps<{
     errors: Record<string, string>;
     processing: boolean;
     roles: RoleOption[];
+    sites?: SiteOption[];
     isEdit?: boolean;
+    showPassword?: boolean;
+    submitLabel?: string;
     backHref?: string;
 }>();
 
@@ -133,6 +141,7 @@ function onPaysChange(code: string) {
         code_pays: country.code,
         code_phone_pays: country.dial,
         telephone: currentDigits.slice(0, max) || null,
+        ville: country.code === 'GN' && !props.form.ville ? 'Conakry' : props.form.ville,
     });
 }
 
@@ -175,6 +184,22 @@ function update(field: keyof typeof props.form, value: string | null) {
     emit('update:form', { ...props.form, [field]: value });
     emit('clear-error', field);
 }
+
+function toTitleCase(str: string): string {
+    return str
+        .toLowerCase()
+        .replace(/(?:^|\s|-)\S/g, (c) => c.toUpperCase());
+}
+
+function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
+    const raw = (props.form[field] as string | null) ?? '';
+    if (!raw.trim()) return;
+    let formatted: string;
+    if (field === 'nom') formatted = raw.toUpperCase();
+    else if (field === 'prenom' || field === 'ville' || field === 'adresse') formatted = toTitleCase(raw);
+    else formatted = raw.toLowerCase(); // email
+    emit('update:form', { ...props.form, [field]: formatted });
+}
 </script>
 
 <template>
@@ -196,17 +221,16 @@ function update(field: keyof typeof props.form, value: string | null) {
                     <Label for="prenom" class="mb-1.5 block">
                         Prénom <span class="text-destructive">*</span>
                     </Label>
-                    <InputText
-                        id="prenom"
-                        :model-value="form.prenom"
-                        placeholder="Mamadou"
-                        autocomplete="off"
-                        class="w-full"
-                        :class="{ 'p-invalid': errors.prenom }"
-                        @update:model-value="
-                            update('prenom', String($event ?? ''))
-                        "
-                    />
+                    <div @focusout="formatOnBlur('prenom')" @keydown.enter="formatOnBlur('prenom')">
+                        <InputText
+                            id="prenom"
+                            :model-value="form.prenom"
+                            autocomplete="off"
+                            class="w-full"
+                            :class="{ 'p-invalid': errors.prenom }"
+                            @update:model-value="update('prenom', String($event ?? ''))"
+                        />
+                    </div>
                     <p
                         v-if="errors.prenom"
                         class="mt-1 text-xs text-destructive"
@@ -218,17 +242,16 @@ function update(field: keyof typeof props.form, value: string | null) {
                     <Label for="nom" class="mb-1.5 block">
                         Nom <span class="text-destructive">*</span>
                     </Label>
-                    <InputText
-                        id="nom"
-                        :model-value="form.nom"
-                        placeholder="BARRY"
-                        autocomplete="off"
-                        class="w-full"
-                        :class="{ 'p-invalid': errors.nom }"
-                        @update:model-value="
-                            update('nom', String($event ?? ''))
-                        "
-                    />
+                    <div @focusout="formatOnBlur('nom')" @keydown.enter="formatOnBlur('nom')">
+                        <InputText
+                            id="nom"
+                            :model-value="form.nom"
+                            autocomplete="off"
+                            class="w-full"
+                            :class="{ 'p-invalid': errors.nom }"
+                            @update:model-value="update('nom', String($event ?? ''))"
+                        />
+                    </div>
                     <p v-if="errors.nom" class="mt-1 text-xs text-destructive">
                         {{ errors.nom }}
                     </p>
@@ -281,27 +304,25 @@ function update(field: keyof typeof props.form, value: string | null) {
                 </div>
                 <div>
                     <Label for="ville" class="mb-1.5 block">Ville</Label>
-                    <InputText
-                        id="ville"
-                        :model-value="form.ville ?? ''"
-                        placeholder="Conakry"
-                        class="w-full"
-                        @update:model-value="
-                            update('ville', ($event as string) || null)
-                        "
-                    />
+                    <div @focusout="formatOnBlur('ville')" @keydown.enter="formatOnBlur('ville')">
+                        <InputText
+                            id="ville"
+                            :model-value="form.ville ?? ''"
+                            class="w-full"
+                            @update:model-value="update('ville', ($event as string) || null)"
+                        />
+                    </div>
                 </div>
                 <div class="sm:col-span-2">
                     <Label for="adresse" class="mb-1.5 block">Adresse</Label>
-                    <InputText
-                        id="adresse"
-                        :model-value="form.adresse ?? ''"
-                        placeholder="Quartier, rue…"
-                        class="w-full"
-                        @update:model-value="
-                            update('adresse', ($event as string) || null)
-                        "
-                    />
+                    <div @focusout="formatOnBlur('adresse')" @keydown.enter="formatOnBlur('adresse')">
+                        <InputText
+                            id="adresse"
+                            :model-value="form.adresse ?? ''"
+                            class="w-full"
+                            @update:model-value="update('adresse', ($event as string) || null)"
+                        />
+                    </div>
                 </div>
             </div>
         </div>
@@ -334,7 +355,7 @@ function update(field: keyof typeof props.form, value: string | null) {
                         <InputText
                             id="telephone"
                             :model-value="form.telephone ?? ''"
-                            :placeholder="`${selectedPhoneLength} chiffres`"
+                            placeholder=""
                             inputmode="numeric"
                             pattern="[0-9]*"
                             :maxlength="phoneMaxLength"
@@ -370,9 +391,9 @@ function update(field: keyof typeof props.form, value: string | null) {
                         autocomplete="off"
                         class="w-full"
                         :class="{ 'p-invalid': errors.email }"
-                        @update:model-value="
-                            update('email', ($event as string) || null)
-                        "
+                        @update:model-value="update('email', ($event as string) || null)"
+                        @focusout="formatOnBlur('email')"
+                        @keydown.enter="formatOnBlur('email')"
                     />
                     <p
                         v-if="errors.email"
@@ -384,35 +405,55 @@ function update(field: keyof typeof props.form, value: string | null) {
             </div>
         </div>
 
-        <!-- Rôle -->
+        <!-- Rôle & Site -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
-                Rôle
+                Rôle & Affectation
             </h3>
-            <div>
-                <Label class="mb-1.5 block">
-                    Rôle <span class="text-destructive">*</span>
-                </Label>
-                <Select
-                    :model-value="form.role"
-                    :options="roleOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Choisir un rôle"
-                    class="w-full"
-                    :class="{ 'p-invalid': errors.role }"
-                    @change="update('role', $event.value)"
-                />
-                <p v-if="errors.role" class="mt-1 text-xs text-destructive">
-                    {{ errors.role }}
-                </p>
+            <div class="grid gap-5 sm:grid-cols-2">
+                <div>
+                    <Label class="mb-1.5 block">
+                        Rôle <span class="text-destructive">*</span>
+                    </Label>
+                    <Select
+                        :model-value="form.role"
+                        :options="roleOptions"
+                        option-label="label"
+                        option-value="value"
+                        placeholder="Choisir un rôle"
+                        class="w-full"
+                        :class="{ 'p-invalid': errors.role }"
+                        @change="update('role', $event.value)"
+                    />
+                    <p v-if="errors.role" class="mt-1 text-xs text-destructive">
+                        {{ errors.role }}
+                    </p>
+                </div>
+                <div v-if="sites && sites.length">
+                    <Label class="mb-1.5 block">
+                        Site <span class="text-destructive">*</span>
+                    </Label>
+                    <Select
+                        :model-value="(form as any).site_id"
+                        :options="sites"
+                        option-label="label"
+                        option-value="value"
+                        placeholder="Choisir un site"
+                        class="w-full"
+                        :class="{ 'p-invalid': errors.site_id }"
+                        @change="emit('update:form', { ...form, site_id: $event.value } as any)"
+                    />
+                    <p v-if="errors.site_id" class="mt-1 text-xs text-destructive">
+                        {{ errors.site_id }}
+                    </p>
+                </div>
             </div>
         </div>
 
         <!-- Mot de passe -->
-        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div v-if="showPassword !== false" class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
@@ -431,7 +472,6 @@ function update(field: keyof typeof props.form, value: string | null) {
                         id="password"
                         :model-value="form.password"
                         type="password"
-                        placeholder="••••••••"
                         autocomplete="new-password"
                         class="w-full"
                         :class="{ 'p-invalid': errors.password }"
@@ -455,7 +495,6 @@ function update(field: keyof typeof props.form, value: string | null) {
                         id="password_confirmation"
                         :model-value="form.password_confirmation"
                         type="password"
-                        placeholder="••••••••"
                         autocomplete="new-password"
                         class="w-full"
                         @update:model-value="
@@ -511,13 +550,18 @@ function update(field: keyof typeof props.form, value: string | null) {
                 </a>
             </Button>
             <Button type="submit" :disabled="processing">
-                <Save class="mr-2 h-4 w-4" />
+                <component
+                    :is="submitLabel ? ArrowRight : Save"
+                    class="mr-2 h-4 w-4"
+                />
                 {{
                     processing
                         ? 'Enregistrement…'
-                        : isEdit
-                          ? 'Enregistrer'
-                          : 'Créer le compte'
+                        : submitLabel
+                          ? submitLabel
+                          : isEdit
+                            ? 'Enregistrer'
+                            : 'Créer le compte'
                 }}
             </Button>
         </div>

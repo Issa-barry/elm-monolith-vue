@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Organization;
+use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -16,6 +18,15 @@ class UserControllerTest extends TestCase
     private function createRole(string $name): Role
     {
         return Role::firstOrCreate(['name' => $name, 'guard_name' => 'web']);
+    }
+
+    private function createSite(Organization $org): Site
+    {
+        return Site::create([
+            'organization_id' => $org->id,
+            'nom'             => 'Dépôt Central',
+            'type'            => 'depot',
+        ]);
     }
 
     private function superAdmin(Organization $org): User
@@ -44,12 +55,13 @@ class UserControllerTest extends TestCase
     private function validStoreData(array $overrides = []): array
     {
         return array_merge([
-            'prenom' => 'Mamadou',
-            'nom' => 'Barry',
-            'email' => null,
-            'telephone' => '+224620000001',
-            'role' => 'manager',
-            'password' => 'Password123',
+            'prenom'                => 'Mamadou',
+            'nom'                   => 'Barry',
+            'email'                 => null,
+            'telephone'             => '+224620000001',
+            'role'                  => 'manager',
+            'site_id'               => null, // caller must set a real site_id
+            'password'              => 'Password123',
             'password_confirmation' => 'Password123',
         ], $overrides);
     }
@@ -58,7 +70,7 @@ class UserControllerTest extends TestCase
 
     public function test_index_returns_200_for_super_admin(): void
     {
-        $org = Organization::factory()->create();
+        $org   = Organization::factory()->create();
         $admin = $this->superAdmin($org);
 
         $this->actingAs($admin)
@@ -68,7 +80,7 @@ class UserControllerTest extends TestCase
 
     public function test_index_returns_200_for_user_with_read_permission(): void
     {
-        $org = Organization::factory()->create();
+        $org  = Organization::factory()->create();
         $user = $this->adminUser($org);
 
         $this->actingAs($user)
@@ -84,7 +96,7 @@ class UserControllerTest extends TestCase
     public function test_index_returns_403_without_permission(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
+        $org  = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('manager');
 
@@ -107,12 +119,11 @@ class UserControllerTest extends TestCase
         $userOtherOrg = User::factory()->create(['organization_id' => $org2->id]);
         $userOtherOrg->assignRole('manager');
 
-        $response = $this->actingAs($admin)
-            ->get(route('users.index'));
+        $response = $this->actingAs($admin)->get(route('users.index'));
 
         $response->assertStatus(200);
         $users = $response->original->getData()['page']['props']['users'];
-        $ids = array_column($users, 'id');
+        $ids   = array_column($users, 'id');
 
         $this->assertContains($admin->id, $ids);
         $this->assertContains($userSameOrg->id, $ids);
@@ -123,7 +134,7 @@ class UserControllerTest extends TestCase
 
     public function test_create_returns_200_for_super_admin(): void
     {
-        $org = Organization::factory()->create();
+        $org   = Organization::factory()->create();
         $admin = $this->superAdmin($org);
 
         $this->actingAs($admin)
@@ -133,7 +144,7 @@ class UserControllerTest extends TestCase
 
     public function test_create_returns_403_for_non_super_admin(): void
     {
-        $org = Organization::factory()->create();
+        $org  = Organization::factory()->create();
         $user = $this->adminUser($org);
 
         $this->actingAs($user)
@@ -146,27 +157,46 @@ class UserControllerTest extends TestCase
     public function test_store_creates_user_and_redirects(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
+        $org   = Organization::factory()->create();
         $admin = $this->superAdmin($org);
+        $site  = $this->createSite($org);
 
         $this->actingAs($admin)
-            ->post(route('users.store'), $this->validStoreData())
-            ->assertRedirect(route('users.index'));
+            ->post(route('users.store'), $this->validStoreData(['site_id' => $site->id]));
+
+        $created = User::where('nom', 'BARRY')->where('organization_id', $org->id)->first();
+        $this->assertNotNull($created);
+        $this->assertRedirect = route('users.edit', $created);
 
         $this->assertDatabaseHas('users', [
-            'nom' => 'BARRY',
+            'nom'             => 'BARRY',
             'organization_id' => $org->id,
         ]);
+    }
+
+    public function test_store_redirects_to_edit_page(): void
+    {
+        $this->createRole('manager');
+        $org   = Organization::factory()->create();
+        $admin = $this->superAdmin($org);
+        $site  = $this->createSite($org);
+
+        $response = $this->actingAs($admin)
+            ->post(route('users.store'), $this->validStoreData(['site_id' => $site->id]));
+
+        $created = User::where('telephone', '+224620000001')->first();
+        $response->assertRedirect(route('users.edit', $created));
     }
 
     public function test_store_formats_prenom_as_title_case(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
+        $org   = Organization::factory()->create();
         $admin = $this->superAdmin($org);
+        $site  = $this->createSite($org);
 
         $this->actingAs($admin)
-            ->post(route('users.store'), $this->validStoreData(['prenom' => 'mamadou']));
+            ->post(route('users.store'), $this->validStoreData(['prenom' => 'mamadou', 'site_id' => $site->id]));
 
         $this->assertDatabaseHas('users', ['prenom' => 'Mamadou']);
     }
@@ -174,11 +204,12 @@ class UserControllerTest extends TestCase
     public function test_store_uppercases_nom(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
+        $org   = Organization::factory()->create();
         $admin = $this->superAdmin($org);
+        $site  = $this->createSite($org);
 
         $this->actingAs($admin)
-            ->post(route('users.store'), $this->validStoreData(['nom' => 'barry']));
+            ->post(route('users.store'), $this->validStoreData(['nom' => 'barry', 'site_id' => $site->id]));
 
         $this->assertDatabaseHas('users', ['nom' => 'BARRY']);
     }
@@ -186,26 +217,46 @@ class UserControllerTest extends TestCase
     public function test_store_assigns_role_to_user(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
+        $org   = Organization::factory()->create();
         $admin = $this->superAdmin($org);
+        $site  = $this->createSite($org);
 
         $this->actingAs($admin)
-            ->post(route('users.store'), $this->validStoreData(['role' => 'manager']));
+            ->post(route('users.store'), $this->validStoreData(['role' => 'manager', 'site_id' => $site->id]));
 
         $created = User::where('telephone', '+224620000001')->first();
         $this->assertNotNull($created);
         $this->assertTrue($created->hasRole('manager'));
     }
 
+    public function test_store_attaches_site_to_user(): void
+    {
+        $this->createRole('manager');
+        $org   = Organization::factory()->create();
+        $admin = $this->superAdmin($org);
+        $site  = $this->createSite($org);
+
+        $this->actingAs($admin)
+            ->post(route('users.store'), $this->validStoreData(['site_id' => $site->id]));
+
+        $created = User::where('telephone', '+224620000001')->first();
+        $this->assertNotNull($created);
+
+        $defaultSite = $created->sites()->wherePivot('is_default', true)->first();
+        $this->assertNotNull($defaultSite);
+        $this->assertEquals($site->id, $defaultSite->id);
+    }
+
     public function test_store_allows_null_email(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
+        $org   = Organization::factory()->create();
         $admin = $this->superAdmin($org);
+        $site  = $this->createSite($org);
 
         $this->actingAs($admin)
-            ->post(route('users.store'), $this->validStoreData(['email' => null]))
-            ->assertRedirect(route('users.index'));
+            ->post(route('users.store'), $this->validStoreData(['email' => null, 'site_id' => $site->id]))
+            ->assertSessionDoesntHaveErrors();
 
         $this->assertDatabaseHas('users', ['telephone' => '+224620000001', 'email' => null]);
     }
@@ -213,78 +264,96 @@ class UserControllerTest extends TestCase
     public function test_store_fails_without_telephone(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
+        $org   = Organization::factory()->create();
+        $admin = $this->superAdmin($org);
+        $site  = $this->createSite($org);
+
+        $this->actingAs($admin)
+            ->post(route('users.store'), $this->validStoreData(['telephone' => null, 'site_id' => $site->id]))
+            ->assertSessionHasErrors('telephone');
+    }
+
+    public function test_store_fails_without_site_id(): void
+    {
+        $this->createRole('manager');
+        $org   = Organization::factory()->create();
         $admin = $this->superAdmin($org);
 
         $this->actingAs($admin)
-            ->post(route('users.store'), $this->validStoreData(['telephone' => null]))
-            ->assertSessionHasErrors('telephone');
+            ->post(route('users.store'), $this->validStoreData(['site_id' => null]))
+            ->assertSessionHasErrors('site_id');
     }
 
     public function test_store_fails_with_duplicate_telephone(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
+        $org   = Organization::factory()->create();
         $admin = $this->superAdmin($org);
+        $site  = $this->createSite($org);
 
         User::factory()->create([
-            'telephone' => '+224620000001',
+            'telephone'       => '+224620000001',
             'organization_id' => $org->id,
         ]);
 
         $this->actingAs($admin)
-            ->post(route('users.store'), $this->validStoreData(['telephone' => '+224620000001']))
+            ->post(route('users.store'), $this->validStoreData(['telephone' => '+224620000001', 'site_id' => $site->id]))
             ->assertSessionHasErrors('telephone');
     }
 
     public function test_store_fails_with_duplicate_email(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
+        $org   = Organization::factory()->create();
         $admin = $this->superAdmin($org);
+        $site  = $this->createSite($org);
 
         User::factory()->create([
-            'email' => 'existing@example.com',
+            'email'           => 'existing@example.com',
             'organization_id' => $org->id,
         ]);
 
         $this->actingAs($admin)
-            ->post(route('users.store'), $this->validStoreData(['email' => 'existing@example.com']))
+            ->post(route('users.store'), $this->validStoreData(['email' => 'existing@example.com', 'site_id' => $site->id]))
             ->assertSessionHasErrors('email');
     }
 
     public function test_store_fails_with_password_mismatch(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
+        $org   = Organization::factory()->create();
         $admin = $this->superAdmin($org);
+        $site  = $this->createSite($org);
 
         $this->actingAs($admin)
             ->post(route('users.store'), $this->validStoreData([
-                'password' => 'Password123',
+                'password'              => 'Password123',
                 'password_confirmation' => 'Different123',
+                'site_id'               => $site->id,
             ]))
             ->assertSessionHasErrors('password');
     }
 
     public function test_store_fails_with_invalid_role(): void
     {
-        $org = Organization::factory()->create();
+        $org   = Organization::factory()->create();
         $admin = $this->superAdmin($org);
+        $site  = $this->createSite($org);
 
         $this->actingAs($admin)
-            ->post(route('users.store'), $this->validStoreData(['role' => 'client']))
+            ->post(route('users.store'), $this->validStoreData(['role' => 'client', 'site_id' => $site->id]))
             ->assertSessionHasErrors('role');
     }
 
     public function test_store_returns_403_for_non_super_admin(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
+        $org  = Organization::factory()->create();
         $user = $this->adminUser($org);
+        $site = $this->createSite($org);
 
         $this->actingAs($user)
-            ->post(route('users.store'), $this->validStoreData())
+            ->post(route('users.store'), $this->validStoreData(['site_id' => $site->id]))
             ->assertStatus(403);
     }
 
@@ -293,9 +362,8 @@ class UserControllerTest extends TestCase
     public function test_edit_returns_200_for_super_admin(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
-        $admin = $this->superAdmin($org);
-
+        $org    = Organization::factory()->create();
+        $admin  = $this->superAdmin($org);
         $target = User::factory()->create(['organization_id' => $org->id]);
         $target->assignRole('manager');
 
@@ -309,10 +377,9 @@ class UserControllerTest extends TestCase
         $this->createRole('manager');
         Permission::firstOrCreate(['name' => 'users.update', 'guard_name' => 'web']);
 
-        $org = Organization::factory()->create();
-        $user = $this->adminUser($org);
+        $org    = Organization::factory()->create();
+        $user   = $this->adminUser($org);
         $user->givePermissionTo('users.update');
-
         $target = User::factory()->create(['organization_id' => $org->id]);
         $target->assignRole('manager');
 
@@ -327,33 +394,32 @@ class UserControllerTest extends TestCase
     {
         $this->createRole('manager');
         $this->createRole('commerciale');
-        Permission::firstOrCreate(['name' => 'users.update', 'guard_name' => 'web']);
 
-        $org = Organization::factory()->create();
-        $admin = $this->superAdmin($org);
-
+        $org    = Organization::factory()->create();
+        $admin  = $this->superAdmin($org);
         $target = User::factory()->create([
             'organization_id' => $org->id,
-            'telephone' => '+224620000099',
+            'telephone'       => '+224620000099',
         ]);
         $target->assignRole('manager');
 
-        $this->actingAs($admin)
+        $response = $this->actingAs($admin)
             ->put(route('users.update', $target), [
-                'prenom' => 'Fatoumata',
-                'nom' => 'Bah',
-                'email' => null,
-                'telephone' => '+224620000099',
-                'role' => 'commerciale',
-                'password' => '',
+                'prenom'                => 'Fatoumata',
+                'nom'                   => 'Bah',
+                'email'                 => null,
+                'telephone'             => '+224620000099',
+                'role'                  => 'commerciale',
+                'password'              => '',
                 'password_confirmation' => '',
-            ])
-            ->assertRedirect(route('users.index'));
+            ]);
+
+        $response->assertRedirect(route('users.edit', $target));
 
         $this->assertDatabaseHas('users', [
-            'id' => $target->id,
+            'id'     => $target->id,
             'prenom' => 'Fatoumata',
-            'nom' => 'BAH',
+            'nom'    => 'BAH',
         ]);
 
         $target->refresh();
@@ -363,26 +429,24 @@ class UserControllerTest extends TestCase
     public function test_update_does_not_change_password_when_empty(): void
     {
         $this->createRole('manager');
-        Permission::firstOrCreate(['name' => 'users.update', 'guard_name' => 'web']);
 
-        $org = Organization::factory()->create();
-        $admin = $this->superAdmin($org);
-
+        $org    = Organization::factory()->create();
+        $admin  = $this->superAdmin($org);
         $target = User::factory()->create([
             'organization_id' => $org->id,
-            'telephone' => '+224620000098',
+            'telephone'       => '+224620000098',
         ]);
         $target->assignRole('manager');
         $originalHash = $target->password;
 
         $this->actingAs($admin)
             ->put(route('users.update', $target), [
-                'prenom' => $target->prenom,
-                'nom' => $target->nom,
-                'email' => null,
-                'telephone' => '+224620000098',
-                'role' => 'manager',
-                'password' => '',
+                'prenom'                => $target->prenom,
+                'nom'                   => $target->nom,
+                'email'                 => null,
+                'telephone'             => '+224620000098',
+                'role'                  => 'manager',
+                'password'              => '',
                 'password_confirmation' => '',
             ]);
 
@@ -392,28 +456,114 @@ class UserControllerTest extends TestCase
     public function test_update_allows_same_telephone_for_same_user(): void
     {
         $this->createRole('manager');
-        Permission::firstOrCreate(['name' => 'users.update', 'guard_name' => 'web']);
 
-        $org = Organization::factory()->create();
-        $admin = $this->superAdmin($org);
-
+        $org    = Organization::factory()->create();
+        $admin  = $this->superAdmin($org);
         $target = User::factory()->create([
             'organization_id' => $org->id,
-            'telephone' => '+224620000097',
+            'telephone'       => '+224620000097',
         ]);
         $target->assignRole('manager');
 
         $this->actingAs($admin)
             ->put(route('users.update', $target), [
-                'prenom' => $target->prenom,
-                'nom' => $target->nom,
-                'email' => null,
-                'telephone' => '+224620000097',
-                'role' => 'manager',
-                'password' => '',
+                'prenom'                => $target->prenom,
+                'nom'                   => $target->nom,
+                'email'                 => null,
+                'telephone'             => '+224620000097',
+                'role'                  => 'manager',
+                'password'              => '',
                 'password_confirmation' => '',
             ])
-            ->assertRedirect(route('users.index'));
+            ->assertRedirect(route('users.edit', $target));
+    }
+
+    public function test_update_site_changes_assignment(): void
+    {
+        $this->createRole('manager');
+
+        $org    = Organization::factory()->create();
+        $admin  = $this->superAdmin($org);
+        $site1  = $this->createSite($org);
+        $site2  = Site::create(['organization_id' => $org->id, 'nom' => 'Agence Nord', 'type' => 'agence']);
+
+        $target = User::factory()->create([
+            'organization_id' => $org->id,
+            'telephone'       => '+224620000096',
+        ]);
+        $target->assignRole('manager');
+        $target->sites()->attach($site1->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($admin)
+            ->put(route('users.update', $target), [
+                'prenom'                => $target->prenom,
+                'nom'                   => $target->nom,
+                'email'                 => null,
+                'telephone'             => '+224620000096',
+                'role'                  => 'manager',
+                'site_id'               => $site2->id,
+                'password'              => '',
+                'password_confirmation' => '',
+            ]);
+
+        $defaultSite = $target->fresh()->sites()->wherePivot('is_default', true)->first();
+        $this->assertNotNull($defaultSite);
+        $this->assertEquals($site2->id, $defaultSite->id);
+    }
+
+    // ── update password ───────────────────────────────────────────────────────
+
+    public function test_update_password_changes_password(): void
+    {
+        $this->createRole('manager');
+
+        $org    = Organization::factory()->create();
+        $admin  = $this->superAdmin($org);
+        $target = User::factory()->create(['organization_id' => $org->id]);
+        $target->assignRole('manager');
+
+        $this->actingAs($admin)
+            ->put(route('users.update-password', $target), [
+                'password'              => 'NewPass456',
+                'password_confirmation' => 'NewPass456',
+            ])
+            ->assertRedirect(route('users.edit', $target));
+
+        $this->assertTrue(Hash::check('NewPass456', $target->fresh()->password));
+    }
+
+    public function test_update_password_fails_with_short_password(): void
+    {
+        $this->createRole('manager');
+
+        $org    = Organization::factory()->create();
+        $admin  = $this->superAdmin($org);
+        $target = User::factory()->create(['organization_id' => $org->id]);
+        $target->assignRole('manager');
+
+        $this->actingAs($admin)
+            ->put(route('users.update-password', $target), [
+                'password'              => 'Ab1',
+                'password_confirmation' => 'Ab1',
+            ])
+            ->assertSessionHasErrors('password');
+    }
+
+    public function test_update_password_fails_with_mismatch(): void
+    {
+        $this->createRole('manager');
+
+        $org    = Organization::factory()->create();
+        $admin  = $this->superAdmin($org);
+        $target = User::factory()->create(['organization_id' => $org->id]);
+        $target->assignRole('manager');
+
+        $this->actingAs($admin)
+            ->put(route('users.update-password', $target), [
+                'password'              => 'NewPass456',
+                'password_confirmation' => 'Different456',
+            ])
+            ->assertSessionHasErrors('password');
     }
 
     // ── destroy ───────────────────────────────────────────────────────────────
@@ -421,9 +571,8 @@ class UserControllerTest extends TestCase
     public function test_destroy_deletes_user_and_redirects(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
-        $admin = $this->superAdmin($org);
-
+        $org    = Organization::factory()->create();
+        $admin  = $this->superAdmin($org);
         $target = User::factory()->create(['organization_id' => $org->id]);
         $target->assignRole('manager');
 
@@ -437,9 +586,8 @@ class UserControllerTest extends TestCase
     public function test_destroy_returns_403_for_non_super_admin(): void
     {
         $this->createRole('manager');
-        $org = Organization::factory()->create();
-        $user = $this->adminUser($org);
-
+        $org    = Organization::factory()->create();
+        $user   = $this->adminUser($org);
         $target = User::factory()->create(['organization_id' => $org->id]);
         $target->assignRole('manager');
 
@@ -450,7 +598,7 @@ class UserControllerTest extends TestCase
 
     public function test_destroy_prevents_self_deletion(): void
     {
-        $org = Organization::factory()->create();
+        $org   = Organization::factory()->create();
         $admin = $this->superAdmin($org);
 
         $this->actingAs($admin)

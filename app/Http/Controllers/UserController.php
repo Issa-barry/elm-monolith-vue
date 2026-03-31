@@ -36,25 +36,32 @@ class UserController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $users = User::with('roles')
+        $users = User::with([
+                'roles:id,name',
+                'sites' => fn ($q) => $q->wherePivot('is_default', true)->select('sites.id', 'sites.nom', 'sites.code')->limit(1),
+            ])
             ->where('organization_id', $orgId)
             ->whereHas('roles', fn ($q) => $q->whereIn('name', self::STAFF_ROLES))
             ->orderBy('nom')
             ->get()
-            ->map(fn (User $u) => [
-                'id' => $u->id,
-                'nom' => $u->nom,
-                'prenom' => $u->prenom,
-                'nom_complet' => $u->name,
-                'email' => $u->email,
-                'telephone' => $u->telephone,
-                'code_phone_pays' => ($u->code_pays && isset(USER_PAYS[$u->code_pays]))
-                    ? USER_PAYS[$u->code_pays][1]
-                    : null,
-                'is_active' => $u->is_active,
-                'roles' => $u->getRoleNames(),
-                'is_me' => $u->id === auth()->id(),
-            ]);
+            ->map(function (User $u) {
+                $defaultSite = $u->sites->first();
+                return [
+                    'id'             => $u->id,
+                    'nom'            => $u->nom,
+                    'prenom'         => $u->prenom,
+                    'nom_complet'    => $u->name,
+                    'email'          => $u->email,
+                    'telephone'      => $u->telephone,
+                    'code_phone_pays' => ($u->code_pays && isset(USER_PAYS[$u->code_pays]))
+                        ? USER_PAYS[$u->code_pays][1]
+                        : null,
+                    'is_active'      => $u->is_active,
+                    'roles'          => $u->getRoleNames(),
+                    'site'           => $defaultSite ? "{$defaultSite->nom} ({$defaultSite->code})" : null,
+                    'is_me'          => $u->id === auth()->id(),
+                ];
+            });
 
         return Inertia::render('Users/Index', [
             'users' => $users,
@@ -65,12 +72,20 @@ class UserController extends Controller
     {
         $this->authorize('create', User::class);
 
+        $orgId = auth()->user()->organization_id;
+
         $roles = Role::whereIn('name', self::STAFF_ROLES)
             ->get(['id', 'name'])
             ->map(fn ($r) => ['value' => $r->name, 'label' => $r->name]);
 
+        $sites = \App\Models\Site::where('organization_id', $orgId)
+            ->orderBy('nom')
+            ->get(['id', 'nom', 'code'])
+            ->map(fn ($s) => ['value' => $s->id, 'label' => "{$s->nom} ({$s->code})"]);
+
         return Inertia::render('Users/Create', [
             'roles' => $roles,
+            'sites' => $sites,
         ]);
     }
 
@@ -106,6 +121,7 @@ class UserController extends Controller
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:255',
             'role' => ['required', Rule::in(self::STAFF_ROLES)],
+            'site_id' => 'required|exists:sites,id',
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
             'is_active' => 'boolean',
         ], [
@@ -117,6 +133,8 @@ class UserController extends Controller
             'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé.',
             'role.required' => 'Le rôle est obligatoire.',
             'role.in' => 'Rôle invalide.',
+            'site_id.required' => 'Le site est obligatoire.',
+            'site_id.exists' => 'Site invalide.',
             'password.required' => 'Le mot de passe est obligatoire.',
             'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
             'password.min' => 'Le mot de passe doit contenir au moins 8 caractères.',
@@ -138,16 +156,17 @@ class UserController extends Controller
             'pays' => $pays,
             'code_pays' => $codePays,
             'code_phone_pays' => $codePhonePays,
-            'ville' => $data['ville'] ?? null,
-            'adresse' => $data['adresse'] ?? null,
+            'ville' => isset($data['ville']) ? mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8') : null,
+            'adresse' => isset($data['adresse']) ? mb_convert_case(mb_strtolower($data['adresse'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8') : null,
             'is_active' => $data['is_active'] ?? true,
             'password' => Hash::make($data['password']),
             'organization_id' => $orgId,
         ]);
 
         $user->assignRole($data['role']);
+        $user->sites()->attach($data['site_id'], ['role' => 'employe', 'is_default' => true]);
 
-        return redirect()->route('users.index')
+        return redirect()->route('users.edit', $user)
             ->with('success', "{$user->name} a été créé avec succès.");
     }
 
@@ -155,9 +174,18 @@ class UserController extends Controller
     {
         $this->authorize('update', $user);
 
+        $orgId = auth()->user()->organization_id;
+
         $roles = Role::whereIn('name', self::STAFF_ROLES)
             ->get(['id', 'name'])
             ->map(fn ($r) => ['value' => $r->name, 'label' => $r->name]);
+
+        $sites = \App\Models\Site::where('organization_id', $orgId)
+            ->orderBy('nom')
+            ->get(['id', 'nom', 'code'])
+            ->map(fn ($s) => ['value' => $s->id, 'label' => "{$s->nom} ({$s->code})"]);
+
+        $defaultSite = $user->sites()->wherePivot('is_default', true)->first();
 
         return Inertia::render('Users/Edit', [
             'user' => [
@@ -170,9 +198,11 @@ class UserController extends Controller
                 'ville' => $user->ville,
                 'adresse' => $user->adresse,
                 'role' => $user->getRoleNames()->first(),
+                'site_id' => $defaultSite?->id,
                 'is_active' => $user->is_active,
             ],
             'roles' => $roles,
+            'sites' => $sites,
             'is_me' => $user->id === auth()->id(),
         ]);
     }
@@ -192,6 +222,7 @@ class UserController extends Controller
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:255',
             'role' => ['required', Rule::in(self::STAFF_ROLES)],
+            'site_id' => 'required|exists:sites,id',
             'password' => ['nullable', 'confirmed', Password::min(8)->letters()->numbers()],
             'is_active' => 'boolean',
         ], [
@@ -202,6 +233,8 @@ class UserController extends Controller
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
             'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé.',
             'role.required' => 'Le rôle est obligatoire.',
+            'site_id.required' => 'Le site est obligatoire.',
+            'site_id.exists' => 'Site invalide.',
             'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
         ]);
 
@@ -221,8 +254,8 @@ class UserController extends Controller
             'pays' => $pays,
             'code_pays' => $codePays,
             'code_phone_pays' => $codePhonePays,
-            'ville' => $data['ville'] ?? null,
-            'adresse' => $data['adresse'] ?? null,
+            'ville' => isset($data['ville']) ? mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8') : null,
+            'adresse' => isset($data['adresse']) ? mb_convert_case(mb_strtolower($data['adresse'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8') : null,
             'is_active' => $data['is_active'] ?? $user->is_active,
         ];
 
@@ -233,8 +266,30 @@ class UserController extends Controller
         $user->update($updateData);
         $user->syncRoles([$data['role']]);
 
-        return redirect()->route('users.index')
+        if (!empty($data['site_id'])) {
+            $user->sites()->sync([$data['site_id'] => ['role' => 'employe', 'is_default' => true]]);
+        }
+
+        return redirect()->route('users.edit', $user)
             ->with('success', "{$user->name} a été mis à jour.");
+    }
+
+    public function updatePassword(Request $request, User $user): RedirectResponse
+    {
+        $this->authorize('update', $user);
+
+        $data = $request->validate([
+            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
+        ], [
+            'password.required' => 'Le mot de passe est obligatoire.',
+            'password.confirmed' => 'La confirmation ne correspond pas.',
+            'password.min' => 'Le mot de passe doit contenir au moins 8 caractères.',
+        ]);
+
+        $user->update(['password' => Hash::make($data['password'])]);
+
+        return redirect()->route('users.edit', $user)
+            ->with('success', "Mot de passe de {$user->name} mis à jour.");
     }
 
     public function destroy(User $user): RedirectResponse

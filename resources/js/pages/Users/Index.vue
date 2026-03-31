@@ -7,12 +7,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
+    Building2,
     MoreVertical,
     Pencil,
     Plus,
@@ -40,6 +42,7 @@ interface StaffUser {
     code_phone_pays: string | null;
     is_active: boolean;
     roles: string[];
+    site: string | null;
     is_me: boolean;
 }
 
@@ -158,7 +161,7 @@ function confirmDelete(u: StaffUser) {
                     :value="props.users"
                     :paginator="props.users.length > 20"
                     :rows="20"
-                    :global-filter-fields="['nom_complet', 'email']"
+                    :global-filter-fields="['nom_complet', 'email', 'site']"
                     v-model:filters="filters"
                     data-key="id"
                     striped-rows
@@ -219,7 +222,7 @@ function confirmDelete(u: StaffUser) {
                     </Column>
 
                     <!-- Rôle -->
-                    <Column header="Rôle" style="width: 220px">
+                    <Column header="Rôle" style="width: 180px">
                         <template #body="{ data }">
                             <div class="flex flex-wrap items-center gap-1.5">
                                 <span
@@ -231,13 +234,32 @@ function confirmDelete(u: StaffUser) {
                                     <Shield class="h-3 w-3" />
                                     {{ roleLabel(role) }}
                                 </span>
-                                <span
-                                    v-if="!data.is_active"
-                                    class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:bg-red-900/30 dark:text-red-400"
-                                >
-                                    Inactif
-                                </span>
                             </div>
+                        </template>
+                    </Column>
+
+                    <!-- Site -->
+                    <Column header="Site" style="width: 180px">
+                        <template #body="{ data }">
+                            <span
+                                v-if="data.site"
+                                class="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+                            >
+                                <Building2 class="h-3.5 w-3.5 shrink-0" />
+                                {{ data.site }}
+                            </span>
+                            <span v-else class="text-xs text-muted-foreground">—</span>
+                        </template>
+                    </Column>
+
+                    <!-- Statut -->
+                    <Column header="Statut" style="width: 100px">
+                        <template #body="{ data }">
+                            <StatusDot
+                                :label="data.is_active ? 'Actif' : 'Inactif'"
+                                :dot-class="data.is_active ? 'bg-emerald-500' : 'bg-zinc-400 dark:bg-zinc-500'"
+                                class="text-muted-foreground"
+                            />
                         </template>
                     </Column>
 
