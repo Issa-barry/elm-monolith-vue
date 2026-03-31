@@ -31,7 +31,8 @@
       "Bash(powershell -Command \"Set-Location ''c:\\\\laragon\\\\www\\\\elm-monolithe''; & ''C:\\\\laragon\\\\bin\\\\php\\\\php-8.5.1-nts-Win32-vs17-x64\\\\php.exe'' artisan test --filter ''VersementCommissionTest|EncaissementVenteTest'' --no-coverage 2>&1\")",
       "Bash(grep -l \"], \\\\[\" /c/laragon/www/elm-monolithe/app/Http/Controllers/*.php)",
       "Bash(grep -r \"validate\\(\\\\[\" /c/laragon/www/elm-monolithe/app/Http/Controllers/*.php)",
-      "Bash(./vendor/bin/pint app/Mail/ContactMessageReceived.php)"
+      "Bash(./vendor/bin/pint app/Mail/ContactMessageReceived.php)",
+      "Bash(grep -n \"^    name:\" c:/laragon/www/elm-monolithe/.github/workflows/*.yml)"
     ]
   }
 }
