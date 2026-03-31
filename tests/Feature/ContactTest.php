@@ -18,7 +18,7 @@ class ContactTest extends TestCase
         $this->get('/contact')->assertStatus(200);
     }
 
-    public function test_store_creates_message_and_queues_mail(): void
+    public function test_store_creates_message_and_sends_mail(): void
     {
         Mail::fake();
 
@@ -31,7 +31,7 @@ class ContactTest extends TestCase
             'phone' => '+224620001122',
         ]);
 
-        Mail::assertQueued(ContactMessageReceived::class);
+        Mail::assertSent(ContactMessageReceived::class);
     }
 
     public function test_store_requires_phone_and_message(): void

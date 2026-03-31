@@ -23,7 +23,11 @@ class ContactController extends Controller
         $contact = ContactMessage::create($validated);
 
         $to = config('mail.contact_to', config('mail.from.address'));
-        Mail::to($to)->queue(new ContactMessageReceived($contact));
+        try {
+            Mail::to($to)->send(new ContactMessageReceived($contact));
+        } catch (\Throwable) {
+            // Mail failure must not block the user response
+        }
 
         return back()->with('success', 'Votre message a été envoyé. Nous vous répondrons rapidement.');
     }
