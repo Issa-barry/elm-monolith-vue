@@ -37,7 +37,10 @@
       "Bash(./vendor/bin/pint app/Http/Controllers/UserController.php app/Policies/UserPolicy.php)",
       "Bash(./vendor/bin/pint app/Http/Controllers/UserController.php)",
       "Bash(grep -n is_active c:/laragon/www/elm-monolithe/database/migrations/*.php)",
-      "Bash(grep -n is_active c:/laragon/www/elm-monolithe/database/migrations/*users*)"
+      "Bash(grep -n is_active c:/laragon/www/elm-monolithe/database/migrations/*users*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(vendor/bin/pint --test tests/Unit/UserPolicyTest.php)"
     ]
   }
 }
