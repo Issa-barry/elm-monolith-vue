@@ -23,6 +23,7 @@ import {
     Package,
     PackageCheck,
     ShoppingCart,
+    UserCog,
     Users,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
@@ -129,6 +130,14 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Sites',
             href: '/sites',
             icon: Building2,
+        });
+    }
+
+    if (can('users.read')) {
+        items.push({
+            title: 'Utilisateurs',
+            href: '/users',
+            icon: UserCog,
         });
     }
 

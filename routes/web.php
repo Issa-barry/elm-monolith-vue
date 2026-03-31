@@ -14,6 +14,7 @@ use App\Http\Controllers\ProduitController;
 use App\Http\Controllers\ProprietaireController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SiteController;
+use App\Http\Controllers\UserController;
 use App\Http\Controllers\VehiculeController;
 use App\Http\Controllers\VersementCommissionController;
 use App\Http\Controllers\VersementController;
@@ -45,6 +46,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     Route::patch('packings/{packing}/annuler', [PackingController::class, 'annuler'])->name('packings.annuler');
     Route::post('packings/{packing}/versements', [VersementController::class, 'store'])->name('packings.versements.store');
     Route::delete('packings/{packing}/versements/{versement}', [VersementController::class, 'destroy'])->name('packings.versements.destroy');
+    Route::resource('users', UserController::class)->except(['show']);
     Route::resource('roles', RoleController::class)->only(['index', 'edit', 'update']);
     Route::resource('proprietaires', ProprietaireController::class);
     Route::resource('livreurs', LivreurController::class);

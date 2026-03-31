@@ -19,7 +19,7 @@ class UserPolicy
 
     public function create(User $user): bool
     {
-        return $user->can('users.create');
+        return $user->isSuperAdmin();
     }
 
     public function update(User $user, User $target): bool
@@ -30,7 +30,8 @@ class UserPolicy
 
     public function delete(User $user, User $target): bool
     {
-        return $user->can('users.delete')
-            && $user->id !== $target->id;
+        return $user->isSuperAdmin()
+            && $user->id !== $target->id
+            && $user->organization_id === $target->organization_id;
     }
 }

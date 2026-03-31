@@ -19,6 +19,12 @@ class User extends Authenticatable
         'email',
         'password',
         'telephone',
+        'is_active',
+        'pays',
+        'code_pays',
+        'code_phone_pays',
+        'ville',
+        'adresse',
         'organization_id',
     ];
 
@@ -40,6 +46,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime:Y-m-d H:i:s',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+            'is_active' => 'boolean',
         ];
     }
 
