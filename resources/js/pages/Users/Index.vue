@@ -97,6 +97,10 @@ function initials(name: string) {
         .toUpperCase();
 }
 
+const totalUsers = computed(() => props.users.length);
+const activeUsers = computed(() => props.users.filter((u) => u.is_active).length);
+const inactiveUsers = computed(() => props.users.filter((u) => !u.is_active).length);
+
 const search = ref('');
 const statusFilter = ref<boolean | null>(null);
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
@@ -161,6 +165,22 @@ function confirmDelete(u: StaffUser) {
                         Nouveau compte
                     </Button>
                 </Link>
+            </div>
+
+            <!-- Stats -->
+            <div class="grid grid-cols-3 gap-4">
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">Total utilisateurs</p>
+                    <p class="mt-1 text-3xl font-bold">{{ totalUsers }}</p>
+                </div>
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">Utilisateurs actifs</p>
+                    <p class="mt-1 text-3xl font-bold text-emerald-500">{{ activeUsers }}</p>
+                </div>
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">Utilisateurs inactifs</p>
+                    <p class="mt-1 text-3xl font-bold text-zinc-400">{{ inactiveUsers }}</p>
+                </div>
             </div>
 
             <div class="overflow-hidden rounded-xl border bg-card">
