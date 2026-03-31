@@ -126,9 +126,9 @@ test('stats cards display correct counts', async ({ page }) => {
     await expect(activeCard).toBeVisible();
     await expect(inactiveCard).toBeVisible();
 
-    const total = parseInt(await totalCard.innerText(), 10);
-    const active = parseInt(await activeCard.innerText(), 10);
-    const inactive = parseInt(await inactiveCard.innerText(), 10);
+    const total = Number.parseInt(await totalCard.innerText(), 10);
+    const active = Number.parseInt(await activeCard.innerText(), 10);
+    const inactive = Number.parseInt(await inactiveCard.innerText(), 10);
 
     expect(total).toBeGreaterThan(0);
     expect(active + inactive).toBe(total);
