@@ -32,6 +32,7 @@ import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
+
 interface StaffUser {
     id: number;
     nom: string;
@@ -97,9 +98,15 @@ function initials(name: string) {
 }
 
 const search = ref('');
+const statusFilter = ref<boolean | null>(null);
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => {
     filters.value.global.value = val;
+});
+
+const filteredUsers = computed(() => {
+    if (statusFilter.value === null) return props.users;
+    return props.users.filter((u) => u.is_active === statusFilter.value);
 });
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -142,8 +149,8 @@ function confirmDelete(u: StaffUser) {
                         Utilisateurs
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ props.users.length }} compte{{
-                            props.users.length !== 1 ? 's' : ''
+                        {{ filteredUsers.length }} compte{{
+                            filteredUsers.length !== 1 ? 's' : ''
                         }}
                         staff
                     </p>
@@ -158,7 +165,7 @@ function confirmDelete(u: StaffUser) {
 
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="props.users"
+                    :value="filteredUsers"
                     :paginator="props.users.length > 20"
                     :rows="20"
                     :global-filter-fields="['nom_complet', 'email', 'site']"
@@ -185,6 +192,26 @@ function confirmDelete(u: StaffUser) {
                                     class="w-full text-sm"
                                 />
                             </IconField>
+                            <div class="flex gap-1">
+                                <button
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                                    :class="statusFilter === null ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'"
+                                    @click="statusFilter = null"
+                                >Tous</button>
+                                <button
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                                    :class="statusFilter === true ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'"
+                                    @click="statusFilter = true"
+                                >Actif</button>
+                                <button
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                                    :class="statusFilter === false ? 'bg-zinc-500 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'"
+                                    @click="statusFilter = false"
+                                >Inactif</button>
+                            </div>
                         </div>
                     </template>
 
@@ -221,8 +248,24 @@ function confirmDelete(u: StaffUser) {
                         </template>
                     </Column>
 
+                    <!-- Téléphone -->
+                    <Column
+                        field="telephone"
+                        header="Téléphone"
+                        style="width: 180px"
+                    >
+                        <template #body="{ data }">
+                            <span class="text-sm text-muted-foreground">{{
+                                formatPhoneDisplay(
+                                    data.telephone,
+                                    data.code_phone_pays,
+                                )
+                            }}</span>
+                        </template>
+                    </Column>
+
                     <!-- Rôle -->
-                    <Column header="Rôle" style="width: 180px">
+                    <Column field="roles" header="Rôle" sortable style="width: 180px">
                         <template #body="{ data }">
                             <div class="flex flex-wrap items-center gap-1.5">
                                 <span
@@ -239,7 +282,7 @@ function confirmDelete(u: StaffUser) {
                     </Column>
 
                     <!-- Site -->
-                    <Column header="Site" style="width: 180px">
+                    <Column field="site" header="Site" sortable style="width: 180px">
                         <template #body="{ data }">
                             <span
                                 v-if="data.site"
@@ -253,29 +296,13 @@ function confirmDelete(u: StaffUser) {
                     </Column>
 
                     <!-- Statut -->
-                    <Column header="Statut" style="width: 100px">
+                    <Column field="is_active" header="Statut" sortable style="width: 100px">
                         <template #body="{ data }">
                             <StatusDot
                                 :label="data.is_active ? 'Actif' : 'Inactif'"
                                 :dot-class="data.is_active ? 'bg-emerald-500' : 'bg-zinc-400 dark:bg-zinc-500'"
                                 class="text-muted-foreground"
                             />
-                        </template>
-                    </Column>
-
-                    <!-- Téléphone -->
-                    <Column
-                        field="telephone"
-                        header="Téléphone"
-                        style="width: 180px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-sm text-muted-foreground">{{
-                                formatPhoneDisplay(
-                                    data.telephone,
-                                    data.code_phone_pays,
-                                )
-                            }}</span>
                         </template>
                     </Column>
 
