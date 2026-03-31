@@ -24,12 +24,20 @@ class UserPolicy
 
     public function update(User $user, User $target): bool
     {
+        if ($target->isSuperAdmin() && ! $user->isSuperAdmin()) {
+            return false;
+        }
+
         return $user->can('users.update')
             && $user->organization_id === $target->organization_id;
     }
 
     public function delete(User $user, User $target): bool
     {
+        if ($target->isSuperAdmin() && ! $user->isSuperAdmin()) {
+            return false;
+        }
+
         return $user->isSuperAdmin()
             && $user->id !== $target->id
             && $user->organization_id === $target->organization_id;

@@ -27,7 +27,13 @@ interface CountryOption {
 }
 
 const PAYS_OPTIONS: CountryOption[] = [
-    { label: 'Guinée', value: 'GN', code: 'GN', dial: '+224', localLength: 9 },
+    {
+        label: 'Guinée',
+        value: 'GN',
+        code: 'GN',
+        dial: '+224',
+        localLength: 9,
+    },
     {
         label: 'Guinée-Bissau',
         value: 'GW',
@@ -35,7 +41,13 @@ const PAYS_OPTIONS: CountryOption[] = [
         dial: '+245',
         localLength: 7,
     },
-    { label: 'Sénégal', value: 'SN', code: 'SN', dial: '+221', localLength: 9 },
+    {
+        label: 'Sénégal',
+        value: 'SN',
+        code: 'SN',
+        dial: '+221',
+        localLength: 9,
+    },
     { label: 'Mali', value: 'ML', code: 'ML', dial: '+223', localLength: 8 },
     {
         label: "Côte d'Ivoire",
@@ -123,7 +135,7 @@ const selectedCountry = computed(
 const selectedPhoneLength = computed(() => selectedCountry.value.localLength);
 
 const phoneMaxLength = computed(() => {
-    const digits = String(props.form.telephone ?? '').replace(/\D/g, '');
+    const digits = String(props.form.telephone ?? '').replaceAll(/\D/g, '');
     return digits.startsWith('0')
         ? selectedPhoneLength.value + 1
         : selectedPhoneLength.value;
@@ -132,7 +144,10 @@ const phoneMaxLength = computed(() => {
 function onPaysChange(code: string) {
     const country = PAYS_OPTIONS.find((c) => c.code === code);
     if (!country) return;
-    const currentDigits = String(props.form.telephone ?? '').replace(/\D/g, '');
+    const currentDigits = String(props.form.telephone ?? '').replaceAll(
+        /\D/g,
+        '',
+    );
     const max = currentDigits.startsWith('0')
         ? country.localLength + 1
         : country.localLength;
@@ -141,7 +156,10 @@ function onPaysChange(code: string) {
         code_pays: country.code,
         code_phone_pays: country.dial,
         telephone: currentDigits.slice(0, max) || null,
-        ville: country.code === 'GN' && !props.form.ville ? 'Conakry' : props.form.ville,
+        ville:
+            country.code === 'GN' && !props.form.ville
+                ? 'Conakry'
+                : props.form.ville,
     });
 }
 
@@ -169,7 +187,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 }
 
 function onTelephoneInput(value: string | null | undefined) {
-    const raw = String(value ?? '').replace(/\D/g, '');
+    const raw = String(value ?? '').replaceAll(/\D/g, '');
     const max = raw.startsWith('0')
         ? selectedPhoneLength.value + 1
         : selectedPhoneLength.value;
@@ -188,7 +206,7 @@ function update(field: keyof typeof props.form, value: string | null) {
 function toTitleCase(str: string): string {
     return str
         .toLowerCase()
-        .replace(/(?:^|\s|-)\S/g, (c) => c.toUpperCase());
+        .replaceAll(/(?:^|\s|-)\S/g, (c) => c.toUpperCase());
 }
 
 function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
@@ -196,7 +214,8 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
     if (!raw.trim()) return;
     let formatted: string;
     if (field === 'nom') formatted = raw.toUpperCase();
-    else if (field === 'prenom' || field === 'ville' || field === 'adresse') formatted = toTitleCase(raw);
+    else if (field === 'prenom' || field === 'ville' || field === 'adresse')
+        formatted = toTitleCase(raw);
     else formatted = raw.toLowerCase(); // email
     emit('update:form', { ...props.form, [field]: formatted });
 }
@@ -221,14 +240,19 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                     <Label for="prenom" class="mb-1.5 block">
                         Prénom <span class="text-destructive">*</span>
                     </Label>
-                    <div @focusout="formatOnBlur('prenom')" @keydown.enter="formatOnBlur('prenom')">
+                    <div
+                        @focusout="formatOnBlur('prenom')"
+                        @keydown.enter="formatOnBlur('prenom')"
+                    >
                         <InputText
                             id="prenom"
                             :model-value="form.prenom"
                             autocomplete="off"
                             class="w-full"
                             :class="{ 'p-invalid': errors.prenom }"
-                            @update:model-value="update('prenom', String($event ?? ''))"
+                            @update:model-value="
+                                update('prenom', String($event ?? ''))
+                            "
                         />
                     </div>
                     <p
@@ -242,14 +266,19 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                     <Label for="nom" class="mb-1.5 block">
                         Nom <span class="text-destructive">*</span>
                     </Label>
-                    <div @focusout="formatOnBlur('nom')" @keydown.enter="formatOnBlur('nom')">
+                    <div
+                        @focusout="formatOnBlur('nom')"
+                        @keydown.enter="formatOnBlur('nom')"
+                    >
                         <InputText
                             id="nom"
                             :model-value="form.nom"
                             autocomplete="off"
                             class="w-full"
                             :class="{ 'p-invalid': errors.nom }"
-                            @update:model-value="update('nom', String($event ?? ''))"
+                            @update:model-value="
+                                update('nom', String($event ?? ''))
+                            "
                         />
                     </div>
                     <p v-if="errors.nom" class="mt-1 text-xs text-destructive">
@@ -268,8 +297,9 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
-                    <Label class="mb-1.5 block">Pays</Label>
+                    <Label for="code_pays" class="mb-1.5 block">Pays</Label>
                     <Dropdown
+                        input-id="code_pays"
                         :model-value="form.code_pays"
                         :options="PAYS_OPTIONS"
                         option-label="label"
@@ -282,6 +312,7 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                             <div v-if="value" class="flex items-center gap-2">
                                 <img
                                     :src="flagUrl(value)"
+                                    :alt="selectedCountry.label"
                                     class="h-4 w-auto rounded-sm shadow-sm"
                                 />
                                 <span>{{ selectedCountry.label }}</span>
@@ -304,23 +335,33 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                 </div>
                 <div>
                     <Label for="ville" class="mb-1.5 block">Ville</Label>
-                    <div @focusout="formatOnBlur('ville')" @keydown.enter="formatOnBlur('ville')">
+                    <div
+                        @focusout="formatOnBlur('ville')"
+                        @keydown.enter="formatOnBlur('ville')"
+                    >
                         <InputText
                             id="ville"
                             :model-value="form.ville ?? ''"
                             class="w-full"
-                            @update:model-value="update('ville', ($event as string) || null)"
+                            @update:model-value="
+                                update('ville', ($event as string) || null)
+                            "
                         />
                     </div>
                 </div>
                 <div class="sm:col-span-2">
                     <Label for="adresse" class="mb-1.5 block">Adresse</Label>
-                    <div @focusout="formatOnBlur('adresse')" @keydown.enter="formatOnBlur('adresse')">
+                    <div
+                        @focusout="formatOnBlur('adresse')"
+                        @keydown.enter="formatOnBlur('adresse')"
+                    >
                         <InputText
                             id="adresse"
                             :model-value="form.adresse ?? ''"
                             class="w-full"
-                            @update:model-value="update('adresse', ($event as string) || null)"
+                            @update:model-value="
+                                update('adresse', ($event as string) || null)
+                            "
                         />
                     </div>
                 </div>
@@ -391,7 +432,9 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                         autocomplete="off"
                         class="w-full"
                         :class="{ 'p-invalid': errors.email }"
-                        @update:model-value="update('email', ($event as string) || null)"
+                        @update:model-value="
+                            update('email', ($event as string) || null)
+                        "
                         @focusout="formatOnBlur('email')"
                         @keydown.enter="formatOnBlur('email')"
                     />
@@ -414,10 +457,11 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
-                    <Label class="mb-1.5 block">
+                    <Label for="role" class="mb-1.5 block">
                         Rôle <span class="text-destructive">*</span>
                     </Label>
                     <Select
+                        input-id="role"
                         :model-value="form.role"
                         :options="roleOptions"
                         option-label="label"
@@ -432,10 +476,11 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                     </p>
                 </div>
                 <div v-if="sites && sites.length">
-                    <Label class="mb-1.5 block">
+                    <Label for="site_id" class="mb-1.5 block">
                         Site <span class="text-destructive">*</span>
                     </Label>
                     <Select
+                        input-id="site_id"
                         :model-value="(form as any).site_id"
                         :options="sites"
                         option-label="label"
@@ -443,9 +488,17 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                         placeholder="Choisir un site"
                         class="w-full"
                         :class="{ 'p-invalid': errors.site_id }"
-                        @change="emit('update:form', { ...form, site_id: $event.value } as any)"
+                        @change="
+                            emit('update:form', {
+                                ...form,
+                                site_id: $event.value,
+                            } as any)
+                        "
                     />
-                    <p v-if="errors.site_id" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="errors.site_id"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ errors.site_id }}
                     </p>
                 </div>
@@ -453,7 +506,10 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
         </div>
 
         <!-- Mot de passe -->
-        <div v-if="showPassword !== false" class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div
+            v-if="showPassword !== false"
+            class="rounded-xl border bg-card p-4 shadow-sm sm:p-6"
+        >
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >

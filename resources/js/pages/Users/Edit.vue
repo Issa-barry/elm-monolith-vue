@@ -58,7 +58,10 @@ const DIAL_MAP: Record<string, string> = {
     IN: '+91',
 };
 
-function localDigits(tel: string | null, codePays: string | null): string | null {
+function localDigits(
+    tel: string | null,
+    codePays: string | null,
+): string | null {
     if (!tel) return null;
     const dial = codePays ? DIAL_MAP[codePays] : null;
     if (dial && tel.startsWith(dial)) return tel.slice(dial.length);
@@ -88,21 +91,25 @@ const infoForm = useForm({
     is_active: props.user.is_active,
 });
 
-watch(() => props.user, (user) => {
-    const codePays = user.code_pays ?? 'GN';
-    infoForm.prenom   = user.prenom;
-    infoForm.nom      = user.nom;
-    infoForm.email    = user.email;
-    infoForm.telephone = localDigits(user.telephone, codePays);
-    infoForm.code_pays = codePays;
-    infoForm.code_phone_pays = DIAL_MAP[codePays] ?? '+224';
-    infoForm.ville    = user.ville;
-    infoForm.adresse  = user.adresse;
-    infoForm.role     = user.role;
-    infoForm.site_id  = user.site_id;
-    infoForm.is_active = user.is_active;
-    infoForm.clearErrors();
-}, { deep: true });
+watch(
+    () => props.user,
+    (user) => {
+        const codePays = user.code_pays ?? 'GN';
+        infoForm.prenom = user.prenom;
+        infoForm.nom = user.nom;
+        infoForm.email = user.email;
+        infoForm.telephone = localDigits(user.telephone, codePays);
+        infoForm.code_pays = codePays;
+        infoForm.code_phone_pays = DIAL_MAP[codePays] ?? '+224';
+        infoForm.ville = user.ville;
+        infoForm.adresse = user.adresse;
+        infoForm.role = user.role;
+        infoForm.site_id = user.site_id;
+        infoForm.is_active = user.is_active;
+        infoForm.clearErrors();
+    },
+    { deep: true },
+);
 
 function submitInfo() {
     infoForm.put(`/users/${props.user.id}`);
@@ -168,14 +175,19 @@ function submitPassword() {
 
             <!-- Layout 2 colonnes style Settings -->
             <div class="flex flex-col px-4 sm:px-6 lg:flex-row lg:gap-12">
-
                 <!-- Sidebar nav -->
                 <aside class="w-full lg:w-44">
-                    <nav class="flex gap-1 overflow-x-auto pb-4 lg:flex-col lg:space-y-1 lg:overflow-x-visible lg:pb-0">
+                    <nav
+                        class="flex gap-1 overflow-x-auto pb-4 lg:flex-col lg:space-y-1 lg:overflow-x-visible lg:pb-0"
+                    >
                         <button
                             type="button"
                             class="inline-flex w-auto shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted lg:w-full lg:justify-start"
-                            :class="activeTab === 'info' ? 'bg-muted text-foreground' : 'text-muted-foreground'"
+                            :class="
+                                activeTab === 'info'
+                                    ? 'bg-muted text-foreground'
+                                    : 'text-muted-foreground'
+                            "
                             @click="activeTab = 'info'"
                         >
                             <UserCog class="h-4 w-4" />
@@ -184,7 +196,11 @@ function submitPassword() {
                         <button
                             type="button"
                             class="inline-flex w-auto shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted lg:w-full lg:justify-start"
-                            :class="activeTab === 'password' ? 'bg-muted text-foreground' : 'text-muted-foreground'"
+                            :class="
+                                activeTab === 'password'
+                                    ? 'bg-muted text-foreground'
+                                    : 'text-muted-foreground'
+                            "
                             @click="activeTab = 'password'"
                         >
                             <KeyRound class="h-4 w-4" />
@@ -195,105 +211,118 @@ function submitPassword() {
 
                 <!-- Contenu -->
                 <div class="min-w-0 flex-1">
+                    <!-- Onglet Informations -->
+                    <UserForm
+                        v-if="activeTab === 'info'"
+                        :form="infoForm"
+                        :errors="infoForm.errors"
+                        :processing="infoForm.processing"
+                        :roles="roles"
+                        :sites="sites"
+                        :is-edit="true"
+                        :show-password="false"
+                        back-href="/users"
+                        @submit="submitInfo"
+                        @update:form="Object.assign(infoForm, $event)"
+                        @clear-error="infoForm.clearErrors($event as any)"
+                    />
 
-                <!-- Onglet Informations -->
-                <UserForm
-                    v-if="activeTab === 'info'"
-                    :form="infoForm"
-                    :errors="infoForm.errors"
-                    :processing="infoForm.processing"
-                    :roles="roles"
-                    :sites="sites"
-                    :is-edit="true"
-                    :show-password="false"
-                    back-href="/users"
-                    @submit="submitInfo"
-                    @update:form="Object.assign(infoForm, $event)"
-                    @clear-error="infoForm.clearErrors($event as any)"
-                />
-
-            <!-- Onglet Mot de passe -->
-                <form
-                    v-else
-                    id="user-form"
-                    class="space-y-4 sm:space-y-6"
-                    autocomplete="off"
-                    @submit.prevent="submitPassword"
-                >
-                    <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-                        <h3
-                            class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+                    <!-- Onglet Mot de passe -->
+                    <form
+                        v-else
+                        id="user-form"
+                        class="space-y-4 sm:space-y-6"
+                        autocomplete="off"
+                        @submit.prevent="submitPassword"
+                    >
+                        <div
+                            class="rounded-xl border bg-card p-4 shadow-sm sm:p-6"
                         >
-                            Nouveau mot de passe
-                        </h3>
-                        <div class="grid gap-5 sm:grid-cols-2">
-                            <div>
-                                <label
-                                    for="password"
-                                    class="mb-1.5 block text-sm font-medium"
-                                >
-                                    Mot de passe
-                                    <span class="text-destructive">*</span>
-                                </label>
-                                <input
-                                    id="password"
-                                    v-model="passwordForm.password"
-                                    type="password"
-                                    autocomplete="new-password"
-                                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                    :class="{ 'border-destructive': passwordForm.errors.password }"
-                                />
-                                <p
-                                    v-if="passwordForm.errors.password"
-                                    class="mt-1 text-xs text-destructive"
-                                >
-                                    {{ passwordForm.errors.password }}
-                                </p>
-                            </div>
-                            <div>
-                                <label
-                                    for="password_confirmation"
-                                    class="mb-1.5 block text-sm font-medium"
-                                >
-                                    Confirmer
-                                    <span class="text-destructive">*</span>
-                                </label>
-                                <input
-                                    id="password_confirmation"
-                                    v-model="passwordForm.password_confirmation"
-                                    type="password"
-                                    autocomplete="new-password"
-                                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                />
+                            <h3
+                                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+                            >
+                                Nouveau mot de passe
+                            </h3>
+                            <div class="grid gap-5 sm:grid-cols-2">
+                                <div>
+                                    <label
+                                        for="password"
+                                        class="mb-1.5 block text-sm font-medium"
+                                    >
+                                        Mot de passe
+                                        <span class="text-destructive">*</span>
+                                    </label>
+                                    <input
+                                        id="password"
+                                        v-model="passwordForm.password"
+                                        type="password"
+                                        autocomplete="new-password"
+                                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                        :class="{
+                                            'border-destructive':
+                                                passwordForm.errors.password,
+                                        }"
+                                    />
+                                    <p
+                                        v-if="passwordForm.errors.password"
+                                        class="mt-1 text-xs text-destructive"
+                                    >
+                                        {{ passwordForm.errors.password }}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label
+                                        for="password_confirmation"
+                                        class="mb-1.5 block text-sm font-medium"
+                                    >
+                                        Confirmer
+                                        <span class="text-destructive">*</span>
+                                    </label>
+                                    <input
+                                        id="password_confirmation"
+                                        v-model="
+                                            passwordForm.password_confirmation
+                                        "
+                                        type="password"
+                                        autocomplete="new-password"
+                                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                    />
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Actions desktop -->
-                    <div class="hidden items-center justify-between sm:flex">
-                        <Link href="/users">
-                            <button
-                                type="button"
-                                class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium transition-colors hover:bg-accent"
-                            >
-                                <ArrowLeft class="mr-2 h-4 w-4" />
-                                Retour
-                            </button>
-                        </Link>
-                        <button
-                            type="submit"
-                            :disabled="passwordForm.processing"
-                            class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+                        <!-- Actions desktop -->
+                        <div
+                            class="hidden items-center justify-between sm:flex"
                         >
-                            <Save class="mr-2 h-4 w-4" />
-                            {{ passwordForm.processing ? 'Enregistrement…' : 'Enregistrer' }}
-                        </button>
-                    </div>
-                    <div class="h-20 sm:hidden" />
-                </form>
-
-                </div><!-- /flex-1 -->
-            </div><!-- /flex row -->
+                            <Link href="/users">
+                                <button
+                                    type="button"
+                                    class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium transition-colors hover:bg-accent"
+                                >
+                                    <ArrowLeft class="mr-2 h-4 w-4" />
+                                    Retour
+                                </button>
+                            </Link>
+                            <button
+                                type="submit"
+                                :disabled="passwordForm.processing"
+                                class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+                            >
+                                <Save class="mr-2 h-4 w-4" />
+                                {{
+                                    passwordForm.processing
+                                        ? 'Enregistrement…'
+                                        : 'Enregistrer'
+                                }}
+                            </button>
+                        </div>
+                        <div class="h-20 sm:hidden" />
+                    </form>
+                </div>
+                <!-- /flex-1 -->
+            </div>
+            <!-- /flex row -->
         </div>
 
         <!-- Footer mobile -->
@@ -303,16 +332,28 @@ function submitPassword() {
             <button
                 type="submit"
                 form="user-form"
-                :disabled="activeTab === 'info' ? infoForm.processing : passwordForm.processing"
+                :disabled="
+                    activeTab === 'info'
+                        ? infoForm.processing
+                        : passwordForm.processing
+                "
                 class="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-60"
             >
                 <Spinner
-                    v-if="activeTab === 'info' ? infoForm.processing : passwordForm.processing"
+                    v-if="
+                        activeTab === 'info'
+                            ? infoForm.processing
+                            : passwordForm.processing
+                    "
                     class="h-4 w-4"
                 />
                 <Save v-else class="h-4 w-4" />
                 {{
-                    (activeTab === 'info' ? infoForm.processing : passwordForm.processing)
+                    (
+                        activeTab === 'info'
+                            ? infoForm.processing
+                            : passwordForm.processing
+                    )
                         ? 'Enregistrement…'
                         : 'Enregistrer'
                 }}

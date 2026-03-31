@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -7,7 +8,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import StatusDot from '@/components/StatusDot.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -31,7 +31,6 @@ import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
-
 
 interface StaffUser {
     id: number;
@@ -98,8 +97,12 @@ function initials(name: string) {
 }
 
 const totalUsers = computed(() => props.users.length);
-const activeUsers = computed(() => props.users.filter((u) => u.is_active).length);
-const inactiveUsers = computed(() => props.users.filter((u) => !u.is_active).length);
+const activeUsers = computed(
+    () => props.users.filter((u) => u.is_active).length,
+);
+const inactiveUsers = computed(
+    () => props.users.filter((u) => !u.is_active).length,
+);
 
 const search = ref('');
 const statusFilter = ref<boolean | null>(null);
@@ -117,6 +120,11 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Utilisateurs', href: '/users' },
 ];
+
+function canActOn(u: StaffUser): boolean {
+    if (u.roles.includes('super_admin') && !isSuperAdmin.value) return false;
+    return true;
+}
 
 function confirmDelete(u: StaffUser) {
     confirm.require({
@@ -170,16 +178,26 @@ function confirmDelete(u: StaffUser) {
             <!-- Stats -->
             <div class="grid grid-cols-3 gap-4">
                 <div class="rounded-xl border bg-card p-5">
-                    <p class="text-sm text-muted-foreground">Total utilisateurs</p>
+                    <p class="text-sm text-muted-foreground">
+                        Total utilisateurs
+                    </p>
                     <p class="mt-1 text-3xl font-bold">{{ totalUsers }}</p>
                 </div>
                 <div class="rounded-xl border bg-card p-5">
-                    <p class="text-sm text-muted-foreground">Utilisateurs actifs</p>
-                    <p class="mt-1 text-3xl font-bold text-emerald-500">{{ activeUsers }}</p>
+                    <p class="text-sm text-muted-foreground">
+                        Utilisateurs actifs
+                    </p>
+                    <p class="mt-1 text-3xl font-bold text-emerald-500">
+                        {{ activeUsers }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5">
-                    <p class="text-sm text-muted-foreground">Utilisateurs inactifs</p>
-                    <p class="mt-1 text-3xl font-bold text-zinc-400">{{ inactiveUsers }}</p>
+                    <p class="text-sm text-muted-foreground">
+                        Utilisateurs inactifs
+                    </p>
+                    <p class="mt-1 text-3xl font-bold text-zinc-400">
+                        {{ inactiveUsers }}
+                    </p>
                 </div>
             </div>
 
@@ -216,21 +234,39 @@ function confirmDelete(u: StaffUser) {
                                 <button
                                     type="button"
                                     class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                                    :class="statusFilter === null ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'"
+                                    :class="
+                                        statusFilter === null
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    "
                                     @click="statusFilter = null"
-                                >Tous</button>
+                                >
+                                    Tous
+                                </button>
                                 <button
                                     type="button"
                                     class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                                    :class="statusFilter === true ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'"
+                                    :class="
+                                        statusFilter === true
+                                            ? 'bg-emerald-500 text-white'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    "
                                     @click="statusFilter = true"
-                                >Actif</button>
+                                >
+                                    Actif
+                                </button>
                                 <button
                                     type="button"
                                     class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                                    :class="statusFilter === false ? 'bg-zinc-500 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'"
+                                    :class="
+                                        statusFilter === false
+                                            ? 'bg-zinc-500 text-white'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    "
                                     @click="statusFilter = false"
-                                >Inactif</button>
+                                >
+                                    Inactif
+                                </button>
                             </div>
                         </div>
                     </template>
@@ -285,7 +321,12 @@ function confirmDelete(u: StaffUser) {
                     </Column>
 
                     <!-- Rôle -->
-                    <Column field="roles" header="Rôle" sortable style="width: 180px">
+                    <Column
+                        field="roles"
+                        header="Rôle"
+                        sortable
+                        style="width: 180px"
+                    >
                         <template #body="{ data }">
                             <div class="flex flex-wrap items-center gap-1.5">
                                 <span
@@ -302,7 +343,12 @@ function confirmDelete(u: StaffUser) {
                     </Column>
 
                     <!-- Site -->
-                    <Column field="site" header="Site" sortable style="width: 180px">
+                    <Column
+                        field="site"
+                        header="Site"
+                        sortable
+                        style="width: 180px"
+                    >
                         <template #body="{ data }">
                             <span
                                 v-if="data.site"
@@ -311,16 +357,27 @@ function confirmDelete(u: StaffUser) {
                                 <Building2 class="h-3.5 w-3.5 shrink-0" />
                                 {{ data.site }}
                             </span>
-                            <span v-else class="text-xs text-muted-foreground">—</span>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
                         </template>
                     </Column>
 
                     <!-- Statut -->
-                    <Column field="is_active" header="Statut" sortable style="width: 100px">
+                    <Column
+                        field="is_active"
+                        header="Statut"
+                        sortable
+                        style="width: 100px"
+                    >
                         <template #body="{ data }">
                             <StatusDot
                                 :label="data.is_active ? 'Actif' : 'Inactif'"
-                                :dot-class="data.is_active ? 'bg-emerald-500' : 'bg-zinc-400 dark:bg-zinc-500'"
+                                :dot-class="
+                                    data.is_active
+                                        ? 'bg-emerald-500'
+                                        : 'bg-zinc-400 dark:bg-zinc-500'
+                                "
                                 class="text-muted-foreground"
                             />
                         </template>
@@ -345,7 +402,7 @@ function confirmDelete(u: StaffUser) {
                                         class="w-44"
                                     >
                                         <DropdownMenuItem
-                                            v-if="can('users.update')"
+                                            v-if="can('users.update') && canActOn(data)"
                                             as-child
                                         >
                                             <Link
@@ -359,12 +416,13 @@ function confirmDelete(u: StaffUser) {
                                         <DropdownMenuSeparator
                                             v-if="
                                                 can('users.update') &&
+                                                canActOn(data) &&
                                                 isSuperAdmin &&
                                                 !data.is_me
                                             "
                                         />
                                         <DropdownMenuItem
-                                            v-if="isSuperAdmin && !data.is_me"
+                                            v-if="isSuperAdmin && canActOn(data) && !data.is_me"
                                             class="cursor-pointer text-destructive focus:text-destructive"
                                             @click="confirmDelete(data)"
                                         >

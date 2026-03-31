@@ -37,29 +37,30 @@ class UserController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $users = User::with([
-                'roles:id,name',
-                'sites' => fn ($q) => $q->wherePivot('is_default', true)->select('sites.id', 'sites.nom', 'sites.code')->limit(1),
-            ])
+            'roles:id,name',
+            'sites' => fn ($q) => $q->wherePivot('is_default', true)->select('sites.id', 'sites.nom', 'sites.code')->limit(1),
+        ])
             ->where('organization_id', $orgId)
             ->whereHas('roles', fn ($q) => $q->whereIn('name', self::STAFF_ROLES))
             ->orderBy('nom')
             ->get()
             ->map(function (User $u) {
                 $defaultSite = $u->sites->first();
+
                 return [
-                    'id'             => $u->id,
-                    'nom'            => $u->nom,
-                    'prenom'         => $u->prenom,
-                    'nom_complet'    => $u->name,
-                    'email'          => $u->email,
-                    'telephone'      => $u->telephone,
+                    'id' => $u->id,
+                    'nom' => $u->nom,
+                    'prenom' => $u->prenom,
+                    'nom_complet' => $u->name,
+                    'email' => $u->email,
+                    'telephone' => $u->telephone,
                     'code_phone_pays' => ($u->code_pays && isset(USER_PAYS[$u->code_pays]))
                         ? USER_PAYS[$u->code_pays][1]
                         : null,
-                    'is_active'      => $u->is_active,
-                    'roles'          => $u->getRoleNames(),
-                    'site'           => $defaultSite ? "{$defaultSite->nom} ({$defaultSite->code})" : null,
-                    'is_me'          => $u->id === auth()->id(),
+                    'is_active' => $u->is_active,
+                    'roles' => $u->getRoleNames(),
+                    'site' => $defaultSite ? "{$defaultSite->nom} ({$defaultSite->code})" : null,
+                    'is_me' => $u->id === auth()->id(),
                 ];
             });
 
@@ -266,7 +267,7 @@ class UserController extends Controller
         $user->update($updateData);
         $user->syncRoles([$data['role']]);
 
-        if (!empty($data['site_id'])) {
+        if (! empty($data['site_id'])) {
             $user->sites()->sync([$data['site_id'] => ['role' => 'employe', 'is_default' => true]]);
         }
 

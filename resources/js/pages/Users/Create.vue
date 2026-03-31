@@ -49,9 +49,11 @@ const form = useForm({
 function goToPassword() {
     form.clearErrors();
 
-    if (!form.prenom.trim()) form.setError('prenom', 'Le prénom est obligatoire.');
+    if (!form.prenom.trim())
+        form.setError('prenom', 'Le prénom est obligatoire.');
     if (!form.nom.trim()) form.setError('nom', 'Le nom est obligatoire.');
-    if (!form.telephone) form.setError('telephone', 'Le numéro de téléphone est obligatoire.');
+    if (!form.telephone)
+        form.setError('telephone', 'Le numéro de téléphone est obligatoire.');
     if (!form.role) form.setError('role', 'Le rôle est obligatoire.');
     if (!form.site_id) form.setError('site_id', 'Le site est obligatoire.');
 
@@ -68,15 +70,24 @@ function submit() {
         return;
     }
     if (form.password.length < 8) {
-        form.setError('password', 'Le mot de passe doit contenir au moins 8 caractères.');
+        form.setError(
+            'password',
+            'Le mot de passe doit contenir au moins 8 caractères.',
+        );
         return;
     }
-    if (!/[a-zA-Z]/.test(form.password) || !/[0-9]/.test(form.password)) {
-        form.setError('password', 'Le mot de passe doit contenir des lettres et des chiffres.');
+    if (!/[a-zA-Z]/.test(form.password) || !/\d/.test(form.password)) {
+        form.setError(
+            'password',
+            'Le mot de passe doit contenir des lettres et des chiffres.',
+        );
         return;
     }
     if (form.password !== form.password_confirmation) {
-        form.setError('password_confirmation', 'La confirmation ne correspond pas.');
+        form.setError(
+            'password_confirmation',
+            'La confirmation ne correspond pas.',
+        );
         return;
     }
 
@@ -123,14 +134,19 @@ function submit() {
 
             <!-- Layout 2 colonnes style Settings -->
             <div class="flex flex-col px-4 sm:px-6 lg:flex-row lg:gap-12">
-
                 <!-- Sidebar nav -->
                 <aside class="w-full lg:w-44">
-                    <nav class="flex gap-1 overflow-x-auto pb-4 lg:flex-col lg:space-y-1 lg:overflow-x-visible lg:pb-0">
+                    <nav
+                        class="flex gap-1 overflow-x-auto pb-4 lg:flex-col lg:space-y-1 lg:overflow-x-visible lg:pb-0"
+                    >
                         <button
                             type="button"
                             class="inline-flex w-auto shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted lg:w-full lg:justify-start"
-                            :class="activeTab === 'info' ? 'bg-muted text-foreground' : 'text-muted-foreground'"
+                            :class="
+                                activeTab === 'info'
+                                    ? 'bg-muted text-foreground'
+                                    : 'text-muted-foreground'
+                            "
                             @click="activeTab = 'info'"
                         >
                             <UserCog class="h-4 w-4" />
@@ -139,7 +155,11 @@ function submit() {
                         <button
                             type="button"
                             class="inline-flex w-auto shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted lg:w-full lg:justify-start"
-                            :class="activeTab === 'password' ? 'bg-muted text-foreground' : 'text-muted-foreground'"
+                            :class="
+                                activeTab === 'password'
+                                    ? 'bg-muted text-foreground'
+                                    : 'text-muted-foreground'
+                            "
                             @click="activeTab = 'password'"
                         >
                             <KeyRound class="h-4 w-4" />
@@ -150,7 +170,6 @@ function submit() {
 
                 <!-- Contenu -->
                 <div class="min-w-0 flex-1">
-
                     <!-- Onglet Informations -->
                     <UserForm
                         v-if="activeTab === 'info'"
@@ -176,7 +195,9 @@ function submit() {
                         autocomplete="off"
                         @submit.prevent="submit"
                     >
-                        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+                        <div
+                            class="rounded-xl border bg-card p-4 shadow-sm sm:p-6"
+                        >
                             <h3
                                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
                             >
@@ -196,8 +217,11 @@ function submit() {
                                         v-model="form.password"
                                         type="password"
                                         autocomplete="new-password"
-                                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                        :class="{ 'border-destructive': form.errors.password }"
+                                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                        :class="{
+                                            'border-destructive':
+                                                form.errors.password,
+                                        }"
                                     />
                                     <p
                                         v-if="form.errors.password"
@@ -219,14 +243,16 @@ function submit() {
                                         v-model="form.password_confirmation"
                                         type="password"
                                         autocomplete="new-password"
-                                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                     />
                                 </div>
                             </div>
                         </div>
 
                         <!-- Actions desktop -->
-                        <div class="hidden items-center justify-between sm:flex">
+                        <div
+                            class="hidden items-center justify-between sm:flex"
+                        >
                             <button
                                 type="button"
                                 class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium transition-colors hover:bg-accent"
@@ -241,14 +267,19 @@ function submit() {
                                 class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
                             >
                                 <Save class="mr-2 h-4 w-4" />
-                                {{ form.processing ? 'Création…' : 'Créer le compte' }}
+                                {{
+                                    form.processing
+                                        ? 'Création…'
+                                        : 'Créer le compte'
+                                }}
                             </button>
                         </div>
                         <div class="h-20 sm:hidden" />
                     </form>
-
-                </div><!-- /flex-1 -->
-            </div><!-- /flex row -->
+                </div>
+                <!-- /flex-1 -->
+            </div>
+            <!-- /flex row -->
         </div>
 
         <!-- Footer mobile -->
@@ -263,7 +294,13 @@ function submit() {
             >
                 <Spinner v-if="form.processing" class="h-4 w-4" />
                 <Save v-else class="h-4 w-4" />
-                {{ form.processing ? 'Création…' : activeTab === 'info' ? 'Continuer' : 'Créer le compte' }}
+                {{
+                    form.processing
+                        ? 'Création…'
+                        : activeTab === 'info'
+                          ? 'Continuer'
+                          : 'Créer le compte'
+                }}
             </button>
         </div>
     </AppLayout>
