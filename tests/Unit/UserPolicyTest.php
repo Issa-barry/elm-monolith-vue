@@ -29,6 +29,7 @@ class UserPolicyTest extends TestCase
         Role::firstOrCreate(['name' => $role, 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole($role);
+
         return $user;
     }
 
@@ -41,6 +42,7 @@ class UserPolicyTest extends TestCase
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
         $user->givePermissionTo($permissions);
+
         return $user;
     }
 
