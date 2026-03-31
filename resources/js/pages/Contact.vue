@@ -52,7 +52,9 @@ function submit() {
                         class="flex w-full flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-green-500/30 bg-green-500/10 p-10 text-center"
                     >
                         <CheckCircle class="h-12 w-12 text-green-500" />
-                        <p class="text-lg font-semibold text-green-600 dark:text-green-400">
+                        <p
+                            class="text-lg font-semibold text-green-600 dark:text-green-400"
+                        >
                             Message envoyé !
                         </p>
                         <p class="text-sm text-green-600 dark:text-green-400">
@@ -66,7 +68,9 @@ function submit() {
                         @submit.prevent="submit"
                     >
                         <div class="flex flex-col gap-2">
-                            <label for="name" class="font-medium text-foreground"
+                            <label
+                                for="name"
+                                class="font-medium text-foreground"
                                 >Nom / Entreprise</label
                             >
                             <InputText id="name" v-model="form.name" />
