@@ -16,6 +16,7 @@ interface PackingData {
     reference: string;
     prestataire_id: number;
     date: string;
+    shift: string;
     nb_rouleaux: number;
     prix_par_rouleau: number;
     montant: number;
@@ -28,6 +29,7 @@ interface PackingData {
 const props = defineProps<{
     packing: PackingData;
     prestataires: Option[];
+    shifts: { value: string; label: string }[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -40,6 +42,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     prestataire_id: props.packing.prestataire_id,
     date: props.packing.date,
+    shift: props.packing.shift,
     nb_rouleaux: props.packing.nb_rouleaux,
     prix_par_rouleau: props.packing.prix_par_rouleau,
     notes: props.packing.notes,
@@ -94,6 +97,7 @@ function submit() {
                 :form="form"
                 :errors="form.errors"
                 :prestataires="prestataires"
+                :shifts="shifts"
                 :processing="form.processing"
                 :reference="packing.reference"
                 @update:form="Object.assign(form, $event)"

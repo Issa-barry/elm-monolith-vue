@@ -39,6 +39,8 @@ interface Packing {
     prestataire_id: number;
     prestataire_nom: string | null;
     date: string;
+    shift: string;
+    shift_label: string;
     nb_rouleaux: number;
     prix_par_rouleau: number;
     montant: number;
@@ -78,6 +80,12 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Packings', href: '/packings' },
 ];
+
+// ── Badges shift ──────────────────────────────────────────────────────────────
+const shiftIcon: Record<string, string> = {
+    jour: '☀',
+    nuit: '🌙',
+};
 
 // ── Badges statut ─────────────────────────────────────────────────────────────
 const statutColor: Record<string, string> = {
@@ -229,6 +237,9 @@ function confirmDelete(packing: Packing) {
                                 class="text-[11px] text-muted-foreground tabular-nums"
                                 >{{ formatDate(p.date) }}</span
                             >
+                            <span class="text-[11px] text-muted-foreground">{{
+                                shiftIcon[p.shift] ?? p.shift_label
+                            }}</span>
                             <span
                                 class="text-[11px] font-medium tabular-nums"
                                 >{{ formatGNF(p.montant) }}</span
@@ -438,6 +449,21 @@ function confirmDelete(packing: Packing) {
                                 class="whitespace-nowrap text-muted-foreground tabular-nums"
                                 >{{ formatDate(data.date) }}</span
                             >
+                        </template>
+                    </Column>
+
+                    <!-- Shift -->
+                    <Column
+                        field="shift"
+                        header="Shift"
+                        sortable
+                        style="width: 90px"
+                    >
+                        <template #body="{ data }">
+                            <span class="whitespace-nowrap text-sm">
+                                {{ shiftIcon[data.shift] ?? '' }}
+                                {{ data.shift_label }}
+                            </span>
                         </template>
                     </Column>
 
