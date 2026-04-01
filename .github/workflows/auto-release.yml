@@ -184,7 +184,8 @@ jobs:
 
       - name: Publish GitHub release
         if: steps.release_exists.outputs.exists != 'true'
-        uses: softprops/action-gh-release@v2
+        # v2.6.1
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe
         with:
           tag_name: ${{ steps.release_tag.outputs.tag }}
           name: Release ${{ steps.release_tag.outputs.tag }}

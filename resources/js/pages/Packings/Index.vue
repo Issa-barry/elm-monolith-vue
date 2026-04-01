@@ -460,7 +460,7 @@ function confirmDelete(packing: Packing) {
                         style="width: 90px"
                     >
                         <template #body="{ data }">
-                            <span class="whitespace-nowrap text-sm">
+                            <span class="text-sm whitespace-nowrap">
                                 {{ shiftIcon[data.shift] ?? '' }}
                                 {{ data.shift_label }}
                             </span>

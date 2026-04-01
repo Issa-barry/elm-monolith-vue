@@ -132,7 +132,7 @@ function fromDate(val: Date | null): string {
 
                 <!-- Shift -->
                 <div>
-                    <Label class="mb-1.5 block"
+                    <Label for="shift" class="mb-1.5 block"
                         >Shift <span class="text-destructive">*</span></Label
                     >
                     <Dropdown

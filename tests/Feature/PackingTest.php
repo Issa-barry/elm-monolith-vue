@@ -311,7 +311,6 @@ class PackingTest extends TestCase
     public function test_shift_default_is_jour(): void
     {
         $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $prestataire = $this->makePrestataire($org);
         $packing = $this->makePacking($org, $prestataire);
 
