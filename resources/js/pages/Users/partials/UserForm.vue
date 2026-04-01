@@ -167,17 +167,10 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
 </script>
 
 <template>
-    <form
-        id="user-form"
-        class="space-y-4 sm:space-y-6"
-        autocomplete="off"
-        @submit.prevent="emit('submit')"
-    >
+    <form id="user-form" class="space-y-4 sm:space-y-6" autocomplete="off" @submit.prevent="emit('submit')">
         <!-- Identité -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
+            <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">
                 Identité
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
@@ -185,25 +178,13 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                     <Label for="prenom" class="mb-1.5 block">
                         Prénom <span class="text-destructive">*</span>
                     </Label>
-                    <div
-                        @focusout="formatOnBlur('prenom')"
-                        @keydown.enter="formatOnBlur('prenom')"
-                    >
-                        <InputText
-                            id="prenom"
-                            :model-value="form.prenom"
-                            autocomplete="off"
-                            class="w-full"
-                            :class="{ 'p-invalid': errors.prenom }"
-                            @update:model-value="
+                    <div @focusout="formatOnBlur('prenom')" @keydown.enter="formatOnBlur('prenom')">
+                        <InputText id="prenom" :model-value="form.prenom" autocomplete="off" class="w-full"
+                            :class="{ 'p-invalid': errors.prenom }" @update:model-value="
                                 update('prenom', String($event ?? ''))
-                            "
-                        />
+                                " />
                     </div>
-                    <p
-                        v-if="errors.prenom"
-                        class="mt-1 text-xs text-destructive"
-                    >
+                    <p v-if="errors.prenom" class="mt-1 text-xs text-destructive">
                         {{ errors.prenom }}
                     </p>
                 </div>
@@ -211,20 +192,11 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                     <Label for="nom" class="mb-1.5 block">
                         Nom <span class="text-destructive">*</span>
                     </Label>
-                    <div
-                        @focusout="formatOnBlur('nom')"
-                        @keydown.enter="formatOnBlur('nom')"
-                    >
-                        <InputText
-                            id="nom"
-                            :model-value="form.nom"
-                            autocomplete="off"
-                            class="w-full"
-                            :class="{ 'p-invalid': errors.nom }"
-                            @update:model-value="
+                    <div @focusout="formatOnBlur('nom')" @keydown.enter="formatOnBlur('nom')">
+                        <InputText id="nom" :model-value="form.nom" autocomplete="off" class="w-full"
+                            :class="{ 'p-invalid': errors.nom }" @update:model-value="
                                 update('nom', String($event ?? ''))
-                            "
-                        />
+                                " />
                     </div>
                     <p v-if="errors.nom" class="mt-1 text-xs text-destructive">
                         {{ errors.nom }}
@@ -235,31 +207,19 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
 
         <!-- Localisation -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
+            <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">
                 Localisation
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
                     <Label for="code_pays" class="mb-1.5 block">Pays</Label>
-                    <Dropdown
-                        input-id="code_pays"
-                        :model-value="form.code_pays"
-                        :options="PAYS_OPTIONS"
-                        option-label="label"
-                        option-value="value"
-                        placeholder="Sélectionner…"
-                        class="w-full"
-                        @update:model-value="onPaysChange($event)"
-                    >
+                    <Dropdown input-id="code_pays" :model-value="form.code_pays" :options="PAYS_OPTIONS"
+                        option-label="label" option-value="value" placeholder="Sélectionner…" class="w-full"
+                        @update:model-value="onPaysChange($event)">
                         <template #value="{ value }">
                             <div v-if="value" class="flex items-center gap-2">
-                                <img
-                                    :src="flagUrl(value)"
-                                    :alt="selectedCountry.label"
-                                    class="h-4 w-auto rounded-sm shadow-sm"
-                                />
+                                <img :src="flagUrl(value)" :alt="selectedCountry.label"
+                                    class="h-4 w-auto rounded-sm shadow-sm" />
                                 <span>{{ selectedCountry.label }}</span>
                             </div>
                             <span v-else class="text-muted-foreground">
@@ -268,11 +228,8 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                         </template>
                         <template #option="{ option }">
                             <div class="flex items-center gap-2">
-                                <img
-                                    :src="flagUrl(option.code)"
-                                    :alt="option.label"
-                                    class="h-4 w-auto rounded-sm shadow-sm"
-                                />
+                                <img :src="flagUrl(option.code)" :alt="option.label"
+                                    class="h-4 w-auto rounded-sm shadow-sm" />
                                 <span>{{ option.label }}</span>
                             </div>
                         </template>
@@ -280,34 +237,18 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                 </div>
                 <div>
                     <Label for="ville" class="mb-1.5 block">Ville</Label>
-                    <div
-                        @focusout="formatOnBlur('ville')"
-                        @keydown.enter="formatOnBlur('ville')"
-                    >
-                        <InputText
-                            id="ville"
-                            :model-value="form.ville ?? ''"
-                            class="w-full"
-                            @update:model-value="
-                                update('ville', ($event as string) || null)
-                            "
-                        />
+                    <div @focusout="formatOnBlur('ville')" @keydown.enter="formatOnBlur('ville')">
+                        <InputText id="ville" :model-value="form.ville ?? ''" class="w-full" @update:model-value="
+                            update('ville', ($event as string) || null)
+                            " />
                     </div>
                 </div>
                 <div class="sm:col-span-2">
                     <Label for="adresse" class="mb-1.5 block">Adresse</Label>
-                    <div
-                        @focusout="formatOnBlur('adresse')"
-                        @keydown.enter="formatOnBlur('adresse')"
-                    >
-                        <InputText
-                            id="adresse"
-                            :model-value="form.adresse ?? ''"
-                            class="w-full"
-                            @update:model-value="
-                                update('adresse', ($event as string) || null)
-                            "
-                        />
+                    <div @focusout="formatOnBlur('adresse')" @keydown.enter="formatOnBlur('adresse')">
+                        <InputText id="adresse" :model-value="form.adresse ?? ''" class="w-full" @update:model-value="
+                            update('adresse', ($event as string) || null)
+                            " />
                     </div>
                 </div>
             </div>
@@ -315,9 +256,7 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
 
         <!-- Contact -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
+            <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">
                 Contact
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
@@ -328,33 +267,17 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                     </Label>
                     <div class="flex gap-2">
                         <div
-                            class="flex h-10 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border bg-muted/40 px-2 font-mono text-sm text-muted-foreground"
-                        >
-                            <img
-                                v-if="form.code_pays"
-                                :src="flagUrl(form.code_pays)"
-                                :alt="selectedCountry.label"
-                                class="h-4 w-auto rounded-sm shadow-sm"
-                            />
+                            class="flex h-10 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border bg-muted/40 px-2 font-mono text-sm text-muted-foreground">
+                            <img v-if="form.code_pays" :src="flagUrl(form.code_pays)" :alt="selectedCountry.label"
+                                class="h-4 w-auto rounded-sm shadow-sm" />
                             <span>{{ selectedCountry.dial }}</span>
                         </div>
-                        <InputText
-                            id="telephone"
-                            :model-value="form.telephone ?? ''"
-                            placeholder=""
-                            inputmode="numeric"
-                            pattern="[0-9]*"
-                            :maxlength="phoneMaxLength"
-                            class="w-full"
-                            :class="{ 'p-invalid': errors.telephone }"
-                            @update:model-value="onTelephoneInput($event)"
-                            @keydown="handlePhoneKeydown"
-                        />
+                        <InputText id="telephone" :model-value="form.telephone ?? ''" placeholder="" inputmode="numeric"
+                            pattern="[0-9]*" :maxlength="phoneMaxLength" class="w-full"
+                            :class="{ 'p-invalid': errors.telephone }" @update:model-value="onTelephoneInput($event)"
+                            @keydown="handlePhoneKeydown" />
                     </div>
-                    <p
-                        v-if="errors.telephone"
-                        class="mt-1 text-xs text-destructive"
-                    >
+                    <p v-if="errors.telephone" class="mt-1 text-xs text-destructive">
                         {{ errors.telephone }}
                     </p>
                     <p v-else class="mt-1 text-xs text-muted-foreground">
@@ -366,27 +289,13 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                 <div>
                     <Label for="email" class="mb-1.5 block">
                         Adresse e-mail
-                        <span class="text-xs text-muted-foreground"
-                            >(facultatif)</span
-                        >
+                        <span class="text-xs text-muted-foreground">(facultatif)</span>
                     </Label>
-                    <InputText
-                        id="email"
-                        :model-value="form.email ?? ''"
-                        type="email"
-                        autocomplete="off"
-                        class="w-full"
-                        :class="{ 'p-invalid': errors.email }"
-                        @update:model-value="
+                    <InputText id="email" :model-value="form.email ?? ''" type="email" autocomplete="off" class="w-full"
+                        :class="{ 'p-invalid': errors.email }" @update:model-value="
                             update('email', ($event as string) || null)
-                        "
-                        @focusout="formatOnBlur('email')"
-                        @keydown.enter="formatOnBlur('email')"
-                    />
-                    <p
-                        v-if="errors.email"
-                        class="mt-1 text-xs text-destructive"
-                    >
+                            " @focusout="formatOnBlur('email')" @keydown.enter="formatOnBlur('email')" />
+                    <p v-if="errors.email" class="mt-1 text-xs text-destructive">
                         {{ errors.email }}
                     </p>
                 </div>
@@ -395,9 +304,7 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
 
         <!-- Rôle & Site -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
+            <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">
                 Rôle & Affectation
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
@@ -405,17 +312,9 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                     <Label for="role" class="mb-1.5 block">
                         Rôle <span class="text-destructive">*</span>
                     </Label>
-                    <Select
-                        input-id="role"
-                        :model-value="form.role"
-                        :options="roleOptions"
-                        option-label="label"
-                        option-value="value"
-                        placeholder="Choisir un rôle"
-                        class="w-full"
-                        :class="{ 'p-invalid': errors.role }"
-                        @change="update('role', $event.value)"
-                    />
+                    <Select input-id="role" :model-value="form.role" :options="roleOptions" option-label="label"
+                        option-value="value" placeholder="Choisir un rôle" class="w-full"
+                        :class="{ 'p-invalid': errors.role }" @change="update('role', $event.value)" />
                     <p v-if="errors.role" class="mt-1 text-xs text-destructive">
                         {{ errors.role }}
                     </p>
@@ -424,26 +323,15 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                     <Label for="site_id" class="mb-1.5 block">
                         Site <span class="text-destructive">*</span>
                     </Label>
-                    <Select
-                        input-id="site_id"
-                        :model-value="(form as any).site_id"
-                        :options="sites"
-                        option-label="label"
-                        option-value="value"
-                        placeholder="Choisir un site"
-                        class="w-full"
-                        :class="{ 'p-invalid': errors.site_id }"
-                        @change="
+                    <Select input-id="site_id" :model-value="(form as any).site_id" :options="sites"
+                        option-label="label" option-value="value" placeholder="Choisir un site" class="w-full"
+                        :class="{ 'p-invalid': errors.site_id }" @change="
                             emit('update:form', {
                                 ...form,
                                 site_id: $event.value,
                             } as any)
-                        "
-                    />
-                    <p
-                        v-if="errors.site_id"
-                        class="mt-1 text-xs text-destructive"
-                    >
+                            " />
+                    <p v-if="errors.site_id" class="mt-1 text-xs text-destructive">
                         {{ errors.site_id }}
                     </p>
                 </div>
@@ -451,13 +339,8 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
         </div>
 
         <!-- Mot de passe -->
-        <div
-            v-if="showPassword !== false"
-            class="rounded-xl border bg-card p-4 shadow-sm sm:p-6"
-        >
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
+        <div v-if="showPassword !== false" class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">
                 {{ isEdit ? 'Changer le mot de passe' : 'Mot de passe' }}
             </h3>
             <p v-if="isEdit" class="mb-4 text-xs text-muted-foreground">
@@ -469,21 +352,11 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                         Mot de passe
                         <span v-if="!isEdit" class="text-destructive">*</span>
                     </Label>
-                    <InputText
-                        id="password"
-                        :model-value="form.password"
-                        type="password"
-                        autocomplete="new-password"
-                        class="w-full"
-                        :class="{ 'p-invalid': errors.password }"
-                        @update:model-value="
+                    <InputText id="password" :model-value="form.password" type="password" autocomplete="new-password"
+                        class="w-full" :class="{ 'p-invalid': errors.password }" @update:model-value="
                             update('password', String($event ?? ''))
-                        "
-                    />
-                    <p
-                        v-if="errors.password"
-                        class="mt-1 text-xs text-destructive"
-                    >
+                            " />
+                    <p v-if="errors.password" class="mt-1 text-xs text-destructive">
                         {{ errors.password }}
                     </p>
                 </div>
@@ -492,41 +365,29 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                         Confirmer
                         <span v-if="!isEdit" class="text-destructive">*</span>
                     </Label>
-                    <InputText
-                        id="password_confirmation"
-                        :model-value="form.password_confirmation"
-                        type="password"
-                        autocomplete="new-password"
-                        class="w-full"
-                        @update:model-value="
+                    <InputText id="password_confirmation" :model-value="form.password_confirmation" type="password"
+                        autocomplete="new-password" class="w-full" @update:model-value="
                             update(
                                 'password_confirmation',
                                 String($event ?? ''),
                             )
-                        "
-                    />
+                            " />
                 </div>
             </div>
         </div>
 
         <!-- Statut -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
+            <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">
                 Statut
             </h3>
             <div class="flex items-center gap-3">
-                <Checkbox
-                    id="is_active"
-                    :model-value="form.is_active"
-                    @update:model-value="
-                        emit('update:form', {
-                            ...form,
-                            is_active: $event === true,
-                        })
-                    "
-                />
+                <Checkbox id="is_active" :model-value="form.is_active" @update:model-value="
+                    emit('update:form', {
+                        ...form,
+                        is_active: $event === true,
+                    })
+                    " />
                 <div>
                     <Label for="is_active" class="cursor-pointer font-medium">
                         {{ form.is_active ? 'Actif' : 'Inactif' }}
@@ -551,18 +412,15 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                 </a>
             </Button>
             <Button type="submit" :disabled="processing">
-                <component
-                    :is="submitLabel ? ArrowRight : Save"
-                    class="mr-2 h-4 w-4"
-                />
+                <component :is="submitLabel ? ArrowRight : Save" class="mr-2 h-4 w-4" />
                 {{
                     processing
                         ? 'Enregistrement…'
                         : submitLabel
-                          ? submitLabel
-                          : isEdit
-                            ? 'Enregistrer'
-                            : 'Créer le compte'
+                            ? submitLabel
+                            : isEdit
+                                ? 'Enregistrer'
+                                : 'Créer le compte'
                 }}
             </Button>
         </div>
