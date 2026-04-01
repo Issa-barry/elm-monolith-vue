@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 export const E2E_EMAIL = process.env.E2E_EMAIL ?? 'superadmin@admin.com';
 export const E2E_PHONE = process.env.E2E_PHONE ?? '+33758855039';
@@ -169,6 +169,22 @@ export async function findUserInList(page: Page, query: string): Promise<Locator
         .first();
     await expect(row).toBeVisible();
     return row;
+}
+
+export function registerCleanup(route: string, prefix: string): void {
+    test.afterEach(async ({ browser }) => {
+        try {
+            const context = await browser.newContext();
+            try {
+                const p = await context.newPage();
+                await cleanupRowsByPrefix(p, route, prefix);
+            } finally {
+                await context.close().catch(() => undefined);
+            }
+        } catch (e) {
+            console.warn(`E2E cleanup warning (${route}):`, e);
+        }
+    });
 }
 
 export async function cleanupRowsByPrefix(

@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
 import {
-    cleanupRowsByPrefix,
     createUser,
     escapeRegExp,
     fillUserInfoAndAdvance,
@@ -8,6 +7,7 @@ import {
     login,
     openRowActions,
     randomDigits,
+    registerCleanup,
     selectOptionFromCombobox,
 } from './helpers';
 
@@ -15,19 +15,7 @@ const PREFIX = 'e2eusrflow';
 
 test.setTimeout(180_000);
 
-test.afterEach(async ({ browser }) => {
-    try {
-        const context = await browser.newContext();
-        try {
-            const p = await context.newPage();
-            await cleanupRowsByPrefix(p, '/users', PREFIX);
-        } finally {
-            await context.close().catch(() => undefined);
-        }
-    } catch (e) {
-        console.warn('E2E cleanup warning (users):', e);
-    }
-});
+registerCleanup('/users', PREFIX);
 
 // ─── Création ─────────────────────────────────────────────────────────────────
 

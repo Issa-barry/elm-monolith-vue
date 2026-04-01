@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { type CountryOption, paysOptionsByName } from '@/lib/pays';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -7,81 +8,7 @@ import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import { computed } from 'vue';
 
-interface CountryOption {
-    label: string;
-    value: string;
-    code: string;
-    dial: string;
-    localLength: number;
-}
-
-const PAYS_OPTIONS: CountryOption[] = [
-    {
-        label: 'Guinée',
-        value: 'Guinée',
-        code: 'GN',
-        dial: '+224',
-        localLength: 9,
-    },
-    {
-        label: 'Guinée-Bissau',
-        value: 'Guinée-Bissau',
-        code: 'GW',
-        dial: '+245',
-        localLength: 7,
-    },
-    {
-        label: 'Sénégal',
-        value: 'Sénégal',
-        code: 'SN',
-        dial: '+221',
-        localLength: 9,
-    },
-    { label: 'Mali', value: 'Mali', code: 'ML', dial: '+223', localLength: 8 },
-    {
-        label: "Côte d'Ivoire",
-        value: "Côte d'Ivoire",
-        code: 'CI',
-        dial: '+225',
-        localLength: 10,
-    },
-    {
-        label: 'Liberia',
-        value: 'Liberia',
-        code: 'LR',
-        dial: '+231',
-        localLength: 8,
-    },
-    {
-        label: 'Sierra Leone',
-        value: 'Sierra Leone',
-        code: 'SL',
-        dial: '+232',
-        localLength: 8,
-    },
-    {
-        label: 'France',
-        value: 'France',
-        code: 'FR',
-        dial: '+33',
-        localLength: 9,
-    },
-    {
-        label: 'Chine',
-        value: 'Chine',
-        code: 'CN',
-        dial: '+86',
-        localLength: 11,
-    },
-    {
-        label: 'Émirats arabes unis',
-        value: 'Émirats arabes unis',
-        code: 'AE',
-        dial: '+971',
-        localLength: 9,
-    },
-    { label: 'Inde', value: 'Inde', code: 'IN', dial: '+91', localLength: 10 },
-];
+const PAYS_OPTIONS = paysOptionsByName;
 
 function flagUrl(code: string) {
     return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;

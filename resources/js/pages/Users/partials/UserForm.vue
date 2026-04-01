@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { type CountryOption, paysOptionsByCode } from '@/lib/pays';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -18,63 +19,7 @@ interface SiteOption {
     label: string;
 }
 
-interface CountryOption {
-    label: string;
-    value: string;
-    code: string;
-    dial: string;
-    localLength: number;
-}
-
-const PAYS_OPTIONS: CountryOption[] = [
-    {
-        label: 'Guinée',
-        value: 'GN',
-        code: 'GN',
-        dial: '+224',
-        localLength: 9,
-    },
-    {
-        label: 'Guinée-Bissau',
-        value: 'GW',
-        code: 'GW',
-        dial: '+245',
-        localLength: 7,
-    },
-    {
-        label: 'Sénégal',
-        value: 'SN',
-        code: 'SN',
-        dial: '+221',
-        localLength: 9,
-    },
-    { label: 'Mali', value: 'ML', code: 'ML', dial: '+223', localLength: 8 },
-    {
-        label: "Côte d'Ivoire",
-        value: 'CI',
-        code: 'CI',
-        dial: '+225',
-        localLength: 10,
-    },
-    { label: 'Liberia', value: 'LR', code: 'LR', dial: '+231', localLength: 8 },
-    {
-        label: 'Sierra Leone',
-        value: 'SL',
-        code: 'SL',
-        dial: '+232',
-        localLength: 8,
-    },
-    { label: 'France', value: 'FR', code: 'FR', dial: '+33', localLength: 9 },
-    { label: 'Chine', value: 'CN', code: 'CN', dial: '+86', localLength: 11 },
-    {
-        label: 'Émirats arabes unis',
-        value: 'AE',
-        code: 'AE',
-        dial: '+971',
-        localLength: 9,
-    },
-    { label: 'Inde', value: 'IN', code: 'IN', dial: '+91', localLength: 10 },
-];
+const PAYS_OPTIONS = paysOptionsByCode;
 
 function flagUrl(code: string) {
     return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
