@@ -35,5 +35,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Pushing '$Branch' to '$Remote'..."
-git push $Remote "refs/heads/$Branch:refs/heads/$Branch"
+$refspec = "refs/heads/$($Branch):refs/heads/$($Branch)"
+git push $Remote $refspec
 exit $LASTEXITCODE
