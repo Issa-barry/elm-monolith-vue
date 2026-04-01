@@ -32,7 +32,18 @@
       "Bash(grep -l \"], \\\\[\" /c/laragon/www/elm-monolithe/app/Http/Controllers/*.php)",
       "Bash(grep -r \"validate\\(\\\\[\" /c/laragon/www/elm-monolithe/app/Http/Controllers/*.php)",
       "Bash(./vendor/bin/pint app/Mail/ContactMessageReceived.php)",
-      "Bash(grep -n \"^    name:\" c:/laragon/www/elm-monolithe/.github/workflows/*.yml)"
+      "Bash(grep -n \"^    name:\" c:/laragon/www/elm-monolithe/.github/workflows/*.yml)",
+      "Bash(./vendor/bin/pint app/Http/Controllers/UserController.php app/Policies/UserPolicy.php --test)",
+      "Bash(./vendor/bin/pint app/Http/Controllers/UserController.php app/Policies/UserPolicy.php)",
+      "Bash(./vendor/bin/pint app/Http/Controllers/UserController.php)",
+      "Bash(grep -n is_active c:/laragon/www/elm-monolithe/database/migrations/*.php)",
+      "Bash(grep -n is_active c:/laragon/www/elm-monolithe/database/migrations/*users*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(vendor/bin/pint --test tests/Unit/UserPolicyTest.php)",
+      "Bash(find /c/laragon/www/elm-monolithe/tests/e2e -type f -name *.spec.ts)",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File .claude/scripts/safe-push-dev.ps1)",
+      "Bash(grep -A 6 \"label: ''Guinée''\" resources/js/pages/Proprietaires/partials/ProprietaireForm.vue)"
     ]
   }
 }

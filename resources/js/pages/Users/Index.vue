@@ -1,0 +1,463 @@
+<script setup lang="ts">
+import StatusDot from '@/components/StatusDot.vue';
+import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { usePermissions } from '@/composables/usePermissions';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
+import { type BreadcrumbItem } from '@/types';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import {
+    Building2,
+    MoreVertical,
+    Pencil,
+    Plus,
+    Search,
+    Shield,
+    Trash2,
+    UserCircle,
+} from 'lucide-vue-next';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
+import InputText from 'primevue/inputtext';
+import { useConfirm } from 'primevue/useconfirm';
+import { useToast } from 'primevue/usetoast';
+import { computed, ref, watch } from 'vue';
+
+interface StaffUser {
+    id: number;
+    nom: string;
+    prenom: string;
+    nom_complet: string;
+    email: string | null;
+    telephone: string | null;
+    code_phone_pays: string | null;
+    is_active: boolean;
+    roles: string[];
+    site: string | null;
+    is_me: boolean;
+}
+
+const props = defineProps<{ users: StaffUser[] }>();
+
+const { can } = usePermissions();
+const confirm = useConfirm();
+const toast = useToast();
+const page = usePage();
+
+const isSuperAdmin = computed(() =>
+    (page.props as any).auth?.roles?.includes('super_admin'),
+);
+
+const ROLE_LABELS: Record<string, string> = {
+    super_admin: 'Super administrateur',
+    admin_entreprise: 'Administrateur',
+    manager: 'Manager',
+    commerciale: 'Commercial(e)',
+    comptable: 'Comptable',
+};
+
+const ROLE_COLORS: Record<string, string> = {
+    super_admin:
+        'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+    admin_entreprise:
+        'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    manager:
+        'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    commerciale:
+        'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    comptable:
+        'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+};
+
+function roleLabel(role: string) {
+    return ROLE_LABELS[role] ?? role;
+}
+
+function roleColor(role: string) {
+    return ROLE_COLORS[role] ?? 'bg-muted text-muted-foreground';
+}
+
+function initials(name: string) {
+    return name
+        .trim()
+        .split(/\s+/)
+        .map((w) => w[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase();
+}
+
+const totalUsers = computed(() => props.users.length);
+const activeUsers = computed(
+    () => props.users.filter((u) => u.is_active).length,
+);
+const inactiveUsers = computed(
+    () => props.users.filter((u) => !u.is_active).length,
+);
+
+const search = ref('');
+const statusFilter = ref<boolean | null>(null);
+const filters = ref({ global: { value: '', matchMode: 'contains' } });
+watch(search, (val) => {
+    filters.value.global.value = val;
+});
+
+const filteredUsers = computed(() => {
+    if (statusFilter.value === null) return props.users;
+    return props.users.filter((u) => u.is_active === statusFilter.value);
+});
+
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Tableau de bord', href: '/dashboard' },
+    { title: 'Utilisateurs', href: '/users' },
+];
+
+function canActOn(u: StaffUser): boolean {
+    if (u.roles.includes('super_admin') && !isSuperAdmin.value) return false;
+    return true;
+}
+
+function confirmDelete(u: StaffUser) {
+    confirm.require({
+        message: `Supprimer le compte de ${u.nom_complet} ? Cette action est irréversible.`,
+        header: 'Confirmer la suppression',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Supprimer',
+        acceptClass: 'p-button-danger',
+        accept: () => {
+            router.delete(`/users/${u.id}`, {
+                onSuccess: () =>
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Supprimé',
+                        detail: `${u.nom_complet} a été supprimé.`,
+                        life: 3000,
+                    }),
+            });
+        },
+    });
+}
+</script>
+
+<template>
+    <Head>
+        <title>Utilisateurs</title>
+    </Head>
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+        <div class="flex flex-col gap-6 p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Utilisateurs
+                    </h1>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        {{ filteredUsers.length }} compte{{
+                            filteredUsers.length !== 1 ? 's' : ''
+                        }}
+                        staff
+                    </p>
+                </div>
+                <Link v-if="isSuperAdmin" href="/users/create">
+                    <Button>
+                        <Plus class="mr-2 h-4 w-4" />
+                        Nouveau compte
+                    </Button>
+                </Link>
+            </div>
+
+            <!-- Stats -->
+            <div class="grid grid-cols-3 gap-4">
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">
+                        Total utilisateurs
+                    </p>
+                    <p class="mt-1 text-3xl font-bold">{{ totalUsers }}</p>
+                </div>
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">
+                        Utilisateurs actifs
+                    </p>
+                    <p class="mt-1 text-3xl font-bold text-emerald-500">
+                        {{ activeUsers }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">
+                        Utilisateurs inactifs
+                    </p>
+                    <p class="mt-1 text-3xl font-bold text-zinc-400">
+                        {{ inactiveUsers }}
+                    </p>
+                </div>
+            </div>
+
+            <div class="overflow-hidden rounded-xl border bg-card">
+                <DataTable
+                    :value="filteredUsers"
+                    :paginator="props.users.length > 20"
+                    :rows="20"
+                    :global-filter-fields="['nom_complet', 'email', 'site']"
+                    v-model:filters="filters"
+                    data-key="id"
+                    striped-rows
+                    removable-sort
+                    class="text-sm"
+                    table-class="w-full"
+                >
+                    <template #header>
+                        <div
+                            class="flex items-center gap-3 border-b border-border bg-muted/30 px-4 py-3"
+                        >
+                            <IconField class="max-w-sm flex-1">
+                                <InputIcon class="pointer-events-none">
+                                    <Search
+                                        class="h-4 w-4 text-muted-foreground"
+                                    />
+                                </InputIcon>
+                                <InputText
+                                    v-model="search"
+                                    placeholder="Rechercher un utilisateur..."
+                                    class="w-full text-sm"
+                                />
+                            </IconField>
+                            <div class="flex gap-1">
+                                <button
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                                    :class="
+                                        statusFilter === null
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    "
+                                    @click="statusFilter = null"
+                                >
+                                    Tous
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                                    :class="
+                                        statusFilter === true
+                                            ? 'bg-emerald-500 text-white'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    "
+                                    @click="statusFilter = true"
+                                >
+                                    Actif
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                                    :class="
+                                        statusFilter === false
+                                            ? 'bg-zinc-500 text-white'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    "
+                                    @click="statusFilter = false"
+                                >
+                                    Inactif
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Avatar + nom -->
+                    <Column
+                        field="nom_complet"
+                        header="Utilisateur"
+                        sortable
+                        style="min-width: 200px"
+                    >
+                        <template #body="{ data }">
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
+                                >
+                                    {{ initials(data.nom_complet) }}
+                                </div>
+                                <div>
+                                    <div
+                                        class="flex items-center gap-1.5 font-medium"
+                                    >
+                                        {{ data.nom_complet }}
+                                        <span
+                                            v-if="data.is_me"
+                                            class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                                            >Moi</span
+                                        >
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        {{ data.email }}
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </Column>
+
+                    <!-- Téléphone -->
+                    <Column
+                        field="telephone"
+                        header="Téléphone"
+                        style="width: 180px"
+                    >
+                        <template #body="{ data }">
+                            <span class="text-sm text-muted-foreground">{{
+                                formatPhoneDisplay(
+                                    data.telephone,
+                                    data.code_phone_pays,
+                                )
+                            }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Rôle -->
+                    <Column
+                        field="roles"
+                        header="Rôle"
+                        sortable
+                        style="width: 180px"
+                    >
+                        <template #body="{ data }">
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span
+                                    v-for="role in data.roles"
+                                    :key="role"
+                                    class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                    :class="roleColor(role)"
+                                >
+                                    <Shield class="h-3 w-3" />
+                                    {{ roleLabel(role) }}
+                                </span>
+                            </div>
+                        </template>
+                    </Column>
+
+                    <!-- Site -->
+                    <Column
+                        field="site"
+                        header="Site"
+                        sortable
+                        style="width: 180px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                v-if="data.site"
+                                class="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+                            >
+                                <Building2 class="h-3.5 w-3.5 shrink-0" />
+                                {{ data.site }}
+                            </span>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
+                        </template>
+                    </Column>
+
+                    <!-- Statut -->
+                    <Column
+                        field="is_active"
+                        header="Statut"
+                        sortable
+                        style="width: 100px"
+                    >
+                        <template #body="{ data }">
+                            <StatusDot
+                                :label="data.is_active ? 'Actif' : 'Inactif'"
+                                :dot-class="
+                                    data.is_active
+                                        ? 'bg-emerald-500'
+                                        : 'bg-zinc-400 dark:bg-zinc-500'
+                                "
+                                class="text-muted-foreground"
+                            />
+                        </template>
+                    </Column>
+
+                    <!-- Actions -->
+                    <Column header="" style="width: 56px">
+                        <template #body="{ data }">
+                            <div class="flex justify-end">
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger as-child>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-8 w-8"
+                                        >
+                                            <MoreVertical class="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                        align="end"
+                                        class="w-44"
+                                    >
+                                        <DropdownMenuItem
+                                            v-if="
+                                                can('users.update') &&
+                                                canActOn(data)
+                                            "
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="`/users/${data.id}/edit`"
+                                                class="flex w-full items-center gap-2"
+                                            >
+                                                <Pencil class="h-4 w-4" />
+                                                Modifier
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator
+                                            v-if="
+                                                can('users.update') &&
+                                                canActOn(data) &&
+                                                isSuperAdmin &&
+                                                !data.is_me
+                                            "
+                                        />
+                                        <DropdownMenuItem
+                                            v-if="
+                                                isSuperAdmin &&
+                                                canActOn(data) &&
+                                                !data.is_me
+                                            "
+                                            class="cursor-pointer text-destructive focus:text-destructive"
+                                            @click="confirmDelete(data)"
+                                        >
+                                            <Trash2 class="h-4 w-4" />
+                                            Supprimer
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                        </template>
+                    </Column>
+
+                    <template #empty>
+                        <div
+                            class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+                        >
+                            <UserCircle class="h-12 w-12 opacity-30" />
+                            <p class="text-sm">Aucun utilisateur trouvé.</p>
+                            <Link v-if="isSuperAdmin" href="/users/create">
+                                <Button variant="outline" size="sm">
+                                    <Plus class="mr-2 h-4 w-4" />
+                                    Créer le premier compte
+                                </Button>
+                            </Link>
+                        </div>
+                    </template>
+                </DataTable>
+            </div>
+        </div>
+    </AppLayout>
+</template>

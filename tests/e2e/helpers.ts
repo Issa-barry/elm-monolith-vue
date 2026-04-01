@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 export const E2E_EMAIL = process.env.E2E_EMAIL ?? 'superadmin@admin.com';
 export const E2E_PHONE = process.env.E2E_PHONE ?? '+33758855039';
@@ -6,6 +6,13 @@ export const E2E_PASSWORD = process.env.E2E_PASSWORD ?? 'Staff@2025';
 
 export function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function randomDigits(length: number): string {
+    const max = 10 ** length;
+    const array = new Uint32Array(1);
+    crypto.getRandomValues(array);
+    return `${array[0] % max}`.padStart(length, '0');
 }
 
 export async function login(page: Page): Promise<void> {
@@ -105,6 +112,79 @@ export async function selectOptionFromCombobox(
 
     await expect(option).toBeVisible();
     await option.click({ timeout: 3000 });
+}
+
+interface CreateUserParams {
+    prenom: string;
+    nom: string;
+    tel: string;
+    email?: string;
+    role?: string | RegExp;
+    password?: string;
+}
+
+/**
+ * Fills the info tab of the user form and advances to the password tab.
+ * The page must already be on /users/create when this is called.
+ */
+export async function fillUserInfoAndAdvance(
+    page: Page,
+    { prenom, nom, tel, email, role = /manager/i }: Omit<CreateUserParams, 'password'>,
+): Promise<void> {
+    const form = page.locator('#user-form');
+    await selectOptionFromCombobox(page, form.getByRole('combobox').first(), /guinée$/i);
+    await page.locator('#prenom').fill(prenom);
+    await page.locator('#nom').fill(nom);
+    await page.locator('#telephone').fill(tel);
+    if (email) {
+        await page.locator('#email').fill(email);
+    }
+    await selectOptionFromCombobox(page, form.getByRole('combobox').nth(1), role);
+    await form.getByRole('combobox').nth(2).click();
+    await page.locator('[role="option"]:visible').first().click();
+    await form.locator('button[type="submit"]:visible').click();
+    await expect(page.locator('#password')).toBeVisible();
+}
+
+export async function createUser(
+    page: Page,
+    { prenom, nom, tel, email, role = /manager/i, password = 'Password123' }: CreateUserParams,
+): Promise<void> {
+    await page.goto('/users/create');
+    await fillUserInfoAndAdvance(page, { prenom, nom, tel, email, role });
+    await page.locator('#password').fill(password);
+    await page.locator('#password_confirmation').fill(password);
+    await page.locator('#user-form button[type="submit"]:visible').first().click();
+    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+}
+
+export async function findUserInList(page: Page, query: string): Promise<Locator> {
+    await page.goto('/users');
+    const search = getVisibleSearchInput(page);
+    await search.fill(query);
+    const row = page
+        .locator('tbody tr', {
+            hasText: new RegExp(escapeRegExp(query), 'i'),
+        })
+        .first();
+    await expect(row).toBeVisible();
+    return row;
+}
+
+export function registerCleanup(route: string, prefix: string): void {
+    test.afterEach(async ({ browser }) => {
+        try {
+            const context = await browser.newContext();
+            try {
+                const p = await context.newPage();
+                await cleanupRowsByPrefix(p, route, prefix);
+            } finally {
+                await context.close().catch(() => undefined);
+            }
+        } catch (e) {
+            console.warn(`E2E cleanup warning (${route}):`, e);
+        }
+    });
 }
 
 export async function cleanupRowsByPrefix(
