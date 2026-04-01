@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -19,6 +20,12 @@ class User extends Authenticatable
         'email',
         'password',
         'telephone',
+        'is_active',
+        'pays',
+        'code_pays',
+        'code_phone_pays',
+        'ville',
+        'adresse',
         'organization_id',
     ];
 
@@ -40,12 +47,20 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime:Y-m-d H:i:s',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+            'is_active' => 'boolean',
         ];
     }
 
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    public function sites(): BelongsToMany
+    {
+        return $this->belongsToMany(Site::class, 'user_sites')
+            ->withPivot('role', 'is_default')
+            ->withTimestamps();
     }
 
     public function isSuperAdmin(): bool

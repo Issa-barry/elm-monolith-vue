@@ -97,58 +97,75 @@ class RolesAndPermissionsSeeder extends Seeder
         );
 
         // ── 4. Comptes staff ──────────────────────────────────────────────────
+        $pays = [
+            'FR' => ['France',  '+33'],
+            'GN' => ['Guinée',  '+224'],
+        ];
+
         $staff = [
             [
                 'prenom' => 'Issa',
                 'nom' => 'BARRY',
                 'telephone' => '+33758855039',
+                'code_pays' => 'FR',
                 'role' => 'super_admin',
             ],
             [
                 'prenom' => 'Abdoulaye',
                 'nom' => 'DIALLO',
                 'telephone' => '+33769442565',
+                'code_pays' => 'FR',
                 'role' => 'admin_entreprise',
             ],
             [
                 'prenom' => 'Moussa',
                 'nom' => 'SIDIBÉ',
                 'telephone' => '+224656555520',
+                'code_pays' => 'GN',
                 'role' => 'admin_entreprise',
             ],
             [
                 'prenom' => 'Thierno Oumar',
                 'nom' => 'DIALLO',
                 'telephone' => '+224622176056',
+                'code_pays' => 'GN',
                 'role' => 'manager',
             ],
             [
                 'prenom' => 'Aminata',
                 'nom' => 'DIALLO',
                 'telephone' => null,
+                'code_pays' => null,
                 'role' => 'comptable',
             ],
             [
                 'prenom' => 'Alpha Oumar',
                 'nom' => 'CAMARA',
                 'telephone' => null,
+                'code_pays' => null,
                 'role' => 'commerciale',
             ],
             [
                 'prenom' => 'Elhadj Oumar',
                 'nom' => 'TALL',
                 'telephone' => '+33605751596',
+                'code_pays' => 'FR',
                 'role' => 'super_admin',
             ],
             [
                 'prenom' => 'Amadou',
                 'nom' => 'DIALLO',
                 'telephone' => '+33754158797',
+                'code_pays' => 'FR',
                 'role' => 'admin_entreprise',
             ],
         ];
 
         foreach ($staff as $data) {
+            $codePays = $data['code_pays'];
+            $paysNom = $codePays ? $pays[$codePays][0] : null;
+            $codePhone = $codePays ? $pays[$codePays][1] : null;
+
             $lookup = $data['telephone']
                 ? ['telephone' => $data['telephone']]
                 : ['prenom' => $data['prenom'], 'nom' => $data['nom']];
@@ -157,6 +174,9 @@ class RolesAndPermissionsSeeder extends Seeder
                 'prenom' => $data['prenom'],
                 'nom' => $data['nom'],
                 'telephone' => $data['telephone'],
+                'code_pays' => $codePays,
+                'pays' => $paysNom,
+                'code_phone_pays' => $codePhone,
                 'email' => null,
                 'password' => Hash::make(self::PASSWORD),
                 'organization_id' => $org->id,

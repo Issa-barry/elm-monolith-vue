@@ -4,7 +4,7 @@ npm run build
 git add public/build
 git commit -m "build: production"
 git push  
-
+ 
 ## CI/CD Hostinger (GitHub Actions)
 
 Flux de branches:
@@ -207,3 +207,9 @@ git push
  
 # code coverage : 
 php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text
+
+# magic 
+composer2 update
+php artisan migrate:fresh --seed
+php artisan optimize:clear
+php artisan optimize

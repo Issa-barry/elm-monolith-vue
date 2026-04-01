@@ -19,18 +19,27 @@ class UserPolicy
 
     public function create(User $user): bool
     {
-        return $user->can('users.create');
+        return $user->isSuperAdmin();
     }
 
     public function update(User $user, User $target): bool
     {
+        if ($target->isSuperAdmin() && ! $user->isSuperAdmin()) {
+            return false;
+        }
+
         return $user->can('users.update')
             && $user->organization_id === $target->organization_id;
     }
 
     public function delete(User $user, User $target): bool
     {
-        return $user->can('users.delete')
-            && $user->id !== $target->id;
+        if ($target->isSuperAdmin() && ! $user->isSuperAdmin()) {
+            return false;
+        }
+
+        return $user->isSuperAdmin()
+            && $user->id !== $target->id
+            && $user->organization_id === $target->organization_id;
     }
 }
