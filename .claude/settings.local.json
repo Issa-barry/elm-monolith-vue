@@ -42,11 +42,7 @@
       "Bash(git commit:*)",
       "Bash(vendor/bin/pint --test tests/Unit/UserPolicyTest.php)",
       "Bash(find /c/laragon/www/elm-monolithe/tests/e2e -type f -name *.spec.ts)",
-      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File .claude/scripts/safe-push.ps1)",
-      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File .claude/scripts/safe-push.ps1:*)",
-      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File .claude/scripts/safe-push-dev.ps1)",
-      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File .claude/scripts/safe-push-dev.ps1:*)",
-      "Bash(SAFE_PUSH_ALLOW_DEV=1 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/scripts/safe-push.ps1)"
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File .claude/scripts/safe-push-dev.ps1)"
     ]
   }
 }
