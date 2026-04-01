@@ -107,6 +107,46 @@ export async function selectOptionFromCombobox(
     await option.click({ timeout: 3000 });
 }
 
+export function randomDigits(length: number): string {
+    const max = 10 ** length;
+    const array = new Uint32Array(1);
+    crypto.getRandomValues(array);
+    return `${array[0] % max}`.padStart(length, '0');
+}
+
+interface CreateUserParams {
+    prenom: string;
+    nom: string;
+    tel: string;
+    email?: string;
+    role?: string | RegExp;
+    password?: string;
+}
+
+export async function createUser(
+    page: Page,
+    { prenom, nom, tel, email, role = /manager/i, password = 'Password123' }: CreateUserParams,
+): Promise<void> {
+    await page.goto('/users/create');
+    const form = page.locator('#user-form');
+    await selectOptionFromCombobox(page, form.getByRole('combobox').first(), /guinée$/i);
+    await page.locator('#prenom').fill(prenom);
+    await page.locator('#nom').fill(nom);
+    await page.locator('#telephone').fill(tel);
+    if (email) {
+        await page.locator('#email').fill(email);
+    }
+    await selectOptionFromCombobox(page, form.getByRole('combobox').nth(1), role);
+    await form.getByRole('combobox').nth(2).click();
+    await page.locator('[role="option"]:visible').first().click();
+    await form.locator('button[type="submit"]:visible').click();
+    await expect(page.locator('#password')).toBeVisible();
+    await page.locator('#password').fill(password);
+    await page.locator('#password_confirmation').fill(password);
+    await page.locator('#user-form button[type="submit"]:visible').first().click();
+    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+}
+
 export async function cleanupRowsByPrefix(
     page: Page,
     route: string,

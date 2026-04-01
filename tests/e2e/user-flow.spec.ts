@@ -1,21 +1,18 @@
 import { expect, test } from '@playwright/test';
 import {
     cleanupRowsByPrefix,
+    createUser,
     escapeRegExp,
     getVisibleSearchInput,
     login,
     openRowActions,
+    randomDigits,
     selectOptionFromCombobox,
 } from './helpers';
 
 const PREFIX = 'e2eusrflow';
 
 test.setTimeout(180_000);
-
-function randomDigits(length: number): string {
-    const max = 10 ** length;
-    return `${Math.floor(Math.random() * max)}`.padStart(length, '0');
-}
 
 test.afterEach(async ({ browser }) => {
     try {
@@ -101,29 +98,7 @@ test('edit user info → data persists', async ({ page }) => {
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-
-    // Création préalable
-    await page.goto('/users/create');
-    const form = page.locator('#user-form');
-    const paysCombo = form.getByRole('combobox').first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
-    await page.locator('#prenom').fill(prenom);
-    await page.locator('#nom').fill(nom);
-    await page.locator('#telephone').fill(tel);
-    const roleCombo = form.getByRole('combobox').nth(1);
-    await selectOptionFromCombobox(page, roleCombo, /manager/i);
-    const siteCombo = form.getByRole('combobox').nth(2);
-    await siteCombo.click();
-    await page.locator('[role="option"]:visible').first().click();
-    await form.locator('button[type="submit"]:visible').click();
-    await expect(page.locator('#password')).toBeVisible();
-    await page.locator('#password').fill('Password123');
-    await page.locator('#password_confirmation').fill('Password123');
-    await page
-        .locator('#user-form button[type="submit"]:visible')
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await createUser(page, { prenom, nom, tel });
 
     // Modifier le rôle
     const editForm = page.locator('#user-form');
@@ -158,29 +133,7 @@ test('edit user password → login with new password', async ({ page }) => {
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-
-    // Création préalable
-    await page.goto('/users/create');
-    const form = page.locator('#user-form');
-    const paysCombo = form.getByRole('combobox').first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
-    await page.locator('#prenom').fill(prenom);
-    await page.locator('#nom').fill(nom);
-    await page.locator('#telephone').fill(tel);
-    const roleCombo = form.getByRole('combobox').nth(1);
-    await selectOptionFromCombobox(page, roleCombo, /manager/i);
-    const siteCombo = form.getByRole('combobox').nth(2);
-    await siteCombo.click();
-    await page.locator('[role="option"]:visible').first().click();
-    await form.locator('button[type="submit"]:visible').click();
-    await expect(page.locator('#password')).toBeVisible();
-    await page.locator('#password').fill('Password123');
-    await page.locator('#password_confirmation').fill('Password123');
-    await page
-        .locator('#user-form button[type="submit"]:visible')
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await createUser(page, { prenom, nom, tel });
 
     // Aller sur l'onglet Mot de passe
     await page
@@ -208,29 +161,7 @@ test('toggle user status → inactif in list', async ({ page }) => {
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-
-    // Création préalable
-    await page.goto('/users/create');
-    const form = page.locator('#user-form');
-    const paysCombo = form.getByRole('combobox').first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
-    await page.locator('#prenom').fill(prenom);
-    await page.locator('#nom').fill(nom);
-    await page.locator('#telephone').fill(tel);
-    const roleCombo = form.getByRole('combobox').nth(1);
-    await selectOptionFromCombobox(page, roleCombo, /manager/i);
-    const siteCombo = form.getByRole('combobox').nth(2);
-    await siteCombo.click();
-    await page.locator('[role="option"]:visible').first().click();
-    await form.locator('button[type="submit"]:visible').click();
-    await expect(page.locator('#password')).toBeVisible();
-    await page.locator('#password').fill('Password123');
-    await page.locator('#password_confirmation').fill('Password123');
-    await page
-        .locator('#user-form button[type="submit"]:visible')
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await createUser(page, { prenom, nom, tel });
 
     // Vérifier actif dans la liste
     await page.goto('/users');
@@ -357,29 +288,7 @@ test('delete user → removed from list', async ({ page }) => {
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-
-    // Création préalable
-    await page.goto('/users/create');
-    const form = page.locator('#user-form');
-    const paysCombo = form.getByRole('combobox').first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
-    await page.locator('#prenom').fill(prenom);
-    await page.locator('#nom').fill(nom);
-    await page.locator('#telephone').fill(tel);
-    const roleCombo = form.getByRole('combobox').nth(1);
-    await selectOptionFromCombobox(page, roleCombo, /manager/i);
-    const siteCombo = form.getByRole('combobox').nth(2);
-    await siteCombo.click();
-    await page.locator('[role="option"]:visible').first().click();
-    await form.locator('button[type="submit"]:visible').click();
-    await expect(page.locator('#password')).toBeVisible();
-    await page.locator('#password').fill('Password123');
-    await page.locator('#password_confirmation').fill('Password123');
-    await page
-        .locator('#user-form button[type="submit"]:visible')
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await createUser(page, { prenom, nom, tel });
 
     // Supprimer depuis la liste
     await page.goto('/users');
