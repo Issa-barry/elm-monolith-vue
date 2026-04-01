@@ -30,6 +30,51 @@ class UserController extends Controller
 {
     private const STAFF_ROLES = ['super_admin', 'admin_entreprise', 'manager', 'commerciale', 'comptable'];
 
+    private function getRoleOptions(): \Illuminate\Support\Collection
+    {
+        return Role::whereIn('name', self::STAFF_ROLES)
+            ->get(['id', 'name'])
+            ->map(fn ($r) => ['value' => $r->name, 'label' => $r->name]);
+    }
+
+    private function getSiteOptions(int $orgId): \Illuminate\Support\Collection
+    {
+        return \App\Models\Site::where('organization_id', $orgId)
+            ->orderBy('nom')
+            ->get(['id', 'nom', 'code'])
+            ->map(fn ($s) => ['value' => $s->id, 'label' => "{$s->nom} ({$s->code})"]);
+    }
+
+    private function resolvePays(?string $codePays): array
+    {
+        if ($codePays && isset(USER_PAYS[$codePays])) {
+            [$pays, $codePhonePays] = USER_PAYS[$codePays];
+
+            return ['pays' => $pays, 'code_phone_pays' => $codePhonePays];
+        }
+
+        return ['pays' => null, 'code_phone_pays' => null];
+    }
+
+    private function buildUserFields(array $data, ?bool $currentIsActive = null): array
+    {
+        $resolved = $this->resolvePays($data['code_pays'] ?? null);
+        $codePays = $data['code_pays'] ?? null;
+
+        return [
+            'prenom' => mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
+            'nom' => mb_strtoupper($data['nom'], 'UTF-8'),
+            'email' => isset($data['email']) ? mb_strtolower($data['email'], 'UTF-8') : null,
+            'telephone' => $data['telephone'],
+            'pays' => $resolved['pays'],
+            'code_pays' => $codePays,
+            'code_phone_pays' => $resolved['code_phone_pays'],
+            'ville' => isset($data['ville']) ? mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8') : null,
+            'adresse' => isset($data['adresse']) ? mb_convert_case(mb_strtolower($data['adresse'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8') : null,
+            'is_active' => $data['is_active'] ?? $currentIsActive ?? true,
+        ];
+    }
+
     public function index(): Response
     {
         $this->authorize('viewAny', User::class);
@@ -75,18 +120,9 @@ class UserController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $roles = Role::whereIn('name', self::STAFF_ROLES)
-            ->get(['id', 'name'])
-            ->map(fn ($r) => ['value' => $r->name, 'label' => $r->name]);
-
-        $sites = \App\Models\Site::where('organization_id', $orgId)
-            ->orderBy('nom')
-            ->get(['id', 'nom', 'code'])
-            ->map(fn ($s) => ['value' => $s->id, 'label' => "{$s->nom} ({$s->code})"]);
-
         return Inertia::render('Users/Create', [
-            'roles' => $roles,
-            'sites' => $sites,
+            'roles' => $this->getRoleOptions(),
+            'sites' => $this->getSiteOptions($orgId),
         ]);
     }
 
@@ -141,28 +177,11 @@ class UserController extends Controller
             'password.min' => 'Le mot de passe doit contenir au moins 8 caractères.',
         ]);
 
-        $pays = null;
-        $codePhonePays = null;
-        $codePays = $data['code_pays'] ?? null;
-
-        if ($codePays && isset(USER_PAYS[$codePays])) {
-            [$pays, $codePhonePays] = USER_PAYS[$codePays];
-        }
-
-        $user = User::create([
-            'prenom' => mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
-            'nom' => mb_strtoupper($data['nom'], 'UTF-8'),
-            'email' => isset($data['email']) ? mb_strtolower($data['email'], 'UTF-8') : null,
-            'telephone' => $data['telephone'],
-            'pays' => $pays,
-            'code_pays' => $codePays,
-            'code_phone_pays' => $codePhonePays,
-            'ville' => isset($data['ville']) ? mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8') : null,
-            'adresse' => isset($data['adresse']) ? mb_convert_case(mb_strtolower($data['adresse'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8') : null,
-            'is_active' => $data['is_active'] ?? true,
+        $fields = $this->buildUserFields($data);
+        $user = User::create(array_merge($fields, [
             'password' => Hash::make($data['password']),
             'organization_id' => $orgId,
-        ]);
+        ]));
 
         $user->assignRole($data['role']);
         $user->sites()->attach($data['site_id'], ['role' => 'employe', 'is_default' => true]);
@@ -176,16 +195,6 @@ class UserController extends Controller
         $this->authorize('update', $user);
 
         $orgId = auth()->user()->organization_id;
-
-        $roles = Role::whereIn('name', self::STAFF_ROLES)
-            ->get(['id', 'name'])
-            ->map(fn ($r) => ['value' => $r->name, 'label' => $r->name]);
-
-        $sites = \App\Models\Site::where('organization_id', $orgId)
-            ->orderBy('nom')
-            ->get(['id', 'nom', 'code'])
-            ->map(fn ($s) => ['value' => $s->id, 'label' => "{$s->nom} ({$s->code})"]);
-
         $defaultSite = $user->sites()->wherePivot('is_default', true)->first();
 
         return Inertia::render('Users/Edit', [
@@ -202,8 +211,8 @@ class UserController extends Controller
                 'site_id' => $defaultSite?->id,
                 'is_active' => $user->is_active,
             ],
-            'roles' => $roles,
-            'sites' => $sites,
+            'roles' => $this->getRoleOptions(),
+            'sites' => $this->getSiteOptions($orgId),
             'is_me' => $user->id === auth()->id(),
         ]);
     }
@@ -239,26 +248,7 @@ class UserController extends Controller
             'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
         ]);
 
-        $pays = null;
-        $codePhonePays = null;
-        $codePays = $data['code_pays'] ?? null;
-
-        if ($codePays && isset(USER_PAYS[$codePays])) {
-            [$pays, $codePhonePays] = USER_PAYS[$codePays];
-        }
-
-        $updateData = [
-            'prenom' => mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
-            'nom' => mb_strtoupper($data['nom'], 'UTF-8'),
-            'email' => isset($data['email']) ? mb_strtolower($data['email'], 'UTF-8') : null,
-            'telephone' => $data['telephone'],
-            'pays' => $pays,
-            'code_pays' => $codePays,
-            'code_phone_pays' => $codePhonePays,
-            'ville' => isset($data['ville']) ? mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8') : null,
-            'adresse' => isset($data['adresse']) ? mb_convert_case(mb_strtolower($data['adresse'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8') : null,
-            'is_active' => $data['is_active'] ?? $user->is_active,
-        ];
+        $updateData = $this->buildUserFields($data, $user->is_active);
 
         if (! empty($data['password'])) {
             $updateData['password'] = Hash::make($data['password']);

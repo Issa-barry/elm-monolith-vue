@@ -3,7 +3,8 @@ import {
     cleanupRowsByPrefix,
     createUser,
     escapeRegExp,
-    getVisibleSearchInput,
+    fillUserInfoAndAdvance,
+    findUserInList,
     login,
     openRowActions,
     randomDigits,
@@ -37,55 +38,9 @@ test('create user with all fields → verify in list', async ({ page }) => {
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-    await page.goto('/users/create');
-    await expect(page).toHaveURL(/\/users\/create$/);
+    await createUser(page, { prenom, nom, tel });
 
-    // ── Onglet Informations ──────────────────────────────────────────────────
-    const form = page.locator('#user-form');
-
-    // Pays (premier combobox)
-    const paysCombo = form.getByRole('combobox').first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
-
-    await page.locator('#prenom').fill(prenom);
-    await page.locator('#nom').fill(nom);
-    await page.locator('#telephone').fill(tel);
-
-    // Rôle (deuxième combobox)
-    const roleCombo = form.getByRole('combobox').nth(1);
-    await selectOptionFromCombobox(page, roleCombo, /manager/i);
-
-    // Site (troisième combobox → première option disponible)
-    const siteCombo = form.getByRole('combobox').nth(2);
-    await siteCombo.click();
-    await page.locator('[role="option"]:visible').first().click();
-
-    // Continuer → onglet mot de passe
-    await form.locator('button[type="submit"]:visible').click();
-    await expect(page.locator('#password')).toBeVisible();
-
-    // ── Onglet Mot de passe ──────────────────────────────────────────────────
-    await page.locator('#password').fill('Password123');
-    await page.locator('#password_confirmation').fill('Password123');
-    await page
-        .locator('#user-form button[type="submit"]:visible')
-        .first()
-        .click();
-
-    // Redirige vers la page d'édition
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
-
-    // Vérifier la présence dans la liste
-    await page.goto('/users');
-    const search = getVisibleSearchInput(page);
-    await search.fill(prenom);
-
-    const row = page
-        .locator('tbody tr', {
-            hasText: new RegExp(escapeRegExp(prenom), 'i'),
-        })
-        .first();
-    await expect(row).toBeVisible();
+    const row = await findUserInList(page, prenom);
     await expect(row).toContainText(/manager/i);
 });
 
@@ -110,17 +65,7 @@ test('edit user info → data persists', async ({ page }) => {
     await editForm.locator('button[type="submit"]:visible').first().click();
     await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
 
-    // Vérifier dans la liste
-    await page.goto('/users');
-    const search = getVisibleSearchInput(page);
-    await search.fill(prenom);
-
-    const row = page
-        .locator('tbody tr', {
-            hasText: new RegExp(escapeRegExp(prenom), 'i'),
-        })
-        .first();
-    await expect(row).toBeVisible();
+    const row = await findUserInList(page, prenom);
     await expect(row).toContainText(/comptable/i);
 });
 
@@ -148,7 +93,6 @@ test('edit user password → login with new password', async ({ page }) => {
         .first()
         .click();
 
-    // Doit rester sur la page d'édition avec succès
     await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
 });
 
@@ -164,15 +108,7 @@ test('toggle user status → inactif in list', async ({ page }) => {
     await createUser(page, { prenom, nom, tel });
 
     // Vérifier actif dans la liste
-    await page.goto('/users');
-    const search = getVisibleSearchInput(page);
-    await search.fill(prenom);
-    const row = page
-        .locator('tbody tr', {
-            hasText: new RegExp(escapeRegExp(prenom), 'i'),
-        })
-        .first();
-    await expect(row).toBeVisible();
+    const row = await findUserInList(page, prenom);
     await expect(row).toContainText(/actif/i);
 
     // Ouvrir l'édition → désactiver le compte
@@ -191,15 +127,7 @@ test('toggle user status → inactif in list', async ({ page }) => {
     await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
 
     // Vérifier inactif dans la liste
-    await page.goto('/users');
-    const search2 = getVisibleSearchInput(page);
-    await search2.fill(prenom);
-    const updated = page
-        .locator('tbody tr', {
-            hasText: new RegExp(escapeRegExp(prenom), 'i'),
-        })
-        .first();
-    await expect(updated).toBeVisible();
+    const updated = await findUserInList(page, prenom);
     await expect(updated).toContainText(/inactif/i);
 });
 
@@ -211,7 +139,6 @@ test('create user without required fields → stays on create page', async ({
     await login(page);
     await page.goto('/users/create');
 
-    // Soumettre sans rien remplir → doit rester sur create (validation client)
     await page
         .locator('#user-form button[type="submit"]:visible')
         .first()
@@ -228,22 +155,7 @@ test('create user with password mismatch → error shown', async ({ page }) => {
 
     await login(page);
     await page.goto('/users/create');
-
-    const form = page.locator('#user-form');
-    const paysCombo = form.getByRole('combobox').first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
-    await page.locator('#prenom').fill(prenom);
-    await page.locator('#nom').fill(nom);
-    await page.locator('#telephone').fill(tel);
-    const roleCombo = form.getByRole('combobox').nth(1);
-    await selectOptionFromCombobox(page, roleCombo, /manager/i);
-    const siteCombo = form.getByRole('combobox').nth(2);
-    await siteCombo.click();
-    await page.locator('[role="option"]:visible').first().click();
-
-    // Continuer → onglet mot de passe
-    await form.locator('button[type="submit"]:visible').click();
-    await expect(page.locator('#password')).toBeVisible();
+    await fillUserInfoAndAdvance(page, { prenom, nom, tel });
 
     // Mots de passe différents
     await page.locator('#password').fill('Password123');
@@ -253,7 +165,6 @@ test('create user with password mismatch → error shown', async ({ page }) => {
         .first()
         .click();
 
-    // Doit rester sur create
     await expect(page).toHaveURL(/\/users\/create$/);
 });
 
@@ -263,10 +174,8 @@ test('status filter → shows only active users', async ({ page }) => {
     await login(page);
     await page.goto('/users');
 
-    // Cliquer sur le filtre "Actif"
     await page.getByRole('button', { name: /^actif$/i }).click();
 
-    // Toutes les lignes visibles doivent afficher "Actif"
     const rows = page.locator('tbody tr:visible');
     const count = await rows.count();
     for (let i = 0; i < count; i++) {
@@ -274,7 +183,6 @@ test('status filter → shows only active users', async ({ page }) => {
         await expect(rows.nth(i)).not.toContainText(/inactif/i);
     }
 
-    // Revenir à "Tous"
     await page.getByRole('button', { name: /^tous$/i }).click();
     await expect(page.locator('tbody tr:visible').first()).toBeVisible();
 });
@@ -290,16 +198,7 @@ test('delete user → removed from list', async ({ page }) => {
     await login(page);
     await createUser(page, { prenom, nom, tel });
 
-    // Supprimer depuis la liste
-    await page.goto('/users');
-    const search = getVisibleSearchInput(page);
-    await search.fill(prenom);
-    const row = page
-        .locator('tbody tr', {
-            hasText: new RegExp(escapeRegExp(prenom), 'i'),
-        })
-        .first();
-    await expect(row).toBeVisible();
+    const row = await findUserInList(page, prenom);
 
     await openRowActions(row);
     await page
@@ -314,7 +213,7 @@ test('delete user → removed from list', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
     // L'utilisateur ne doit plus apparaître
-    const search2 = getVisibleSearchInput(page);
+    const search2 = page.locator('input[placeholder*="rechercher" i]:visible').first();
     await search2.fill(prenom);
     await expect(
         page.locator('tbody tr', {

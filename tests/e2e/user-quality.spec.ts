@@ -3,6 +3,8 @@ import {
     cleanupRowsByPrefix,
     createUser,
     escapeRegExp,
+    fillUserInfoAndAdvance,
+    findUserInList,
     getVisibleSearchInput,
     login,
     openRowActions,
@@ -82,7 +84,6 @@ test('stats cards display correct counts', async ({ page }) => {
     await login(page);
     await page.goto('/users');
 
-    // Les 3 cartes doivent être visibles avec des chiffres
     const totalCard = page.getByText('Total utilisateurs').locator('..').locator('p.text-3xl');
     const activeCard = page.getByText('Utilisateurs actifs').locator('..').locator('p.text-3xl');
     const inactiveCard = page.getByText('Utilisateurs inactifs').locator('..').locator('p.text-3xl');
@@ -141,16 +142,7 @@ test('duplicate phone number shows validation error', async ({ page }) => {
 
     // Second utilisateur avec le même téléphone – doit échouer
     await page.goto('/users/create');
-    const form2 = page.locator('#user-form');
-    await selectOptionFromCombobox(page, form2.getByRole('combobox').first(), /guin/i);
-    await page.locator('#prenom').fill(`${PREFIX}${uid}B`);
-    await page.locator('#nom').fill(`Dup${uid}B`);
-    await page.locator('#telephone').fill(tel);
-    await selectOptionFromCombobox(page, form2.getByRole('combobox').nth(1), /manager/i);
-    await form2.getByRole('combobox').nth(2).click();
-    await page.locator('[role="option"]:visible').first().click();
-    await form2.locator('button[type="submit"]:visible').click();
-    await expect(page.locator('#password')).toBeVisible();
+    await fillUserInfoAndAdvance(page, { prenom: `${PREFIX}${uid}B`, nom: `Dup${uid}B`, tel });
     await page.locator('#password').fill('Password123');
     await page.locator('#password_confirmation').fill('Password123');
     await page.locator('#user-form button[type="submit"]:visible').first().click();
@@ -174,7 +166,6 @@ test('prenom is saved as title case and nom as uppercase', async ({ page }) => {
     await page.goto('/users');
     const search = getVisibleSearchInput(page);
     await search.fill('mamadou barry');
-    // La ligne doit exister avec Mamadou BARRY (title case + uppercase)
     const row = page
         .locator('tbody tr', { hasText: /Mamadou/i })
         .filter({ hasText: /BARRY/i })
@@ -193,15 +184,7 @@ test('edit action in dropdown navigates to edit page', async ({ page }) => {
     await login(page);
     await createUser(page, { prenom, nom, tel });
 
-    // Naviguer depuis la liste
-    await page.goto('/users');
-    const search = getVisibleSearchInput(page);
-    await search.fill(prenom);
-
-    const row = page
-        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(prenom), 'i') })
-        .first();
-    await expect(row).toBeVisible();
+    const row = await findUserInList(page, prenom);
 
     await openRowActions(row);
     await page.getByRole('menuitem', { name: /modifier/i }).first().click();
