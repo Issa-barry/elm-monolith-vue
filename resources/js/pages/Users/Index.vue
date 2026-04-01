@@ -402,7 +402,10 @@ function confirmDelete(u: StaffUser) {
                                         class="w-44"
                                     >
                                         <DropdownMenuItem
-                                            v-if="can('users.update') && canActOn(data)"
+                                            v-if="
+                                                can('users.update') &&
+                                                canActOn(data)
+                                            "
                                             as-child
                                         >
                                             <Link
@@ -422,7 +425,11 @@ function confirmDelete(u: StaffUser) {
                                             "
                                         />
                                         <DropdownMenuItem
-                                            v-if="isSuperAdmin && canActOn(data) && !data.is_me"
+                                            v-if="
+                                                isSuperAdmin &&
+                                                canActOn(data) &&
+                                                !data.is_me
+                                            "
                                             class="cursor-pointer text-destructive focus:text-destructive"
                                             @click="confirmDelete(data)"
                                         >
