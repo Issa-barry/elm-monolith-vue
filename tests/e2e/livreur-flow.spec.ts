@@ -98,9 +98,11 @@ test('edit livreur → update ville / adresse → data persists', async ({ page 
     await page.locator('#adresse').fill('Adresse modifiée');
 
     await page.locator('#livreur-form button[type="submit"]:visible').first().click();
-    await expect(page).toHaveURL(/\/livreurs$/);
+    // Le contrôleur redirige vers edit après mise à jour (message de succès affiché)
+    await expect(page).toHaveURL(/\/livreurs\/\d+\/edit$/, { timeout: 15_000 });
 
     // Vérifier dans la liste
+    await page.goto('/livreurs');
     const search2 = getVisibleSearchInput(page);
     await search2.fill(prenom);
     const updatedRow = page.locator('tbody tr', { hasText: new RegExp(escapeRegExp(prenom), 'i') }).first();
@@ -142,8 +144,10 @@ test('create livreur + toggle status → inactif in list', async ({ page }) => {
 
     await page.locator('label[for="is_active"]').first().click();
     await page.locator('#livreur-form button[type="submit"]:visible').first().click();
-    await expect(page).toHaveURL(/\/livreurs$/);
+    // Le contrôleur redirige vers edit après mise à jour (message de succès affiché)
+    await expect(page).toHaveURL(/\/livreurs\/\d+\/edit$/, { timeout: 15_000 });
 
+    await page.goto('/livreurs');
     const search2 = getVisibleSearchInput(page);
     await search2.fill(prenom);
     const updated = page.locator('tbody tr', { hasText: new RegExp(escapeRegExp(prenom), 'i') }).first();

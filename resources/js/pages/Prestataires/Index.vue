@@ -62,15 +62,28 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const search = ref('');
+const statusFilter = ref<boolean | null>(null);
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => {
     filters.value.global.value = val;
 });
 
-const mobileFiltered = computed(() => {
+const totalPrestataires = computed(() => props.prestataires.length);
+const activePrestataires = computed(
+    () => props.prestataires.filter((p) => p.is_active).length,
+);
+const inactivePrestataires = computed(
+    () => props.prestataires.filter((p) => !p.is_active).length,
+);
+
+function applyFilters(list: Prestataire[]): Prestataire[] {
+    const byStatus =
+        statusFilter.value === null
+            ? list
+            : list.filter((p) => p.is_active === statusFilter.value);
     const q = search.value.trim().toLowerCase();
-    if (!q) return props.prestataires;
-    return props.prestataires.filter(
+    if (!q) return byStatus;
+    return byStatus.filter(
         (p) =>
             (p.nom_complet ?? '').toLowerCase().includes(q) ||
             p.reference.toLowerCase().includes(q) ||
@@ -78,7 +91,10 @@ const mobileFiltered = computed(() => {
             (p.type_label ?? '').toLowerCase().includes(q) ||
             (p.ville ?? '').toLowerCase().includes(q),
     );
-});
+}
+
+const filteredPrestataires = computed(() => applyFilters(props.prestataires));
+const mobileFiltered = computed(() => applyFilters(props.prestataires));
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -285,8 +301,8 @@ function confirmDelete(p: Prestataire) {
                         Prestataires
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ prestataires.length }} prestataire{{
-                            prestataires.length !== 1 ? 's' : ''
+                        {{ filteredPrestataires.length }} prestataire{{
+                            filteredPrestataires.length !== 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -301,11 +317,39 @@ function confirmDelete(p: Prestataire) {
                 </Link>
             </div>
 
+            <!-- Stats -->
+            <div class="grid grid-cols-3 gap-4">
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">
+                        Total prestataires
+                    </p>
+                    <p class="mt-1 text-3xl font-bold">
+                        {{ totalPrestataires }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">
+                        Prestataires actifs
+                    </p>
+                    <p class="mt-1 text-3xl font-bold text-emerald-500">
+                        {{ activePrestataires }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">
+                        Prestataires inactifs
+                    </p>
+                    <p class="mt-1 text-3xl font-bold text-zinc-400">
+                        {{ inactivePrestataires }}
+                    </p>
+                </div>
+            </div>
+
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="prestataires"
-                    :paginator="prestataires.length > 20"
+                    :value="filteredPrestataires"
+                    :paginator="totalPrestataires > 20"
                     :rows="20"
                     :global-filter-fields="[
                         'nom_complet',
@@ -328,7 +372,9 @@ function confirmDelete(p: Prestataire) {
                     }"
                 >
                     <template #header>
-                        <div class="flex items-center gap-3">
+                        <div
+                            class="flex items-center gap-3 border-b border-border bg-muted/30 px-4 py-3"
+                        >
                             <IconField class="max-w-sm flex-1">
                                 <InputIcon class="pointer-events-none">
                                     <Search
@@ -341,11 +387,44 @@ function confirmDelete(p: Prestataire) {
                                     class="w-full text-sm"
                                 />
                             </IconField>
-                            <span class="text-xs text-muted-foreground"
-                                >{{ prestataires.length }} résultat{{
-                                    prestataires.length !== 1 ? 's' : ''
-                                }}</span
-                            >
+                            <div class="flex gap-1">
+                                <button
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                                    :class="
+                                        statusFilter === null
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    "
+                                    @click="statusFilter = null"
+                                >
+                                    Tous
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                                    :class="
+                                        statusFilter === true
+                                            ? 'bg-emerald-500 text-white'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    "
+                                    @click="statusFilter = true"
+                                >
+                                    Actif
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                                    :class="
+                                        statusFilter === false
+                                            ? 'bg-zinc-500 text-white'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    "
+                                    @click="statusFilter = false"
+                                >
+                                    Inactif
+                                </button>
+                            </div>
                         </div>
                     </template>
 
