@@ -41,7 +41,7 @@ function toggle(mod: Module) {
 
 <template>
     <AppLayout :breadcrumbs="breadcrumbs">
-        <Head title="Modules métier" />
+        <Head><title>Modules métier</title></Head>
 
         <SettingsLayout>
             <div class="space-y-6">

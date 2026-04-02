@@ -47,7 +47,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     Route::resource('clients', ClientController::class);
 
     // ── Module : Ventes ───────────────────────────────────────────────────────
-    Route::middleware('module:' . ModuleFeature::VENTES)->group(function () {
+    Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
         Route::resource('ventes', CommandeVenteController::class)->except(['edit', 'update']);
         Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
         Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
@@ -59,7 +59,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     });
 
     // ── Module : Achats ───────────────────────────────────────────────────────
-    Route::middleware('module:' . ModuleFeature::ACHATS)->group(function () {
+    Route::middleware('module:'.ModuleFeature::ACHATS)->group(function () {
         Route::resource('achats', CommandeAchatController::class)->except(['edit', 'update']);
         Route::patch('achats/{achat}/receptionner', [CommandeAchatController::class, 'receptionner'])->name('achats.receptionner');
         Route::patch('achats/{achat}/annuler', [CommandeAchatController::class, 'annuler'])->name('achats.annuler');
@@ -67,7 +67,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     });
 
     // ── Module : Packings ─────────────────────────────────────────────────────
-    Route::middleware('module:' . ModuleFeature::PACKINGS)->group(function () {
+    Route::middleware('module:'.ModuleFeature::PACKINGS)->group(function () {
         Route::resource('packings', PackingController::class);
         Route::patch('packings/{packing}/annuler', [PackingController::class, 'annuler'])->name('packings.annuler');
         Route::post('packings/{packing}/versements', [VersementController::class, 'store'])->name('packings.versements.store');
@@ -75,29 +75,29 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     });
 
     // ── Module : Prestataires ─────────────────────────────────────────────────
-    Route::middleware('module:' . ModuleFeature::PRESTATAIRES)->group(function () {
+    Route::middleware('module:'.ModuleFeature::PRESTATAIRES)->group(function () {
         Route::resource('prestataires', PrestataireController::class);
     });
 
     // ── Module : Véhicules ────────────────────────────────────────────────────
-    Route::middleware('module:' . ModuleFeature::VEHICULES)->group(function () {
+    Route::middleware('module:'.ModuleFeature::VEHICULES)->group(function () {
         Route::resource('vehicules', VehiculeController::class)->except(['show']);
         Route::resource('proprietaires', ProprietaireController::class);
         Route::resource('livreurs', LivreurController::class);
     });
 
     // ── Module : Produits ─────────────────────────────────────────────────────
-    Route::middleware('module:' . ModuleFeature::PRODUITS)->group(function () {
+    Route::middleware('module:'.ModuleFeature::PRODUITS)->group(function () {
         Route::resource('produits', ProduitController::class);
     });
 
     // ── Module : Sites ────────────────────────────────────────────────────────
-    Route::middleware('module:' . ModuleFeature::SITES)->group(function () {
+    Route::middleware('module:'.ModuleFeature::SITES)->group(function () {
         Route::resource('sites', SiteController::class);
     });
 
     // ── Module : Utilisateurs ─────────────────────────────────────────────────
-    Route::middleware('module:' . ModuleFeature::UTILISATEURS)->group(function () {
+    Route::middleware('module:'.ModuleFeature::UTILISATEURS)->group(function () {
         Route::resource('users', UserController::class)->except(['show']);
         Route::put('users/{user}/password', [UserController::class, 'updatePassword'])->name('users.update-password');
         Route::resource('roles', RoleController::class)->only(['index', 'edit', 'update']);

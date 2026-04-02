@@ -39,16 +39,29 @@ const moduleFlags = computed(
 );
 const moduleActive = (key: string): boolean => moduleFlags.value[key] !== false;
 
+/** Guard combiné permission + module actif */
+const canSee = (permission: string, module: string): boolean =>
+    can(permission) && moduleActive(module);
+
+/** Sous-items Véhicules (calculés séparément pour limiter la complexité) */
+const vehiculesItems = computed((): NavItem[] => {
+    if (!moduleActive('vehicules')) return [];
+    const sub: NavItem[] = [];
+    if (can('vehicules.read'))
+        sub.push({ title: 'Liste de véhicules', href: '/vehicules' });
+    if (can('proprietaires.read'))
+        sub.push({ title: 'Propriétaires', href: '/proprietaires' });
+    if (can('livreurs.read'))
+        sub.push({ title: 'Livreurs', href: '/livreurs' });
+    return sub;
+});
+
 const mainNavItems = computed((): NavItem[] => {
     const items: NavItem[] = [
-        {
-            title: 'Tableau de bord',
-            href: dashboard(),
-            icon: LayoutGrid,
-        },
+        { title: 'Tableau de bord', href: dashboard(), icon: LayoutGrid },
     ];
 
-    if (can('ventes.read') && moduleActive('ventes')) {
+    if (canSee('ventes.read', 'ventes')) {
         items.push({
             title: 'Ventes',
             href: '/ventes',
@@ -61,65 +74,27 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (can('achats.read') && moduleActive('achats')) {
-        items.push({
-            title: 'Achats',
-            href: '/achats',
-            icon: PackageCheck,
-        });
-    }
-
-    if (can('packings.read') && moduleActive('packings')) {
-        items.push({
-            title: 'Packings',
-            href: '/packings',
-            icon: Layers,
-        });
-    }
-
-    if (can('prestataires.read') && moduleActive('prestataires')) {
+    if (canSee('achats.read', 'achats'))
+        items.push({ title: 'Achats', href: '/achats', icon: PackageCheck });
+    if (canSee('packings.read', 'packings'))
+        items.push({ title: 'Packings', href: '/packings', icon: Layers });
+    if (canSee('prestataires.read', 'prestataires'))
         items.push({
             title: 'Prestataires',
             href: '/prestataires',
             icon: Users,
         });
+
+    if (vehiculesItems.value.length > 0) {
+        items.push({
+            title: 'Véhicules',
+            href: vehiculesItems.value[0].href,
+            icon: Car,
+            items: vehiculesItems.value,
+        });
     }
 
-    if (moduleActive('vehicules')) {
-        const vehiculesSubItems: NavItem[] = [];
-
-        if (can('vehicules.read')) {
-            vehiculesSubItems.push({
-                title: 'Liste de véhicules',
-                href: '/vehicules',
-            });
-        }
-
-        if (can('proprietaires.read')) {
-            vehiculesSubItems.push({
-                title: 'Propriétaires',
-                href: '/proprietaires',
-            });
-        }
-
-        if (can('livreurs.read')) {
-            vehiculesSubItems.push({
-                title: 'Livreurs',
-                href: '/livreurs',
-            });
-        }
-
-        if (vehiculesSubItems.length > 0) {
-            items.push({
-                title: 'Véhicules',
-                href: vehiculesSubItems[0].href,
-                icon: Car,
-                items: vehiculesSubItems,
-            });
-        }
-    }
-
-    if (can('produits.read') && moduleActive('produits')) {
+    if (canSee('produits.read', 'produits')) {
         items.push({
             title: 'Produits',
             href: '/produits',
@@ -131,21 +106,10 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (can('sites.read') && moduleActive('sites')) {
-        items.push({
-            title: 'Sites',
-            href: '/sites',
-            icon: Building2,
-        });
-    }
-
-    if (can('users.read') && moduleActive('utilisateurs')) {
-        items.push({
-            title: 'Utilisateurs',
-            href: '/users',
-            icon: UserCog,
-        });
-    }
+    if (canSee('sites.read', 'sites'))
+        items.push({ title: 'Sites', href: '/sites', icon: Building2 });
+    if (canSee('users.read', 'utilisateurs'))
+        items.push({ title: 'Utilisateurs', href: '/users', icon: UserCog });
 
     return items;
 });

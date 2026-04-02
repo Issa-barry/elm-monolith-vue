@@ -39,7 +39,7 @@ class ModuleController extends Controller
         abort_if(! auth()->user()->can('parametres.update'), 403);
 
         $request->validate([
-            'module' => ['required', 'string', 'in:' . implode(',', ModuleFeature::ALL)],
+            'module' => ['required', 'string', 'in:'.implode(',', ModuleFeature::ALL)],
             'active' => ['required', 'boolean'],
         ]);
 

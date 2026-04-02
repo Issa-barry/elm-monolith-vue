@@ -209,7 +209,6 @@ class ModuleFeatureTest extends TestCase
     public function test_modules_are_active_by_default_for_new_org(): void
     {
         $org = Organization::factory()->create();
-        $user = $this->staffUser($org);
 
         // Sans entrée en base, le module doit être actif (valeur par défaut = true)
         foreach (ModuleFeature::ALL as $module) {
