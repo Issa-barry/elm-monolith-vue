@@ -188,7 +188,7 @@ class PrestataireTest extends TestCase
                 'type' => 'mecanicien',
                 'is_active' => true,
             ])
-            ->assertRedirect(route('prestataires.index'));
+            ->assertRedirect(route('prestataires.edit', $prestataire));
 
         $this->assertDatabaseHas('prestataires', [
             'id' => $prestataire->id,
