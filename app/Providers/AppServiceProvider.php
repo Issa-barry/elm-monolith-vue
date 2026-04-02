@@ -2,8 +2,11 @@
 
 namespace App\Providers;
 
+use App\Features\ModuleFeature;
+use App\Models\Organization;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Pennant\Feature;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -25,5 +28,12 @@ class AppServiceProvider extends ServiceProvider
                 ->mixedCase()   // maj + min
                 ->symbols();    // caractère spécial
         });
+
+        // ── Feature flags Pennant – modules métier ────────────────────────────
+        // Scope : Organization. Valeur par défaut : true (tous actifs).
+        // Persistance : driver database (table features).
+        foreach (ModuleFeature::ALL as $module) {
+            Feature::define($module, fn (Organization $org) => true);
+        }
     }
 }

@@ -28,10 +28,10 @@ const sidebarNavItems = computed((): NavItem[] => {
     }
 
     if (can('parametres.update')) {
-        items.push({
-            title: 'Paramétrage système',
-            href: editParametres().url,
-        });
+        items.push(
+            { title: 'Paramétrage système', href: editParametres().url },
+            { title: 'Modules métier', href: '/settings/modules' },
+        );
     }
 
     return items;

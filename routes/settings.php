@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\ModuleController;
 use App\Http\Controllers\Settings\ParametreController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
@@ -29,4 +30,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/parametres', [ParametreController::class, 'edit'])->name('parametres.edit');
     Route::put('settings/parametres/{parametre}', [ParametreController::class, 'update'])->name('parametres.update');
+
+    Route::get('settings/modules', [ModuleController::class, 'edit'])->name('modules.edit');
+    Route::patch('settings/modules', [ModuleController::class, 'toggle'])->name('modules.toggle');
 });

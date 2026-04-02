@@ -1,0 +1,51 @@
+<?php
+
+namespace App\Features;
+
+class ModuleFeature
+{
+    // ── Constantes stables ────────────────────────────────────────────────────
+
+    public const VENTES = 'module.ventes';
+
+    public const ACHATS = 'module.achats';
+
+    public const PACKINGS = 'module.packings';
+
+    public const PRESTATAIRES = 'module.prestataires';
+
+    public const VEHICULES = 'module.vehicules';
+
+    public const PRODUITS = 'module.produits';
+
+    public const SITES = 'module.sites';
+
+    public const UTILISATEURS = 'module.utilisateurs';
+
+    public const ALL = [
+        self::VENTES,
+        self::ACHATS,
+        self::PACKINGS,
+        self::PRESTATAIRES,
+        self::VEHICULES,
+        self::PRODUITS,
+        self::SITES,
+        self::UTILISATEURS,
+    ];
+
+    // ── Libellés UI ───────────────────────────────────────────────────────────
+
+    public static function labels(): array
+    {
+        return [
+            self::VENTES => 'Ventes',
+            self::ACHATS => 'Achats',
+            self::PACKINGS => 'Packings',
+            self::PRESTATAIRES => 'Prestataires',
+            self::VEHICULES => 'Véhicules',
+            self::PRODUITS => 'Produits',
+            self::SITES => 'Sites',
+            self::UTILISATEURS => 'Utilisateurs',
+        ];
+    }
+}
