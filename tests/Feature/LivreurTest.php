@@ -13,11 +13,6 @@ class LivreurTest extends TestCase
 {
     use HasAdminSetup, RefreshDatabase;
 
-    private function user(): User
-    {
-        return $this->makeAdminUser();
-    }
-
     private function userWithPermissions(Organization $org): User
     {
         return $this->makeUserWithPermissions($org, ['livreurs.read', 'livreurs.create', 'livreurs.update', 'livreurs.delete']);
@@ -42,7 +37,7 @@ class LivreurTest extends TestCase
 
     public function test_index_returns_403_without_permission(): void
     {
-        $user = $this->user();
+        $user = $this->makeAdminUser();
 
         $this->actingAs($user)
             ->get(route('livreurs.index'))
@@ -63,7 +58,7 @@ class LivreurTest extends TestCase
 
     public function test_create_returns_403_without_permission(): void
     {
-        $user = $this->user();
+        $user = $this->makeAdminUser();
 
         $this->actingAs($user)
             ->get(route('livreurs.create'))

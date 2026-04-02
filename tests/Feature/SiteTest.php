@@ -13,11 +13,6 @@ class SiteTest extends TestCase
 {
     use HasAdminSetup, RefreshDatabase;
 
-    private function user(): User
-    {
-        return $this->makeAdminUser();
-    }
-
     private function userWithPermissions(Organization $org): User
     {
         return $this->makeUserWithPermissions($org, ['sites.read', 'sites.create', 'sites.update', 'sites.delete']);
@@ -52,7 +47,7 @@ class SiteTest extends TestCase
 
     public function test_index_returns_403_without_permission(): void
     {
-        $user = $this->user();
+        $user = $this->makeAdminUser();
 
         $this->actingAs($user)
             ->get(route('sites.index'))

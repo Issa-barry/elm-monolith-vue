@@ -19,11 +19,6 @@ class CommandeVenteTest extends TestCase
 {
     use HasAdminSetup, RefreshDatabase;
 
-    private function user(): User
-    {
-        return $this->makeAdminUser();
-    }
-
     private function userWithPermissions(Organization $org): User
     {
         return $this->makeUserWithPermissions($org, ['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete']);
@@ -77,7 +72,7 @@ class CommandeVenteTest extends TestCase
 
     public function test_index_returns_403_without_permission(): void
     {
-        $user = $this->user();
+        $user = $this->makeAdminUser();
 
         $this->actingAs($user)
             ->get(route('ventes.index'))

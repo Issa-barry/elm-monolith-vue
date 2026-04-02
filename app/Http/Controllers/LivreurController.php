@@ -83,7 +83,7 @@ class LivreurController extends Controller
 
         $this->validateLocalPhoneLength($data);
 
-        $data = $this->normalizeData($data);
+        $data = $this->normalizePersonData($data);
 
         Livreur::create([...$data, 'organization_id' => $orgId]);
 
@@ -151,30 +151,12 @@ class LivreurController extends Controller
 
         $this->validateLocalPhoneLength($data);
 
-        $data = $this->normalizeData($data);
+        $data = $this->normalizePersonData($data);
 
         $livreur->update($data);
 
         return redirect()->route('livreurs.edit', $livreur)
             ->with('success', 'Livreur mis à jour avec succès.');
-    }
-
-    private function normalizeData(array $data): array
-    {
-        if (! empty($data['nom'])) {
-            $data['nom'] = mb_strtoupper($data['nom'], 'UTF-8');
-        }
-        if (! empty($data['prenom'])) {
-            $data['prenom'] = mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
-        }
-        if (! empty($data['ville'])) {
-            $data['ville'] = mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
-        }
-        if (! empty($data['telephone'])) {
-            $data['telephone'] = $this->buildInternationalPhone($data['telephone'], $data['code_phone_pays'] ?? null);
-        }
-
-        return $data;
     }
 
     public function destroy(Livreur $livreur): RedirectResponse

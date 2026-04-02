@@ -13,11 +13,6 @@ class ClientTest extends TestCase
 {
     use HasAdminSetup, RefreshDatabase;
 
-    private function user(): User
-    {
-        return $this->makeAdminUser();
-    }
-
     private function userWithPermissions(Organization $org): User
     {
         return $this->makeUserWithPermissions($org, ['clients.read', 'clients.create', 'clients.update', 'clients.delete']);
@@ -42,7 +37,7 @@ class ClientTest extends TestCase
 
     public function test_index_returns_403_without_permission(): void
     {
-        $user = $this->user();
+        $user = $this->makeAdminUser();
 
         $this->actingAs($user)
             ->get(route('clients.index'))
@@ -107,7 +102,7 @@ class ClientTest extends TestCase
 
     public function test_store_returns_403_without_permission(): void
     {
-        $user = $this->user();
+        $user = $this->makeAdminUser();
 
         $this->actingAs($user)
             ->post(route('clients.store'), [
@@ -181,7 +176,7 @@ class ClientTest extends TestCase
 
     public function test_destroy_returns_403_without_permission(): void
     {
-        $user = $this->user();
+        $user = $this->makeAdminUser();
         $client = Client::factory()->create(['organization_id' => $user->organization_id]);
 
         $this->actingAs($user)

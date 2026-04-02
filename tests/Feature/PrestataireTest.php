@@ -13,11 +13,6 @@ class PrestataireTest extends TestCase
 {
     use HasAdminSetup, RefreshDatabase;
 
-    private function user(): User
-    {
-        return $this->makeAdminUser();
-    }
-
     private function userWithPermissions(Organization $org): User
     {
         return $this->makeUserWithPermissions($org, ['prestataires.read', 'prestataires.create', 'prestataires.update', 'prestataires.delete']);
@@ -52,7 +47,7 @@ class PrestataireTest extends TestCase
 
     public function test_index_returns_403_without_permission(): void
     {
-        $user = $this->user();
+        $user = $this->makeAdminUser();
 
         $this->actingAs($user)
             ->get(route('prestataires.index'))
