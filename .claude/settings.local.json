@@ -47,7 +47,9 @@
       "Bash(grep -r \"authenticate\\\\|failed\" app/Actions/Fortify/ --include=*.php -n)",
       "Bash(npx tsc:*)",
       "Bash(grep -n \"success\\\\|flash\\\\|usePage\\\\|$page\" c:/laragon/www/elm-monolithe/resources/js/pages/Livreurs/Edit.vue)",
-      "Bash(./vendor/bin/phpunit --filter \"test_update_modifies_livreur_and_redirects|test_update_modifies_prestataire_and_redirects\")"
+      "Bash(./vendor/bin/phpunit --filter \"test_update_modifies_livreur_and_redirects|test_update_modifies_prestataire_and_redirects\")",
+      "Bash(./vendor/bin/pint app/Http/Controllers/Settings/ModuleController.php bootstrap/app.php routes/web.php)",
+      "Bash(./vendor/bin/phpunit --filter ModuleFeatureTest)"
     ]
   }
 }

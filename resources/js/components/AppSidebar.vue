@@ -34,17 +34,34 @@ const page = usePage();
 const stockAlertes = computed(
     () => (page.props as any).stock_alertes ?? { total: 0 },
 );
+const moduleFlags = computed(
+    () => ((page.props as any).module_flags as Record<string, boolean>) ?? {},
+);
+const moduleActive = (key: string): boolean => moduleFlags.value[key] !== false;
+
+/** Guard combiné permission + module actif */
+const canSee = (permission: string, module: string): boolean =>
+    can(permission) && moduleActive(module);
+
+/** Sous-items Véhicules (calculés séparément pour limiter la complexité) */
+const vehiculesItems = computed((): NavItem[] => {
+    if (!moduleActive('vehicules')) return [];
+    const sub: NavItem[] = [];
+    if (can('vehicules.read'))
+        sub.push({ title: 'Liste de véhicules', href: '/vehicules' });
+    if (can('proprietaires.read'))
+        sub.push({ title: 'Propriétaires', href: '/proprietaires' });
+    if (can('livreurs.read'))
+        sub.push({ title: 'Livreurs', href: '/livreurs' });
+    return sub;
+});
 
 const mainNavItems = computed((): NavItem[] => {
     const items: NavItem[] = [
-        {
-            title: 'Tableau de bord',
-            href: dashboard(),
-            icon: LayoutGrid,
-        },
+        { title: 'Tableau de bord', href: dashboard(), icon: LayoutGrid },
     ];
 
-    if (can('ventes.read')) {
+    if (canSee('ventes.read', 'ventes')) {
         items.push({
             title: 'Ventes',
             href: '/ventes',
@@ -57,63 +74,27 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (can('achats.read')) {
-        items.push({
-            title: 'Achats',
-            href: '/achats',
-            icon: PackageCheck,
-        });
-    }
-
-    if (can('packings.read')) {
-        items.push({
-            title: 'Packings',
-            href: '/packings',
-            icon: Layers,
-        });
-    }
-
-    if (can('prestataires.read')) {
+    if (canSee('achats.read', 'achats'))
+        items.push({ title: 'Achats', href: '/achats', icon: PackageCheck });
+    if (canSee('packings.read', 'packings'))
+        items.push({ title: 'Packings', href: '/packings', icon: Layers });
+    if (canSee('prestataires.read', 'prestataires'))
         items.push({
             title: 'Prestataires',
             href: '/prestataires',
             icon: Users,
         });
-    }
 
-    const vehiculesSubItems: NavItem[] = [];
-
-    if (can('vehicules.read')) {
-        vehiculesSubItems.push({
-            title: 'Liste de véhicules',
-            href: '/vehicules',
-        });
-    }
-
-    if (can('proprietaires.read')) {
-        vehiculesSubItems.push({
-            title: 'Propriétaires',
-            href: '/proprietaires',
-        });
-    }
-
-    if (can('livreurs.read')) {
-        vehiculesSubItems.push({
-            title: 'Livreurs',
-            href: '/livreurs',
-        });
-    }
-
-    if (vehiculesSubItems.length > 0) {
+    if (vehiculesItems.value.length > 0) {
         items.push({
             title: 'Véhicules',
-            href: vehiculesSubItems[0].href,
+            href: vehiculesItems.value[0].href,
             icon: Car,
-            items: vehiculesSubItems,
+            items: vehiculesItems.value,
         });
     }
 
-    if (can('produits.read')) {
+    if (canSee('produits.read', 'produits')) {
         items.push({
             title: 'Produits',
             href: '/produits',
@@ -125,21 +106,10 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (can('sites.read')) {
-        items.push({
-            title: 'Sites',
-            href: '/sites',
-            icon: Building2,
-        });
-    }
-
-    if (can('users.read')) {
-        items.push({
-            title: 'Utilisateurs',
-            href: '/users',
-            icon: UserCog,
-        });
-    }
+    if (canSee('sites.read', 'sites'))
+        items.push({ title: 'Sites', href: '/sites', icon: Building2 });
+    if (canSee('users.read', 'utilisateurs'))
+        items.push({ title: 'Utilisateurs', href: '/users', icon: UserCog });
 
     return items;
 });
