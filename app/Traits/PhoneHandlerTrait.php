@@ -40,6 +40,11 @@ trait PhoneHandlerTrait
         ];
     }
 
+    private function digitsOnly(string $value): string
+    {
+        return preg_replace('/\D+/', '', $value) ?? '';
+    }
+
     private function splitPhone(?string $telephone, ?string $codePhonePays, ?string $codePays, ?string $pays): array
     {
         if (! $telephone) {
@@ -47,24 +52,24 @@ trait PhoneHandlerTrait
         }
 
         $raw = trim($telephone);
+        $result = [$this->digitsOnly($raw) ?: null, $codePhonePays, $codePays, $pays];
 
         if ($codePhonePays && str_starts_with($raw, $codePhonePays)) {
-            $local = substr($raw, strlen($codePhonePays));
+            $result[0] = $this->digitsOnly(substr($raw, strlen($codePhonePays))) ?: null;
 
-            return [preg_replace('/\D+/', '', $local) ?: null, $codePhonePays, $codePays, $pays];
+            return $result;
         }
 
         $sorted = static::supportedPays();
         uasort($sorted, fn ($a, $b) => strlen($b[1]) <=> strlen($a[1]));
         foreach ($sorted as $code => [$name, $dial]) {
             if (str_starts_with($raw, $dial)) {
-                $local = substr($raw, strlen($dial));
-
-                return [preg_replace('/\D+/', '', $local) ?: null, $dial, $code, $name];
+                $result = [$this->digitsOnly(substr($raw, strlen($dial))) ?: null, $dial, $code, $name];
+                break;
             }
         }
 
-        return [preg_replace('/\D+/', '', $raw) ?: null, $codePhonePays, $codePays, $pays];
+        return $result;
     }
 
     private function validateLocalPhoneLength(array $data): void
@@ -78,7 +83,7 @@ trait PhoneHandlerTrait
             return;
         }
 
-        $digits = preg_replace('/\D+/', '', (string) $data['telephone']) ?? '';
+        $digits = $this->digitsOnly((string) $data['telephone']);
         if ($digits === '') {
             return;
         }
@@ -117,23 +122,19 @@ trait PhoneHandlerTrait
     private function buildInternationalPhone(string $telephone, ?string $codePhonePays): ?string
     {
         $telephone = trim($telephone);
-        $telephoneDigits = preg_replace('/\D+/', '', $telephone) ?? '';
+        $digits = $this->digitsOnly($telephone);
 
-        if ($telephoneDigits === '') {
+        if ($digits === '') {
             return null;
         }
 
         if (str_starts_with($telephone, '+')) {
-            return '+'.$telephoneDigits;
+            return '+'.$digits;
         }
 
-        if ($codePhonePays) {
-            $dialDigits = preg_replace('/\D+/', '', $codePhonePays) ?? '';
-            $localDigits = preg_replace('/^0/', '', $telephoneDigits);
+        $localDigits = preg_replace('/^0/', '', $digits);
+        $dialDigits = $codePhonePays ? $this->digitsOnly($codePhonePays) : '';
 
-            return $dialDigits !== '' ? '+'.$dialDigits.$localDigits : $telephoneDigits;
-        }
-
-        return $telephoneDigits;
+        return $dialDigits !== '' ? '+'.$dialDigits.$localDigits : $digits;
     }
 }
