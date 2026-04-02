@@ -206,7 +206,7 @@ class ProprietaireController extends Controller
 
         $proprietaire->update($data);
 
-        return redirect()->route('proprietaires.index')
+        return redirect()->route('proprietaires.edit', $proprietaire)
             ->with('success', 'Propriétaire mis à jour avec succès.');
     }
 

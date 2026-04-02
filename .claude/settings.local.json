@@ -45,7 +45,8 @@
       "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File .claude/scripts/safe-push-dev.ps1)",
       "Bash(grep -A 6 \"label: ''Guinée''\" resources/js/pages/Proprietaires/partials/ProprietaireForm.vue)",
       "Bash(grep -r \"authenticate\\\\|failed\" app/Actions/Fortify/ --include=*.php -n)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(grep -n \"success\\\\|flash\\\\|usePage\\\\|$page\" c:/laragon/www/elm-monolithe/resources/js/pages/Livreurs/Edit.vue)"
     ]
   }
 }

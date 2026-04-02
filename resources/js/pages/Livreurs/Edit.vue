@@ -2,8 +2,9 @@
 import { Spinner } from '@/components/ui/spinner';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Save } from 'lucide-vue-next';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
+import { computed } from 'vue';
 import LivreurForm from './partials/LivreurForm.vue';
 
 interface LivreurData {
@@ -21,6 +22,10 @@ interface LivreurData {
 }
 
 const props = defineProps<{ livreur: LivreurData }>();
+const page = usePage();
+const flashSuccess = computed(
+    () => (page.props as any).flash?.success as string | undefined,
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -82,6 +87,14 @@ function submit() {
                         {{ livreur.prenom }} {{ livreur.nom }}
                     </p>
                 </div>
+            </div>
+
+            <div
+                v-if="flashSuccess"
+                class="mx-6 mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+            >
+                <CheckCircle class="h-4 w-4 shrink-0" />
+                {{ flashSuccess }}
             </div>
 
             <LivreurForm
