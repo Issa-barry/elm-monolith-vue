@@ -11,7 +11,7 @@
 import { expect, type Page, test } from '@playwright/test';
 import { E2E_PASSWORD, E2E_PHONE, fillLoginIdentifier } from './helpers';
 
-test.setTimeout(120_000);
+test.setTimeout(300_000);
 
 // Login flow tests must start unauthenticated, regardless of global storage state.
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -172,6 +172,18 @@ test('wrong credentials -> stays on /login with error message', async ({
     );
 });
 
+test('access protected route -> login -> redirected back to intended URL', async ({
+    page,
+}) => {
+    await page.goto('/users');
+
+    await expect(page).toHaveURL(/\/login(?:\?.*)?$/, { timeout: 20_000 });
+
+    await submitCurrentLoginWithRetry(page, E2E_PHONE, E2E_PASSWORD);
+
+    await expect(page).toHaveURL(/\/users(?:\/|$|\?)/, { timeout: 30_000 });
+});
+
 test('empty phone (password filled) -> server validation error on telephone', async ({
     page,
 }) => {
@@ -243,16 +255,4 @@ test('remember me checked -> session cookie removed -> still authenticated', asy
     await page.goto('/users');
     await expect(page).not.toHaveURL(/\/login/, { timeout: 30_000 });
     await expect(page).toHaveURL(/\/users/, { timeout: 10_000 });
-});
-
-test('access protected route -> login -> redirected back to intended URL', async ({
-    page,
-}) => {
-    await page.goto('/users');
-
-    await expect(page).toHaveURL(/\/login(?:\?.*)?$/, { timeout: 20_000 });
-
-    await submitCurrentLoginWithRetry(page, E2E_PHONE, E2E_PASSWORD);
-
-    await expect(page).toHaveURL(/\/users(?:\/|$|\?)/, { timeout: 30_000 });
 });

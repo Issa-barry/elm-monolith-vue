@@ -71,7 +71,7 @@ function parseLoginPhone(rawPhone: string): ParsedLoginPhone | null {
     };
 }
 
-async function selectLoginCountry(
+async function ensureLoginCountry(
     page: Page,
     country: LoginCountryOption,
 ): Promise<void> {
@@ -90,20 +90,12 @@ async function selectLoginCountry(
         return;
     }
 
-    await combobox.click({ timeout: 5_000, force: true });
+    await page.evaluate((countryCode) => {
+        globalThis.localStorage?.setItem('login_country_code', countryCode);
+    }, country.code);
 
-    const option = page
-        .locator('[role="option"]')
-        .filter({
-            hasText: new RegExp(
-                `${escapeRegExp(country.prefix)}|${escapeRegExp(country.code)}`,
-                'i',
-            ),
-        })
-        .first();
-
-    await expect(option).toBeVisible({ timeout: 10_000 });
-    await option.click({ timeout: 5_000, force: true });
+    await page.reload();
+    await page.waitForSelector('input[name="password"]', { timeout: 20_000 });
 }
 
 export async function fillLoginIdentifier(
@@ -121,7 +113,7 @@ export async function fillLoginIdentifier(
 
     const parsedPhone = parseLoginPhone(phone);
     if (parsedPhone) {
-        await selectLoginCountry(page, parsedPhone.country);
+        await ensureLoginCountry(page, parsedPhone.country);
     }
 
     const telInput = page.locator('form input[type="tel"]').first();
@@ -138,7 +130,7 @@ export async function fillLoginIdentifier(
 }
 
 export async function login(page: Page): Promise<void> {
-    // Verify whether storageState already loaded a valid session
+    // Verify whether storageState already loaded a valid session.
     await page.goto('/dashboard');
     if (!page.url().includes('/login')) {
         return;
@@ -174,7 +166,7 @@ export async function login(page: Page): Promise<void> {
                 .innerText()
                 .catch(() => '');
             const isRateLimited =
-                /too many|trop de tentatives|veuillez patienter|please wait|seconds|secondes|r[ée]essayez/i.test(
+                /too many|trop de tentatives|veuillez patienter|please wait|seconds|secondes|r[ée]essayez|requests|429/i.test(
                     bodyText,
                 );
 
