@@ -8,34 +8,21 @@ use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Permission;
+use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\TestCase;
 
 class VehiculeTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasAdminSetup, RefreshDatabase;
 
     private function user(): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        $org = Organization::factory()->create();
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-
-        return $user;
+        return $this->makeAdminUser();
     }
 
     private function userWithPermissions(Organization $org): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        foreach (['vehicules.read', 'vehicules.create', 'vehicules.update', 'vehicules.delete'] as $perm) {
-            Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
-        }
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-        $user->givePermissionTo(['vehicules.read', 'vehicules.create', 'vehicules.update', 'vehicules.delete']);
-
-        return $user;
+        return $this->makeUserWithPermissions($org, ['vehicules.read', 'vehicules.create', 'vehicules.update', 'vehicules.delete']);
     }
 
     private function makeVehicule(Organization $org): Vehicule

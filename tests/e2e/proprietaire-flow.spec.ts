@@ -1,14 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { cleanupRowsByPrefix, escapeRegExp, getVisibleSearchInput, login, openRowActions, selectOptionFromCombobox } from './helpers';
+import { cleanupRowsByPrefix, escapeRegExp, getVisibleSearchInput, login, openRowActions, randomDigits, selectOptionFromCombobox } from './helpers';
 
 const PREFIX = 'e2eproflow';
 
 test.setTimeout(180_000);
-
-function randomDigits(length: number): string {
-    const max = 10 ** length;
-    return `${Math.floor(Math.random() * max)}`.padStart(length, '0');
-}
 
 test.afterEach(async ({ browser }) => {
     try {

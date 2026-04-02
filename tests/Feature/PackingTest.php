@@ -9,34 +9,21 @@ use App\Models\Packing;
 use App\Models\Prestataire;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Permission;
+use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\TestCase;
 
 class PackingTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasAdminSetup, RefreshDatabase;
 
     private function user(): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        $org = Organization::factory()->create();
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-
-        return $user;
+        return $this->makeAdminUser();
     }
 
     private function userWithPermissions(Organization $org): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        foreach (['packings.read', 'packings.create', 'packings.update', 'packings.delete'] as $perm) {
-            Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
-        }
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-        $user->givePermissionTo(['packings.read', 'packings.create', 'packings.update', 'packings.delete']);
-
-        return $user;
+        return $this->makeUserWithPermissions($org, ['packings.read', 'packings.create', 'packings.update', 'packings.delete']);
     }
 
     private function makePrestataire(Organization $org): Prestataire

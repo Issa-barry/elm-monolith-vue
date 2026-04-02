@@ -12,34 +12,21 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Permission;
+use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\TestCase;
 
 class CommandeVenteTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasAdminSetup, RefreshDatabase;
 
     private function user(): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        $org = Organization::factory()->create();
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-
-        return $user;
+        return $this->makeAdminUser();
     }
 
     private function userWithPermissions(Organization $org): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        foreach (['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete'] as $perm) {
-            Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
-        }
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-        $user->givePermissionTo(['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete']);
-
-        return $user;
+        return $this->makeUserWithPermissions($org, ['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete']);
     }
 
     private function makeContext(Organization $org): array

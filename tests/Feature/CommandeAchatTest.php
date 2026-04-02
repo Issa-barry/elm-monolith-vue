@@ -9,34 +9,21 @@ use App\Models\Prestataire;
 use App\Models\Produit;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Permission;
+use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\TestCase;
 
 class CommandeAchatTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasAdminSetup, RefreshDatabase;
 
     private function user(): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        $org = Organization::factory()->create();
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-
-        return $user;
+        return $this->makeAdminUser();
     }
 
     private function userWithPermissions(Organization $org): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        foreach (['achats.read', 'achats.create', 'achats.update', 'achats.delete'] as $perm) {
-            Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
-        }
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-        $user->givePermissionTo(['achats.read', 'achats.create', 'achats.update', 'achats.delete']);
-
-        return $user;
+        return $this->makeUserWithPermissions($org, ['achats.read', 'achats.create', 'achats.update', 'achats.delete']);
     }
 
     private function makeContext(Organization $org): array

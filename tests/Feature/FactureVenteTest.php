@@ -7,32 +7,21 @@ use App\Models\FactureVente;
 use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Permission;
+use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\TestCase;
 
 class FactureVenteTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasAdminSetup, RefreshDatabase;
 
     private function user(): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        $org = Organization::factory()->create();
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-
-        return $user;
+        return $this->makeAdminUser();
     }
 
     private function userWithPermissions(Organization $org): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        Permission::firstOrCreate(['name' => 'ventes.read', 'guard_name' => 'web']);
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-        $user->givePermissionTo('ventes.read');
-
-        return $user;
+        return $this->makeUserWithPermissions($org, ['ventes.read']);
     }
 
     // ── index ─────────────────────────────────────────────────────────────────

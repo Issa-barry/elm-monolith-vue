@@ -4,29 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Enums\PrestataireType;
 use App\Models\Prestataire;
+use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
-// Pays autorisés : code ISO => [nom, indicatif]
-define('PRESTATAIRE_PAYS', [
-    'GN' => ['Guinée',              '+224'],
-    'GW' => ['Guinée-Bissau',       '+245'],
-    'SN' => ['Sénégal',             '+221'],
-    'ML' => ['Mali',                '+223'],
-    'CI' => ["Côte d'Ivoire",       '+225'],
-    'LR' => ['Liberia',             '+231'],
-    'SL' => ['Sierra Leone',        '+232'],
-    'FR' => ['France',              '+33'],
-    'CN' => ['Chine',               '+86'],
-    'AE' => ['Émirats arabes unis', '+971'],
-    'IN' => ['Inde',                '+91'],
-]);
-
 class PrestataireController extends Controller
 {
+    use PhoneHandlerTrait;
+
     public function index(): Response
     {
         $this->authorize('viewAny', Prestataire::class);
@@ -77,7 +65,7 @@ class PrestataireController extends Controller
             'raison_sociale' => 'nullable|string|max:255',
             'email' => 'nullable|email:rfc,dns|max:255',
             'phone' => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
-            'code_pays' => ['nullable', Rule::in(array_keys(PRESTATAIRE_PAYS))],
+            'code_pays' => ['nullable', Rule::in(array_keys(static::supportedPays()))],
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string',
             'type' => ['required', Rule::enum(PrestataireType::class)],
@@ -85,9 +73,8 @@ class PrestataireController extends Controller
             'is_active' => 'boolean',
         ]);
 
-        // Dériver pays et indicatif depuis code_pays (source unique)
-        if (isset($data['code_pays']) && isset(PRESTATAIRE_PAYS[$data['code_pays']])) {
-            [$data['pays'], $data['code_phone_pays']] = PRESTATAIRE_PAYS[$data['code_pays']];
+        if (isset($data['code_pays']) && isset(static::supportedPays()[$data['code_pays']])) {
+            [$data['pays'], $data['code_phone_pays']] = static::supportedPays()[$data['code_pays']];
         }
 
         $data = $this->normalizeData($data);
@@ -131,25 +118,6 @@ class PrestataireController extends Controller
         ]);
     }
 
-    private function splitPhone(?string $phone, ?string $codePhonePays, ?string $codePays, ?string $pays): array
-    {
-        if (! $phone) {
-            return [null, $codePhonePays, $codePays, $pays];
-        }
-        if ($codePhonePays && str_starts_with($phone, $codePhonePays)) {
-            return [substr($phone, strlen($codePhonePays)), $codePhonePays, $codePays, $pays];
-        }
-        $sorted = PRESTATAIRE_PAYS;
-        uasort($sorted, fn ($a, $b) => strlen($b[1]) <=> strlen($a[1]));
-        foreach ($sorted as $code => [$name, $dial]) {
-            if (str_starts_with($phone, $dial)) {
-                return [substr($phone, strlen($dial)), $dial, $code, $name];
-            }
-        }
-
-        return [$phone, $codePhonePays, $codePays, $pays];
-    }
-
     public function update(Request $request, Prestataire $prestataire): RedirectResponse
     {
         $this->authorize('update', $prestataire);
@@ -160,7 +128,7 @@ class PrestataireController extends Controller
             'raison_sociale' => 'nullable|string|max:255',
             'email' => 'nullable|email:rfc,dns|max:255',
             'phone' => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
-            'code_pays' => ['nullable', Rule::in(array_keys(PRESTATAIRE_PAYS))],
+            'code_pays' => ['nullable', Rule::in(array_keys(static::supportedPays()))],
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string',
             'type' => ['required', Rule::enum(PrestataireType::class)],
@@ -168,9 +136,8 @@ class PrestataireController extends Controller
             'is_active' => 'boolean',
         ]);
 
-        // Dériver pays et indicatif depuis code_pays (source unique)
-        if (isset($data['code_pays']) && isset(PRESTATAIRE_PAYS[$data['code_pays']])) {
-            [$data['pays'], $data['code_phone_pays']] = PRESTATAIRE_PAYS[$data['code_pays']];
+        if (isset($data['code_pays']) && isset(static::supportedPays()[$data['code_pays']])) {
+            [$data['pays'], $data['code_phone_pays']] = static::supportedPays()[$data['code_pays']];
         }
 
         $data = $this->normalizeData($data);

@@ -6,34 +6,21 @@ use App\Models\Organization;
 use App\Models\Prestataire;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Permission;
+use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\TestCase;
 
 class PrestataireTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasAdminSetup, RefreshDatabase;
 
     private function user(): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        $org = Organization::factory()->create();
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-
-        return $user;
+        return $this->makeAdminUser();
     }
 
     private function userWithPermissions(Organization $org): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        foreach (['prestataires.read', 'prestataires.create', 'prestataires.update', 'prestataires.delete'] as $perm) {
-            Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
-        }
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-        $user->givePermissionTo(['prestataires.read', 'prestataires.create', 'prestataires.update', 'prestataires.delete']);
-
-        return $user;
+        return $this->makeUserWithPermissions($org, ['prestataires.read', 'prestataires.create', 'prestataires.update', 'prestataires.delete']);
     }
 
     private function makePrestataire(Organization $org, array $overrides = []): Prestataire
