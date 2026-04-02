@@ -4,6 +4,7 @@ const baseURL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:8080';
 
 export default defineConfig({
     testDir: './tests/e2e',
+    globalSetup: './tests/e2e/global-setup.ts',
     fullyParallel: true,
     workers: process.env.CI ? 2 : 1,
     retries: process.env.CI ? 1 : 0,
@@ -13,6 +14,7 @@ export default defineConfig({
     },
     use: {
         baseURL,
+        storageState: '.auth/user.json',
         trace: 'on-first-retry',
         screenshot: 'only-on-failure',
         video: 'retain-on-failure',

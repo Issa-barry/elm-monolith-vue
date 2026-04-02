@@ -14,6 +14,9 @@ test('home page responds', async ({ page }) => {
 });
 
 test('login page renders', async ({ page }) => {
+    // Vide les cookies pour simuler un utilisateur non authentifié
+    // (avec storageState actif, /login redirigerait sinon vers le dashboard).
+    await page.context().clearCookies();
     await page.goto('/login');
     await expect(page.locator('input[name="password"]')).toBeVisible({
         timeout: 15_000,

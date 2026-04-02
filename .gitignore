@@ -32,3 +32,4 @@ yarn-error.log
 # Code coverage
 /coverage/
 /coverage-report/
+.auth/

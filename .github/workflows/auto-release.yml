@@ -1,0 +1,202 @@
+name: auto-release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: auto-release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --force --tags
+
+      - name: Detect release bump
+        id: bump
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prs = await github.paginate(
+              github.rest.repos.listPullRequestsAssociatedWithCommit,
+              {
+                owner,
+                repo,
+                commit_sha: context.sha,
+              }
+            );
+
+            const mergedPr = prs.find((pr) => pr.merged_at && pr.base?.ref === 'main');
+            let bump = 'patch';
+            let reason = 'default patch (no PR metadata found)';
+            let prRef = '';
+
+            if (mergedPr) {
+              prRef = `#${mergedPr.number}`;
+              const labels = mergedPr.labels
+                .map((label) => (typeof label === 'string' ? label : label.name || ''))
+                .map((label) => label.toLowerCase());
+              const title = (mergedPr.title || '').toLowerCase();
+
+              const hasAny = (candidates) => candidates.some((candidate) => labels.includes(candidate));
+
+              if (
+                hasAny(['release:major', 'semver:major', 'major']) ||
+                /\bbreaking\b/.test(title)
+              ) {
+                bump = 'major';
+                reason = 'PR label/title indicates a major change';
+              } else if (
+                hasAny(['release:minor', 'semver:minor', 'minor']) ||
+                /^feat(\(|:)/.test(title) ||
+                /^feature(\(|:)/.test(title)
+              ) {
+                bump = 'minor';
+                reason = 'PR label/title indicates a minor change';
+              } else if (hasAny(['release:patch', 'semver:patch', 'patch', 'hotfix'])) {
+                bump = 'patch';
+                reason = 'PR label indicates a patch release';
+              } else {
+                reason = 'no semver label found on PR to main; fallback to patch';
+              }
+            }
+
+            core.info(`Bump: ${bump} | Reason: ${reason} | PR: ${prRef || 'n/a'}`);
+            core.setOutput('bump', bump);
+            core.setOutput('reason', reason);
+            core.setOutput('pr', prRef);
+
+      - name: Check semver tag on commit
+        id: commit_tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          existing_tag="$(git tag --points-at "$GITHUB_SHA" | grep -E '^(v)?[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)"
+          echo "existing_tag=$existing_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Compute next semver tag
+        if: steps.commit_tag.outputs.existing_tag == ''
+        id: next_tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          latest_tag="$(git tag --list | grep -E '^(v)?[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)"
+          if [ -z "$latest_tag" ]; then
+            latest_tag="0.0.0"
+          fi
+
+          prefix=""
+          version="$latest_tag"
+          if [[ "$latest_tag" == v* ]]; then
+            prefix="v"
+            version="${latest_tag#v}"
+          fi
+
+          IFS='.' read -r major minor patch <<< "$version"
+          bump="${{ steps.bump.outputs.bump }}"
+
+          case "$bump" in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            patch)
+              patch=$((patch + 1))
+              ;;
+            *)
+              echo "Unsupported bump '$bump'" >&2
+              exit 1
+              ;;
+          esac
+
+          next_tag="${prefix}${major}.${minor}.${patch}"
+
+          echo "latest_tag=$latest_tag" >> "$GITHUB_OUTPUT"
+          echo "next_tag=$next_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create git tag
+        if: steps.commit_tag.outputs.existing_tag == ''
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${{ steps.next_tag.outputs.next_tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" "$GITHUB_SHA" -m "Release $tag"
+          git push origin "$tag"
+
+      - name: Resolve release tag
+        id: release_tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -n "${{ steps.commit_tag.outputs.existing_tag }}" ]; then
+            echo "tag=${{ steps.commit_tag.outputs.existing_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ steps.next_tag.outputs.next_tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check if GitHub release exists
+        id: release_exists
+        env:
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const tag = process.env.RELEASE_TAG;
+
+            try {
+              await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              core.setOutput('exists', 'true');
+            } catch (error) {
+              if (error.status === 404) {
+                core.setOutput('exists', 'false');
+              } else {
+                throw error;
+              }
+            }
+
+      - name: Publish GitHub release
+        if: steps.release_exists.outputs.exists != 'true'
+        # v2.6.1
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: Release ${{ steps.release_tag.outputs.tag }}
+          target_commitish: main
+          generate_release_notes: true
+          body: |
+            Auto-generated release.
+            - Bump: `${{ steps.bump.outputs.bump }}`
+            - Reason: ${{ steps.bump.outputs.reason }}
+            - Source PR: ${{ steps.bump.outputs.pr }}
+
+      - name: Release already exists
+        if: steps.release_exists.outputs.exists == 'true'
+        run: echo "Release for tag '${{ steps.release_tag.outputs.tag }}' already exists. Skipping."

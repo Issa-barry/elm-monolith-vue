@@ -32,6 +32,8 @@ interface PackingData {
     prestataire_id: number;
     prestataire_nom: string | null;
     date: string;
+    shift: string;
+    shift_label: string;
     nb_rouleaux: number;
     prix_par_rouleau: number;
     montant: number;
@@ -278,6 +280,13 @@ const canAddVersement = computed(
                         <p class="text-xs text-muted-foreground">Date</p>
                         <p class="mt-0.5 font-medium">
                             {{ formatDate(packing.date) }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-muted-foreground">Shift</p>
+                        <p class="mt-0.5 font-medium">
+                            {{ packing.shift === 'jour' ? '☀' : '🌙' }}
+                            {{ packing.shift_label }}
                         </p>
                     </div>
                     <div>
