@@ -13,7 +13,7 @@ interface Module {
     active: boolean;
 }
 
-const props = defineProps<{ modules: Module[] }>();
+defineProps<{ modules: Module[] }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Paramètres', href: '/settings/profile' },

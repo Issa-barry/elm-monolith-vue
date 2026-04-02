@@ -214,4 +214,4 @@ php artisan migrate:fresh --seed
 php artisan optimize:clear
 php artisan optimize
 
-brache feature
+brache feature 2
