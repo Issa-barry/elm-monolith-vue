@@ -1,40 +1,31 @@
-/**
+﻿/**
  * packing-flow.spec.ts
- * Tests e2e pour la gestion des packings, incluant le champ shift (jour/nuit).
+ * E2E tests for packing management, including shift (jour/nuit).
  *
  * Run: npx playwright test tests/e2e/packing-flow.spec.ts --workers=1
  */
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 import { login, selectOptionFromCombobox } from './helpers';
 
 test.setTimeout(180_000);
-
-// ─── Helpers locaux ────────────────────────────────────────────────────────────
 
 async function goToCreate(page: Page): Promise<void> {
     await page.goto('/packings/create');
     await page.waitForSelector('#packing-form', { timeout: 20_000 });
 }
 
-/**
- * Sélectionne le premier prestataire (1er combobox du formulaire).
- */
 async function selectFirstPrestataire(page: Page): Promise<void> {
     const combo = page.locator('#packing-form').getByRole('combobox').first();
     await selectOptionFromCombobox(page, combo);
 }
 
-/**
- * Sélectionne un shift via le Dropdown (input-id="shift").
- * On clique sur le wrapper puis sur l'option.
- */
 async function selectShift(page: Page, shift: 'Jour' | 'Nuit'): Promise<void> {
-    // PrimeVue 4 Dropdown : le wrapper clickable contient l'input#shift
-    const wrapper = page.locator('#shift').locator('xpath=ancestor::*[@data-pc-name][1]');
+    const wrapper = page
+        .locator('#shift')
+        .locator('xpath=ancestor::*[@data-pc-name][1]');
     await expect(wrapper).toBeVisible({ timeout: 10_000 });
     await wrapper.click({ timeout: 5_000 });
 
-    // Attendre et cliquer sur l'option
     const option = page
         .locator('[role="option"]')
         .filter({ hasText: new RegExp(`^${shift}$`, 'i') })
@@ -43,17 +34,24 @@ async function selectShift(page: Page, shift: 'Jour' | 'Nuit'): Promise<void> {
     await option.click({ timeout: 3_000 });
 }
 
-/**
- * Remplit le nombre de rouleaux (1er spinbutton = InputNumber PrimeVue 4) et soumet.
- * Prestataire et shift doivent déjà être sélectionnés.
- */
+async function fillPrimeNumberInput(
+    input: Locator,
+    value: string,
+): Promise<void> {
+    await expect(input).toBeVisible({ timeout: 10_000 });
+    await input.click({ timeout: 5_000 });
+    await input.fill(value);
+    await input.press('Tab');
+}
+
 async function fillAndSubmitPacking(page: Page): Promise<void> {
-    const nbInput = page
-        .locator('#packing-form')
-        .getByRole('spinbutton')
-        .first();
-    await expect(nbInput).toBeVisible({ timeout: 10_000 });
-    await nbInput.fill('5');
+    const numberInputs = page.locator('#packing-form').getByRole('spinbutton');
+
+    const nbInput = numberInputs.first();
+    const prixInput = numberInputs.nth(1);
+
+    await fillPrimeNumberInput(nbInput, '5');
+    await fillPrimeNumberInput(prixInput, '1000');
 
     await page
         .locator('#packing-form button[type="submit"]:visible')
@@ -61,9 +59,6 @@ async function fillAndSubmitPacking(page: Page): Promise<void> {
         .click();
 }
 
-/**
- * Crée un packing complet et attend la redirection show.
- */
 async function createPacking(
     page: Page,
     shift: 'Jour' | 'Nuit' = 'Jour',
@@ -75,9 +70,9 @@ async function createPacking(
     await expect(page).toHaveURL(/\/packings\/\d+$/, { timeout: 30_000 });
 }
 
-// ─── Création avec shift Jour ──────────────────────────────────────────────────
-
-test('create packing with shift Jour → show displays Jour', async ({ page }) => {
+test('create packing with shift Jour -> show displays Jour', async ({
+    page,
+}) => {
     await login(page);
     await createPacking(page, 'Jour');
 
@@ -86,9 +81,9 @@ test('create packing with shift Jour → show displays Jour', async ({ page }) =
     });
 });
 
-// ─── Création avec shift Nuit ──────────────────────────────────────────────────
-
-test('create packing with shift Nuit → show displays Nuit', async ({ page }) => {
+test('create packing with shift Nuit -> show displays Nuit', async ({
+    page,
+}) => {
     await login(page);
     await createPacking(page, 'Nuit');
 
@@ -97,9 +92,9 @@ test('create packing with shift Nuit → show displays Nuit', async ({ page }) =
     });
 });
 
-// ─── Modification du shift via edit ───────────────────────────────────────────
-
-test('edit packing → change shift Jour to Nuit → persisted', async ({ page }) => {
+test('edit packing -> change shift Jour to Nuit -> persisted', async ({
+    page,
+}) => {
     await login(page);
     await createPacking(page, 'Jour');
 
@@ -121,8 +116,6 @@ test('edit packing → change shift Jour to Nuit → persisted', async ({ page }
     });
 });
 
-// ─── Shift visible dans la liste ──────────────────────────────────────────────
-
 test('packing list shows shift label', async ({ page }) => {
     await login(page);
     await createPacking(page, 'Nuit');
@@ -132,8 +125,6 @@ test('packing list shows shift label', async ({ page }) => {
         timeout: 10_000,
     });
 });
-
-// ─── Shift dans la page show ───────────────────────────────────────────────────
 
 test('packing show page displays shift label and icon', async ({ page }) => {
     await login(page);
@@ -147,13 +138,10 @@ test('packing show page displays shift label and icon', async ({ page }) => {
     });
 });
 
-// ─── Shift par défaut = Jour ───────────────────────────────────────────────────
-
 test('new packing form has Jour selected by default', async ({ page }) => {
     await login(page);
     await goToCreate(page);
 
-    // Le wrapper du Dropdown shift doit afficher "Jour" par défaut
     const shiftWrapper = page
         .locator('#shift')
         .locator('xpath=ancestor::*[@data-pc-name][1]');
