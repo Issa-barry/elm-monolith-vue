@@ -213,3 +213,5 @@ composer2 update
 php artisan migrate:fresh --seed
 php artisan optimize:clear
 php artisan optimize
+
+brache feature
