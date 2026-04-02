@@ -64,22 +64,38 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const search = ref('');
+const statusFilter = ref<boolean | null>(null);
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => {
     filters.value.global.value = val;
 });
 
-const mobileFiltered = computed(() => {
+const totalLivreurs = computed(() => props.livreurs.length);
+const activeLivreurs = computed(
+    () => props.livreurs.filter((l) => l.is_active).length,
+);
+const inactiveLivreurs = computed(
+    () => props.livreurs.filter((l) => !l.is_active).length,
+);
+
+function applyFilters(list: Livreur[]): Livreur[] {
+    const byStatus =
+        statusFilter.value === null
+            ? list
+            : list.filter((l) => l.is_active === statusFilter.value);
     const q = search.value.trim().toLowerCase();
-    if (!q) return props.livreurs;
-    return props.livreurs.filter(
+    if (!q) return byStatus;
+    return byStatus.filter(
         (l) =>
             l.nom_complet.toLowerCase().includes(q) ||
             (l.email ?? '').toLowerCase().includes(q) ||
             (l.adresse ?? '').toLowerCase().includes(q) ||
             (l.ville ?? '').toLowerCase().includes(q),
     );
-});
+}
+
+const filteredLivreurs = computed(() => applyFilters(props.livreurs));
+const mobileFiltered = computed(() => applyFilters(props.livreurs));
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -282,8 +298,8 @@ function confirmDelete(l: Livreur) {
                         Livreurs
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ livreurs.length }} livreur{{
-                            livreurs.length !== 1 ? 's' : ''
+                        {{ filteredLivreurs.length }} livreur{{
+                            filteredLivreurs.length !== 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -295,11 +311,33 @@ function confirmDelete(l: Livreur) {
                 </Link>
             </div>
 
+            <!-- Stats -->
+            <div class="grid grid-cols-3 gap-4">
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">Total livreurs</p>
+                    <p class="mt-1 text-3xl font-bold">{{ totalLivreurs }}</p>
+                </div>
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">Livreurs actifs</p>
+                    <p class="mt-1 text-3xl font-bold text-emerald-500">
+                        {{ activeLivreurs }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">
+                        Livreurs inactifs
+                    </p>
+                    <p class="mt-1 text-3xl font-bold text-zinc-400">
+                        {{ inactiveLivreurs }}
+                    </p>
+                </div>
+            </div>
+
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="livreurs"
-                    :paginator="livreurs.length > 20"
+                    :value="filteredLivreurs"
+                    :paginator="totalLivreurs > 20"
                     :rows="20"
                     :global-filter-fields="[
                         'nom_complet',
@@ -321,7 +359,9 @@ function confirmDelete(l: Livreur) {
                     }"
                 >
                     <template #header>
-                        <div class="flex items-center gap-3">
+                        <div
+                            class="flex items-center gap-3 border-b border-border bg-muted/30 px-4 py-3"
+                        >
                             <IconField class="max-w-sm flex-1">
                                 <InputIcon class="pointer-events-none">
                                     <Search
@@ -334,11 +374,44 @@ function confirmDelete(l: Livreur) {
                                     class="w-full text-sm"
                                 />
                             </IconField>
-                            <span class="text-xs text-muted-foreground"
-                                >{{ livreurs.length }} résultat{{
-                                    livreurs.length !== 1 ? 's' : ''
-                                }}</span
-                            >
+                            <div class="flex gap-1">
+                                <button
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                                    :class="
+                                        statusFilter === null
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    "
+                                    @click="statusFilter = null"
+                                >
+                                    Tous
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                                    :class="
+                                        statusFilter === true
+                                            ? 'bg-emerald-500 text-white'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    "
+                                    @click="statusFilter = true"
+                                >
+                                    Actif
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                                    :class="
+                                        statusFilter === false
+                                            ? 'bg-zinc-500 text-white'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    "
+                                    @click="statusFilter = false"
+                                >
+                                    Inactif
+                                </button>
+                            </div>
                         </div>
                     </template>
 

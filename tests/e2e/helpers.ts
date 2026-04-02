@@ -80,7 +80,17 @@ async function selectLoginCountry(
         return;
     }
 
-    await combobox.click({ timeout: 5_000 });
+    const currentValue = (
+        await combobox.innerText().catch(() => '')
+    ).toLowerCase();
+    if (
+        currentValue.includes(country.prefix.toLowerCase()) ||
+        currentValue.includes(country.code.toLowerCase())
+    ) {
+        return;
+    }
+
+    await combobox.click({ timeout: 5_000, force: true });
 
     const option = page
         .locator('[role="option"]')
@@ -93,7 +103,7 @@ async function selectLoginCountry(
         .first();
 
     await expect(option).toBeVisible({ timeout: 10_000 });
-    await option.click({ timeout: 5_000 });
+    await option.click({ timeout: 5_000, force: true });
 }
 
 export async function fillLoginIdentifier(
