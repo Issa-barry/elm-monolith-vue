@@ -2,6 +2,7 @@
 import { usePermissions } from '@/composables/usePermissions';
 import { toUrl } from '@/lib/utils';
 import { dashboard } from '@/routes';
+import type { AppPageProps, ModuleFlagKey, PermissionKey } from '@/types';
 import type { InertiaLinkProps } from '@inertiajs/vue3';
 import { Link, usePage } from '@inertiajs/vue3';
 import type { LucideIcon } from 'lucide-vue-next';
@@ -28,8 +29,13 @@ interface QuickMenuItem {
     visible: boolean;
 }
 
-const page = usePage();
+const page = usePage<AppPageProps>();
 const { can } = usePermissions();
+const moduleFlags = computed(() => page.props.module_flags ?? {});
+const moduleActive = (key: ModuleFlagKey): boolean =>
+    moduleFlags.value[key] !== false;
+const canSee = (permission: PermissionKey, module: ModuleFlagKey): boolean =>
+    can(permission) && moduleActive(module);
 
 const quickMenuItems = computed((): QuickMenuItem[] =>
     [
@@ -43,55 +49,55 @@ const quickMenuItems = computed((): QuickMenuItem[] =>
             title: 'Ventes',
             href: '/ventes',
             icon: ShoppingCart,
-            visible: can('ventes.read'),
+            visible: canSee('ventes.read', 'ventes'),
         },
         {
             title: 'Achats',
             href: '/achats',
             icon: PackageCheck,
-            visible: can('achats.read'),
+            visible: canSee('achats.read', 'achats'),
         },
         {
             title: 'Packings',
             href: '/packings',
             icon: Layers,
-            visible: can('packings.read'),
+            visible: canSee('packings.read', 'packings'),
         },
         {
             title: 'Prestataires',
             href: '/prestataires',
             icon: HandCoins,
-            visible: can('prestataires.read'),
+            visible: canSee('prestataires.read', 'prestataires'),
         },
         {
             title: 'Vehicules',
             href: '/vehicules',
             icon: Car,
-            visible: can('vehicules.read'),
+            visible: canSee('vehicules.read', 'vehicules'),
         },
         {
             title: 'Livreurs',
             href: '/livreurs',
             icon: Truck,
-            visible: can('livreurs.read'),
+            visible: canSee('livreurs.read', 'vehicules'),
         },
         {
             title: 'Proprietaires',
             href: '/proprietaires',
             icon: UserRound,
-            visible: can('proprietaires.read'),
+            visible: canSee('proprietaires.read', 'vehicules'),
         },
         {
             title: 'Produits',
             href: '/produits',
             icon: Package,
-            visible: can('produits.read'),
+            visible: canSee('produits.read', 'produits'),
         },
         {
             title: 'Sites',
             href: '/sites',
             icon: Building2,
-            visible: can('sites.read'),
+            visible: canSee('sites.read', 'sites'),
         },
     ].filter((item) => item.visible),
 );
