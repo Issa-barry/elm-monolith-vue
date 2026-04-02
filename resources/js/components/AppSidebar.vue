@@ -34,6 +34,10 @@ const page = usePage();
 const stockAlertes = computed(
     () => (page.props as any).stock_alertes ?? { total: 0 },
 );
+const moduleFlags = computed(
+    () => ((page.props as any).module_flags as Record<string, boolean>) ?? {},
+);
+const moduleActive = (key: string): boolean => moduleFlags.value[key] !== false;
 
 const mainNavItems = computed((): NavItem[] => {
     const items: NavItem[] = [
@@ -44,7 +48,7 @@ const mainNavItems = computed((): NavItem[] => {
         },
     ];
 
-    if (can('ventes.read')) {
+    if (can('ventes.read') && moduleActive('ventes')) {
         items.push({
             title: 'Ventes',
             href: '/ventes',
@@ -57,7 +61,7 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (can('achats.read')) {
+    if (can('achats.read') && moduleActive('achats')) {
         items.push({
             title: 'Achats',
             href: '/achats',
@@ -65,7 +69,7 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (can('packings.read')) {
+    if (can('packings.read') && moduleActive('packings')) {
         items.push({
             title: 'Packings',
             href: '/packings',
@@ -73,7 +77,7 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (can('prestataires.read')) {
+    if (can('prestataires.read') && moduleActive('prestataires')) {
         items.push({
             title: 'Prestataires',
             href: '/prestataires',
@@ -81,39 +85,41 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    const vehiculesSubItems: NavItem[] = [];
+    if (moduleActive('vehicules')) {
+        const vehiculesSubItems: NavItem[] = [];
 
-    if (can('vehicules.read')) {
-        vehiculesSubItems.push({
-            title: 'Liste de véhicules',
-            href: '/vehicules',
-        });
+        if (can('vehicules.read')) {
+            vehiculesSubItems.push({
+                title: 'Liste de véhicules',
+                href: '/vehicules',
+            });
+        }
+
+        if (can('proprietaires.read')) {
+            vehiculesSubItems.push({
+                title: 'Propriétaires',
+                href: '/proprietaires',
+            });
+        }
+
+        if (can('livreurs.read')) {
+            vehiculesSubItems.push({
+                title: 'Livreurs',
+                href: '/livreurs',
+            });
+        }
+
+        if (vehiculesSubItems.length > 0) {
+            items.push({
+                title: 'Véhicules',
+                href: vehiculesSubItems[0].href,
+                icon: Car,
+                items: vehiculesSubItems,
+            });
+        }
     }
 
-    if (can('proprietaires.read')) {
-        vehiculesSubItems.push({
-            title: 'Propriétaires',
-            href: '/proprietaires',
-        });
-    }
-
-    if (can('livreurs.read')) {
-        vehiculesSubItems.push({
-            title: 'Livreurs',
-            href: '/livreurs',
-        });
-    }
-
-    if (vehiculesSubItems.length > 0) {
-        items.push({
-            title: 'Véhicules',
-            href: vehiculesSubItems[0].href,
-            icon: Car,
-            items: vehiculesSubItems,
-        });
-    }
-
-    if (can('produits.read')) {
+    if (can('produits.read') && moduleActive('produits')) {
         items.push({
             title: 'Produits',
             href: '/produits',
@@ -125,7 +131,7 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (can('sites.read')) {
+    if (can('sites.read') && moduleActive('sites')) {
         items.push({
             title: 'Sites',
             href: '/sites',
@@ -133,7 +139,7 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (can('users.read')) {
+    if (can('users.read') && moduleActive('utilisateurs')) {
         items.push({
             title: 'Utilisateurs',
             href: '/users',

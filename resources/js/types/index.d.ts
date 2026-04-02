@@ -46,6 +46,16 @@ export interface NavItem {
     items?: NavItem[];
 }
 
+export type ModuleFlagKey =
+    | 'ventes'
+    | 'achats'
+    | 'packings'
+    | 'prestataires'
+    | 'vehicules'
+    | 'produits'
+    | 'sites'
+    | 'utilisateurs';
+
 export type AppPageProps<
     T extends Record<string, unknown> = Record<string, unknown>,
 > = T & {
@@ -56,6 +66,7 @@ export type AppPageProps<
     auth: Auth;
     sidebarOpen: boolean;
     stock_alertes: { ruptures: number; faibles: number; total: number };
+    module_flags: Partial<Record<ModuleFlagKey, boolean>>;
 };
 
 export interface Organization {

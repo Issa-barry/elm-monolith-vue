@@ -32,6 +32,10 @@ const sidebarNavItems = computed((): NavItem[] => {
             title: 'Paramétrage système',
             href: editParametres().url,
         });
+        items.push({
+            title: 'Modules métier',
+            href: '/settings/modules',
+        });
     }
 
     return items;
