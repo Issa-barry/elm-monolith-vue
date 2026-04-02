@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Produit;
+use App\Services\ModuleService;
 use App\Support\AppVersion;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
@@ -44,6 +45,30 @@ class HandleInertiaRequests extends Middleware
             'faibles' => $faibles,
             'total' => $ruptures + $faibles,
         ];
+    }
+
+    private function moduleFlags(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user || ! $user->organization_id) {
+            return [];
+        }
+
+        // loadMissing est idempotent : pas de requête supplémentaire si déjà chargé
+        $org = $user->loadMissing('organization')->organization;
+        if (! $org) {
+            return [];
+        }
+
+        // Les clés sont simplifiées (sans préfixe 'module.')
+        // pour éviter les problèmes de dot-notation dans les assertions Inertia/Vue
+        $raw = ModuleService::allForOrg($org);
+        $flags = [];
+        foreach ($raw as $key => $value) {
+            $flags[str_replace('module.', '', $key)] = $value;
+        }
+
+        return $flags;
     }
 
     private function contactMessagesNonLus(Request $request): int
@@ -92,6 +117,7 @@ class HandleInertiaRequests extends Middleware
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'stock_alertes' => $this->stockAlertes($request),
             'contact_messages_non_lus' => $this->contactMessagesNonLus($request),
+            'module_flags' => $this->moduleFlags($request),
             'flash' => ['success' => $request->session()->get('success')],
         ];
     }
