@@ -177,7 +177,7 @@ class PrestataireController extends Controller
 
         $prestataire->update($data);
 
-        return redirect()->route('prestataires.index')
+        return redirect()->route('prestataires.edit', $prestataire)
             ->with('success', 'Prestataire mis à jour avec succès.');
     }
 

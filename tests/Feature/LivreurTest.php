@@ -175,7 +175,7 @@ class LivreurTest extends TestCase
                 'ville' => 'Kindia',
                 'is_active' => true,
             ])
-            ->assertRedirect(route('livreurs.index'));
+            ->assertRedirect(route('livreurs.edit', $livreur));
 
         $this->assertDatabaseHas('livreurs', [
             'id' => $livreur->id,

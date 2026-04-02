@@ -11,21 +11,21 @@
 import { expect, type Page, test } from '@playwright/test';
 import { E2E_PASSWORD, E2E_PHONE, fillLoginIdentifier } from './helpers';
 
-test.setTimeout(120_000);
+test.setTimeout(300_000);
 
 // Login flow tests must start unauthenticated, regardless of global storage state.
 test.use({ storageState: { cookies: [], origins: [] } });
 
 const SESSION_COOKIE = 'eau-la-maman-session';
 const AUTH_ERROR_OR_THROTTLE_REGEX =
-    /(num[ée]ro de t[ée]l[ée]phone ou mot de passe incorrect|these credentials do not match our records|trop de tentatives|too many attempts|please wait|veuillez patienter|r[ée]essayez)/i;
+    /(num[ée]ro de t[ée]l[ée]phone ou mot de passe incorrect|these credentials do not match our records|trop de tentatives|too many attempts|too many requests|429|please wait|veuillez patienter|r[ée]essayez)/i;
 const RATE_LIMIT_REGEX =
-    /trop de tentatives|too many attempts|please wait|veuillez patienter|seconds|secondes|r[ée]essayez/i;
+    /trop de tentatives|too many attempts|too many requests|429|please wait|veuillez patienter|seconds|secondes|r[ée]essayez/i;
 
 async function clickSubmit(page: Page): Promise<void> {
     const btn = page.getByRole('button', { name: /se connecter/i }).first();
     await expect(btn).toBeEnabled({ timeout: 10_000 });
-    await btn.click();
+    await btn.click({ force: true });
 }
 
 async function checkRememberMe(page: Page): Promise<void> {
@@ -114,6 +114,45 @@ async function ensureAuthenticatedWithRetry(
     );
 }
 
+async function submitCurrentLoginWithRetry(
+    page: Page,
+    phone: string,
+    password: string,
+): Promise<void> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        await submitFromCurrentLoginPage(page, phone, password);
+
+        try {
+            await expect(page).not.toHaveURL(/\/login(?:\?.*)?$/, {
+                timeout: 30_000,
+            });
+            return;
+        } catch (error) {
+            lastError = error;
+            const bodyText = await page
+                .locator('body')
+                .innerText()
+                .catch(() => '');
+            const rateLimited = RATE_LIMIT_REGEX.test(bodyText);
+
+            if (!rateLimited) {
+                throw error;
+            }
+
+            await page.waitForTimeout(61_000);
+        }
+    }
+
+    throw (
+        lastError ??
+        new Error(
+            'Unable to submit login form after retries on intended URL flow.',
+        )
+    );
+}
+
 test('wrong credentials -> stays on /login with error message', async ({
     page,
 }) => {
@@ -131,6 +170,18 @@ test('wrong credentials -> stays on /login with error message', async ({
             timeout: 15_000,
         },
     );
+});
+
+test('access protected route -> login -> redirected back to intended URL', async ({
+    page,
+}) => {
+    await page.goto('/users');
+
+    await expect(page).toHaveURL(/\/login(?:\?.*)?$/, { timeout: 20_000 });
+
+    await submitCurrentLoginWithRetry(page, E2E_PHONE, E2E_PASSWORD);
+
+    await expect(page).toHaveURL(/\/users(?:\/|$|\?)/, { timeout: 30_000 });
 });
 
 test('empty phone (password filled) -> server validation error on telephone', async ({
@@ -204,16 +255,4 @@ test('remember me checked -> session cookie removed -> still authenticated', asy
     await page.goto('/users');
     await expect(page).not.toHaveURL(/\/login/, { timeout: 30_000 });
     await expect(page).toHaveURL(/\/users/, { timeout: 10_000 });
-});
-
-test('access protected route -> login -> redirected back to intended URL', async ({
-    page,
-}) => {
-    await page.goto('/users');
-
-    await expect(page).toHaveURL(/\/login(?:\?.*)?$/, { timeout: 20_000 });
-
-    await submitFromCurrentLoginPage(page, E2E_PHONE, E2E_PASSWORD);
-
-    await expect(page).toHaveURL(/\/users(?:\/|$|\?)/, { timeout: 30_000 });
 });

@@ -208,7 +208,7 @@ class LivreurController extends Controller
 
         $livreur->update($data);
 
-        return redirect()->route('livreurs.index')
+        return redirect()->route('livreurs.edit', $livreur)
             ->with('success', 'Livreur mis à jour avec succès.');
     }
 
