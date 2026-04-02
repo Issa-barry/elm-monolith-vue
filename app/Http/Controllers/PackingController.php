@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\PackingShift;
 use App\Enums\PackingStatut;
 use App\Models\Packing;
 use App\Models\Parametre;
@@ -27,6 +28,8 @@ class PackingController extends Controller
             'montant' => $p->montant,
             'montant_verse' => $p->montant_verse,
             'montant_restant' => $p->montant_restant,
+            'shift' => $p->shift?->value,
+            'shift_label' => $p->shift?->label(),
             'statut' => $p->statut?->value,
             'statut_label' => $p->statut_label,
             'notes' => $p->notes,
@@ -69,6 +72,7 @@ class PackingController extends Controller
             'prestataires' => $prestataires,
             'prix_defaut' => Parametre::getPrixRouleauDefaut(auth()->user()->organization_id),
             'statuts' => PackingStatut::options(),
+            'shifts' => PackingShift::options(),
         ]);
     }
 
@@ -82,6 +86,7 @@ class PackingController extends Controller
         $data = $request->validate([
             'prestataire_id' => ['required', 'integer', Rule::exists('prestataires', 'id')->where('organization_id', $orgId)],
             'date' => 'required|date',
+            'shift' => ['required', Rule::in(PackingShift::values())],
             'nb_rouleaux' => 'required|integer|min:1|max:9999999',
             'prix_par_rouleau' => 'required|integer|min:0|max:99999999',
             'statut' => ['nullable', Rule::in([PackingStatut::IMPAYEE->value, PackingStatut::ANNULEE->value])],
@@ -90,6 +95,8 @@ class PackingController extends Controller
             'prestataire_id.required' => 'Le prestataire est obligatoire.',
             'prestataire_id.exists' => 'Le prestataire sélectionné est introuvable.',
             'date.required' => 'La date est obligatoire.',
+            'shift.required' => 'Le shift est obligatoire.',
+            'shift.in' => 'Le shift doit être "jour" ou "nuit".',
             'nb_rouleaux.required' => 'Le nombre de rouleaux est obligatoire.',
             'nb_rouleaux.min' => 'Le nombre de rouleaux doit être supérieur à 0.',
             'prix_par_rouleau.required' => 'Le prix par rouleau est obligatoire.',
@@ -146,6 +153,7 @@ class PackingController extends Controller
         return Inertia::render('Packings/Edit', [
             'packing' => $this->packingData($packing),
             'prestataires' => $prestataires,
+            'shifts' => PackingShift::options(),
         ]);
     }
 
@@ -159,6 +167,7 @@ class PackingController extends Controller
         $data = $request->validate([
             'prestataire_id' => ['required', 'integer', Rule::exists('prestataires', 'id')->where('organization_id', $orgId)],
             'date' => 'required|date',
+            'shift' => ['required', Rule::in(PackingShift::values())],
             'nb_rouleaux' => 'required|integer|min:1|max:9999999',
             'prix_par_rouleau' => 'required|integer|min:0|max:99999999',
             'notes' => 'nullable|string|max:5000',
@@ -166,6 +175,8 @@ class PackingController extends Controller
             'prestataire_id.required' => 'Le prestataire est obligatoire.',
             'prestataire_id.exists' => 'Le prestataire sélectionné est introuvable.',
             'date.required' => 'La date est obligatoire.',
+            'shift.required' => 'Le shift est obligatoire.',
+            'shift.in' => 'Le shift doit être "jour" ou "nuit".',
             'nb_rouleaux.required' => 'Le nombre de rouleaux est obligatoire.',
             'nb_rouleaux.min' => 'Le nombre de rouleaux doit être supérieur à 0.',
             'prix_par_rouleau.required' => 'Le prix par rouleau est obligatoire.',

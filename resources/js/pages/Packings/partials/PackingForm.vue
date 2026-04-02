@@ -13,9 +13,15 @@ interface Option {
     label: string;
 }
 
+interface ShiftOption {
+    value: string;
+    label: string;
+}
+
 interface FormData {
     prestataire_id: number | null;
     date: string;
+    shift: string;
     nb_rouleaux: number | null;
     prix_par_rouleau: number;
     notes: string | null;
@@ -25,6 +31,7 @@ const props = defineProps<{
     form: FormData;
     errors: Partial<Record<keyof FormData, string>>;
     prestataires: Option[];
+    shifts: ShiftOption[];
     processing: boolean;
     reference?: string | null;
 }>();
@@ -99,8 +106,8 @@ function fromDate(val: Date | null): string {
                     </p>
                 </div>
 
-                <!-- Date -->
-                <div class="sm:col-span-2">
+                <!-- Date + Shift (même ligne) -->
+                <div>
                     <Label class="mb-1.5 block"
                         >Date <span class="text-destructive">*</span></Label
                     >
@@ -120,6 +127,35 @@ function fromDate(val: Date | null): string {
                     />
                     <p v-if="errors.date" class="mt-1 text-xs text-destructive">
                         {{ errors.date }}
+                    </p>
+                </div>
+
+                <!-- Shift -->
+                <div>
+                    <Label for="shift" class="mb-1.5 block"
+                        >Shift <span class="text-destructive">*</span></Label
+                    >
+                    <Dropdown
+                        input-id="shift"
+                        :model-value="form.shift"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                shift: $event,
+                            })
+                        "
+                        :options="shifts"
+                        option-label="label"
+                        option-value="value"
+                        placeholder="Sélectionner…"
+                        class="w-full"
+                        :class="{ 'p-invalid': errors.shift }"
+                    />
+                    <p
+                        v-if="errors.shift"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.shift }}
                     </p>
                 </div>
 

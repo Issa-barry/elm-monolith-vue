@@ -15,6 +15,7 @@ const props = defineProps<{
     prestataires: Option[];
     prix_defaut?: number;
     statuts: { value: string; label: string }[];
+    shifts: { value: string; label: string }[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -26,6 +27,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     prestataire_id: null as number | null,
     date: new Date().toISOString().slice(0, 10),
+    shift: 'jour',
     nb_rouleaux: null as number | null,
     prix_par_rouleau: props.prix_defaut ?? 0,
     notes: null as string | null,
@@ -75,6 +77,7 @@ function submit() {
                 :form="form"
                 :errors="form.errors"
                 :prestataires="prestataires"
+                :shifts="shifts"
                 :processing="form.processing"
                 @update:form="Object.assign(form, $event)"
                 @submit="submit"

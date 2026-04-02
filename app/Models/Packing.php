@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PackingShift;
 use App\Enums\PackingStatut;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -26,6 +27,7 @@ class Packing extends Model
         'nb_rouleaux',
         'prix_par_rouleau',
         'montant',
+        'shift',
         'statut',
         'notes',
         'created_by',
@@ -43,6 +45,7 @@ class Packing extends Model
             'nb_rouleaux' => 'integer',
             'prix_par_rouleau' => 'integer',
             'montant' => 'integer',
+            'shift' => PackingShift::class,
             'statut' => PackingStatut::class,
         ];
     }
@@ -52,6 +55,9 @@ class Packing extends Model
         static::creating(function (Packing $p) {
             if (empty($p->reference)) {
                 $p->reference = self::TEMP_PREFIX.Str::uuid();
+            }
+            if (empty($p->shift)) {
+                $p->shift = PackingShift::JOUR;
             }
             if (empty($p->statut)) {
                 $p->statut = PackingStatut::IMPAYEE;
