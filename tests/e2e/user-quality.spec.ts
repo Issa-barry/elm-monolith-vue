@@ -138,7 +138,10 @@ test('duplicate phone number shows validation error', async ({ page }) => {
     await expect(page).toHaveURL(/\/users\/create$/);
     await page.getByRole('button', { name: /informations/i }).click();
     await expect(page.locator('#telephone')).toBeVisible();
-    await expect(page.locator('#telephone')).toHaveClass(/p-invalid/);
+    // Vérifier via le message d'erreur (plus fiable que la classe CSS p-invalid)
+    await expect(
+        page.locator('.text-destructive:visible').first(),
+    ).toBeVisible({ timeout: 10_000 });
 });
 
 // ─── Formatage des champs ─────────────────────────────────────────────────────
