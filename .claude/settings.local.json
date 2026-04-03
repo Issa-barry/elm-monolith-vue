@@ -60,7 +60,8 @@
       "Bash(find /c/laragon/www/elm-monolithe -name \"web.php\" -type f -exec grep -l \"register\\\\|login\" {} \\\\;)",
       "Bash(vendor/bin/pint app/Actions/Fortify/CreateNewUser.php app/Providers/FortifyServiceProvider.php --test)",
       "Bash(vendor/bin/pint app/Actions/Fortify/CreateNewUser.php app/Providers/FortifyServiceProvider.php)",
-      "Bash(vendor/bin/pint app/Http/Controllers/ProprietaireController.php tests/Feature/ProprietaireTest.php --test)"
+      "Bash(vendor/bin/pint app/Http/Controllers/ProprietaireController.php tests/Feature/ProprietaireTest.php --test)",
+      "Bash(vendor/bin/pint app/Http/Controllers/PrestataireController.php --test)"
     ]
   }
 }

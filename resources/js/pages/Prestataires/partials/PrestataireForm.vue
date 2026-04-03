@@ -2,6 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { paysOptionsByName } from '@/lib/pays';
 import { Save } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
@@ -13,63 +14,7 @@ interface Option {
     label: string;
 }
 
-interface CountryOption {
-    label: string;
-    value: string;
-    code: string;
-    dial: string;
-    flag: string;
-}
-
-const PAYS_OPTIONS: CountryOption[] = [
-    { label: 'Guinée', value: 'Guinée', code: 'GN', dial: '+224', flag: '🇬🇳' },
-    {
-        label: 'Guinée-Bissau',
-        value: 'Guinée-Bissau',
-        code: 'GW',
-        dial: '+245',
-        flag: '🇬🇼',
-    },
-    {
-        label: 'Sénégal',
-        value: 'Sénégal',
-        code: 'SN',
-        dial: '+221',
-        flag: '🇸🇳',
-    },
-    { label: 'Mali', value: 'Mali', code: 'ML', dial: '+223', flag: '🇲🇱' },
-    {
-        label: "Côte d'Ivoire",
-        value: "Côte d'Ivoire",
-        code: 'CI',
-        dial: '+225',
-        flag: '🇨🇮',
-    },
-    {
-        label: 'Liberia',
-        value: 'Liberia',
-        code: 'LR',
-        dial: '+231',
-        flag: '🇱🇷',
-    },
-    {
-        label: 'Sierra Leone',
-        value: 'Sierra Leone',
-        code: 'SL',
-        dial: '+232',
-        flag: '🇸🇱',
-    },
-    { label: 'France', value: 'France', code: 'FR', dial: '+33', flag: '🇫🇷' },
-    { label: 'Chine', value: 'Chine', code: 'CN', dial: '+86', flag: '🇨🇳' },
-    {
-        label: 'Émirats arabes unis',
-        value: 'Émirats arabes unis',
-        code: 'AE',
-        dial: '+971',
-        flag: '🇦🇪',
-    },
-    { label: 'Inde', value: 'Inde', code: 'IN', dial: '+91', flag: '🇮🇳' },
-];
+const PAYS_OPTIONS = paysOptionsByName;
 
 function flagUrl(code: string) {
     return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
@@ -104,17 +49,63 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
 const selectedCountry = computed(() =>
     PAYS_OPTIONS.find((c) => c.code === props.form.code_pays),
 );
+const selectedPhoneLength = computed(
+    () => selectedCountry.value?.localLength ?? 9,
+);
+const phoneMaxLength = computed(() => {
+    const digits = String(props.form.phone ?? '').replace(/\D/g, '');
+    return digits.startsWith('0')
+        ? selectedPhoneLength.value + 1
+        : selectedPhoneLength.value;
+});
 
 function onPaysChange(pays: string) {
     const country = PAYS_OPTIONS.find((c) => c.value === pays);
     if (country) {
+        const currentDigits = String(props.form.phone ?? '').replace(/\D/g, '');
+        const max = currentDigits.startsWith('0')
+            ? country.localLength + 1
+            : country.localLength;
         emit('update:form', {
             ...props.form,
             pays: country.value,
             code_pays: country.code,
             code_phone_pays: country.dial,
+            phone: currentDigits.slice(0, max) || null,
         });
     }
+}
+
+function handlePhoneKeydown(e: KeyboardEvent) {
+    const pass = [
+        'Backspace',
+        'Delete',
+        'Tab',
+        'Escape',
+        'Enter',
+        'ArrowLeft',
+        'ArrowRight',
+        'ArrowUp',
+        'ArrowDown',
+        'Home',
+        'End',
+    ];
+    if (pass.includes(e.key)) return;
+    if (
+        (e.ctrlKey || e.metaKey) &&
+        ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())
+    )
+        return;
+    if (!/^\d$/.test(e.key)) e.preventDefault();
+}
+
+function onPhoneInput(value: string | null | undefined) {
+    const raw = String(value ?? '').replace(/\D/g, '');
+    const max = raw.startsWith('0')
+        ? selectedPhoneLength.value + 1
+        : selectedPhoneLength.value;
+    const digits = raw.slice(0, max);
+    emit('update:form', { ...props.form, phone: digits || null });
 }
 </script>
 
@@ -247,7 +238,9 @@ function onPaysChange(pays: string) {
 
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
-                    <Label class="mb-1.5 block">Pays</Label>
+                    <Label class="mb-1.5 block"
+                        >Pays <span class="text-destructive">*</span></Label
+                    >
                     <Dropdown
                         :model-value="form.pays"
                         @update:model-value="onPaysChange($event)"
@@ -255,6 +248,7 @@ function onPaysChange(pays: string) {
                         option-label="label"
                         option-value="value"
                         class="w-full"
+                        :class="{ 'p-invalid': errors.code_pays }"
                     >
                         <template #value="{ value }">
                             <div v-if="value" class="flex items-center gap-2">
@@ -285,9 +279,17 @@ function onPaysChange(pays: string) {
                             </div>
                         </template>
                     </Dropdown>
+                    <p
+                        v-if="errors.code_pays"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.code_pays }}
+                    </p>
                 </div>
                 <div>
-                    <Label for="ville" class="mb-1.5 block">Ville</Label>
+                    <Label for="ville" class="mb-1.5 block"
+                        >Ville <span class="text-destructive">*</span></Label
+                    >
                     <InputText
                         id="ville"
                         :model-value="form.ville ?? ''"
@@ -298,7 +300,14 @@ function onPaysChange(pays: string) {
                             })
                         "
                         class="w-full"
+                        :class="{ 'p-invalid': errors.ville }"
                     />
+                    <p
+                        v-if="errors.ville"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.ville }}
+                    </p>
                 </div>
                 <div class="sm:col-span-2">
                     <Label for="adresse" class="mb-1.5 block">Adresse</Label>
@@ -328,7 +337,10 @@ function onPaysChange(pays: string) {
             <div class="grid gap-5 sm:grid-cols-2">
                 <!-- Téléphone -->
                 <div>
-                    <Label for="phone" class="mb-1.5 block">Téléphone</Label>
+                    <Label for="phone" class="mb-1.5 block"
+                        >Téléphone
+                        <span class="text-destructive">*</span></Label
+                    >
                     <div class="flex gap-2">
                         <div
                             class="flex h-10 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border bg-muted/40 px-2 font-mono text-sm text-muted-foreground"
@@ -344,12 +356,13 @@ function onPaysChange(pays: string) {
                         <InputText
                             id="phone"
                             :model-value="form.phone ?? ''"
-                            @update:model-value="
-                                $emit('update:form', {
-                                    ...form,
-                                    phone: $event || null,
-                                })
-                            "
+                            @update:model-value="onPhoneInput($event)"
+                            @keydown="handlePhoneKeydown"
+                            :placeholder="`${selectedPhoneLength} chiffres`"
+                            inputmode="numeric"
+                            pattern="[0-9]*"
+                            autocomplete="tel-national"
+                            :maxlength="phoneMaxLength"
                             class="w-full"
                             :class="{ 'p-invalid': errors.phone }"
                         />
@@ -359,6 +372,9 @@ function onPaysChange(pays: string) {
                         class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.phone }}
+                    </p>
+                    <p v-else class="mt-1 text-xs text-muted-foreground">
+                        Saisissez les chiffres sans indicatif
                     </p>
                 </div>
 
