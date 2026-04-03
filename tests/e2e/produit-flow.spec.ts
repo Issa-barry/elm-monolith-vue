@@ -1,31 +1,20 @@
 import { expect, test } from '@playwright/test';
 import {
-    cleanupRowsByPrefix,
     escapeRegExp,
     getVisibleSearchInput,
     login,
+    randomDigits,
+    registerCleanup,
 } from './helpers';
 
 const E2E_PRODUCT_PREFIX = 'E2E Produit';
 
 test.setTimeout(180_000);
 
-test.afterEach(async ({ browser }) => {
-    try {
-        const context = await browser.newContext();
-        try {
-            const p = await context.newPage();
-            await cleanupRowsByPrefix(p, '/produits', E2E_PRODUCT_PREFIX);
-        } finally {
-            await context.close().catch(() => undefined);
-        }
-    } catch (e) {
-        console.warn('E2E cleanup warning (produits):', e);
-    }
-});
+registerCleanup('/produits', E2E_PRODUCT_PREFIX);
 
 test('login + create product + verify list', async ({ page }) => {
-    const unique = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const unique = `${Date.now()}-${randomDigits(3)}`;
     const productName = `${E2E_PRODUCT_PREFIX} ${unique}`;
     const supplierCode = `E2E-${unique}`;
 

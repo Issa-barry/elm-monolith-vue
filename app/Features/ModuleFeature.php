@@ -22,6 +22,8 @@ class ModuleFeature
 
     public const UTILISATEURS = 'module.utilisateurs';
 
+    public const INSCRIPTION = 'module.inscription';
+
     public const ALL = [
         self::VENTES,
         self::ACHATS,
@@ -31,6 +33,7 @@ class ModuleFeature
         self::PRODUITS,
         self::SITES,
         self::UTILISATEURS,
+        self::INSCRIPTION,
     ];
 
     // ── Libellés UI ───────────────────────────────────────────────────────────
@@ -46,6 +49,7 @@ class ModuleFeature
             self::PRODUITS => 'Produits',
             self::SITES => 'Sites',
             self::UTILISATEURS => 'Utilisateurs',
+            self::INSCRIPTION => 'Inscription',
         ];
     }
 }

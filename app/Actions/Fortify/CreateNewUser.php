@@ -2,7 +2,9 @@
 
 namespace App\Actions\Fortify;
 
+use App\Features\ModuleFeature;
 use App\Models\User;
+use App\Services\ModuleService;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -33,6 +35,10 @@ class CreateNewUser implements CreatesNewUsers
      */
     public function create(array $input): User
     {
+        if (! ModuleService::isPublicActive(ModuleFeature::INSCRIPTION)) {
+            abort(403, 'Les inscriptions sont desactivees.');
+        }
+
         $validated = Validator::make($input, [
             'prenom' => ['required', 'string', 'min:2', 'max:100'],
             'nom' => ['required', 'string', 'min:2', 'max:100'],

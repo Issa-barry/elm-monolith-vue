@@ -2,8 +2,11 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Features\ModuleFeature;
+use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Pennant\Feature;
 use Tests\TestCase;
 
 class RegistrationTest extends TestCase
@@ -17,6 +20,34 @@ class RegistrationTest extends TestCase
         $this->get(route('register'))->assertStatus(200);
     }
 
+    public function test_registration_screen_returns_404_when_inscription_is_disabled(): void
+    {
+        $org = Organization::factory()->create();
+        Feature::for($org)->deactivate(ModuleFeature::INSCRIPTION);
+
+        $this->get(route('register'))->assertStatus(404);
+    }
+
+    public function test_login_page_hides_register_link_when_inscription_is_disabled(): void
+    {
+        $org = Organization::factory()->create();
+        Feature::for($org)->deactivate(ModuleFeature::INSCRIPTION);
+
+        $this->get(route('login'))
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page->where('canRegister', false));
+    }
+
+    public function test_home_page_hides_register_button_when_inscription_is_disabled(): void
+    {
+        $org = Organization::factory()->create();
+        Feature::for($org)->deactivate(ModuleFeature::INSCRIPTION);
+
+        $this->get(route('home'))
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page->where('canRegister', false));
+    }
+
     public function test_authenticated_user_cannot_access_register(): void
     {
         $user = User::factory()->create();
@@ -24,6 +55,22 @@ class RegistrationTest extends TestCase
         $this->actingAs($user)
             ->get(route('register'))
             ->assertRedirect(route('dashboard'));
+    }
+
+    public function test_registration_submission_returns_403_when_inscription_is_disabled(): void
+    {
+        $org = Organization::factory()->create();
+        Feature::for($org)->deactivate(ModuleFeature::INSCRIPTION);
+
+        $this->post(route('register.store'), [
+            'prenom' => 'Test',
+            'nom' => 'User',
+            'email' => 'test@example.com',
+            'password' => 'Password@123',
+        ])->assertStatus(403);
+
+        $this->assertGuest();
+        $this->assertDatabaseCount('users', 0);
     }
 
     // ─── Inscription réussie ───────────────────────────────────────────────────

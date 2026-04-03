@@ -10,14 +10,14 @@ import Button from 'primevue/button';
                 <h1
                     class="mb-4 text-4xl leading-tight font-bold text-white md:text-5xl"
                 >
-                    <span class="text-primary underline">Eau la maman.</span>
+                    <p class="mb-3 text-primary underline">Eau la maman.</p>
                     L'eau minerale qui vous accompagne chaque jour
                 </h1>
-                <p class="mb-8 text-xl leading-normal text-slate-300">
+                <!-- <p class="mb-8 text-xl leading-normal text-slate-300">
                     Eau la maman, marque du groupe GBALAN, propose de l'eau
                     minerale en sachet et bientot en bouteille.
-                </p>
-                <ul class="flex list-none flex-col gap-4">
+                </p> -->
+                <ul class="mt-2 flex list-none flex-col gap-4">
                     <li class="flex items-center gap-2">
                         <i class="pi pi-check-circle text-xl text-primary" />
                         <span class="leading-normal text-slate-300"
@@ -28,7 +28,7 @@ import Button from 'primevue/button';
                     <li class="flex items-center gap-2">
                         <i class="pi pi-check-circle text-xl text-primary" />
                         <span class="leading-normal text-slate-300"
-                            >Distribution rapide a Matoto et dans les zones
+                            >Distribution rapide a Conakry et dans les zones
                             voisines.</span
                         >
                     </li>
@@ -50,8 +50,8 @@ import Button from 'primevue/button';
             </div>
             <div class="flex-1 overflow-hidden text-center lg:text-right">
                 <img
-                    src="https://fqjltiegiezfetthbags.supabase.co/storage/v1/render/image/public/block.images/blocks/hero/Illustrations.svg"
-                    alt="Hero illustration"
+                    src="/images/landing-water-illustration.svg"
+                    alt="Illustration eau minerale et distribution"
                     class="mx-auto w-full max-w-md lg:mr-0 lg:ml-auto lg:w-auto lg:max-w-xl"
                 />
             </div>

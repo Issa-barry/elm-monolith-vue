@@ -29,4 +29,29 @@ class ModuleService
 
         return $result;
     }
+
+    /**
+     * Retourne l'organisation "publique" utilisee avant authentification.
+     * On prend la premiere organisation disponible.
+     */
+    public static function publicOrganization(): ?Organization
+    {
+        return Organization::query()
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * Verifie un module pour l'espace public (avant login).
+     * En absence d'organisation, on laisse actif pour eviter un blocage total.
+     */
+    public static function isPublicActive(string $module): bool
+    {
+        $org = self::publicOrganization();
+        if (! $org) {
+            return true;
+        }
+
+        return self::isActive($module, $org);
+    }
 }

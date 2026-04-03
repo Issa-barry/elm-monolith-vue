@@ -8,6 +8,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { showEntityStatsCards } from '@/composables/useEntityConfig';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -318,7 +319,7 @@ function confirmDelete(p: Prestataire) {
             </div>
 
             <!-- Stats -->
-            <div class="grid grid-cols-3 gap-4">
+            <div v-if="showEntityStatsCards" class="grid grid-cols-3 gap-4">
                 <div class="rounded-xl border bg-card p-5">
                     <p class="text-sm text-muted-foreground">
                         Total prestataires
