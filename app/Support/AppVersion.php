@@ -6,7 +6,14 @@ class AppVersion
 {
     public static function label(): string
     {
-        return sprintf('V: %s le %s', self::baseVersion(), self::displayedAt());
+        $label = sprintf('V: %s', self::baseVersion());
+        $releasedAt = self::releasedAt();
+
+        if ($releasedAt === null) {
+            return $label;
+        }
+
+        return sprintf('%s (release du %s)', $label, $releasedAt);
     }
 
     public static function current(): string
@@ -51,7 +58,7 @@ class AppVersion
 
     private static function gitVersion(): ?string
     {
-        if (! is_dir(base_path('.git')) || ! function_exists('exec')) {
+        if (!is_dir(base_path('.git')) || !function_exists('exec')) {
             return null;
         }
 
@@ -78,10 +85,28 @@ class AppVersion
         return null;
     }
 
-    private static function displayedAt(): string
+    private static function releasedAt(): ?string
     {
+        $raw = trim((string) env('APP_RELEASED_AT', ''));
+        if ($raw === '') {
+            $releaseAtFile = base_path('RELEASED_AT');
+            if (is_file($releaseAtFile)) {
+                $raw = trim((string) file_get_contents($releaseAtFile));
+            }
+        }
+
+        if ($raw === '') {
+            return null;
+        }
+
         $timezone = (string) config('app.timezone', 'UTC');
 
-        return now($timezone)->format('d/m/Y \à H:i');
+        try {
+            return \Illuminate\Support\Carbon::parse($raw)
+                ->setTimezone($timezone)
+                ->format('d/m/Y H:i');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }
