@@ -137,7 +137,7 @@ test('create proprietaire + toggle status → inactif in list', async ({
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-    await createProprietaireInApp(page, { prenom, nom, tel });
+    await createProprietaireInApp(page, { prenom, nom, tel, ville: 'Conakry' });
 
     const row = await findRowByName(page, prenom);
     await expect(row).toBeVisible();
@@ -155,6 +155,7 @@ test('create proprietaire + toggle status → inactif in list', async ({
 
     // Vérifier dans la liste
     await page.goto('/proprietaires');
+    await page.waitForLoadState('networkidle');
     const updated = await findRowByName(page, prenom);
     await expect(updated).toBeVisible();
     await expect(updated).toContainText(/inactif/i);

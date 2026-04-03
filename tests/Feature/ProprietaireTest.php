@@ -51,6 +51,15 @@ class ProprietaireTest extends TestCase
             ->assertStatus(200);
     }
 
+    public function test_create_returns_403_without_permission(): void
+    {
+        $user = $this->makeAdminUser();
+
+        $this->actingAs($user)
+            ->get(route('proprietaires.create'))
+            ->assertStatus(403);
+    }
+
     // ── store ─────────────────────────────────────────────────────────────────
 
     public function test_store_creates_proprietaire_and_redirects(): void
@@ -59,6 +68,9 @@ class ProprietaireTest extends TestCase
             ->post(route('proprietaires.store'), [
                 'nom' => 'Camara',
                 'prenom' => 'Ibrahima',
+                'telephone' => '622000001',
+                'code_pays' => 'GN',
+                'ville' => 'Conakry',
                 'is_active' => true,
             ])
             ->assertRedirect(route('proprietaires.index'));
@@ -69,28 +81,24 @@ class ProprietaireTest extends TestCase
         ]);
     }
 
-    public function test_store_fails_with_missing_nom_and_prenom(): void
+    public function test_store_fails_with_empty_data(): void
     {
         $this->actingAs($this->user)
             ->post(route('proprietaires.store'), [])
-            ->assertSessionHasErrors(['nom', 'prenom']);
+            ->assertSessionHasErrors(['nom', 'prenom', 'telephone', 'code_pays', 'ville']);
     }
 
-    public function test_store_accepts_optional_telephone(): void
+    public function test_store_fails_with_invalid_code_pays(): void
     {
         $this->actingAs($this->user)
             ->post(route('proprietaires.store'), [
-                'nom' => 'Sylla',
-                'prenom' => 'Kadiatou',
-                'telephone' => '622000003',
-                'code_pays' => 'GN',
-                'is_active' => true,
+                'nom' => 'Camara',
+                'prenom' => 'Ibrahima',
+                'telephone' => '622000001',
+                'code_pays' => 'XX',
+                'ville' => 'Conakry',
             ])
-            ->assertRedirect(route('proprietaires.index'));
-
-        $this->assertDatabaseHas('proprietaires', [
-            'organization_id' => $this->org->id,
-        ]);
+            ->assertSessionHasErrors('code_pays');
     }
 
     // ── edit ──────────────────────────────────────────────────────────────────
@@ -124,6 +132,9 @@ class ProprietaireTest extends TestCase
             ->put(route('proprietaires.update', $proprietaire), [
                 'nom' => 'Balde',
                 'prenom' => 'Thierno',
+                'telephone' => '622000002',
+                'code_pays' => 'GN',
+                'ville' => 'Kindia',
                 'is_active' => true,
             ])
             ->assertRedirect(route('proprietaires.edit', $proprietaire));
@@ -134,13 +145,13 @@ class ProprietaireTest extends TestCase
         ]);
     }
 
-    public function test_update_fails_with_missing_nom_and_prenom(): void
+    public function test_update_fails_with_missing_required_fields(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
 
         $this->actingAs($this->user)
             ->put(route('proprietaires.update', $proprietaire), [])
-            ->assertSessionHasErrors(['nom', 'prenom']);
+            ->assertSessionHasErrors(['nom', 'prenom', 'telephone', 'code_pays', 'ville']);
     }
 
     // ── destroy ───────────────────────────────────────────────────────────────

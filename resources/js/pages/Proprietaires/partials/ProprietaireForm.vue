@@ -170,14 +170,16 @@ function onTelephoneInput(value: string | null | undefined) {
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
-                    <Label class="mb-1.5 block">Pays</Label>
+                    <Label class="mb-1.5 block"
+                        >Pays <span class="text-destructive">*</span></Label
+                    >
                     <Dropdown
                         :model-value="form.pays"
                         @update:model-value="onPaysChange($event)"
                         :options="PAYS_OPTIONS"
                         option-label="label"
                         option-value="value"
-                        placeholder="Sélectionner..."
+                        placeholder="Sélectionner…"
                         class="w-full"
                         :class="{ 'p-invalid': errors.code_pays }"
                     >
@@ -196,7 +198,7 @@ function onTelephoneInput(value: string | null | undefined) {
                                 <span>{{ value }}</span>
                             </div>
                             <span v-else class="text-muted-foreground"
-                                >Sélectionner...</span
+                                >Sélectionner…</span
                             >
                         </template>
                         <template #option="{ option }">
@@ -218,7 +220,9 @@ function onTelephoneInput(value: string | null | undefined) {
                     </p>
                 </div>
                 <div>
-                    <Label for="ville" class="mb-1.5 block">Ville</Label>
+                    <Label for="ville" class="mb-1.5 block"
+                        >Ville <span class="text-destructive">*</span></Label
+                    >
                     <InputText
                         id="ville"
                         :model-value="form.ville ?? ''"
@@ -265,7 +269,8 @@ function onTelephoneInput(value: string | null | undefined) {
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
                     <Label for="telephone" class="mb-1.5 block"
-                        >Téléphone</Label
+                        >Téléphone
+                        <span class="text-destructive">*</span></Label
                     >
                     <div class="flex gap-2">
                         <div
@@ -368,7 +373,7 @@ function onTelephoneInput(value: string | null | undefined) {
             </a>
             <Button type="submit" :disabled="processing">
                 <Save class="mr-2 h-4 w-4" />
-                {{ processing ? 'Enregistrement...' : 'Enregistrer' }}
+                {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
         </div>
         <div class="h-20 sm:hidden" />
