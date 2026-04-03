@@ -423,9 +423,9 @@ const progressPercent = computed(() => {
                 </div>
             </div>
 
-            <!-- Section facture -->
+            <!-- Section facture (masquée : accessible via Menu Factures) -->
             <div
-                v-if="facture"
+                v-if="false"
                 class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
             >
                 <!-- En-tête facture -->
