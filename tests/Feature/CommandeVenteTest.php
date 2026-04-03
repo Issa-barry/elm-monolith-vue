@@ -20,12 +20,13 @@ class CommandeVenteTest extends TestCase
     use HasAdminSetup, RefreshDatabase;
 
     private Organization $org;
+
     private User $user;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->org  = Organization::factory()->create();
+        $this->org = Organization::factory()->create();
         $this->user = $this->makeUserWithPermissions(
             $this->org,
             ['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete'],

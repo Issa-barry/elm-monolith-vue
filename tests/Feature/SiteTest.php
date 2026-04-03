@@ -14,12 +14,13 @@ class SiteTest extends TestCase
     use HasAdminSetup, RefreshDatabase;
 
     private Organization $org;
+
     private User $user;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->org  = Organization::factory()->create();
+        $this->org = Organization::factory()->create();
         $this->user = $this->makeUserWithPermissions(
             $this->org,
             ['sites.read', 'sites.create', 'sites.update', 'sites.delete'],

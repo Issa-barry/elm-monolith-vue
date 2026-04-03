@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
-    escapeRegExp,
-    getVisibleSearchInput,
+    findRowByName,
     login,
     openRowActions,
     randomDigits,
@@ -14,17 +13,6 @@ const PREFIX = 'e2elivflow';
 test.setTimeout(180_000);
 
 registerCleanup('/livreurs', PREFIX);
-
-async function findRowByName(
-    page: Parameters<typeof login>[0],
-    name: string,
-) {
-    const search = getVisibleSearchInput(page);
-    await search.fill(name);
-    return page
-        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(name), 'i') })
-        .first();
-}
 
 async function navigateToEdit(
     page: Parameters<typeof login>[0],

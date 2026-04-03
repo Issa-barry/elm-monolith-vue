@@ -15,12 +15,13 @@ class CommissionVenteIndexTest extends TestCase
     use HasAdminSetup, HasVentesSetup, RefreshDatabase;
 
     private Organization $org;
+
     private User $user;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->org  = Organization::factory()->create();
+        $this->org = Organization::factory()->create();
         $this->user = $this->userWithPermissions($this->org);
     }
 
