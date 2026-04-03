@@ -70,6 +70,9 @@ watch(search, (val) => {
     filters.value.global.value = val;
 });
 
+const showEntityStatsCards =
+    import.meta.env.VITE_SHOW_ENTITY_STATS_CARDS === 'true';
+
 const totalLivreurs = computed(() => props.livreurs.length);
 const activeLivreurs = computed(
     () => props.livreurs.filter((l) => l.is_active).length,
@@ -312,7 +315,7 @@ function confirmDelete(l: Livreur) {
             </div>
 
             <!-- Stats -->
-            <div class="grid grid-cols-3 gap-4">
+            <div v-if="showEntityStatsCards" class="grid grid-cols-3 gap-4">
                 <div class="rounded-xl border bg-card p-5">
                     <p class="text-sm text-muted-foreground">Total livreurs</p>
                     <p class="mt-1 text-3xl font-bold">{{ totalLivreurs }}</p>

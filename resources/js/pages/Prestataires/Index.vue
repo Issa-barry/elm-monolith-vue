@@ -68,6 +68,9 @@ watch(search, (val) => {
     filters.value.global.value = val;
 });
 
+const showEntityStatsCards =
+    import.meta.env.VITE_SHOW_ENTITY_STATS_CARDS === 'true';
+
 const totalPrestataires = computed(() => props.prestataires.length);
 const activePrestataires = computed(
     () => props.prestataires.filter((p) => p.is_active).length,
@@ -318,7 +321,7 @@ function confirmDelete(p: Prestataire) {
             </div>
 
             <!-- Stats -->
-            <div class="grid grid-cols-3 gap-4">
+            <div v-if="showEntityStatsCards" class="grid grid-cols-3 gap-4">
                 <div class="rounded-xl border bg-card p-5">
                     <p class="text-sm text-muted-foreground">
                         Total prestataires

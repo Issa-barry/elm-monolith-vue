@@ -54,7 +54,8 @@
       "Bash(xargs sed:*)",
       "Bash(perl -i -0pe 's/\\\\n    private function user\\\\\\(\\\\\\): User\\\\n    \\\\{\\\\n        return \\\\$this->makeAdminUser\\\\\\(\\\\\\);\\\\n    \\\\}\\\\n//g' \"$f\")",
       "Bash(grep -n \"private function user\\(\\)\" tests/Feature/*.php)",
-      "Bash(grep -l \"use App\\\\Models\\\\User;\" tests/Feature/*.php)"
+      "Bash(grep -l \"use App\\\\Models\\\\User;\" tests/Feature/*.php)",
+      "Bash(find /c/laragon/www/elm-monolithe -type f -name *packing* -o -type d -name *packing*)"
     ]
   }
 }

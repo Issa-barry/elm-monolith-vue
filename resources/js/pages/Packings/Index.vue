@@ -25,6 +25,7 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
+import Dropdown from 'primevue/dropdown';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
@@ -65,16 +66,33 @@ watch(search, (val) => {
     filters.value.global.value = val;
 });
 
+const statutFilter = ref<string>('tous');
+
+const statutOptions = [
+    { value: 'tous', label: 'Tous' },
+    { value: 'impayee', label: 'Impayée' },
+    { value: 'partielle', label: 'Partielle' },
+    { value: 'payee', label: 'Payée' },
+    { value: 'annulee', label: 'Annulée' },
+];
+
+const baseFiltered = computed(() => {
+    if (statutFilter.value === 'tous') return props.packings;
+    return props.packings.filter((p) => p.statut === statutFilter.value);
+});
+
 const mobileFiltered = computed(() => {
     const q = search.value.trim().toLowerCase();
-    if (!q) return props.packings;
-    return props.packings.filter(
+    if (!q) return baseFiltered.value;
+    return baseFiltered.value.filter(
         (p) =>
             p.reference.toLowerCase().includes(q) ||
             (p.prestataire_nom ?? '').toLowerCase().includes(q) ||
             p.statut_label.toLowerCase().includes(q),
     );
 });
+
+const desktopFiltered = computed(() => baseFiltered.value);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -205,6 +223,17 @@ function confirmDelete(packing: Packing) {
                         class="w-full rounded-lg border bg-background py-2 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
                     />
                 </div>
+            </div>
+
+            <!-- Filtre statut mobile -->
+            <div class="px-3 pb-2">
+                <Dropdown
+                    v-model="statutFilter"
+                    :options="statutOptions"
+                    option-label="label"
+                    option-value="value"
+                    class="w-full"
+                />
             </div>
 
             <!-- Card list -->
@@ -363,7 +392,7 @@ function confirmDelete(packing: Packing) {
             <!-- Tableau ──────────────────────────────────────────────────────── -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="packings"
+                    :value="desktopFiltered"
                     :paginator="packings.length > 20"
                     :rows="20"
                     :global-filter-fields="[
@@ -398,9 +427,16 @@ function confirmDelete(packing: Packing) {
                                     class="w-full text-sm"
                                 />
                             </IconField>
+                            <Dropdown
+                                v-model="statutFilter"
+                                :options="statutOptions"
+                                option-label="label"
+                                option-value="value"
+                                class="w-40"
+                            />
                             <span class="text-xs text-muted-foreground">
-                                {{ packings.length }} résultat{{
-                                    packings.length !== 1 ? 's' : ''
+                                {{ desktopFiltered.length }} résultat{{
+                                    desktopFiltered.length !== 1 ? 's' : ''
                                 }}
                             </span>
                         </div>
