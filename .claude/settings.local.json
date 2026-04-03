@@ -49,7 +49,14 @@
       "Bash(grep -n \"success\\\\|flash\\\\|usePage\\\\|$page\" c:/laragon/www/elm-monolithe/resources/js/pages/Livreurs/Edit.vue)",
       "Bash(./vendor/bin/phpunit --filter \"test_update_modifies_livreur_and_redirects|test_update_modifies_prestataire_and_redirects\")",
       "Bash(./vendor/bin/pint app/Http/Controllers/Settings/ModuleController.php bootstrap/app.php routes/web.php)",
-      "Bash(./vendor/bin/phpunit --filter ModuleFeatureTest)"
+      "Bash(./vendor/bin/phpunit --filter ModuleFeatureTest)",
+      "Bash(grep -rl '\\\\$this->user\\(\\)' tests/Feature/)",
+      "Bash(xargs sed:*)",
+      "Bash(perl -i -0pe 's/\\\\n    private function user\\\\\\(\\\\\\): User\\\\n    \\\\{\\\\n        return \\\\$this->makeAdminUser\\\\\\(\\\\\\);\\\\n    \\\\}\\\\n//g' \"$f\")",
+      "Bash(grep -n \"private function user\\(\\)\" tests/Feature/*.php)",
+      "Bash(grep -l \"use App\\\\Models\\\\User;\" tests/Feature/*.php)",
+      "Bash(find /c/laragon/www/elm-monolithe -type f -name *packing* -o -type d -name *packing*)",
+      "Bash(vendor/bin/pint tests/Feature/ClientTest.php tests/Feature/CommandeAchatTest.php tests/Feature/CommandeVenteTest.php tests/Feature/CommissionVenteIndexTest.php tests/Feature/FactureVenteTest.php tests/Feature/LivreurTest.php tests/Feature/PackingTest.php tests/Feature/PrestataireTest.php tests/Feature/ProduitTest.php tests/Feature/ProprietaireTest.php tests/Feature/SiteTest.php tests/Feature/VehiculeTest.php)"
     ]
   }
 }

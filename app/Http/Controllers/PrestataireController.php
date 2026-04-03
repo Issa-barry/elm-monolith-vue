@@ -4,29 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Enums\PrestataireType;
 use App\Models\Prestataire;
+use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
-// Pays autorisés : code ISO => [nom, indicatif]
-define('PRESTATAIRE_PAYS', [
-    'GN' => ['Guinée',              '+224'],
-    'GW' => ['Guinée-Bissau',       '+245'],
-    'SN' => ['Sénégal',             '+221'],
-    'ML' => ['Mali',                '+223'],
-    'CI' => ["Côte d'Ivoire",       '+225'],
-    'LR' => ['Liberia',             '+231'],
-    'SL' => ['Sierra Leone',        '+232'],
-    'FR' => ['France',              '+33'],
-    'CN' => ['Chine',               '+86'],
-    'AE' => ['Émirats arabes unis', '+971'],
-    'IN' => ['Inde',                '+91'],
-]);
-
 class PrestataireController extends Controller
 {
+    use PhoneHandlerTrait;
+
     public function index(): Response
     {
         $this->authorize('viewAny', Prestataire::class);
@@ -71,24 +59,9 @@ class PrestataireController extends Controller
         $orgId = auth()->user()->organization_id;
         abort_if(! $orgId, 403, 'Votre compte n\'est associé à aucune organisation.');
 
-        $data = $request->validate([
-            'nom' => 'nullable|string|max:255|required_without:raison_sociale',
-            'prenom' => 'nullable|string|max:255|required_without:raison_sociale',
-            'raison_sociale' => 'nullable|string|max:255',
-            'email' => 'nullable|email:rfc,dns|max:255',
-            'phone' => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
-            'code_pays' => ['nullable', Rule::in(array_keys(PRESTATAIRE_PAYS))],
-            'ville' => 'nullable|string|max:100',
-            'adresse' => 'nullable|string',
-            'type' => ['required', Rule::enum(PrestataireType::class)],
-            'notes' => 'nullable|string',
-            'is_active' => 'boolean',
-        ]);
+        $data = $request->validate($this->validationRules());
 
-        // Dériver pays et indicatif depuis code_pays (source unique)
-        if (isset($data['code_pays']) && isset(PRESTATAIRE_PAYS[$data['code_pays']])) {
-            [$data['pays'], $data['code_phone_pays']] = PRESTATAIRE_PAYS[$data['code_pays']];
-        }
+        $data = $this->resolveCountryData($data);
 
         $data = $this->normalizeData($data);
 
@@ -131,47 +104,13 @@ class PrestataireController extends Controller
         ]);
     }
 
-    private function splitPhone(?string $phone, ?string $codePhonePays, ?string $codePays, ?string $pays): array
-    {
-        if (! $phone) {
-            return [null, $codePhonePays, $codePays, $pays];
-        }
-        if ($codePhonePays && str_starts_with($phone, $codePhonePays)) {
-            return [substr($phone, strlen($codePhonePays)), $codePhonePays, $codePays, $pays];
-        }
-        $sorted = PRESTATAIRE_PAYS;
-        uasort($sorted, fn ($a, $b) => strlen($b[1]) <=> strlen($a[1]));
-        foreach ($sorted as $code => [$name, $dial]) {
-            if (str_starts_with($phone, $dial)) {
-                return [substr($phone, strlen($dial)), $dial, $code, $name];
-            }
-        }
-
-        return [$phone, $codePhonePays, $codePays, $pays];
-    }
-
     public function update(Request $request, Prestataire $prestataire): RedirectResponse
     {
         $this->authorize('update', $prestataire);
 
-        $data = $request->validate([
-            'nom' => 'nullable|string|max:255|required_without:raison_sociale',
-            'prenom' => 'nullable|string|max:255|required_without:raison_sociale',
-            'raison_sociale' => 'nullable|string|max:255',
-            'email' => 'nullable|email:rfc,dns|max:255',
-            'phone' => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
-            'code_pays' => ['nullable', Rule::in(array_keys(PRESTATAIRE_PAYS))],
-            'ville' => 'nullable|string|max:100',
-            'adresse' => 'nullable|string',
-            'type' => ['required', Rule::enum(PrestataireType::class)],
-            'notes' => 'nullable|string',
-            'is_active' => 'boolean',
-        ]);
+        $data = $request->validate($this->validationRules());
 
-        // Dériver pays et indicatif depuis code_pays (source unique)
-        if (isset($data['code_pays']) && isset(PRESTATAIRE_PAYS[$data['code_pays']])) {
-            [$data['pays'], $data['code_phone_pays']] = PRESTATAIRE_PAYS[$data['code_pays']];
-        }
+        $data = $this->resolveCountryData($data);
 
         $data = $this->normalizeData($data);
 
@@ -181,28 +120,21 @@ class PrestataireController extends Controller
             ->with('success', 'Prestataire mis à jour avec succès.');
     }
 
-    private function normalizeData(array $data): array
+    private function validationRules(): array
     {
-        if (! empty($data['nom'])) {
-            $data['nom'] = mb_strtoupper($data['nom'], 'UTF-8');
-        }
-        if (! empty($data['prenom'])) {
-            $data['prenom'] = mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
-        }
-        if (! empty($data['raison_sociale'])) {
-            $data['raison_sociale'] = mb_convert_case(mb_strtolower($data['raison_sociale'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
-        }
-        if (! empty($data['ville'])) {
-            $data['ville'] = mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
-        }
-        if (! empty($data['code_phone_pays']) && ! empty($data['phone'])) {
-            $tel = (string) $data['phone'];
-            if (! str_starts_with($tel, '+')) {
-                $data['phone'] = $data['code_phone_pays'].ltrim($tel, '0');
-            }
-        }
-
-        return $data;
+        return [
+            'nom' => 'nullable|string|max:255|required_without:raison_sociale',
+            'prenom' => 'nullable|string|max:255|required_without:raison_sociale',
+            'raison_sociale' => 'nullable|string|max:255',
+            'email' => 'nullable|email:rfc,dns|max:255',
+            'phone' => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
+            'code_pays' => ['nullable', Rule::in(array_keys(static::supportedPays()))],
+            'ville' => 'nullable|string|max:100',
+            'adresse' => 'nullable|string',
+            'type' => ['required', Rule::enum(PrestataireType::class)],
+            'notes' => 'nullable|string',
+            'is_active' => 'boolean',
+        ];
     }
 
     public function destroy(Prestataire $prestataire): RedirectResponse

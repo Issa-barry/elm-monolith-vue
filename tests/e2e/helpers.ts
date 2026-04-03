@@ -292,6 +292,17 @@ export async function findUserInList(
     return row;
 }
 
+export async function findRowByName(
+    page: Page,
+    name: string,
+): Promise<Locator> {
+    const search = getVisibleSearchInput(page);
+    await search.fill(name);
+    return page
+        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(name), 'i') })
+        .first();
+}
+
 export function registerCleanup(route: string, prefix: string): void {
     test.afterEach(async ({ browser }) => {
         try {

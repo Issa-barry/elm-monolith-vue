@@ -4,46 +4,26 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\Organization;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Permission;
+use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class ClientTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
-    private function user(): User
+    protected function setUp(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        $org = Organization::factory()->create();
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-
-        return $user;
-    }
-
-    private function userWithPermissions(Organization $org): User
-    {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        foreach (['clients.read', 'clients.create', 'clients.update', 'clients.delete'] as $perm) {
-            Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
-        }
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-        $user->givePermissionTo(['clients.read', 'clients.create', 'clients.update', 'clients.delete']);
-
-        return $user;
+        parent::setUp();
+        $this->initOrgAndUser(['clients.read', 'clients.create', 'clients.update', 'clients.delete']);
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
 
     public function test_index_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('clients.index'))
             ->assertStatus(200);
     }
@@ -55,7 +35,7 @@ class ClientTest extends TestCase
 
     public function test_index_returns_403_without_permission(): void
     {
-        $user = $this->user();
+        $user = $this->makeAdminUser();
 
         $this->actingAs($user)
             ->get(route('clients.index'))
@@ -66,23 +46,19 @@ class ClientTest extends TestCase
 
     public function test_show_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $client = Client::factory()->create(['organization_id' => $org->id]);
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('clients.show', $client))
             ->assertStatus(200);
     }
 
     public function test_show_returns_403_for_other_organization(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $otherOrg = Organization::factory()->create();
         $client = Client::factory()->create(['organization_id' => $otherOrg->id]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('clients.show', $client))
             ->assertStatus(403);
     }
@@ -91,10 +67,7 @@ class ClientTest extends TestCase
 
     public function test_store_creates_client_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('clients.store'), [
                 'nom' => 'Diallo',
                 'prenom' => 'Aissatou',
@@ -103,24 +76,21 @@ class ClientTest extends TestCase
             ->assertRedirect(route('clients.index'));
 
         $this->assertDatabaseHas('clients', [
-            'organization_id' => $org->id,
+            'organization_id' => $this->org->id,
             'nom' => 'Diallo',
         ]);
     }
 
     public function test_store_fails_with_empty_nom_and_prenom(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('clients.store'), [])
             ->assertSessionHasErrors(['nom', 'prenom']);
     }
 
     public function test_store_returns_403_without_permission(): void
     {
-        $user = $this->user();
+        $user = $this->makeAdminUser();
 
         $this->actingAs($user)
             ->post(route('clients.store'), [
@@ -134,11 +104,9 @@ class ClientTest extends TestCase
 
     public function test_update_modifies_client_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $client = Client::factory()->create(['organization_id' => $org->id]);
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->put(route('clients.update', $client), [
                 'nom' => 'Barry',
                 'prenom' => 'Mariama',
@@ -153,12 +121,10 @@ class ClientTest extends TestCase
 
     public function test_update_returns_403_for_other_organization(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $otherOrg = Organization::factory()->create();
         $client = Client::factory()->create(['organization_id' => $otherOrg->id]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->put(route('clients.update', $client), [
                 'nom' => 'Barry',
             ])
@@ -169,11 +135,9 @@ class ClientTest extends TestCase
 
     public function test_destroy_deletes_client_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $client = Client::factory()->create(['organization_id' => $org->id]);
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->delete(route('clients.destroy', $client))
             ->assertRedirect(route('clients.index'));
 
@@ -182,19 +146,17 @@ class ClientTest extends TestCase
 
     public function test_destroy_returns_403_for_other_organization(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $otherOrg = Organization::factory()->create();
         $client = Client::factory()->create(['organization_id' => $otherOrg->id]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->delete(route('clients.destroy', $client))
             ->assertStatus(403);
     }
 
     public function test_destroy_returns_403_without_permission(): void
     {
-        $user = $this->user();
+        $user = $this->makeAdminUser();
         $client = Client::factory()->create(['organization_id' => $user->organization_id]);
 
         $this->actingAs($user)
