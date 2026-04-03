@@ -1,4 +1,4 @@
-# Eau la maman — Monolithe
+# Eau maman — Monolithe
 # Sur ton PC
 npm run build
 git add public/build
