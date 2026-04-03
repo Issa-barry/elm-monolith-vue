@@ -241,13 +241,13 @@ onBeforeUnmount(() => {
                                 <Button
                                     v-if="canRegister"
                                     label="Inscription"
+                                    outlined
                                     rounded
                                     class="w-full justify-center rounded-full font-semibold lg:w-auto lg:px-7 lg:py-2 lg:text-sm"
                                     @click="router.visit(register())"
                                 />
                                 <Button
                                     label="Connexion"
-                                    outlined
                                     rounded
                                     class="w-full justify-center rounded-full font-semibold lg:w-auto lg:px-7 lg:py-2 lg:text-sm"
                                     @click="router.visit(login())"
