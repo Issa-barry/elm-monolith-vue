@@ -61,6 +61,14 @@ const form = useForm({
 function submit() {
     form.put(`/prestataires/${props.prestataire.id}`);
 }
+
+function handleFormUpdate(updated: Record<string, unknown>) {
+    const changed = Object.keys(updated).filter(
+        (k) => (form as Record<string, unknown>)[k] !== updated[k],
+    );
+    Object.assign(form, updated);
+    if (changed.length) form.clearErrors(...changed);
+}
 </script>
 
 <template>
@@ -116,7 +124,7 @@ function submit() {
                 :processing="form.processing"
                 :reference="prestataire.reference"
                 @submit="submit"
-                @update:form="Object.assign(form, $event)"
+                @update:form="handleFormUpdate($event)"
             />
         </div>
 
