@@ -182,11 +182,11 @@
                 </div>
 
                 <div
-                    class="h-80 w-full overflow-hidden rounded-2xl md:h-[34rem] xl:flex-1"
+                    class="h-80 w-full overflow-hidden rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-100 md:h-[34rem] md:p-8 xl:flex-1"
                 >
                     <img
-                        class="h-full w-full object-cover"
-                        src="https://fqjltiegiezfetthbags.supabase.co/storage/v1/render/image/public/block.images/blocks/feature/sound-2.jpg"
+                        class="h-full w-full object-contain object-center"
+                        src="/images/landing/b2.png"
                         alt="Produit eau minerale en bouteille"
                     />
                 </div>
