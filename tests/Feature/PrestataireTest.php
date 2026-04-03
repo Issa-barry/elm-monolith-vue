@@ -29,6 +29,19 @@ class PrestataireTest extends TestCase
         ], $overrides));
     }
 
+    private function validPayload(array $overrides = []): array
+    {
+        return array_merge([
+            'nom' => 'Diallo',
+            'prenom' => 'Mamadou',
+            'phone' => '622000001',
+            'code_pays' => 'GN',
+            'ville' => 'Conakry',
+            'type' => 'fournisseur',
+            'is_active' => true,
+        ], $overrides);
+    }
+
     // ── index ─────────────────────────────────────────────────────────────────
 
     public function test_index_returns_200_for_authorized_user(): void
@@ -61,32 +74,37 @@ class PrestataireTest extends TestCase
             ->assertStatus(200);
     }
 
+    public function test_create_returns_403_without_permission(): void
+    {
+        $user = $this->makeAdminUser();
+
+        $this->actingAs($user)
+            ->get(route('prestataires.create'))
+            ->assertStatus(403);
+    }
+
     // ── store ─────────────────────────────────────────────────────────────────
 
     public function test_store_creates_prestataire_with_nom_prenom_and_redirects(): void
     {
         $this->actingAs($this->user)
-            ->post(route('prestataires.store'), [
-                'nom' => 'Diallo',
-                'prenom' => 'Mamadou',
-                'type' => 'fournisseur',
-                'is_active' => true,
-            ])
+            ->post(route('prestataires.store'), $this->validPayload())
             ->assertRedirect(route('prestataires.index'));
 
         $this->assertDatabaseHas('prestataires', [
             'organization_id' => $this->org->id,
+            'nom' => 'DIALLO',
         ]);
     }
 
-    public function test_store_creates_prestataire_with_raison_sociale(): void
+    public function test_store_creates_prestataire_with_raison_sociale_only(): void
     {
         $this->actingAs($this->user)
-            ->post(route('prestataires.store'), [
+            ->post(route('prestataires.store'), $this->validPayload([
+                'nom' => null,
+                'prenom' => null,
                 'raison_sociale' => 'Entreprise ABC',
-                'type' => 'consultant',
-                'is_active' => true,
-            ])
+            ]))
             ->assertRedirect(route('prestataires.index'));
 
         $this->assertDatabaseHas('prestataires', [
@@ -97,20 +115,44 @@ class PrestataireTest extends TestCase
     public function test_store_fails_without_type(): void
     {
         $this->actingAs($this->user)
-            ->post(route('prestataires.store'), [
-                'nom' => 'Diallo',
-                'prenom' => 'Mamadou',
-            ])
+            ->post(route('prestataires.store'), $this->validPayload(['type' => null]))
             ->assertSessionHasErrors('type');
     }
 
     public function test_store_fails_without_nom_and_raison_sociale(): void
     {
         $this->actingAs($this->user)
-            ->post(route('prestataires.store'), [
-                'type' => 'fournisseur',
-            ])
-            ->assertSessionHasErrors();
+            ->post(route('prestataires.store'), $this->validPayload([
+                'nom' => null,
+                'prenom' => null,
+                'raison_sociale' => null,
+            ]))
+            ->assertSessionHasErrors(['nom', 'prenom', 'raison_sociale']);
+    }
+
+    public function test_store_fails_when_only_nom_without_prenom(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('prestataires.store'), $this->validPayload(['prenom' => null]))
+            ->assertSessionHasErrors('prenom');
+    }
+
+    public function test_store_fails_with_missing_required_location_and_phone(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('prestataires.store'), $this->validPayload([
+                'phone' => null,
+                'code_pays' => null,
+                'ville' => null,
+            ]))
+            ->assertSessionHasErrors(['phone', 'code_pays', 'ville']);
+    }
+
+    public function test_store_fails_with_invalid_code_pays(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('prestataires.store'), $this->validPayload(['code_pays' => 'XX']))
+            ->assertSessionHasErrors('code_pays');
     }
 
     // ── edit ──────────────────────────────────────────────────────────────────
@@ -141,12 +183,30 @@ class PrestataireTest extends TestCase
         $prestataire = $this->makePrestataire($this->org);
 
         $this->actingAs($this->user)
-            ->put(route('prestataires.update', $prestataire), [
+            ->put(route('prestataires.update', $prestataire), $this->validPayload([
                 'nom' => 'Barry',
                 'prenom' => 'Fatoumata',
                 'type' => 'mecanicien',
-                'is_active' => true,
-            ])
+            ]))
+            ->assertRedirect(route('prestataires.edit', $prestataire));
+
+        $this->assertDatabaseHas('prestataires', [
+            'id' => $prestataire->id,
+            'nom' => 'BARRY',
+        ]);
+    }
+
+    public function test_update_with_raison_sociale_only(): void
+    {
+        $prestataire = $this->makePrestataire($this->org);
+
+        $this->actingAs($this->user)
+            ->put(route('prestataires.update', $prestataire), $this->validPayload([
+                'nom' => null,
+                'prenom' => null,
+                'raison_sociale' => 'SARL Nouvelle',
+                'type' => 'consultant',
+            ]))
             ->assertRedirect(route('prestataires.edit', $prestataire));
 
         $this->assertDatabaseHas('prestataires', [
@@ -159,11 +219,17 @@ class PrestataireTest extends TestCase
         $prestataire = $this->makePrestataire($this->org);
 
         $this->actingAs($this->user)
-            ->put(route('prestataires.update', $prestataire), [
-                'nom' => 'Barry',
-                'prenom' => 'Fatoumata',
-            ])
+            ->put(route('prestataires.update', $prestataire), $this->validPayload(['type' => null]))
             ->assertSessionHasErrors('type');
+    }
+
+    public function test_update_fails_with_missing_required_fields(): void
+    {
+        $prestataire = $this->makePrestataire($this->org);
+
+        $this->actingAs($this->user)
+            ->put(route('prestataires.update', $prestataire), [])
+            ->assertSessionHasErrors(['nom', 'prenom', 'raison_sociale', 'phone', 'code_pays', 'ville', 'type']);
     }
 
     // ── destroy ───────────────────────────────────────────────────────────────

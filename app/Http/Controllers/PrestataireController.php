@@ -59,9 +59,10 @@ class PrestataireController extends Controller
         $orgId = auth()->user()->organization_id;
         abort_if(! $orgId, 403, 'Votre compte n\'est associé à aucune organisation.');
 
-        $data = $request->validate($this->validationRules());
+        $data = $request->validate($this->validationRules(), $this->validationMessages());
 
         $data = $this->resolveCountryData($data);
+        $this->validateLocalPhoneLength(array_merge($data, ['telephone' => $data['phone'] ?? null]));
 
         $data = $this->normalizeData($data);
 
@@ -108,9 +109,10 @@ class PrestataireController extends Controller
     {
         $this->authorize('update', $prestataire);
 
-        $data = $request->validate($this->validationRules());
+        $data = $request->validate($this->validationRules(), $this->validationMessages());
 
         $data = $this->resolveCountryData($data);
+        $this->validateLocalPhoneLength(array_merge($data, ['telephone' => $data['phone'] ?? null]));
 
         $data = $this->normalizeData($data);
 
@@ -125,15 +127,31 @@ class PrestataireController extends Controller
         return [
             'nom' => 'nullable|string|max:255|required_without:raison_sociale',
             'prenom' => 'nullable|string|max:255|required_without:raison_sociale',
-            'raison_sociale' => 'nullable|string|max:255',
+            'raison_sociale' => 'nullable|string|max:255|required_without_all:nom,prenom',
             'email' => 'nullable|email:rfc,dns|max:255',
-            'phone' => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
-            'code_pays' => ['nullable', Rule::in(array_keys(static::supportedPays()))],
-            'ville' => 'nullable|string|max:100',
+            'phone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
+            'code_pays' => ['required', Rule::in(array_keys(static::supportedPays()))],
+            'ville' => 'required|string|max:100',
             'adresse' => 'nullable|string',
             'type' => ['required', Rule::enum(PrestataireType::class)],
             'notes' => 'nullable|string',
             'is_active' => 'boolean',
+        ];
+    }
+
+    private function validationMessages(): array
+    {
+        return [
+            'raison_sociale.required_without_all' => 'La raison sociale est obligatoire si le prénom et le nom sont absents.',
+            'nom.required_without' => 'Le nom est obligatoire si la raison sociale est absente.',
+            'prenom.required_without' => 'Le prénom est obligatoire si la raison sociale est absente.',
+            'phone.required' => 'Le numéro de téléphone est obligatoire.',
+            'phone.regex' => 'Le numéro de téléphone est invalide.',
+            'code_pays.required' => 'Le pays est obligatoire.',
+            'code_pays.in' => 'Pays invalide.',
+            'ville.required' => 'La ville est obligatoire.',
+            'email.email' => "L'adresse email est invalide.",
+            'type.required' => 'Le type est obligatoire.',
         ];
     }
 
