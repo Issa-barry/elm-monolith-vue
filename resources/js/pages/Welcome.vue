@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// import LandingFooter from '@/components/landing/LandingFooter.vue';
+import LandingFooter from '@/components/landing/LandingFooter.vue';
 import LandingHero from '@/components/landing/LandingHero.vue';
 import LandingSection from '@/components/landing/LandingSection.vue';
 import LandingTopbar from '@/components/landing/LandingTopbar.vue';
@@ -22,7 +22,7 @@ withDefaults(
         <LandingHero />
         <div class="mx-auto w-full max-w-6xl px-6 py-8 lg:px-8">
             <LandingSection />
-            <!-- <LandingFooter :version-label="$page.props.appVersionLabel" /> -->
+            <LandingFooter :version-label="$page.props.appVersionLabel" />
         </div>
     </div>
 </template>
