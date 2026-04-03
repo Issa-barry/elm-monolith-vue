@@ -9,7 +9,7 @@ const props = defineProps<{
 }>()
 
 const width = computed(() => {
-  return `${Math.floor(Math.random() * 40) + 50}%`;
+  return `${68}%`;
 })
 </script>
 
@@ -32,3 +32,5 @@ const width = computed(() => {
     />
   </div>
 </template>
+
+

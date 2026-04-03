@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
 import {
-    cleanupRowsByPrefix,
     escapeRegExp,
     getVisibleSearchInput,
     login,
     openRowActions,
+    randomDigits,
+    registerCleanup,
     selectOptionFromCombobox,
 } from './helpers';
 
@@ -12,21 +13,12 @@ const E2E_VEHICULE_IMMATRICULATION_PREFIX = 'E2EVH-';
 
 test.setTimeout(120_000);
 
-test.afterEach(async ({ browser }) => {
-    const context = await browser.newContext();
+registerCleanup('/vehicules', E2E_VEHICULE_IMMATRICULATION_PREFIX);
 
-    try {
-        const cleanupPage = await context.newPage();
-        await cleanupRowsByPrefix(cleanupPage, '/vehicules', E2E_VEHICULE_IMMATRICULATION_PREFIX);
-    } catch (error) {
-        console.warn('E2E cleanup warning (vehicules):', error);
-    } finally {
-        await context.close().catch(() => undefined);
-    }
-});
-
-test('login + create vehicule + update status + verify list', async ({ page }) => {
-    const unique = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+test('login + create vehicule + update status + verify list', async ({
+    page,
+}) => {
+    const unique = `${Date.now()}-${randomDigits(3)}`;
     const nomVehicule = `E2E Vehicule ${unique}`;
     const immatriculation = `${E2E_VEHICULE_IMMATRICULATION_PREFIX}${unique.slice(-6)}`;
 
@@ -44,36 +36,49 @@ test('login + create vehicule + update status + verify list', async ({ page }) =
     await selectOptionFromCombobox(page, comboboxes.nth(1));
     await page.locator('#taux_commission_livreur input').fill('40');
 
-    await page.locator('#vehicule-form button[type="submit"]:visible').first().click();
+    await page
+        .locator('#vehicule-form button[type="submit"]:visible')
+        .first()
+        .click();
 
     await expect(page).toHaveURL(/\/vehicules$/);
 
     const searchInput = getVisibleSearchInput(page);
     await searchInput.fill(immatriculation);
 
-    const row = page.locator('tbody tr', {
-        hasText: new RegExp(escapeRegExp(immatriculation), 'i'),
-    }).first();
+    const row = page
+        .locator('tbody tr', {
+            hasText: new RegExp(escapeRegExp(immatriculation), 'i'),
+        })
+        .first();
     await expect(row).toBeVisible();
 
     await openRowActions(row);
-    await page.getByRole('menuitem', { name: /modifier/i }).first().click();
+    await page
+        .getByRole('menuitem', { name: /modifier/i })
+        .first()
+        .click();
 
     await expect(page).toHaveURL(/\/vehicules\/\d+\/edit$/);
 
     await page.locator('#nom_vehicule').fill(`${nomVehicule} Maj`);
     await page.locator('label[for="is_active"]').first().click();
 
-    await page.locator('#vehicule-form button[type="submit"]:visible').first().click();
+    await page
+        .locator('#vehicule-form button[type="submit"]:visible')
+        .first()
+        .click();
 
     await expect(page).toHaveURL(/\/vehicules$/);
 
     const updatedSearchInput = getVisibleSearchInput(page);
     await updatedSearchInput.fill(immatriculation);
 
-    const updatedRow = page.locator('tbody tr', {
-        hasText: new RegExp(escapeRegExp(immatriculation), 'i'),
-    }).first();
+    const updatedRow = page
+        .locator('tbody tr', {
+            hasText: new RegExp(escapeRegExp(immatriculation), 'i'),
+        })
+        .first();
 
     await expect(updatedRow).toBeVisible();
     await expect(updatedRow).toContainText(/inactif/i);

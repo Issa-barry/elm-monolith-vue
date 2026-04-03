@@ -3,43 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\Proprietaire;
+use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
-const PROPRIETAIRE_PAYS = [
-    'GN' => ['Guinée',               '+224'],
-    'GW' => ['Guinée-Bissau',        '+245'],
-    'SN' => ['Sénégal',              '+221'],
-    'ML' => ['Mali',                 '+223'],
-    'CI' => ["Côte d'Ivoire",        '+225'],
-    'LR' => ['Liberia',              '+231'],
-    'SL' => ['Sierra Leone',         '+232'],
-    'FR' => ['France',               '+33'],
-    'CN' => ['Chine',                '+86'],
-    'AE' => ['Émirats arabes unis',  '+971'],
-    'IN' => ['Inde',                 '+91'],
-];
-
-const PROPRIETAIRE_PHONE_LOCAL_LENGTHS = [
-    'GN' => 9,
-    'GW' => 7,
-    'SN' => 9,
-    'ML' => 8,
-    'CI' => 10,
-    'LR' => 8,
-    'SL' => 8,
-    'FR' => 9,
-    'CN' => 11,
-    'AE' => 9,
-    'IN' => 10,
-];
-
 class ProprietaireController extends Controller
 {
+    use PhoneHandlerTrait;
+
     public function index(): Response
     {
         $this->authorize('viewAny', Proprietaire::class);
@@ -86,25 +60,16 @@ class ProprietaireController extends Controller
             'prenom' => 'required|string|max:255',
             'email' => 'nullable|email:rfc,dns|max:255',
             'telephone' => ['nullable', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
-            'code_pays' => ['nullable', Rule::in(array_keys(PROPRIETAIRE_PAYS))],
+            'code_pays' => ['nullable', Rule::in(array_keys(static::supportedPays()))],
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
-        ], [
-            'nom.required' => 'Le nom est obligatoire.',
-            'prenom.required' => 'Le prénom est obligatoire.',
-            'email.email' => "L'adresse email est invalide.",
-            'telephone.regex' => 'Le numéro de téléphone est invalide.',
-            'code_pays.in' => 'Pays invalide.',
-        ]);
+        ], $this->validationMessages());
 
-        if (! empty($data['code_pays']) && isset(PROPRIETAIRE_PAYS[$data['code_pays']])) {
-            [$data['pays'], $data['code_phone_pays']] = PROPRIETAIRE_PAYS[$data['code_pays']];
-        }
-
+        $data = $this->resolveCountryData($data);
         $this->validateLocalPhoneLength($data);
 
-        $data = $this->normalizeData($data);
+        $data = $this->normalizePersonData($data);
 
         Proprietaire::create([...$data, 'organization_id' => $orgId]);
 
@@ -140,41 +105,6 @@ class ProprietaireController extends Controller
         ]);
     }
 
-    /**
-     * Sépare un numéro complet (+224622000003) en [chiffres_locaux, dial, code_pays, pays].
-     * Si le numéro ne commence pas par un dial connu, le retourne tel quel.
-     */
-    private function splitPhone(?string $telephone, ?string $codePhonePays, ?string $codePays, ?string $pays): array
-    {
-        if (! $telephone) {
-            return [null, $codePhonePays, $codePays, $pays];
-        }
-
-        $raw = trim($telephone);
-
-        if ($codePhonePays && str_starts_with($raw, $codePhonePays)) {
-            $local = substr($raw, strlen($codePhonePays));
-            $localDigits = preg_replace('/\D+/', '', $local) ?: null;
-
-            return [$localDigits, $codePhonePays, $codePays, $pays];
-        }
-
-        $sorted = PROPRIETAIRE_PAYS;
-        uasort($sorted, fn ($a, $b) => strlen($b[1]) <=> strlen($a[1]));
-        foreach ($sorted as $code => [$name, $dial]) {
-            if (str_starts_with($raw, $dial)) {
-                $local = substr($raw, strlen($dial));
-                $localDigits = preg_replace('/\D+/', '', $local) ?: null;
-
-                return [$localDigits, $dial, $code, $name];
-            }
-        }
-
-        $digits = preg_replace('/\D+/', '', $raw) ?: null;
-
-        return [$digits, $codePhonePays, $codePays, $pays];
-    }
-
     public function update(Request $request, Proprietaire $proprietaire): RedirectResponse
     {
         $this->authorize('update', $proprietaire);
@@ -184,25 +114,16 @@ class ProprietaireController extends Controller
             'prenom' => 'required|string|max:255',
             'email' => 'nullable|email:rfc,dns|max:255',
             'telephone' => ['nullable', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
-            'code_pays' => ['nullable', Rule::in(array_keys(PROPRIETAIRE_PAYS))],
+            'code_pays' => ['nullable', Rule::in(array_keys(static::supportedPays()))],
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
-        ], [
-            'nom.required' => 'Le nom est obligatoire.',
-            'prenom.required' => 'Le prénom est obligatoire.',
-            'email.email' => "L'adresse email est invalide.",
-            'telephone.regex' => 'Le numéro de téléphone est invalide.',
-            'code_pays.in' => 'Pays invalide.',
-        ]);
+        ], $this->validationMessages());
 
-        if (! empty($data['code_pays']) && isset(PROPRIETAIRE_PAYS[$data['code_pays']])) {
-            [$data['pays'], $data['code_phone_pays']] = PROPRIETAIRE_PAYS[$data['code_pays']];
-        }
-
+        $data = $this->resolveCountryData($data);
         $this->validateLocalPhoneLength($data);
 
-        $data = $this->normalizeData($data);
+        $data = $this->normalizePersonData($data);
 
         $proprietaire->update($data);
 
@@ -210,66 +131,15 @@ class ProprietaireController extends Controller
             ->with('success', 'Propriétaire mis à jour avec succès.');
     }
 
-    private function validateLocalPhoneLength(array $data): void
+    private function validationMessages(): array
     {
-        if (empty($data['telephone']) || empty($data['code_pays'])) {
-            return;
-        }
-
-        $expectedLength = PROPRIETAIRE_PHONE_LOCAL_LENGTHS[$data['code_pays']] ?? null;
-        if (! $expectedLength) {
-            return;
-        }
-
-        $digits = preg_replace('/\D+/', '', (string) $data['telephone']) ?? '';
-        if ($digits === '') {
-            return;
-        }
-
-        $isValidLength = strlen($digits) === $expectedLength
-            || (strlen($digits) === ($expectedLength + 1) && str_starts_with($digits, '0'));
-
-        if (! $isValidLength) {
-            throw ValidationException::withMessages([
-                'telephone' => "Le numero doit contenir {$expectedLength} chiffres (ou ".($expectedLength + 1).' avec un 0 initial).',
-            ]);
-        }
-    }
-
-    private function normalizeData(array $data): array
-    {
-        if (! empty($data['nom'])) {
-            $data['nom'] = mb_strtoupper($data['nom'], 'UTF-8');
-        }
-        if (! empty($data['prenom'])) {
-            $data['prenom'] = mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
-        }
-        if (! empty($data['ville'])) {
-            $data['ville'] = mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
-        }
-        if (! empty($data['adresse'])) {
-            $data['adresse'] = mb_convert_case(mb_strtolower($data['adresse'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
-        }
-        if (! empty($data['telephone'])) {
-            $telephone = trim((string) $data['telephone']);
-            $telephoneDigits = preg_replace('/\D+/', '', $telephone) ?? '';
-
-            if ($telephoneDigits === '') {
-                $data['telephone'] = null;
-            } elseif (str_starts_with($telephone, '+')) {
-                $data['telephone'] = '+'.$telephoneDigits;
-            } elseif (! empty($data['code_phone_pays'])) {
-                $dialDigits = preg_replace('/\D+/', '', (string) $data['code_phone_pays']) ?? '';
-                $localDigits = preg_replace('/^0/', '', $telephoneDigits);
-                $data['telephone'] = $dialDigits !== ''
-                    ? '+'.$dialDigits.$localDigits
-                    : $telephoneDigits;
-            } else {
-                $data['telephone'] = $telephoneDigits;
-            }
-        }
-
-        return $data;
+        return [
+            'nom.required' => 'Le nom est obligatoire.',
+            'prenom.required' => 'Le prénom est obligatoire.',
+            'email.email' => "L'adresse email est invalide.",
+            'telephone.regex' => 'Le numéro de téléphone est invalide.',
+            'code_pays.in' => 'Pays invalide.',
+        ];
     }
 
     public function destroy(Proprietaire $proprietaire): RedirectResponse

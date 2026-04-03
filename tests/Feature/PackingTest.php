@@ -7,36 +7,19 @@ use App\Enums\PackingStatut;
 use App\Models\Organization;
 use App\Models\Packing;
 use App\Models\Prestataire;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Permission;
+use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class PackingTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
-    private function user(): User
+    protected function setUp(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        $org = Organization::factory()->create();
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-
-        return $user;
-    }
-
-    private function userWithPermissions(Organization $org): User
-    {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        foreach (['packings.read', 'packings.create', 'packings.update', 'packings.delete'] as $perm) {
-            Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
-        }
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-        $user->givePermissionTo(['packings.read', 'packings.create', 'packings.update', 'packings.delete']);
-
-        return $user;
+        parent::setUp();
+        $this->initOrgAndUser(['packings.read', 'packings.create', 'packings.update', 'packings.delete']);
     }
 
     private function makePrestataire(Organization $org): Prestataire
@@ -65,10 +48,7 @@ class PackingTest extends TestCase
 
     public function test_index_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('packings.index'))
             ->assertStatus(200);
     }
@@ -80,7 +60,7 @@ class PackingTest extends TestCase
 
     public function test_index_returns_403_without_permission(): void
     {
-        $user = $this->user();
+        $user = $this->makeAdminUser();
 
         $this->actingAs($user)
             ->get(route('packings.index'))
@@ -91,10 +71,7 @@ class PackingTest extends TestCase
 
     public function test_create_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('packings.create'))
             ->assertStatus(200);
     }
@@ -103,11 +80,9 @@ class PackingTest extends TestCase
 
     public function test_store_creates_packing_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
+        $prestataire = $this->makePrestataire($this->org);
 
-        $response = $this->actingAs($user)
+        $response = $this->actingAs($this->user)
             ->post(route('packings.store'), [
                 'prestataire_id' => $prestataire->id,
                 'date' => now()->toDateString(),
@@ -119,7 +94,7 @@ class PackingTest extends TestCase
         $response->assertRedirect();
 
         $this->assertDatabaseHas('packings', [
-            'organization_id' => $org->id,
+            'organization_id' => $this->org->id,
             'prestataire_id' => $prestataire->id,
             'nb_rouleaux' => 5,
             'shift' => 'jour',
@@ -128,21 +103,16 @@ class PackingTest extends TestCase
 
     public function test_store_fails_with_empty_data(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('packings.store'), [])
             ->assertSessionHasErrors(['prestataire_id', 'date', 'shift', 'nb_rouleaux', 'prix_par_rouleau']);
     }
 
     public function test_store_creates_packing_with_nuit_shift(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
+        $prestataire = $this->makePrestataire($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('packings.store'), [
                 'prestataire_id' => $prestataire->id,
                 'date' => now()->toDateString(),
@@ -153,18 +123,16 @@ class PackingTest extends TestCase
             ->assertRedirect();
 
         $this->assertDatabaseHas('packings', [
-            'organization_id' => $org->id,
+            'organization_id' => $this->org->id,
             'shift' => 'nuit',
         ]);
     }
 
     public function test_store_fails_with_invalid_shift(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
+        $prestataire = $this->makePrestataire($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('packings.store'), [
                 'prestataire_id' => $prestataire->id,
                 'date' => now()->toDateString(),
@@ -177,12 +145,10 @@ class PackingTest extends TestCase
 
     public function test_store_fails_with_prestataire_from_other_org(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $otherOrg = Organization::factory()->create();
         $prestataire = $this->makePrestataire($otherOrg);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('packings.store'), [
                 'prestataire_id' => $prestataire->id,
                 'date' => now()->toDateString(),
@@ -196,25 +162,21 @@ class PackingTest extends TestCase
 
     public function test_show_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
-        $packing = $this->makePacking($org, $prestataire);
+        $prestataire = $this->makePrestataire($this->org);
+        $packing = $this->makePacking($this->org, $prestataire);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('packings.show', $packing))
             ->assertStatus(200);
     }
 
     public function test_show_returns_403_for_other_organization(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $otherOrg = Organization::factory()->create();
         $prestataire = $this->makePrestataire($otherOrg);
         $packing = $this->makePacking($otherOrg, $prestataire);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('packings.show', $packing))
             ->assertStatus(403);
     }
@@ -223,24 +185,20 @@ class PackingTest extends TestCase
 
     public function test_edit_returns_200_for_impayee_packing(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
-        $packing = $this->makePacking($org, $prestataire);
+        $prestataire = $this->makePrestataire($this->org);
+        $packing = $this->makePacking($this->org, $prestataire);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('packings.edit', $packing))
             ->assertStatus(200);
     }
 
     public function test_edit_returns_403_for_paid_packing(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
-        $packing = $this->makePacking($org, $prestataire, ['statut' => PackingStatut::PAYEE]);
+        $prestataire = $this->makePrestataire($this->org);
+        $packing = $this->makePacking($this->org, $prestataire, ['statut' => PackingStatut::PAYEE]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('packings.edit', $packing))
             ->assertStatus(403);
     }
@@ -249,12 +207,10 @@ class PackingTest extends TestCase
 
     public function test_update_modifies_impayee_packing_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
-        $packing = $this->makePacking($org, $prestataire);
+        $prestataire = $this->makePrestataire($this->org);
+        $packing = $this->makePacking($this->org, $prestataire);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->put(route('packings.update', $packing), [
                 'prestataire_id' => $prestataire->id,
                 'date' => now()->toDateString(),
@@ -274,12 +230,10 @@ class PackingTest extends TestCase
 
     public function test_update_returns_403_for_paid_packing(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
-        $packing = $this->makePacking($org, $prestataire, ['statut' => PackingStatut::PAYEE]);
+        $prestataire = $this->makePrestataire($this->org);
+        $packing = $this->makePacking($this->org, $prestataire, ['statut' => PackingStatut::PAYEE]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->put(route('packings.update', $packing), [
                 'prestataire_id' => $prestataire->id,
                 'date' => now()->toDateString(),
@@ -292,12 +246,10 @@ class PackingTest extends TestCase
 
     public function test_update_fails_with_invalid_shift(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
-        $packing = $this->makePacking($org, $prestataire);
+        $prestataire = $this->makePrestataire($this->org);
+        $packing = $this->makePacking($this->org, $prestataire);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->put(route('packings.update', $packing), [
                 'prestataire_id' => $prestataire->id,
                 'date' => now()->toDateString(),
@@ -310,21 +262,18 @@ class PackingTest extends TestCase
 
     public function test_shift_default_is_jour(): void
     {
-        $org = Organization::factory()->create();
-        $prestataire = $this->makePrestataire($org);
-        $packing = $this->makePacking($org, $prestataire);
+        $prestataire = $this->makePrestataire($this->org);
+        $packing = $this->makePacking($this->org, $prestataire);
 
         $this->assertEquals(PackingShift::JOUR, $packing->fresh()->shift);
     }
 
     public function test_packingdata_includes_shift(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
-        $packing = $this->makePacking($org, $prestataire, ['shift' => PackingShift::NUIT]);
+        $prestataire = $this->makePrestataire($this->org);
+        $packing = $this->makePacking($this->org, $prestataire, ['shift' => PackingShift::NUIT]);
 
-        $response = $this->actingAs($user)
+        $response = $this->actingAs($this->user)
             ->get(route('packings.show', $packing));
 
         $response->assertStatus(200);
@@ -339,12 +288,10 @@ class PackingTest extends TestCase
 
     public function test_destroy_deletes_impayee_packing_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
-        $packing = $this->makePacking($org, $prestataire);
+        $prestataire = $this->makePrestataire($this->org);
+        $packing = $this->makePacking($this->org, $prestataire);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->delete(route('packings.destroy', $packing))
             ->assertRedirect(route('packings.index'));
 
@@ -353,12 +300,10 @@ class PackingTest extends TestCase
 
     public function test_destroy_returns_403_for_paid_packing(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
-        $packing = $this->makePacking($org, $prestataire, ['statut' => PackingStatut::PAYEE]);
+        $prestataire = $this->makePrestataire($this->org);
+        $packing = $this->makePacking($this->org, $prestataire, ['statut' => PackingStatut::PAYEE]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->delete(route('packings.destroy', $packing))
             ->assertStatus(403);
     }
@@ -367,12 +312,10 @@ class PackingTest extends TestCase
 
     public function test_annuler_sets_statut_to_annulee(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
-        $packing = $this->makePacking($org, $prestataire);
+        $prestataire = $this->makePrestataire($this->org);
+        $packing = $this->makePacking($this->org, $prestataire);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->patch(route('packings.annuler', $packing))
             ->assertRedirect();
 
@@ -381,12 +324,10 @@ class PackingTest extends TestCase
 
     public function test_annuler_returns_403_if_already_annulee(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
-        $packing = $this->makePacking($org, $prestataire, ['statut' => PackingStatut::ANNULEE]);
+        $prestataire = $this->makePrestataire($this->org);
+        $packing = $this->makePacking($this->org, $prestataire, ['statut' => PackingStatut::ANNULEE]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->patch(route('packings.annuler', $packing))
             ->assertStatus(403);
     }

@@ -1,4 +1,4 @@
-# Eau la maman — Monolithe
+# Eau maman — Monolithe
 # Sur ton PC
 npm run build
 git add public/build
@@ -136,74 +136,6 @@ E2E_PASSWORD=Staff@2025
 E2E_EMAIL=superadmin@admin.com
 ```
 
----
-
-## Déploiement
-
-### Première mise en production
-
-```bash
-# 1. Dépendances PHP (sans packages dev)
-composer install --optimize-autoloader --no-dev
-
-# 2. Build JS pour la production
-npm install
-npm run build
-
-# 3. Configuration
-cp .env.example .env
-# → Éditer .env (voir section Variables ci-dessous)
-php artisan key:generate
-
-# 4. Base de données
-php artisan migrate --seed
-
-# 5. Optimisations Laravel
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
-php artisan storage:link
-```
-
-### Mise en production
-
-Tu build sur ton PC, tu pousse tout y compris public/build/ :
-
-
-
-
-### Mises à jour suivantes
-
-```bash
-# 1. Récupérer le code
-git pull origin main
-
-# 2. Dépendances
-composer install --optimize-autoloader --no-dev
-npm install
-npm run build
-
-# 3. Migrations (sans --seed pour ne pas écraser les données)
-php artisan migrate --force
-
-# 4. Vider et recacher
-php artisan optimize:clear
-php artisan optimize
-```
- 
-
-### Hostinger / cPanel
-
-Le build Vite se fait **en local** (pas besoin de Node.js sur le serveur).
-`public/build/` est inclus dans git.
-
-**Sur ton PC avant de pousser :**
-```bash
-npm run build
-git add public/build
-git commit -m "build: production"
-git push
-```
  
 # code coverage : 
 php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text
@@ -214,4 +146,4 @@ php artisan migrate:fresh --seed
 php artisan optimize:clear
 php artisan optimize
 
-brache feature 3
+brache feature
