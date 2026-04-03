@@ -13,7 +13,7 @@
                     <h3
                         class="mt-3 text-4xl font-bold text-slate-900 lg:text-5xl"
                     >
-                        Eau minerale en sachet, pratique au quotidien.
+                        Eau minerale en sachet.
                     </h3>
                     <p class="mt-4 text-base leading-7 text-slate-600">
                         Une eau minerale accessible, distribuee rapidement a
@@ -91,7 +91,7 @@
                 >
                     <img
                         class="h-full w-full object-cover"
-                        src="https://fqjltiegiezfetthbags.supabase.co/storage/v1/render/image/public/block.images/blocks/feature/sound-1.jpg"
+                        src="/images/landing/sachet.png"
                         alt="Produit eau minerale en sachet"
                     />
                 </div>
