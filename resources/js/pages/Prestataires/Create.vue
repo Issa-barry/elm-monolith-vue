@@ -4,6 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
+import { watch } from 'vue';
 import PrestataireForm from './partials/PrestataireForm.vue';
 
 interface Option {
@@ -38,6 +39,23 @@ const form = useForm({
 function submit() {
     form.post('/prestataires');
 }
+
+function handleFormUpdate(updated: Record<string, unknown>) {
+    const changed = Object.keys(updated).filter(
+        (k) => (form as Record<string, unknown>)[k] !== updated[k],
+    );
+    Object.assign(form, updated);
+    if (changed.length) form.clearErrors(...changed);
+}
+
+// Efface les erreurs croisées identité dès que la condition change
+watch(
+    () => [form.raison_sociale, form.prenom, form.nom] as const,
+    ([rs, prenom, nom]) => {
+        if (rs) form.clearErrors('prenom', 'nom');
+        if (prenom || nom) form.clearErrors('raison_sociale');
+    },
+);
 </script>
 
 <template>
@@ -81,7 +99,7 @@ function submit() {
                 :types="types"
                 :processing="form.processing"
                 @submit="submit"
-                @update:form="Object.assign(form, $event)"
+                @update:form="handleFormUpdate($event)"
             />
         </div>
 
