@@ -129,6 +129,7 @@ test('create livreur + toggle status → inactif in list', async ({ page }) => {
     await expect(page).toHaveURL(/\/livreurs\/\d+\/edit$/, { timeout: 15_000 });
 
     await page.goto('/livreurs');
+    await page.waitForLoadState('networkidle');
     const updated = await findRowByName(page, prenom);
     await expect(updated).toBeVisible();
     await expect(updated).toContainText(/inactif/i);
