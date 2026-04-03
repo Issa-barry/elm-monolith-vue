@@ -58,10 +58,10 @@ class ProprietaireController extends Controller
         $data = $request->validate([
             'nom' => 'required|string|max:255',
             'prenom' => 'required|string|max:255',
-            'email' => 'nullable|email:rfc,dns|max:255',
-            'telephone' => ['nullable', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
-            'code_pays' => ['nullable', Rule::in(array_keys(static::supportedPays()))],
-            'ville' => 'nullable|string|max:100',
+            'email' => 'nullable|email:rfc,dns|max:255|unique:proprietaires,email',
+            'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/', 'unique:proprietaires,telephone'],
+            'code_pays' => ['required', Rule::in(array_keys(static::supportedPays()))],
+            'ville' => 'required|string|max:100',
             'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
         ], $this->validationMessages());
@@ -112,10 +112,10 @@ class ProprietaireController extends Controller
         $data = $request->validate([
             'nom' => 'required|string|max:255',
             'prenom' => 'required|string|max:255',
-            'email' => 'nullable|email:rfc,dns|max:255',
-            'telephone' => ['nullable', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
-            'code_pays' => ['nullable', Rule::in(array_keys(static::supportedPays()))],
-            'ville' => 'nullable|string|max:100',
+            'email' => ['nullable', 'email:rfc,dns', 'max:255', Rule::unique('proprietaires', 'email')->ignore($proprietaire->id)],
+            'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/', Rule::unique('proprietaires', 'telephone')->ignore($proprietaire->id)],
+            'code_pays' => ['required', Rule::in(array_keys(static::supportedPays()))],
+            'ville' => 'required|string|max:100',
             'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
         ], $this->validationMessages());
@@ -137,8 +137,13 @@ class ProprietaireController extends Controller
             'nom.required' => 'Le nom est obligatoire.',
             'prenom.required' => 'Le prénom est obligatoire.',
             'email.email' => "L'adresse email est invalide.",
+            'email.unique' => 'Cet email est déjà utilisé.',
+            'telephone.required' => 'Le numéro de téléphone est obligatoire.',
             'telephone.regex' => 'Le numéro de téléphone est invalide.',
+            'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé.',
+            'code_pays.required' => 'Le pays est obligatoire.',
             'code_pays.in' => 'Pays invalide.',
+            'ville.required' => 'La ville est obligatoire.',
         ];
     }
 
