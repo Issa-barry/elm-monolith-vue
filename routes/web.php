@@ -19,15 +19,20 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\VehiculeController;
 use App\Http\Controllers\VersementCommissionController;
 use App\Http\Controllers\VersementController;
+use App\Services\ModuleService;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    return Inertia::render('Welcome');
+    return Inertia::render('Welcome', [
+        'canRegister' => ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
+    ]);
 })->name('home');
 
 Route::get('/contact', function () {
-    return Inertia::render('Contact');
+    return Inertia::render('Contact', [
+        'canRegister' => ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
+    ]);
 })->name('contact');
 
 Route::post('contact', [ContactController::class, 'store'])->name('contact.store');

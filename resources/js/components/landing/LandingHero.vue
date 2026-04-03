@@ -13,10 +13,10 @@ import Button from 'primevue/button';
                     <span class="text-primary underline">Eau la maman.</span>
                     L'eau minerale qui vous accompagne chaque jour
                 </h1>
-                <p class="mb-8 text-xl leading-normal text-slate-300">
+                <!-- <p class="mb-8 text-xl leading-normal text-slate-300">
                     Eau la maman, marque du groupe GBALAN, propose de l'eau
                     minerale en sachet et bientot en bouteille.
-                </p>
+                </p> -->
                 <ul class="flex list-none flex-col gap-4">
                     <li class="flex items-center gap-2">
                         <i class="pi pi-check-circle text-xl text-primary" />
@@ -28,7 +28,7 @@ import Button from 'primevue/button';
                     <li class="flex items-center gap-2">
                         <i class="pi pi-check-circle text-xl text-primary" />
                         <span class="leading-normal text-slate-300"
-                            >Distribution rapide a Matoto et dans les zones
+                            >Distribution rapide a Conakry et dans les zones
                             voisines.</span
                         >
                     </li>

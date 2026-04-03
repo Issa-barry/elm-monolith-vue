@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
+use App\Features\ModuleFeature;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Services\ModuleService;
 use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -62,7 +64,7 @@ class FortifyServiceProvider extends ServiceProvider
     {
         Fortify::loginView(fn (Request $request) => Inertia::render('auth/Login', [
             'canResetPassword' => Features::enabled(Features::resetPasswords()),
-            'canRegister' => Features::enabled(Features::registration()),
+            'canRegister' => $this->canRegister(),
             'status' => $request->session()->get('status'),
         ]));
 
@@ -79,11 +81,29 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->session()->get('status'),
         ]));
 
-        Fortify::registerView(fn () => Inertia::render('auth/Register'));
+        Fortify::registerView(function () {
+            abort_unless($this->canRegister(), 404);
+
+            return Inertia::render('auth/Register');
+        });
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/TwoFactorChallenge'));
 
         Fortify::confirmPasswordView(fn () => Inertia::render('auth/ConfirmPassword'));
+    }
+
+    /**
+     * L'inscription est active si:
+     * 1) La feature Fortify registration est active
+     * 2) Le flag Pennant module.inscription est actif pour l'organisation publique
+     */
+    private function canRegister(): bool
+    {
+        if (! Features::enabled(Features::registration())) {
+            return false;
+        }
+
+        return ModuleService::isPublicActive(ModuleFeature::INSCRIPTION);
     }
 
     /**
