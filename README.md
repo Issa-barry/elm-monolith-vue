@@ -49,38 +49,6 @@ php artisan storage:link
 | Auth | Connexion par numéro de téléphone + mot de passe |
 | Tests | PHPUnit (Feature tests) |
 
---- 
-
-## Installation locale
-
-```bash
-# 1. Cloner le dépôt
-git clone <url-du-repo> elm-monolithe
-cd elm-monolithe
-
-# 2. Dépendances PHP
-composer install
-
-# 3. Dépendances JS
-npm install
-
-# 4. Configuration
-cp .env.example .env
-php artisan key:generate
-
-# 5. Base de données
-php artisan migrate --seed
-
-# 6. Lancer en développement (deux terminaux)
-php artisan serve
-npm run dev
-```
-
----
-
- 
----
-
 ## Tests
 
 ```bash

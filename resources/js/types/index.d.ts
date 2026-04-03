@@ -54,7 +54,8 @@ export type ModuleFlagKey =
     | 'vehicules'
     | 'produits'
     | 'sites'
-    | 'utilisateurs';
+    | 'utilisateurs'
+    | 'inscription';
 
 export type AppPageProps<
     T extends Record<string, unknown> = Record<string, unknown>,
