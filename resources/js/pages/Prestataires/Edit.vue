@@ -4,7 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import PrestataireForm from './partials/PrestataireForm.vue';
 
 interface Option {
@@ -69,6 +69,15 @@ function handleFormUpdate(updated: Record<string, unknown>) {
     Object.assign(form, updated);
     if (changed.length) form.clearErrors(...changed);
 }
+
+// Efface les erreurs croisées identité dès que la condition change
+watch(
+    () => [form.raison_sociale, form.prenom, form.nom] as const,
+    ([rs, prenom, nom]) => {
+        if (rs) form.clearErrors('prenom', 'nom');
+        if (prenom || nom) form.clearErrors('raison_sociale');
+    },
+);
 </script>
 
 <template>
