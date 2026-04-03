@@ -28,9 +28,10 @@ class AppVersionTest extends TestCase
         $this->assertSame($first, $second);
     }
 
-    public function test_label_contains_date_separator(): void
+    public function test_label_is_release_aligned_without_runtime_timestamp(): void
     {
         $label = AppVersion::label();
-        $this->assertStringContainsString(' le ', $label);
+        $this->assertStringNotContainsString(' le ', $label);
+        $this->assertStringNotContainsString(' a ', $label);
     }
 }
