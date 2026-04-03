@@ -125,8 +125,9 @@ class PrestataireTest extends TestCase
             ->post(route('prestataires.store'), $this->validPayload([
                 'nom' => null,
                 'prenom' => null,
+                'raison_sociale' => null,
             ]))
-            ->assertSessionHasErrors(['nom', 'prenom']);
+            ->assertSessionHasErrors(['nom', 'prenom', 'raison_sociale']);
     }
 
     public function test_store_fails_when_only_nom_without_prenom(): void
@@ -228,7 +229,7 @@ class PrestataireTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('prestataires.update', $prestataire), [])
-            ->assertSessionHasErrors(['phone', 'code_pays', 'ville', 'type']);
+            ->assertSessionHasErrors(['nom', 'prenom', 'raison_sociale', 'phone', 'code_pays', 'ville', 'type']);
     }
 
     // ── destroy ───────────────────────────────────────────────────────────────

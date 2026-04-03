@@ -127,7 +127,7 @@ class PrestataireController extends Controller
         return [
             'nom' => 'nullable|string|max:255|required_without:raison_sociale',
             'prenom' => 'nullable|string|max:255|required_without:raison_sociale',
-            'raison_sociale' => 'nullable|string|max:255',
+            'raison_sociale' => 'nullable|string|max:255|required_without_all:nom,prenom',
             'email' => 'nullable|email:rfc,dns|max:255',
             'phone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
             'code_pays' => ['required', Rule::in(array_keys(static::supportedPays()))],
@@ -142,6 +142,7 @@ class PrestataireController extends Controller
     private function validationMessages(): array
     {
         return [
+            'raison_sociale.required_without_all' => 'La raison sociale est obligatoire si le prénom et le nom sont absents.',
             'nom.required_without' => 'Le nom est obligatoire si la raison sociale est absente.',
             'prenom.required_without' => 'Le prénom est obligatoire si la raison sociale est absente.',
             'phone.required' => 'Le numéro de téléphone est obligatoire.',

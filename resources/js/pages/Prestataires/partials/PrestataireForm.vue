@@ -46,6 +46,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
 
+// Identité — obligatoire dynamique
+const raisonSocialeRequired = computed(
+    () => !props.form.nom && !props.form.prenom,
+);
+const nomRequired = computed(() => !props.form.raison_sociale);
+const prenomRequired = computed(() => !props.form.raison_sociale);
+
 const selectedCountry = computed(() =>
     PAYS_OPTIONS.find((c) => c.code === props.form.code_pays),
 );
@@ -159,6 +166,11 @@ function onPhoneInput(value: string | null | undefined) {
                 <div class="sm:col-span-2">
                     <Label for="raison_sociale" class="mb-1.5 block"
                         >Raison sociale
+                        <span
+                            v-if="raisonSocialeRequired"
+                            class="text-destructive"
+                            >*</span
+                        >
                         <span class="text-xs text-muted-foreground"
                             >(personne morale)</span
                         ></Label
@@ -185,7 +197,12 @@ function onPhoneInput(value: string | null | undefined) {
 
                 <!-- Prénom -->
                 <div>
-                    <Label for="prenom" class="mb-1.5 block">Prénom</Label>
+                    <Label for="prenom" class="mb-1.5 block"
+                        >Prénom
+                        <span v-if="prenomRequired" class="text-destructive"
+                            >*</span
+                        ></Label
+                    >
                     <InputText
                         id="prenom"
                         :model-value="form.prenom ?? ''"
@@ -208,7 +225,12 @@ function onPhoneInput(value: string | null | undefined) {
 
                 <!-- Nom -->
                 <div>
-                    <Label for="nom" class="mb-1.5 block">Nom</Label>
+                    <Label for="nom" class="mb-1.5 block"
+                        >Nom
+                        <span v-if="nomRequired" class="text-destructive"
+                            >*</span
+                        ></Label
+                    >
                     <InputText
                         id="nom"
                         :model-value="form.nom ?? ''"
