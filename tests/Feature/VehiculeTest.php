@@ -5,28 +5,20 @@ namespace Tests\Feature;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Proprietaire;
-use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class VehiculeTest extends TestCase
 {
-    use HasAdminSetup, RefreshDatabase;
-
-    private Organization $org;
-
-    private User $user;
+    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->org = Organization::factory()->create();
-        $this->user = $this->makeUserWithPermissions(
-            $this->org,
-            ['vehicules.read', 'vehicules.create', 'vehicules.update', 'vehicules.delete'],
-        );
+        $this->initOrgAndUser(['vehicules.read', 'vehicules.create', 'vehicules.update', 'vehicules.delete']);
     }
 
     private function makeVehicule(Organization $org): Vehicule

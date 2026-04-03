@@ -9,28 +9,20 @@ use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
-use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class CommandeVenteTest extends TestCase
 {
-    use HasAdminSetup, RefreshDatabase;
-
-    private Organization $org;
-
-    private User $user;
+    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->org = Organization::factory()->create();
-        $this->user = $this->makeUserWithPermissions(
-            $this->org,
-            ['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete'],
-        );
+        $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete']);
     }
 
     private function makeContext(Organization $org): array

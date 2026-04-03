@@ -4,27 +4,19 @@ namespace Tests\Feature;
 
 use App\Models\Organization;
 use App\Models\Proprietaire;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class ProprietaireTest extends TestCase
 {
-    use HasAdminSetup, RefreshDatabase;
-
-    private Organization $org;
-
-    private User $user;
+    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->org = Organization::factory()->create();
-        $this->user = $this->makeUserWithPermissions(
-            $this->org,
-            ['proprietaires.read', 'proprietaires.create', 'proprietaires.update', 'proprietaires.delete'],
-        );
+        $this->initOrgAndUser(['proprietaires.read', 'proprietaires.create', 'proprietaires.update', 'proprietaires.delete']);
     }
 
     // ── index ─────────────────────────────────────────────────────────────────

@@ -4,27 +4,19 @@ namespace Tests\Feature;
 
 use App\Models\Organization;
 use App\Models\Prestataire;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class PrestataireTest extends TestCase
 {
-    use HasAdminSetup, RefreshDatabase;
-
-    private Organization $org;
-
-    private User $user;
+    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->org = Organization::factory()->create();
-        $this->user = $this->makeUserWithPermissions(
-            $this->org,
-            ['prestataires.read', 'prestataires.create', 'prestataires.update', 'prestataires.delete'],
-        );
+        $this->initOrgAndUser(['prestataires.read', 'prestataires.create', 'prestataires.update', 'prestataires.delete']);
     }
 
     private function makePrestataire(Organization $org, array $overrides = []): Prestataire

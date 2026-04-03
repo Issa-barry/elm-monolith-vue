@@ -4,27 +4,19 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\Organization;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class ClientTest extends TestCase
 {
-    use HasAdminSetup, RefreshDatabase;
-
-    private Organization $org;
-
-    private User $user;
+    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->org = Organization::factory()->create();
-        $this->user = $this->makeUserWithPermissions(
-            $this->org,
-            ['clients.read', 'clients.create', 'clients.update', 'clients.delete'],
-        );
+        $this->initOrgAndUser(['clients.read', 'clients.create', 'clients.update', 'clients.delete']);
     }
 
     // ── index ─────────────────────────────────────────────────────────────────

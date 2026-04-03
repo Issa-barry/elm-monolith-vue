@@ -4,25 +4,19 @@ namespace Tests\Feature;
 
 use App\Models\CommissionVente;
 use App\Models\Organization;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
-use Tests\Feature\Concerns\HasVentesSetup;
+use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class CommissionVenteIndexTest extends TestCase
 {
-    use HasAdminSetup, HasVentesSetup, RefreshDatabase;
-
-    private Organization $org;
-
-    private User $user;
+    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->org = Organization::factory()->create();
-        $this->user = $this->userWithPermissions($this->org);
+        $this->initOrgAndUser(['ventes.read']);
     }
 
     // ── index ─────────────────────────────────────────────────────────────────

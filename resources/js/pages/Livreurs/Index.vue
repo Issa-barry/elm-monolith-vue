@@ -8,6 +8,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { showEntityStatsCards } from '@/composables/useEntityConfig';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -69,9 +70,6 @@ const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => {
     filters.value.global.value = val;
 });
-
-const showEntityStatsCards =
-    import.meta.env.VITE_SHOW_ENTITY_STATS_CARDS === 'true';
 
 const totalLivreurs = computed(() => props.livreurs.length);
 const activeLivreurs = computed(

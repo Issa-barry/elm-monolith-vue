@@ -7,27 +7,19 @@ use App\Models\CommandeAchat;
 use App\Models\Organization;
 use App\Models\Prestataire;
 use App\Models\Produit;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class CommandeAchatTest extends TestCase
 {
-    use HasAdminSetup, RefreshDatabase;
-
-    private Organization $org;
-
-    private User $user;
+    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->org = Organization::factory()->create();
-        $this->user = $this->makeUserWithPermissions(
-            $this->org,
-            ['achats.read', 'achats.create', 'achats.update', 'achats.delete'],
-        );
+        $this->initOrgAndUser(['achats.read', 'achats.create', 'achats.update', 'achats.delete']);
     }
 
     private function makeContext(Organization $org): array
