@@ -13,7 +13,7 @@ trait HasOrgAndUser
 
     protected function initOrgAndUser(array $permissions): void
     {
-        $this->org  = Organization::factory()->create();
+        $this->org = Organization::factory()->create();
         $this->user = $this->makeUserWithPermissions($this->org, $permissions);
     }
 }
