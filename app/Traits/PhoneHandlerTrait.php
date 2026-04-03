@@ -40,6 +40,20 @@ trait PhoneHandlerTrait
         ];
     }
 
+    protected function resolveCountryData(array $data): array
+    {
+        if (! empty($data['code_pays']) && isset(static::supportedPays()[$data['code_pays']])) {
+            [$data['pays'], $data['code_phone_pays']] = static::supportedPays()[$data['code_pays']];
+        }
+
+        return $data;
+    }
+
+    private function ucTitle(string $value): string
+    {
+        return mb_convert_case(mb_strtolower($value, 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+    }
+
     private function digitsOnly(string $value): string
     {
         return preg_replace('/\D+/', '', $value) ?? '';
@@ -104,16 +118,40 @@ trait PhoneHandlerTrait
             $data['nom'] = mb_strtoupper($data['nom'], 'UTF-8');
         }
         if (! empty($data['prenom'])) {
-            $data['prenom'] = mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+            $data['prenom'] = $this->ucTitle($data['prenom']);
         }
         if (! empty($data['ville'])) {
-            $data['ville'] = mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+            $data['ville'] = $this->ucTitle($data['ville']);
         }
         if (! empty($data['adresse'])) {
-            $data['adresse'] = mb_convert_case(mb_strtolower($data['adresse'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+            $data['adresse'] = $this->ucTitle($data['adresse']);
         }
         if (! empty($data['telephone'])) {
             $data['telephone'] = $this->buildInternationalPhone($data['telephone'], $data['code_phone_pays'] ?? null);
+        }
+
+        return $data;
+    }
+
+    protected function normalizeData(array $data): array
+    {
+        if (! empty($data['nom'])) {
+            $data['nom'] = mb_strtoupper($data['nom'], 'UTF-8');
+        }
+        if (! empty($data['prenom'])) {
+            $data['prenom'] = $this->ucTitle($data['prenom']);
+        }
+        if (! empty($data['raison_sociale'])) {
+            $data['raison_sociale'] = $this->ucTitle($data['raison_sociale']);
+        }
+        if (! empty($data['ville'])) {
+            $data['ville'] = $this->ucTitle($data['ville']);
+        }
+        if (! empty($data['code_phone_pays']) && ! empty($data['phone'])) {
+            $tel = (string) $data['phone'];
+            if (! str_starts_with($tel, '+')) {
+                $data['phone'] = $data['code_phone_pays'].ltrim($tel, '0');
+            }
         }
 
         return $data;

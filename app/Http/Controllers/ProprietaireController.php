@@ -72,10 +72,7 @@ class ProprietaireController extends Controller
             'code_pays.in' => 'Pays invalide.',
         ]);
 
-        if (! empty($data['code_pays']) && isset(static::supportedPays()[$data['code_pays']])) {
-            [$data['pays'], $data['code_phone_pays']] = static::supportedPays()[$data['code_pays']];
-        }
-
+        $data = $this->resolveCountryData($data);
         $this->validateLocalPhoneLength($data);
 
         $data = $this->normalizePersonData($data);
@@ -135,10 +132,7 @@ class ProprietaireController extends Controller
             'code_pays.in' => 'Pays invalide.',
         ]);
 
-        if (! empty($data['code_pays']) && isset(static::supportedPays()[$data['code_pays']])) {
-            [$data['pays'], $data['code_phone_pays']] = static::supportedPays()[$data['code_pays']];
-        }
-
+        $data = $this->resolveCountryData($data);
         $this->validateLocalPhoneLength($data);
 
         $data = $this->normalizePersonData($data);

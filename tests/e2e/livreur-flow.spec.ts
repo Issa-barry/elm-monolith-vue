@@ -15,6 +15,30 @@ test.setTimeout(180_000);
 
 registerCleanup('/livreurs', PREFIX);
 
+async function createLivreurInApp(
+    page: Parameters<typeof login>[0],
+    params: { prenom: string; nom: string; tel: string; adresse?: string },
+): Promise<void> {
+    await page.goto('/livreurs/create');
+    await page.locator('#prenom').fill(params.prenom);
+    await page.locator('#nom').fill(params.nom);
+    const paysCombo = page
+        .locator('#livreur-form')
+        .getByRole('combobox')
+        .first();
+    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
+    await page.locator('#ville').fill('Conakry');
+    if (params.adresse) {
+        await page.locator('#adresse').fill(params.adresse);
+    }
+    await page.locator('#telephone').fill(params.tel);
+    await page
+        .locator('#livreur-form button[type="submit"]:visible')
+        .first()
+        .click();
+    await expect(page).toHaveURL(/\/livreurs$/);
+}
+
 // ─── Création ────────────────────────────────────────────────────────────────
 
 test('create livreur with all fields → verify in list', async ({ page }) => {
@@ -24,28 +48,7 @@ test('create livreur with all fields → verify in list', async ({ page }) => {
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-    await page.goto('/livreurs/create');
-    await expect(page).toHaveURL(/\/livreurs\/create$/);
-
-    await page.locator('#prenom').fill(prenom);
-    await page.locator('#nom').fill(nom);
-
-    // Sélection du pays (Dropdown PrimeVue → role combobox)
-    const paysCombo = page
-        .locator('#livreur-form')
-        .getByRole('combobox')
-        .first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
-
-    await page.locator('#ville').fill('Conakry');
-    await page.locator('#adresse').fill('Quartier Matam');
-    await page.locator('#telephone').fill(tel);
-
-    await page
-        .locator('#livreur-form button[type="submit"]:visible')
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/livreurs$/);
+    await createLivreurInApp(page, { prenom, nom, tel, adresse: 'Quartier Matam' });
 
     const search = getVisibleSearchInput(page);
     await search.fill(prenom);
@@ -71,24 +74,7 @@ test('edit livreur → update ville / adresse → data persists', async ({
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-
-    // Création préalable
-    await page.goto('/livreurs/create');
-    await page.locator('#prenom').fill(prenom);
-    await page.locator('#nom').fill(nom);
-    const paysCombo = page
-        .locator('#livreur-form')
-        .getByRole('combobox')
-        .first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
-    await page.locator('#ville').fill('Conakry');
-    await page.locator('#adresse').fill('Adresse initiale');
-    await page.locator('#telephone').fill(tel);
-    await page
-        .locator('#livreur-form button[type="submit"]:visible')
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/livreurs$/);
+    await createLivreurInApp(page, { prenom, nom, tel, adresse: 'Adresse initiale' });
 
     // Ouvrir l'édition
     const search = getVisibleSearchInput(page);
@@ -137,22 +123,7 @@ test('create livreur + toggle status → inactif in list', async ({ page }) => {
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-
-    await page.goto('/livreurs/create');
-    await page.locator('#prenom').fill(prenom);
-    await page.locator('#nom').fill(nom);
-    const paysCombo = page
-        .locator('#livreur-form')
-        .getByRole('combobox')
-        .first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
-    await page.locator('#ville').fill('Conakry');
-    await page.locator('#telephone').fill(tel);
-    await page
-        .locator('#livreur-form button[type="submit"]:visible')
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/livreurs$/);
+    await createLivreurInApp(page, { prenom, nom, tel });
 
     const search = getVisibleSearchInput(page);
     await search.fill(prenom);

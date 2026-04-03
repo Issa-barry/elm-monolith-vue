@@ -73,9 +73,7 @@ class PrestataireController extends Controller
             'is_active' => 'boolean',
         ]);
 
-        if (isset($data['code_pays']) && isset(static::supportedPays()[$data['code_pays']])) {
-            [$data['pays'], $data['code_phone_pays']] = static::supportedPays()[$data['code_pays']];
-        }
+        $data = $this->resolveCountryData($data);
 
         $data = $this->normalizeData($data);
 
@@ -136,9 +134,7 @@ class PrestataireController extends Controller
             'is_active' => 'boolean',
         ]);
 
-        if (isset($data['code_pays']) && isset(static::supportedPays()[$data['code_pays']])) {
-            [$data['pays'], $data['code_phone_pays']] = static::supportedPays()[$data['code_pays']];
-        }
+        $data = $this->resolveCountryData($data);
 
         $data = $this->normalizeData($data);
 
@@ -146,30 +142,6 @@ class PrestataireController extends Controller
 
         return redirect()->route('prestataires.edit', $prestataire)
             ->with('success', 'Prestataire mis à jour avec succès.');
-    }
-
-    private function normalizeData(array $data): array
-    {
-        if (! empty($data['nom'])) {
-            $data['nom'] = mb_strtoupper($data['nom'], 'UTF-8');
-        }
-        if (! empty($data['prenom'])) {
-            $data['prenom'] = mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
-        }
-        if (! empty($data['raison_sociale'])) {
-            $data['raison_sociale'] = mb_convert_case(mb_strtolower($data['raison_sociale'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
-        }
-        if (! empty($data['ville'])) {
-            $data['ville'] = mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
-        }
-        if (! empty($data['code_phone_pays']) && ! empty($data['phone'])) {
-            $tel = (string) $data['phone'];
-            if (! str_starts_with($tel, '+')) {
-                $data['phone'] = $data['code_phone_pays'].ltrim($tel, '0');
-            }
-        }
-
-        return $data;
     }
 
     public function destroy(Prestataire $prestataire): RedirectResponse

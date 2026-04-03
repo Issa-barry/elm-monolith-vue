@@ -15,6 +15,34 @@ test.setTimeout(180_000);
 
 registerCleanup('/proprietaires', PREFIX);
 
+async function createProprietaireInApp(
+    page: Parameters<typeof login>[0],
+    params: { prenom: string; nom: string; tel: string; adresse?: string; ville?: string },
+): Promise<void> {
+    await page.goto('/proprietaires/create');
+    await page.locator('#prenom').fill(params.prenom);
+    await page.locator('#nom').fill(params.nom);
+    if (params.ville || params.adresse) {
+        const paysCombo = page
+            .locator('#proprietaire-form')
+            .getByRole('combobox')
+            .first();
+        await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
+        if (params.ville) {
+            await page.locator('#ville').fill(params.ville);
+        }
+        if (params.adresse) {
+            await page.locator('#adresse').fill(params.adresse);
+        }
+    }
+    await page.locator('#telephone').fill(params.tel);
+    await page
+        .locator('#proprietaire-form button[type="submit"]:visible')
+        .first()
+        .click();
+    await expect(page).toHaveURL(/\/proprietaires$/);
+}
+
 // ─── Création ────────────────────────────────────────────────────────────────
 
 test('create proprietaire with all fields → verify in list', async ({
@@ -26,28 +54,11 @@ test('create proprietaire with all fields → verify in list', async ({
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-    await page.goto('/proprietaires/create');
-    await expect(page).toHaveURL(/\/proprietaires\/create$/);
-
-    await page.locator('#prenom').fill(prenom);
-    await page.locator('#nom').fill(nom);
-
-    // Pays (optionnel pour propriétaire)
-    const paysCombo = page
-        .locator('#proprietaire-form')
-        .getByRole('combobox')
-        .first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
-
-    await page.locator('#ville').fill('Conakry');
-    await page.locator('#adresse').fill('Quartier Kaloum');
-    await page.locator('#telephone').fill(tel);
-
-    await page
-        .locator('#proprietaire-form button[type="submit"]:visible')
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/proprietaires$/);
+    await createProprietaireInApp(page, {
+        prenom, nom, tel,
+        ville: 'Conakry',
+        adresse: 'Quartier Kaloum',
+    });
 
     const search = getVisibleSearchInput(page);
     await search.fill(prenom);
@@ -69,24 +80,11 @@ test('edit proprietaire → update pays / ville / adresse → data persists on e
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-
-    // Création préalable
-    await page.goto('/proprietaires/create');
-    await page.locator('#prenom').fill(prenom);
-    await page.locator('#nom').fill(nom);
-    const paysCombo = page
-        .locator('#proprietaire-form')
-        .getByRole('combobox')
-        .first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
-    await page.locator('#ville').fill('Conakry');
-    await page.locator('#adresse').fill('Adresse initiale');
-    await page.locator('#telephone').fill(tel);
-    await page
-        .locator('#proprietaire-form button[type="submit"]:visible')
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/proprietaires$/);
+    await createProprietaireInApp(page, {
+        prenom, nom, tel,
+        ville: 'Conakry',
+        adresse: 'Adresse initiale',
+    });
 
     // Ouvrir l'édition
     const search = getVisibleSearchInput(page);
@@ -145,16 +143,7 @@ test('create proprietaire + toggle status → inactif in list', async ({
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-
-    await page.goto('/proprietaires/create');
-    await page.locator('#prenom').fill(prenom);
-    await page.locator('#nom').fill(nom);
-    await page.locator('#telephone').fill(tel);
-    await page
-        .locator('#proprietaire-form button[type="submit"]:visible')
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/proprietaires$/);
+    await createProprietaireInApp(page, { prenom, nom, tel });
 
     const search = getVisibleSearchInput(page);
     await search.fill(prenom);

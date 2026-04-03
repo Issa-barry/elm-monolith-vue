@@ -7,16 +7,12 @@ use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasVentesSetup;
 use Tests\TestCase;
 
 class CommissionVenteIndexTest extends TestCase
 {
-    use HasAdminSetup, RefreshDatabase;
-
-    private function userWithPermissions(Organization $org): User
-    {
-        return $this->makeUserWithPermissions($org, ['ventes.read']);
-    }
+    use HasAdminSetup, HasVentesSetup, RefreshDatabase;
 
     // ── index ─────────────────────────────────────────────────────────────────
 
