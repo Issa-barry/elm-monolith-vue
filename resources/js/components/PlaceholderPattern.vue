@@ -1,9 +1,21 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-const patternId = computed(
-    () => `pattern-${Math.random().toString(36).substring(2, 9)}`,
-);
+const patternId = computed(() => {
+    if (typeof crypto !== 'undefined') {
+        if (typeof crypto.randomUUID === 'function') {
+            return `pattern-${crypto.randomUUID()}`;
+        }
+
+        if (typeof crypto.getRandomValues === 'function') {
+            const buffer = new Uint32Array(2);
+            crypto.getRandomValues(buffer);
+            return `pattern-${buffer[0].toString(36)}${buffer[1].toString(36)}`;
+        }
+    }
+
+    return `pattern-${Date.now().toString(36)}`;
+});
 </script>
 
 <template>
