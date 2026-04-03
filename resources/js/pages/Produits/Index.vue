@@ -60,6 +60,7 @@ interface Produit {
     is_critique: boolean;
     statut: string;
     statut_label: string;
+    prix_vente: number | null;
     qte_stock: number | null;
     in_stock: boolean;
     is_low_stock: boolean;
@@ -289,6 +290,26 @@ function confirmDelete(produit: Produit) {
                                     class="h-3.5 w-3.5 shrink-0 text-amber-500"
                                 />
                             </Link>
+                        </template>
+                    </Column>
+
+                    <!-- Prix de vente -->
+                    <Column
+                        field="prix_vente"
+                        header="Prix vente"
+                        sortable
+                        style="width: 140px"
+                    >
+                        <template #body="{ data }">
+                            <span class="tabular-nums">
+                                {{
+                                    data.prix_vente != null
+                                        ? new Intl.NumberFormat('fr-FR').format(
+                                              data.prix_vente,
+                                          ) + ' GNF'
+                                        : '—'
+                                }}
+                            </span>
                         </template>
                     </Column>
 

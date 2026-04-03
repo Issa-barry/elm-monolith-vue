@@ -4,7 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
-import { computed, watch } from 'vue';
+import { computed } from 'vue';
 import ProprietaireForm from './partials/ProprietaireForm.vue';
 
 interface ProprietaireData {
@@ -48,38 +48,6 @@ const form = useForm({
     code_phone_pays: props.proprietaire.code_phone_pays,
     is_active: Boolean(props.proprietaire.is_active),
 });
-
-watch(
-    () => props.proprietaire,
-    (p) => {
-        Object.assign(form, {
-            nom: p.nom,
-            prenom: p.prenom,
-            email: p.email,
-            telephone: p.telephone,
-            adresse: p.adresse,
-            ville: p.ville,
-            pays: p.pays,
-            code_pays: p.code_pays,
-            code_phone_pays: p.code_phone_pays,
-            is_active: Boolean(p.is_active),
-        });
-    },
-    { deep: true },
-);
-
-function updateForm(data: Omit<ProprietaireData, 'id'>) {
-    form.nom = data.nom;
-    form.prenom = data.prenom;
-    form.email = data.email;
-    form.telephone = data.telephone;
-    form.adresse = data.adresse;
-    form.ville = data.ville;
-    form.pays = data.pays;
-    form.code_pays = data.code_pays;
-    form.code_phone_pays = data.code_phone_pays;
-    form.is_active = data.is_active;
-}
 
 function submit() {
     form.put(`/proprietaires/${props.proprietaire.id}`);
@@ -137,7 +105,7 @@ function submit() {
                 :errors="form.errors"
                 :processing="form.processing"
                 @submit="submit"
-                @update:form="updateForm"
+                @update:form="Object.assign(form, $event)"
             />
         </div>
 

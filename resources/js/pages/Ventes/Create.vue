@@ -87,6 +87,10 @@ function searchVehicule(event: { query: string }) {
 
 function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
+    if (v) {
+        form.client_id = null;
+        clientSelected.value = null;
+    }
 }
 
 function onVehiculeClear() {
@@ -116,6 +120,10 @@ function searchClient(event: { query: string }) {
 
 function onClientSelect(c: ClientOption | null) {
     form.client_id = c?.id ?? null;
+    if (c) {
+        form.vehicule_id = null;
+        vehiculeSelected.value = null;
+    }
 }
 
 function onClientClear() {
@@ -135,7 +143,7 @@ const siteOptions = computed(() =>
 const produitOptions = computed(() =>
     props.produits.map((p) => ({
         value: p.id,
-        label: `${p.nom} (${formatGNF(p.prix_vente)})`,
+        label: p.nom,
     })),
 );
 
@@ -271,7 +279,14 @@ function submit() {
                     >
                         Informations générales
                     </h2>
-                    <div class="grid gap-4 sm:grid-cols-3">
+                    <div
+                        class="grid gap-4"
+                        :class="
+                            form.vehicule_id || form.client_id
+                                ? 'sm:grid-cols-2'
+                                : 'sm:grid-cols-3'
+                        "
+                    >
                         <!-- Site -->
                         <div>
                             <Label class="mb-1.5 block text-sm"
@@ -298,7 +313,7 @@ function submit() {
                         </div>
 
                         <!-- Véhicule -->
-                        <div>
+                        <div v-if="!form.client_id">
                             <Label class="mb-1.5 block text-sm">
                                 Véhicule
                                 <span
@@ -360,7 +375,7 @@ function submit() {
                         </div>
 
                         <!-- Client -->
-                        <div>
+                        <div v-if="!form.vehicule_id">
                             <Label class="mb-1.5 block text-sm">
                                 Client
                                 <span
