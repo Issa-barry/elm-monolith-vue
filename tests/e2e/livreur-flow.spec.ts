@@ -71,12 +71,7 @@ test('create livreur with all fields → verify in list', async ({ page }) => {
     await login(page);
     await createLivreurInApp(page, { prenom, nom, tel, adresse: 'Quartier Matam' });
 
-    const search = getVisibleSearchInput(page);
-    await search.fill(prenom);
-
-    const row = page
-        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(prenom), 'i') })
-        .first();
+    const row = await findRowByName(page, prenom);
     await expect(row).toBeVisible();
 
     // Localisation affichée : adresse + ville
@@ -113,11 +108,7 @@ test('edit livreur → update ville / adresse → data persists', async ({
 
     // Vérifier dans la liste
     await page.goto('/livreurs');
-    const search2 = getVisibleSearchInput(page);
-    await search2.fill(prenom);
-    const updatedRow = page
-        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(prenom), 'i') })
-        .first();
+    const updatedRow = await findRowByName(page, prenom);
     await expect(updatedRow).toBeVisible();
     await expect(updatedRow).toContainText(/adresse modifi/i);
     await expect(updatedRow).toContainText('Mamou');

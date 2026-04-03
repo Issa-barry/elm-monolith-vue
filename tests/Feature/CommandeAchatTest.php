@@ -16,9 +16,17 @@ class CommandeAchatTest extends TestCase
 {
     use HasAdminSetup, RefreshDatabase;
 
-    private function userWithPermissions(Organization $org): User
+    private Organization $org;
+    private User $user;
+
+    protected function setUp(): void
     {
-        return $this->makeUserWithPermissions($org, ['achats.read', 'achats.create', 'achats.update', 'achats.delete']);
+        parent::setUp();
+        $this->org  = Organization::factory()->create();
+        $this->user = $this->makeUserWithPermissions(
+            $this->org,
+            ['achats.read', 'achats.create', 'achats.update', 'achats.delete'],
+        );
     }
 
     private function makeContext(Organization $org): array
@@ -44,23 +52,18 @@ class CommandeAchatTest extends TestCase
 
     private function makeCommande(Organization $org, array $overrides = []): CommandeAchat
     {
-        $commande = CommandeAchat::create(array_merge([
+        return CommandeAchat::create(array_merge([
             'organization_id' => $org->id,
             'total_commande' => 5000,
             'statut' => StatutCommandeAchat::EN_COURS,
         ], $overrides));
-
-        return $commande;
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
 
     public function test_index_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('achats.index'))
             ->assertStatus(200);
     }
@@ -83,10 +86,7 @@ class CommandeAchatTest extends TestCase
 
     public function test_create_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('achats.create'))
             ->assertStatus(200);
     }
@@ -95,11 +95,9 @@ class CommandeAchatTest extends TestCase
 
     public function test_store_creates_commande_achat_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        ['produit' => $produit, 'prestataire' => $prestataire] = $this->makeContext($org);
+        ['produit' => $produit, 'prestataire' => $prestataire] = $this->makeContext($this->org);
 
-        $response = $this->actingAs($user)
+        $response = $this->actingAs($this->user)
             ->post(route('achats.store'), [
                 'prestataire_id' => $prestataire->id,
                 'lignes' => [
@@ -114,27 +112,21 @@ class CommandeAchatTest extends TestCase
         $response->assertRedirect();
 
         $this->assertDatabaseHas('commandes_achats', [
-            'organization_id' => $org->id,
+            'organization_id' => $this->org->id,
             'prestataire_id' => $prestataire->id,
         ]);
     }
 
     public function test_store_fails_with_empty_lignes(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('achats.store'), ['lignes' => []])
             ->assertSessionHasErrors('lignes');
     }
 
     public function test_store_fails_without_lignes(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('achats.store'), [])
             ->assertSessionHasErrors('lignes');
     }
@@ -143,23 +135,19 @@ class CommandeAchatTest extends TestCase
 
     public function test_show_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $commande = $this->makeCommande($org);
+        $commande = $this->makeCommande($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('achats.show', $commande))
             ->assertStatus(200);
     }
 
     public function test_show_returns_403_for_other_organization(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $otherOrg = Organization::factory()->create();
         $commande = $this->makeCommande($otherOrg);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('achats.show', $commande))
             ->assertStatus(403);
     }
@@ -168,10 +156,8 @@ class CommandeAchatTest extends TestCase
 
     public function test_receptionner_updates_statut_to_receptionnee(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        ['produit' => $produit] = $this->makeContext($org);
-        $commande = $this->makeCommande($org);
+        ['produit' => $produit] = $this->makeContext($this->org);
+        $commande = $this->makeCommande($this->org);
         $ligne = $commande->lignes()->create([
             'produit_id' => $produit->id,
             'qte' => 3,
@@ -179,7 +165,7 @@ class CommandeAchatTest extends TestCase
             'total_ligne' => 3000,
         ]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->patch(route('achats.receptionner', $commande), [
                 'lignes' => [
                     ['id' => $ligne->id, 'qte_recue' => 3],
@@ -192,22 +178,18 @@ class CommandeAchatTest extends TestCase
 
     public function test_receptionner_returns_422_if_annulee(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $commande = $this->makeCommande($org, ['statut' => StatutCommandeAchat::ANNULEE]);
+        $commande = $this->makeCommande($this->org, ['statut' => StatutCommandeAchat::ANNULEE]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->patch(route('achats.receptionner', $commande), ['lignes' => []])
             ->assertStatus(422);
     }
 
     public function test_receptionner_returns_422_if_already_receptionnee(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $commande = $this->makeCommande($org, ['statut' => StatutCommandeAchat::RECEPTIONNEE]);
+        $commande = $this->makeCommande($this->org, ['statut' => StatutCommandeAchat::RECEPTIONNEE]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->patch(route('achats.receptionner', $commande), ['lignes' => []])
             ->assertStatus(422);
     }
@@ -216,11 +198,9 @@ class CommandeAchatTest extends TestCase
 
     public function test_annuler_sets_statut_annulee(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $commande = $this->makeCommande($org);
+        $commande = $this->makeCommande($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->patch(route('achats.annuler', $commande), [
                 'motif_annulation' => 'Annulation test achat',
             ])
@@ -231,22 +211,18 @@ class CommandeAchatTest extends TestCase
 
     public function test_annuler_fails_without_motif(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $commande = $this->makeCommande($org);
+        $commande = $this->makeCommande($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->patch(route('achats.annuler', $commande), [])
             ->assertSessionHasErrors('motif_annulation');
     }
 
     public function test_annuler_returns_422_if_already_annulee(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $commande = $this->makeCommande($org, ['statut' => StatutCommandeAchat::ANNULEE]);
+        $commande = $this->makeCommande($this->org, ['statut' => StatutCommandeAchat::ANNULEE]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->patch(route('achats.annuler', $commande), [
                 'motif_annulation' => 'Tentative double',
             ])
@@ -257,11 +233,9 @@ class CommandeAchatTest extends TestCase
 
     public function test_destroy_deletes_annulee_commande_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $commande = $this->makeCommande($org, ['statut' => StatutCommandeAchat::ANNULEE]);
+        $commande = $this->makeCommande($this->org, ['statut' => StatutCommandeAchat::ANNULEE]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->delete(route('achats.destroy', $commande))
             ->assertRedirect(route('achats.index'));
 
@@ -270,11 +244,9 @@ class CommandeAchatTest extends TestCase
 
     public function test_destroy_returns_403_for_non_annulee_commande(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $commande = $this->makeCommande($org);
+        $commande = $this->makeCommande($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->delete(route('achats.destroy', $commande))
             ->assertStatus(403);
     }
@@ -283,11 +255,9 @@ class CommandeAchatTest extends TestCase
 
     public function test_pdf_returns_200_with_pdf_content_type(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $commande = $this->makeCommande($org);
+        $commande = $this->makeCommande($this->org);
 
-        $response = $this->actingAs($user)
+        $response = $this->actingAs($this->user)
             ->get(route('achats.pdf', $commande));
 
         $response->assertStatus(200);
@@ -296,12 +266,10 @@ class CommandeAchatTest extends TestCase
 
     public function test_pdf_returns_403_for_other_organization(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $otherOrg = Organization::factory()->create();
         $commande = $this->makeCommande($otherOrg);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('achats.pdf', $commande))
             ->assertStatus(403);
     }

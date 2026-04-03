@@ -13,19 +13,24 @@ class ProduitTest extends TestCase
 {
     use HasAdminSetup, RefreshDatabase;
 
-    private function userWithPermissions(Organization $org): User
+    private Organization $org;
+    private User $user;
+
+    protected function setUp(): void
     {
-        return $this->makeUserWithPermissions($org, ['produits.read', 'produits.create', 'produits.update', 'produits.delete']);
+        parent::setUp();
+        $this->org  = Organization::factory()->create();
+        $this->user = $this->makeUserWithPermissions(
+            $this->org,
+            ['produits.read', 'produits.create', 'produits.update', 'produits.delete'],
+        );
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
 
     public function test_index_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('produits.index'))
             ->assertStatus(200);
     }
@@ -48,10 +53,7 @@ class ProduitTest extends TestCase
 
     public function test_create_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('produits.create'))
             ->assertStatus(200);
     }
@@ -60,10 +62,7 @@ class ProduitTest extends TestCase
 
     public function test_store_creates_produit_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Rouleau plastique',
                 'type' => 'materiel',
@@ -75,26 +74,20 @@ class ProduitTest extends TestCase
             ->assertRedirect(route('produits.index'));
 
         $this->assertDatabaseHas('produits', [
-            'organization_id' => $org->id,
+            'organization_id' => $this->org->id,
         ]);
     }
 
     public function test_store_fails_with_empty_data(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('produits.store'), [])
             ->assertSessionHasErrors(['nom', 'type', 'statut']);
     }
 
     public function test_store_fails_with_invalid_type(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Test',
                 'type' => 'type_invalide',
@@ -120,23 +113,19 @@ class ProduitTest extends TestCase
 
     public function test_show_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $produit = $this->makeProduit($org);
+        $produit = $this->makeProduit($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('produits.show', $produit))
             ->assertStatus(200);
     }
 
     public function test_show_returns_403_for_other_organization(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $otherOrg = Organization::factory()->create();
         $produit = $this->makeProduit($otherOrg);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('produits.show', $produit))
             ->assertStatus(403);
     }
@@ -145,11 +134,9 @@ class ProduitTest extends TestCase
 
     public function test_edit_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $produit = $this->makeProduit($org);
+        $produit = $this->makeProduit($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('produits.edit', $produit))
             ->assertStatus(200);
     }
@@ -158,11 +145,9 @@ class ProduitTest extends TestCase
 
     public function test_update_modifies_produit_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $produit = $this->makeProduit($org);
+        $produit = $this->makeProduit($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->put(route('produits.update', $produit), [
                 'nom' => 'Nouveau nom produit',
                 'type' => 'materiel',
@@ -173,17 +158,15 @@ class ProduitTest extends TestCase
 
         $this->assertDatabaseHas('produits', [
             'id' => $produit->id,
-            'organization_id' => $org->id,
+            'organization_id' => $this->org->id,
         ]);
     }
 
     public function test_update_fails_with_missing_required_fields(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $produit = $this->makeProduit($org);
+        $produit = $this->makeProduit($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->put(route('produits.update', $produit), [])
             ->assertSessionHasErrors(['nom', 'type', 'statut']);
     }
@@ -192,11 +175,9 @@ class ProduitTest extends TestCase
 
     public function test_destroy_deletes_produit_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $produit = $this->makeProduit($org);
+        $produit = $this->makeProduit($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->delete(route('produits.destroy', $produit))
             ->assertRedirect(route('produits.index'));
 
@@ -205,12 +186,10 @@ class ProduitTest extends TestCase
 
     public function test_destroy_returns_403_for_other_organization(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $otherOrg = Organization::factory()->create();
         $produit = $this->makeProduit($otherOrg);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->delete(route('produits.destroy', $produit))
             ->assertStatus(403);
     }

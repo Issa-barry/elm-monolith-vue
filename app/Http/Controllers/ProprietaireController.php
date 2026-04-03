@@ -134,11 +134,11 @@ class ProprietaireController extends Controller
     private function validationMessages(): array
     {
         return [
-            'nom.required'    => 'Le nom est obligatoire.',
+            'nom.required' => 'Le nom est obligatoire.',
             'prenom.required' => 'Le prénom est obligatoire.',
-            'email.email'     => "L'adresse email est invalide.",
+            'email.email' => "L'adresse email est invalide.",
             'telephone.regex' => 'Le numéro de téléphone est invalide.',
-            'code_pays.in'    => 'Pays invalide.',
+            'code_pays.in' => 'Pays invalide.',
         ];
     }
 

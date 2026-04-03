@@ -123,17 +123,17 @@ class PrestataireController extends Controller
     private function validationRules(): array
     {
         return [
-            'nom'            => 'nullable|string|max:255|required_without:raison_sociale',
-            'prenom'         => 'nullable|string|max:255|required_without:raison_sociale',
+            'nom' => 'nullable|string|max:255|required_without:raison_sociale',
+            'prenom' => 'nullable|string|max:255|required_without:raison_sociale',
             'raison_sociale' => 'nullable|string|max:255',
-            'email'          => 'nullable|email:rfc,dns|max:255',
-            'phone'          => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
-            'code_pays'      => ['nullable', Rule::in(array_keys(static::supportedPays()))],
-            'ville'          => 'nullable|string|max:100',
-            'adresse'        => 'nullable|string',
-            'type'           => ['required', Rule::enum(PrestataireType::class)],
-            'notes'          => 'nullable|string',
-            'is_active'      => 'boolean',
+            'email' => 'nullable|email:rfc,dns|max:255',
+            'phone' => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
+            'code_pays' => ['nullable', Rule::in(array_keys(static::supportedPays()))],
+            'ville' => 'nullable|string|max:100',
+            'adresse' => 'nullable|string',
+            'type' => ['required', Rule::enum(PrestataireType::class)],
+            'notes' => 'nullable|string',
+            'is_active' => 'boolean',
         ];
     }
 

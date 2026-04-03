@@ -14,14 +14,21 @@ class CommissionVenteIndexTest extends TestCase
 {
     use HasAdminSetup, HasVentesSetup, RefreshDatabase;
 
+    private Organization $org;
+    private User $user;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->org  = Organization::factory()->create();
+        $this->user = $this->userWithPermissions($this->org);
+    }
+
     // ── index ─────────────────────────────────────────────────────────────────
 
     public function test_index_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('commissions.index'))
             ->assertStatus(200);
     }
@@ -42,11 +49,8 @@ class CommissionVenteIndexTest extends TestCase
 
     public function test_index_accepts_all_periode_values(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
         foreach (['today', 'week', 'month', 'all'] as $periode) {
-            $this->actingAs($user)
+            $this->actingAs($this->user)
                 ->get(route('commissions.index', ['periode' => $periode]))
                 ->assertStatus(200);
         }
@@ -54,10 +58,7 @@ class CommissionVenteIndexTest extends TestCase
 
     public function test_index_returns_expected_inertia_data(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('commissions.index'))
             ->assertStatus(200)
             ->assertInertia(fn ($page) => $page
@@ -70,15 +71,12 @@ class CommissionVenteIndexTest extends TestCase
 
     public function test_index_only_shows_commissions_for_own_organization(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $ownCommission = CommissionVente::factory()->create(['organization_id' => $org->id]);
+        CommissionVente::factory()->create(['organization_id' => $this->org->id]);
 
         $otherOrg = Organization::factory()->create();
         CommissionVente::factory()->create(['organization_id' => $otherOrg->id]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('commissions.index', ['periode' => 'all']))
             ->assertStatus(200)
             ->assertInertia(fn ($page) => $page
@@ -88,10 +86,7 @@ class CommissionVenteIndexTest extends TestCase
 
     public function test_index_totaux_keys_are_present(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('commissions.index', ['periode' => 'all']))
             ->assertInertia(fn ($page) => $page
                 ->where('totaux.nb_en_attente', 0)

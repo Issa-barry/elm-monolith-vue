@@ -134,16 +134,16 @@ class LivreurController extends Controller
     private function validationMessages(): array
     {
         return [
-            'nom.required'        => 'Le nom est obligatoire.',
-            'prenom.required'     => 'Le prénom est obligatoire.',
-            'email.email'         => "L'adresse email est invalide.",
-            'email.unique'        => 'Cet email est déjà utilisé.',
-            'telephone.required'  => 'Le numéro de téléphone est obligatoire.',
-            'telephone.regex'     => 'Le numéro de téléphone est invalide.',
-            'telephone.unique'    => 'Ce numéro de téléphone est déjà utilisé.',
-            'code_pays.required'  => 'Le pays est obligatoire.',
-            'code_pays.in'        => 'Pays invalide.',
-            'ville.required'      => 'La ville est obligatoire.',
+            'nom.required' => 'Le nom est obligatoire.',
+            'prenom.required' => 'Le prénom est obligatoire.',
+            'email.email' => "L'adresse email est invalide.",
+            'email.unique' => 'Cet email est déjà utilisé.',
+            'telephone.required' => 'Le numéro de téléphone est obligatoire.',
+            'telephone.regex' => 'Le numéro de téléphone est invalide.',
+            'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé.',
+            'code_pays.required' => 'Le pays est obligatoire.',
+            'code_pays.in' => 'Pays invalide.',
+            'ville.required' => 'La ville est obligatoire.',
         ];
     }
 

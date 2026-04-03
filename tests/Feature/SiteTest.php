@@ -13,9 +13,17 @@ class SiteTest extends TestCase
 {
     use HasAdminSetup, RefreshDatabase;
 
-    private function userWithPermissions(Organization $org): User
+    private Organization $org;
+    private User $user;
+
+    protected function setUp(): void
     {
-        return $this->makeUserWithPermissions($org, ['sites.read', 'sites.create', 'sites.update', 'sites.delete']);
+        parent::setUp();
+        $this->org  = Organization::factory()->create();
+        $this->user = $this->makeUserWithPermissions(
+            $this->org,
+            ['sites.read', 'sites.create', 'sites.update', 'sites.delete'],
+        );
     }
 
     private function makeSite(Organization $org): Site
@@ -32,10 +40,7 @@ class SiteTest extends TestCase
 
     public function test_index_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('sites.index'))
             ->assertStatus(200);
     }
@@ -58,10 +63,7 @@ class SiteTest extends TestCase
 
     public function test_create_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('sites.create'))
             ->assertStatus(200);
     }
@@ -70,10 +72,7 @@ class SiteTest extends TestCase
 
     public function test_store_creates_site_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('sites.store'), [
                 'nom' => 'Depot Conakry',
                 'type' => 'depot',
@@ -84,26 +83,20 @@ class SiteTest extends TestCase
             ->assertRedirect(route('sites.index'));
 
         $this->assertDatabaseHas('sites', [
-            'organization_id' => $org->id,
+            'organization_id' => $this->org->id,
         ]);
     }
 
     public function test_store_fails_with_empty_data(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('sites.store'), [])
             ->assertSessionHasErrors(['nom', 'type', 'localisation']);
     }
 
     public function test_store_fails_with_invalid_type(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('sites.store'), [
                 'nom' => 'Test',
                 'type' => 'type_invalide',
@@ -116,23 +109,19 @@ class SiteTest extends TestCase
 
     public function test_show_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $site = $this->makeSite($org);
+        $site = $this->makeSite($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('sites.show', $site))
             ->assertStatus(200);
     }
 
     public function test_show_returns_403_for_other_organization(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $otherOrg = Organization::factory()->create();
         $site = $this->makeSite($otherOrg);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('sites.show', $site))
             ->assertStatus(403);
     }
@@ -141,11 +130,9 @@ class SiteTest extends TestCase
 
     public function test_edit_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $site = $this->makeSite($org);
+        $site = $this->makeSite($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('sites.edit', $site))
             ->assertStatus(200);
     }
@@ -154,11 +141,9 @@ class SiteTest extends TestCase
 
     public function test_update_modifies_site_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $site = $this->makeSite($org);
+        $site = $this->makeSite($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->put(route('sites.update', $site), [
                 'nom' => 'Depot modifie',
                 'code' => $site->code,
@@ -174,11 +159,9 @@ class SiteTest extends TestCase
 
     public function test_update_fails_with_missing_required_fields(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $site = $this->makeSite($org);
+        $site = $this->makeSite($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->put(route('sites.update', $site), [])
             ->assertSessionHasErrors(['nom', 'code', 'type', 'localisation']);
     }
@@ -187,11 +170,9 @@ class SiteTest extends TestCase
 
     public function test_destroy_deletes_site_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $site = $this->makeSite($org);
+        $site = $this->makeSite($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->delete(route('sites.destroy', $site))
             ->assertRedirect(route('sites.index'));
 
@@ -200,19 +181,17 @@ class SiteTest extends TestCase
 
     public function test_destroy_returns_back_if_site_has_children(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $parent = $this->makeSite($org);
+        $parent = $this->makeSite($this->org);
 
         Site::create([
-            'organization_id' => $org->id,
+            'organization_id' => $this->org->id,
             'nom' => 'Site enfant',
             'type' => 'agence',
             'localisation' => 'Quelque part',
             'parent_id' => $parent->id,
         ]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->delete(route('sites.destroy', $parent))
             ->assertRedirect();
 
@@ -221,12 +200,10 @@ class SiteTest extends TestCase
 
     public function test_destroy_returns_403_for_other_organization(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $otherOrg = Organization::factory()->create();
         $site = $this->makeSite($otherOrg);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->delete(route('sites.destroy', $site))
             ->assertStatus(403);
     }
@@ -235,18 +212,16 @@ class SiteTest extends TestCase
 
     public function test_show_displays_children_sites(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $parent = $this->makeSite($org);
-        $child = Site::create([
-            'organization_id' => $org->id,
+        $parent = $this->makeSite($this->org);
+        Site::create([
+            'organization_id' => $this->org->id,
             'nom' => 'Site Enfant',
             'type' => 'agence',
             'localisation' => 'Kindia',
             'parent_id' => $parent->id,
         ]);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('sites.show', $parent))
             ->assertStatus(200);
     }

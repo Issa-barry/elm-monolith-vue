@@ -13,9 +13,17 @@ class PrestataireTest extends TestCase
 {
     use HasAdminSetup, RefreshDatabase;
 
-    private function userWithPermissions(Organization $org): User
+    private Organization $org;
+    private User $user;
+
+    protected function setUp(): void
     {
-        return $this->makeUserWithPermissions($org, ['prestataires.read', 'prestataires.create', 'prestataires.update', 'prestataires.delete']);
+        parent::setUp();
+        $this->org  = Organization::factory()->create();
+        $this->user = $this->makeUserWithPermissions(
+            $this->org,
+            ['prestataires.read', 'prestataires.create', 'prestataires.update', 'prestataires.delete'],
+        );
     }
 
     private function makePrestataire(Organization $org, array $overrides = []): Prestataire
@@ -32,10 +40,7 @@ class PrestataireTest extends TestCase
 
     public function test_index_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('prestataires.index'))
             ->assertStatus(200);
     }
@@ -58,10 +63,7 @@ class PrestataireTest extends TestCase
 
     public function test_create_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('prestataires.create'))
             ->assertStatus(200);
     }
@@ -70,10 +72,7 @@ class PrestataireTest extends TestCase
 
     public function test_store_creates_prestataire_with_nom_prenom_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('prestataires.store'), [
                 'nom' => 'Diallo',
                 'prenom' => 'Mamadou',
@@ -83,16 +82,13 @@ class PrestataireTest extends TestCase
             ->assertRedirect(route('prestataires.index'));
 
         $this->assertDatabaseHas('prestataires', [
-            'organization_id' => $org->id,
+            'organization_id' => $this->org->id,
         ]);
     }
 
     public function test_store_creates_prestataire_with_raison_sociale(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('prestataires.store'), [
                 'raison_sociale' => 'Entreprise ABC',
                 'type' => 'consultant',
@@ -101,16 +97,13 @@ class PrestataireTest extends TestCase
             ->assertRedirect(route('prestataires.index'));
 
         $this->assertDatabaseHas('prestataires', [
-            'organization_id' => $org->id,
+            'organization_id' => $this->org->id,
         ]);
     }
 
     public function test_store_fails_without_type(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('prestataires.store'), [
                 'nom' => 'Diallo',
                 'prenom' => 'Mamadou',
@@ -120,10 +113,7 @@ class PrestataireTest extends TestCase
 
     public function test_store_fails_without_nom_and_raison_sociale(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->post(route('prestataires.store'), [
                 'type' => 'fournisseur',
             ])
@@ -134,23 +124,19 @@ class PrestataireTest extends TestCase
 
     public function test_edit_returns_200_for_authorized_user(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
+        $prestataire = $this->makePrestataire($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('prestataires.edit', $prestataire))
             ->assertStatus(200);
     }
 
     public function test_edit_returns_403_for_other_organization(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $otherOrg = Organization::factory()->create();
         $prestataire = $this->makePrestataire($otherOrg);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->get(route('prestataires.edit', $prestataire))
             ->assertStatus(403);
     }
@@ -159,11 +145,9 @@ class PrestataireTest extends TestCase
 
     public function test_update_modifies_prestataire_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
+        $prestataire = $this->makePrestataire($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->put(route('prestataires.update', $prestataire), [
                 'nom' => 'Barry',
                 'prenom' => 'Fatoumata',
@@ -179,11 +163,9 @@ class PrestataireTest extends TestCase
 
     public function test_update_fails_without_type(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
+        $prestataire = $this->makePrestataire($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->put(route('prestataires.update', $prestataire), [
                 'nom' => 'Barry',
                 'prenom' => 'Fatoumata',
@@ -195,11 +177,9 @@ class PrestataireTest extends TestCase
 
     public function test_destroy_deletes_prestataire_and_redirects(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
-        $prestataire = $this->makePrestataire($org);
+        $prestataire = $this->makePrestataire($this->org);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->delete(route('prestataires.destroy', $prestataire))
             ->assertRedirect(route('prestataires.index'));
 
@@ -208,12 +188,10 @@ class PrestataireTest extends TestCase
 
     public function test_destroy_returns_403_for_other_organization(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->userWithPermissions($org);
         $otherOrg = Organization::factory()->create();
         $prestataire = $this->makePrestataire($otherOrg);
 
-        $this->actingAs($user)
+        $this->actingAs($this->user)
             ->delete(route('prestataires.destroy', $prestataire))
             ->assertStatus(403);
     }

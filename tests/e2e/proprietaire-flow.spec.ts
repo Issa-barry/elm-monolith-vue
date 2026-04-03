@@ -81,12 +81,7 @@ test('create proprietaire with all fields → verify in list', async ({
         adresse: 'Quartier Kaloum',
     });
 
-    const search = getVisibleSearchInput(page);
-    await search.fill(prenom);
-
-    const row = page
-        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(prenom), 'i') })
-        .first();
+    const row = await findRowByName(page, prenom);
     await expect(row).toBeVisible();
 });
 
