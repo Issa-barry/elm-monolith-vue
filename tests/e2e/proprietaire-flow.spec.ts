@@ -15,6 +15,27 @@ test.setTimeout(180_000);
 
 registerCleanup('/proprietaires', PREFIX);
 
+async function findRowByName(
+    page: Parameters<typeof login>[0],
+    name: string,
+) {
+    const search = getVisibleSearchInput(page);
+    await search.fill(name);
+    return page
+        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(name), 'i') })
+        .first();
+}
+
+async function navigateToEdit(
+    page: Parameters<typeof login>[0],
+    name: string,
+): Promise<void> {
+    const row = await findRowByName(page, name);
+    await openRowActions(row);
+    await page.getByRole('menuitem', { name: /modifier/i }).first().click();
+    await expect(page).toHaveURL(/\/proprietaires\/\d+\/edit$/);
+}
+
 async function createProprietaireInApp(
     page: Parameters<typeof login>[0],
     params: { prenom: string; nom: string; tel: string; adresse?: string; ville?: string },
@@ -87,17 +108,7 @@ test('edit proprietaire → update pays / ville / adresse → data persists on e
     });
 
     // Ouvrir l'édition
-    const search = getVisibleSearchInput(page);
-    await search.fill(prenom);
-    const row = page
-        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(prenom), 'i') })
-        .first();
-    await openRowActions(row);
-    await page
-        .getByRole('menuitem', { name: /modifier/i })
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/proprietaires\/\d+\/edit$/);
+    await navigateToEdit(page, prenom);
 
     // Changer pays → Sénégal (met à jour l'indicatif et tronque le tel)
     const editPaysCombo = page
@@ -145,19 +156,9 @@ test('create proprietaire + toggle status → inactif in list', async ({
     await login(page);
     await createProprietaireInApp(page, { prenom, nom, tel });
 
-    const search = getVisibleSearchInput(page);
-    await search.fill(prenom);
-    const row = page
-        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(prenom), 'i') })
-        .first();
+    const row = await findRowByName(page, prenom);
     await expect(row).toBeVisible();
-
-    await openRowActions(row);
-    await page
-        .getByRole('menuitem', { name: /modifier/i })
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/proprietaires\/\d+\/edit$/);
+    await navigateToEdit(page, prenom);
 
     await page.locator('label[for="is_active"]').first().click();
     await page
@@ -171,11 +172,7 @@ test('create proprietaire + toggle status → inactif in list', async ({
 
     // Vérifier dans la liste
     await page.goto('/proprietaires');
-    const search2 = getVisibleSearchInput(page);
-    await search2.fill(prenom);
-    const updated = page
-        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(prenom), 'i') })
-        .first();
+    const updated = await findRowByName(page, prenom);
     await expect(updated).toBeVisible();
     await expect(updated).toContainText(/inactif/i);
 });

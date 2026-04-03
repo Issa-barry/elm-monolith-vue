@@ -64,13 +64,7 @@ class ProprietaireController extends Controller
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
-        ], [
-            'nom.required' => 'Le nom est obligatoire.',
-            'prenom.required' => 'Le prénom est obligatoire.',
-            'email.email' => "L'adresse email est invalide.",
-            'telephone.regex' => 'Le numéro de téléphone est invalide.',
-            'code_pays.in' => 'Pays invalide.',
-        ]);
+        ], $this->validationMessages());
 
         $data = $this->resolveCountryData($data);
         $this->validateLocalPhoneLength($data);
@@ -124,13 +118,7 @@ class ProprietaireController extends Controller
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
-        ], [
-            'nom.required' => 'Le nom est obligatoire.',
-            'prenom.required' => 'Le prénom est obligatoire.',
-            'email.email' => "L'adresse email est invalide.",
-            'telephone.regex' => 'Le numéro de téléphone est invalide.',
-            'code_pays.in' => 'Pays invalide.',
-        ]);
+        ], $this->validationMessages());
 
         $data = $this->resolveCountryData($data);
         $this->validateLocalPhoneLength($data);
@@ -141,6 +129,17 @@ class ProprietaireController extends Controller
 
         return redirect()->route('proprietaires.edit', $proprietaire)
             ->with('success', 'Propriétaire mis à jour avec succès.');
+    }
+
+    private function validationMessages(): array
+    {
+        return [
+            'nom.required'    => 'Le nom est obligatoire.',
+            'prenom.required' => 'Le prénom est obligatoire.',
+            'email.email'     => "L'adresse email est invalide.",
+            'telephone.regex' => 'Le numéro de téléphone est invalide.',
+            'code_pays.in'    => 'Pays invalide.',
+        ];
     }
 
     public function destroy(Proprietaire $proprietaire): RedirectResponse

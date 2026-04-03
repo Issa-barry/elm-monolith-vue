@@ -114,15 +114,7 @@ trait PhoneHandlerTrait
 
     private function normalizePersonData(array $data): array
     {
-        if (! empty($data['nom'])) {
-            $data['nom'] = mb_strtoupper($data['nom'], 'UTF-8');
-        }
-        if (! empty($data['prenom'])) {
-            $data['prenom'] = $this->ucTitle($data['prenom']);
-        }
-        if (! empty($data['ville'])) {
-            $data['ville'] = $this->ucTitle($data['ville']);
-        }
+        $data = $this->normalizeData($data);
         if (! empty($data['adresse'])) {
             $data['adresse'] = $this->ucTitle($data['adresse']);
         }

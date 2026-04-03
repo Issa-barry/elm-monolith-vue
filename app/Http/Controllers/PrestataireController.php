@@ -59,19 +59,7 @@ class PrestataireController extends Controller
         $orgId = auth()->user()->organization_id;
         abort_if(! $orgId, 403, 'Votre compte n\'est associé à aucune organisation.');
 
-        $data = $request->validate([
-            'nom' => 'nullable|string|max:255|required_without:raison_sociale',
-            'prenom' => 'nullable|string|max:255|required_without:raison_sociale',
-            'raison_sociale' => 'nullable|string|max:255',
-            'email' => 'nullable|email:rfc,dns|max:255',
-            'phone' => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
-            'code_pays' => ['nullable', Rule::in(array_keys(static::supportedPays()))],
-            'ville' => 'nullable|string|max:100',
-            'adresse' => 'nullable|string',
-            'type' => ['required', Rule::enum(PrestataireType::class)],
-            'notes' => 'nullable|string',
-            'is_active' => 'boolean',
-        ]);
+        $data = $request->validate($this->validationRules());
 
         $data = $this->resolveCountryData($data);
 
@@ -120,19 +108,7 @@ class PrestataireController extends Controller
     {
         $this->authorize('update', $prestataire);
 
-        $data = $request->validate([
-            'nom' => 'nullable|string|max:255|required_without:raison_sociale',
-            'prenom' => 'nullable|string|max:255|required_without:raison_sociale',
-            'raison_sociale' => 'nullable|string|max:255',
-            'email' => 'nullable|email:rfc,dns|max:255',
-            'phone' => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
-            'code_pays' => ['nullable', Rule::in(array_keys(static::supportedPays()))],
-            'ville' => 'nullable|string|max:100',
-            'adresse' => 'nullable|string',
-            'type' => ['required', Rule::enum(PrestataireType::class)],
-            'notes' => 'nullable|string',
-            'is_active' => 'boolean',
-        ]);
+        $data = $request->validate($this->validationRules());
 
         $data = $this->resolveCountryData($data);
 
@@ -142,6 +118,23 @@ class PrestataireController extends Controller
 
         return redirect()->route('prestataires.edit', $prestataire)
             ->with('success', 'Prestataire mis à jour avec succès.');
+    }
+
+    private function validationRules(): array
+    {
+        return [
+            'nom'            => 'nullable|string|max:255|required_without:raison_sociale',
+            'prenom'         => 'nullable|string|max:255|required_without:raison_sociale',
+            'raison_sociale' => 'nullable|string|max:255',
+            'email'          => 'nullable|email:rfc,dns|max:255',
+            'phone'          => ['nullable', 'string', 'max:25', 'regex:/^[+0-9][0-9\s\-().]{5,24}$/'],
+            'code_pays'      => ['nullable', Rule::in(array_keys(static::supportedPays()))],
+            'ville'          => 'nullable|string|max:100',
+            'adresse'        => 'nullable|string',
+            'type'           => ['required', Rule::enum(PrestataireType::class)],
+            'notes'          => 'nullable|string',
+            'is_active'      => 'boolean',
+        ];
     }
 
     public function destroy(Prestataire $prestataire): RedirectResponse

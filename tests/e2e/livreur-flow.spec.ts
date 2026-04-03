@@ -15,6 +15,27 @@ test.setTimeout(180_000);
 
 registerCleanup('/livreurs', PREFIX);
 
+async function findRowByName(
+    page: Parameters<typeof login>[0],
+    name: string,
+) {
+    const search = getVisibleSearchInput(page);
+    await search.fill(name);
+    return page
+        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(name), 'i') })
+        .first();
+}
+
+async function navigateToEdit(
+    page: Parameters<typeof login>[0],
+    name: string,
+): Promise<void> {
+    const row = await findRowByName(page, name);
+    await openRowActions(row);
+    await page.getByRole('menuitem', { name: /modifier/i }).first().click();
+    await expect(page).toHaveURL(/\/livreurs\/\d+\/edit$/);
+}
+
 async function createLivreurInApp(
     page: Parameters<typeof login>[0],
     params: { prenom: string; nom: string; tel: string; adresse?: string },
@@ -75,19 +96,7 @@ test('edit livreur → update ville / adresse → data persists', async ({
 
     await login(page);
     await createLivreurInApp(page, { prenom, nom, tel, adresse: 'Adresse initiale' });
-
-    // Ouvrir l'édition
-    const search = getVisibleSearchInput(page);
-    await search.fill(prenom);
-    const row = page
-        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(prenom), 'i') })
-        .first();
-    await openRowActions(row);
-    await page
-        .getByRole('menuitem', { name: /modifier/i })
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/livreurs\/\d+\/edit$/);
+    await navigateToEdit(page, prenom);
 
     // Modifier ville et adresse
     await page.locator('#ville').clear();
@@ -125,21 +134,12 @@ test('create livreur + toggle status → inactif in list', async ({ page }) => {
     await login(page);
     await createLivreurInApp(page, { prenom, nom, tel });
 
-    const search = getVisibleSearchInput(page);
-    await search.fill(prenom);
-    const row = page
-        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(prenom), 'i') })
-        .first();
+    const row = await findRowByName(page, prenom);
     await expect(row).toBeVisible();
     await expect(row).toContainText(/actif/i);
 
     // Modifier → désactiver
-    await openRowActions(row);
-    await page
-        .getByRole('menuitem', { name: /modifier/i })
-        .first()
-        .click();
-    await expect(page).toHaveURL(/\/livreurs\/\d+\/edit$/);
+    await navigateToEdit(page, prenom);
 
     await page.locator('label[for="is_active"]').first().click();
     await page
@@ -150,11 +150,7 @@ test('create livreur + toggle status → inactif in list', async ({ page }) => {
     await expect(page).toHaveURL(/\/livreurs\/\d+\/edit$/, { timeout: 15_000 });
 
     await page.goto('/livreurs');
-    const search2 = getVisibleSearchInput(page);
-    await search2.fill(prenom);
-    const updated = page
-        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(prenom), 'i') })
-        .first();
+    const updated = await findRowByName(page, prenom);
     await expect(updated).toBeVisible();
     await expect(updated).toContainText(/inactif/i);
 });

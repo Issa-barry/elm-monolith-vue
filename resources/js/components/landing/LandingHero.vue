@@ -50,8 +50,8 @@ import Button from 'primevue/button';
             </div>
             <div class="flex-1 overflow-hidden text-center lg:text-right">
                 <img
-                    src="https://fqjltiegiezfetthbags.supabase.co/storage/v1/render/image/public/block.images/blocks/hero/Illustrations.svg"
-                    alt="Hero illustration"
+                    src="/images/landing-water-illustration.svg"
+                    alt="Illustration eau minerale et distribution"
                     class="mx-auto w-full max-w-md lg:mr-0 lg:ml-auto lg:w-auto lg:max-w-xl"
                 />
             </div>
