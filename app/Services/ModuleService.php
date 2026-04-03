@@ -32,12 +32,11 @@ class ModuleService
 
     /**
      * Retourne l'organisation "publique" utilisee avant authentification.
-     * On prend la premiere organisation active.
+     * On prend la premiere organisation disponible.
      */
     public static function publicOrganization(): ?Organization
     {
         return Organization::query()
-            ->where('is_active', true)
             ->orderBy('id')
             ->first();
     }

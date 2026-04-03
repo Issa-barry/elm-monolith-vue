@@ -28,6 +28,26 @@ class RegistrationTest extends TestCase
         $this->get(route('register'))->assertStatus(404);
     }
 
+    public function test_login_page_hides_register_link_when_inscription_is_disabled(): void
+    {
+        $org = Organization::factory()->create();
+        Feature::for($org)->deactivate(ModuleFeature::INSCRIPTION);
+
+        $this->get(route('login'))
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page->where('canRegister', false));
+    }
+
+    public function test_home_page_hides_register_button_when_inscription_is_disabled(): void
+    {
+        $org = Organization::factory()->create();
+        Feature::for($org)->deactivate(ModuleFeature::INSCRIPTION);
+
+        $this->get(route('home'))
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page->where('canRegister', false));
+    }
+
     public function test_authenticated_user_cannot_access_register(): void
     {
         $user = User::factory()->create();
