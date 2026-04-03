@@ -146,4 +146,4 @@ php artisan migrate:fresh --seed
 php artisan optimize:clear
 php artisan optimize
 
-brache feature 3
+brache feature
