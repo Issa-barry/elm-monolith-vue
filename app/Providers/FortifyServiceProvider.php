@@ -3,10 +3,10 @@
 namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
-use App\Features\ModuleFeature;
 use App\Actions\Fortify\ResetUserPassword;
-use App\Services\ModuleService;
+use App\Features\ModuleFeature;
 use App\Models\User;
+use App\Services\ModuleService;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
