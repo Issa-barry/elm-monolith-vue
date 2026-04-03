@@ -58,7 +58,7 @@ class AppVersion
 
     private static function gitVersion(): ?string
     {
-        if (!is_dir(base_path('.git')) || !function_exists('exec')) {
+        if (! is_dir(base_path('.git')) || ! function_exists('exec')) {
             return null;
         }
 
