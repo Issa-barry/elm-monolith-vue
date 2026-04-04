@@ -18,6 +18,7 @@ class FactureVenteController extends Controller
 
         $orgId = auth()->user()->organization_id;
         $periode = $request->input('periode', 'today');
+        $statut = $request->input('statut', 'tous');
 
         $query = FactureVente::with([
             'commande.vehicule',
@@ -36,6 +37,10 @@ class FactureVenteController extends Controller
                 ->whereMonth('created_at', Carbon::now()->month),
             default => null, // 'all' : pas de filtre date
         };
+
+        if ($statut !== 'tous') {
+            $query->where('statut_facture', $statut);
+        }
 
         $factures = $query->orderByDesc('created_at')
             ->get()
@@ -80,6 +85,7 @@ class FactureVenteController extends Controller
             'totaux' => $totaux,
             'modes_paiement' => ModePaiement::options(),
             'periode' => $periode,
+            'statut' => $statut,
         ]);
     }
 }
