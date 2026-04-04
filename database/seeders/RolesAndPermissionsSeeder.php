@@ -170,7 +170,9 @@ class RolesAndPermissionsSeeder extends Seeder
                 ? ['telephone' => $data['telephone']]
                 : ['prenom' => $data['prenom'], 'nom' => $data['nom']];
 
-            $user = User::firstOrCreate($lookup, [
+            // updateOrCreate garantit que le mot de passe est toujours réinitialisé
+            // lors d'un re-seed, même si le compte existe déjà.
+            $user = User::updateOrCreate($lookup, [
                 'prenom' => $data['prenom'],
                 'nom' => $data['nom'],
                 'telephone' => $data['telephone'],
@@ -181,10 +183,6 @@ class RolesAndPermissionsSeeder extends Seeder
                 'password' => Hash::make(self::PASSWORD),
                 'organization_id' => $org->id,
             ]);
-
-            if ($user->organization_id === null) {
-                $user->update(['organization_id' => $org->id]);
-            }
 
             $user->syncRoles([$data['role']]);
         }

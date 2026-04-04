@@ -10,11 +10,11 @@ import {
     ArrowLeft,
     BadgeCheck,
     Car,
-    Clock,
     HandCoins,
     Hourglass,
     MapPin,
     Search,
+    Sigma,
     User,
     X,
 } from 'lucide-vue-next';
@@ -44,6 +44,7 @@ interface CommissionItem {
     vehicule_nom: string | null;
     immatriculation: string | null;
     livreur_nom: string | null;
+    proprietaire_nom: string | null;
     taux_commission: number;
     taux_commission_proprietaire: number;
     montant_commande: number;
@@ -121,6 +122,12 @@ function setPeriode(p: string) {
     );
 }
 
+// Total de toutes les commissions du résultat courant (avant filtre local)
+const totalCommissions = computed(() =>
+    props.commissions.reduce((sum, c) => sum + c.montant_commission, 0),
+);
+const nbTotalCommissions = computed(() => props.commissions.length);
+
 const commissionsFiltrees = computed(() => {
     let list = props.commissions;
 
@@ -138,6 +145,7 @@ const commissionsFiltrees = computed(() => {
                 (c.immatriculation &&
                     c.immatriculation.toLowerCase().includes(q)) ||
                 (c.livreur_nom && c.livreur_nom.toLowerCase().includes(q)) ||
+                (c.proprietaire_nom && c.proprietaire_nom.toLowerCase().includes(q)) ||
                 (c.site_nom && c.site_nom.toLowerCase().includes(q)),
         );
     }
@@ -161,19 +169,12 @@ const mobileFiltered = computed(() => {
                 c.commande_reference.toLowerCase().includes(q)) ||
             (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
             (c.livreur_nom && c.livreur_nom.toLowerCase().includes(q)) ||
+            (c.proprietaire_nom && c.proprietaire_nom.toLowerCase().includes(q)) ||
             (c.immatriculation && c.immatriculation.toLowerCase().includes(q)),
     );
 });
 
 // -- Couleurs statut -----------------------------------------------------------
-const statutColor: Record<string, string> = {
-    en_attente:
-        'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-    partielle: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    versee: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    annulee: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
-};
-
 const statutDotColor: Record<string, string> = {
     en_attente: 'bg-amber-500',
     partielle: 'bg-blue-500',
@@ -186,17 +187,6 @@ function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
 
-function formatCompact(val: number): string {
-    if (val >= 1_000_000) {
-        const n = val / 1_000_000;
-        return (Number.isInteger(n) ? n : n.toFixed(1)) + 'M GNF';
-    }
-    if (val >= 1_000) {
-        const n = val / 1_000;
-        return (Number.isInteger(n) ? n : n.toFixed(1)) + 'K GNF';
-    }
-    return val + ' GNF';
-}
 
 // -- Dialog versement ----------------------------------------------------------
 const dialogVisible = ref(false);
@@ -369,7 +359,7 @@ function submitVersementProprietaire() {
                     <p
                         class="mt-1 text-lg font-bold text-amber-600 tabular-nums dark:text-amber-400"
                     >
-                        {{ formatCompact(totaux.total_a_verser) }}
+                        {{ formatGNF(totaux.total_a_verser) }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
@@ -377,7 +367,7 @@ function submitVersementProprietaire() {
                     <p
                         class="mt-1 text-lg font-bold text-amber-600 tabular-nums dark:text-amber-400"
                     >
-                        {{ formatCompact(totaux.montant_en_attente) }}
+                        {{ formatGNF(totaux.montant_en_attente) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
                         {{ totaux.nb_en_attente }} commission{{
@@ -390,7 +380,7 @@ function submitVersementProprietaire() {
                     <p
                         class="mt-1 text-lg font-bold text-blue-600 tabular-nums dark:text-blue-400"
                     >
-                        {{ formatCompact(totaux.montant_partielles) }}
+                        {{ formatGNF(totaux.montant_partielles) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
                         {{ totaux.nb_partielles }} commission{{
@@ -403,7 +393,7 @@ function submitVersementProprietaire() {
                     <p
                         class="mt-1 text-lg font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
                     >
-                        {{ formatCompact(totaux.montant_versees) }}
+                        {{ formatGNF(totaux.montant_versees) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
                         {{ totaux.nb_versees }} commission{{
@@ -519,14 +509,29 @@ function submitVersementProprietaire() {
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <div class="flex items-center justify-between">
                         <p class="text-sm text-muted-foreground">
+                            Total commissions
+                        </p>
+                        <Sigma class="h-4 w-4 text-primary" />
+                    </div>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">
+                        {{ formatGNF(totalCommissions) }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ nbTotalCommissions }} commission{{
+                            nbTotalCommissions > 1 ? 's' : ''
+                        }}
+                    </p>
+                </div>
+
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <div class="flex items-center justify-between">
+                        <p class="text-sm text-muted-foreground">
                             Restant a verser
                         </p>
                         <HandCoins class="h-4 w-4 text-muted-foreground" />
                     </div>
-                    <p
-                        class="mt-2 text-2xl font-bold text-amber-600 tabular-nums dark:text-amber-400"
-                    >
-                        {{ formatCompact(totaux.total_a_verser) }}
+                    <p class="mt-2 text-2xl font-bold tabular-nums">
+                        {{ formatGNF(totaux.total_a_verser) }}
                     </p>
                 </div>
 
@@ -535,33 +540,12 @@ function submitVersementProprietaire() {
                         <p class="text-sm text-muted-foreground">En attente</p>
                         <Hourglass class="h-4 w-4 text-amber-500" />
                     </div>
-                    <p
-                        class="mt-2 text-2xl font-bold text-amber-600 tabular-nums dark:text-amber-400"
-                    >
-                        {{ formatCompact(totaux.montant_en_attente) }}
+                    <p class="mt-2 text-2xl font-bold tabular-nums">
+                        {{ formatGNF(totaux.montant_en_attente) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
                         {{ totaux.nb_en_attente }} commission{{
                             totaux.nb_en_attente > 1 ? 's' : ''
-                        }}
-                    </p>
-                </div>
-
-                <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <div class="flex items-center justify-between">
-                        <p class="text-sm text-muted-foreground">
-                            Partiellement versees
-                        </p>
-                        <Clock class="h-4 w-4 text-blue-500" />
-                    </div>
-                    <p
-                        class="mt-2 text-2xl font-bold text-blue-600 tabular-nums dark:text-blue-400"
-                    >
-                        {{ formatCompact(totaux.montant_partielles) }}
-                    </p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ totaux.nb_partielles }} commission{{
-                            totaux.nb_partielles > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -574,7 +558,7 @@ function submitVersementProprietaire() {
                     <p
                         class="mt-2 text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
                     >
-                        {{ formatCompact(totaux.montant_versees) }}
+                        {{ formatGNF(totaux.montant_versees) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
                         {{ totaux.nb_versees }} commission{{
@@ -631,7 +615,7 @@ function submitVersementProprietaire() {
             </div>
 
             <!-- Tableau -->
-            <div class="rounded-xl border bg-card">
+            <div class="overflow-hidden rounded-xl border bg-card">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
@@ -654,12 +638,12 @@ function submitVersementProprietaire() {
                                 <th
                                     class="px-4 py-3 text-left font-medium text-muted-foreground"
                                 >
-                                    Site
+                                    Proprietaire
                                 </th>
                                 <th
-                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
                                 >
-                                    Commande
+                                    Site
                                 </th>
                                 <th
                                     class="px-4 py-3 text-right font-medium text-muted-foreground"
@@ -677,14 +661,9 @@ function submitVersementProprietaire() {
                                     Restant
                                 </th>
                                 <th
-                                    class="px-4 py-3 text-center font-medium text-muted-foreground"
-                                >
-                                    Statut
-                                </th>
-                                <th
                                     class="px-4 py-3 text-left font-medium text-muted-foreground"
                                 >
-                                    Date
+                                    Statut
                                 </th>
                                 <th
                                     v-if="can('ventes.update')"
@@ -718,8 +697,11 @@ function submitVersementProprietaire() {
                                         {{ c.immatriculation }}
                                     </div>
                                 </td>
-                                <td class="px-4 py-3 font-medium">
+                                <td class="px-4 py-3 text-muted-foreground">
                                     {{ c.livreur_nom ?? '-' }}
+                                </td>
+                                <td class="px-4 py-3 text-muted-foreground">
+                                    {{ c.proprietaire_nom ?? '-' }}
                                 </td>
                                 <td class="px-4 py-3 text-muted-foreground">
                                     {{ c.site_nom ?? '-' }}
@@ -727,15 +709,10 @@ function submitVersementProprietaire() {
                                 <td
                                     class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                 >
-                                    {{ formatGNF(c.montant_commande) }}
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-right font-semibold tabular-nums"
-                                >
                                     {{ formatGNF(c.montant_commission) }}
                                 </td>
                                 <td
-                                    class="px-4 py-3 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
+                                    class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                 >
                                     {{
                                         c.montant_verse > 0
@@ -747,7 +724,7 @@ function submitVersementProprietaire() {
                                     class="px-4 py-3 text-right tabular-nums"
                                     :class="
                                         c.montant_restant > 0
-                                            ? 'font-semibold text-amber-600 dark:text-amber-400'
+                                            ? 'font-medium text-foreground'
                                             : 'text-muted-foreground'
                                     "
                                 >
@@ -757,21 +734,15 @@ function submitVersementProprietaire() {
                                             : '-'
                                     }}
                                 </td>
-                                <td class="px-4 py-3 text-center">
-                                    <span
-                                        class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                        :class="
-                                            statutColor[c.statut] ??
-                                            'bg-muted text-muted-foreground'
+                                <td class="px-4 py-3">
+                                    <StatusDot
+                                        :label="c.statut_label"
+                                        :dot-class="
+                                            statutDotColor[c.statut] ??
+                                            'bg-zinc-400 dark:bg-zinc-500'
                                         "
-                                    >
-                                        {{ c.statut_label }}
-                                    </span>
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-xs text-muted-foreground tabular-nums"
-                                >
-                                    {{ c.created_at }}
+                                        class="text-muted-foreground"
+                                    />
                                 </td>
                                 <td
                                     v-if="can('ventes.update')"
@@ -781,15 +752,15 @@ function submitVersementProprietaire() {
                                         v-if="!c.is_annulee && !c.is_versee"
                                         size="sm"
                                         variant="outline"
-                                        class="h-7 border-emerald-300 text-xs text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
+                                        class="h-7 text-xs"
                                         @click="openDialog(c)"
                                     >
-                                        <HandCoins class="mr-1.5 h-3.5 w-3.5" />
+                                        <HandCoins class="mr-1.5 h-3.5 w-3.5 text-primary" />
                                         Verser
                                     </Button>
                                     <span
                                         v-else-if="c.is_versee"
-                                        class="text-xs font-medium text-emerald-600 dark:text-emerald-400"
+                                        class="text-xs font-medium text-muted-foreground"
                                     >
                                         Versee
                                     </span>

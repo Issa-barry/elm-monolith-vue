@@ -20,7 +20,7 @@ class CommissionVenteController extends Controller
 
         $query = CommissionVente::with([
             'commande.site',
-            'vehicule',
+            'vehicule.proprietaire',
             'versements.creator',
         ])
             ->where('organization_id', $orgId);
@@ -42,6 +42,9 @@ class CommissionVenteController extends Controller
                 'vehicule_nom' => $c->vehicule?->nom_vehicule,
                 'immatriculation' => $c->vehicule?->immatriculation,
                 'livreur_nom' => $c->livreur_nom,
+                'proprietaire_nom' => $c->vehicule?->proprietaire
+                    ? trim(($c->vehicule->proprietaire->prenom ?? '').' '.($c->vehicule->proprietaire->nom ?? '')) ?: null
+                    : null,
                 'taux_commission' => (float) $c->taux_commission,
                 'taux_commission_proprietaire' => (float) $c->taux_commission_proprietaire,
                 'montant_commande' => (float) $c->montant_commande,

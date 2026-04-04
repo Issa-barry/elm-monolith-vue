@@ -7,12 +7,14 @@ use App\Actions\Fortify\ResetUserPassword;
 use App\Features\ModuleFeature;
 use App\Models\User;
 use App\Services\ModuleService;
+use App\Services\PhoneNormalizer;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
@@ -49,7 +51,15 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::createUsersUsing(CreateNewUser::class);
 
         Fortify::authenticateUsing(function (Request $request) {
-            $user = User::where('telephone', $request->telephone)->first();
+            $phone = PhoneNormalizer::normalize($request->input('telephone', ''));
+
+            if ($phone === null) {
+                throw ValidationException::withMessages([
+                    'telephone' => [__('auth.phone_format')],
+                ]);
+            }
+
+            $user = User::where('telephone', $phone)->first();
 
             if ($user && Hash::check($request->password, $user->password)) {
                 return $user;
