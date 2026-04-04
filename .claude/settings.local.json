@@ -61,7 +61,8 @@
       "Bash(vendor/bin/pint app/Actions/Fortify/CreateNewUser.php app/Providers/FortifyServiceProvider.php --test)",
       "Bash(vendor/bin/pint app/Actions/Fortify/CreateNewUser.php app/Providers/FortifyServiceProvider.php)",
       "Bash(vendor/bin/pint app/Http/Controllers/ProprietaireController.php tests/Feature/ProprietaireTest.php --test)",
-      "Bash(vendor/bin/pint app/Http/Controllers/PrestataireController.php --test)"
+      "Bash(vendor/bin/pint app/Http/Controllers/PrestataireController.php --test)",
+      "Bash(ls c:/laragon/www/elm-monolithe/.env*)"
     ]
   }
 }
