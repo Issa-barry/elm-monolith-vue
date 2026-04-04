@@ -19,7 +19,7 @@ class ClientSeeder extends Seeder
     {
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
-        Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
+        $clientRole = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
 
         $clients = [
             ['prenom' => 'Fatoumata', 'nom' => 'BALDE',   'telephone' => self::GN.'622345678'],
@@ -40,7 +40,8 @@ class ClientSeeder extends Seeder
                 ]
             );
 
-            $user->syncRoles(['client']);
+            // Idempotent: n'insère pas de doublon si le rôle est déjà attaché.
+            $user->roles()->syncWithoutDetaching([$clientRole->id]);
         }
 
         $this->command->newLine();
