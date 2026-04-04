@@ -60,6 +60,7 @@ const props = defineProps<{
     totaux: Totaux;
     modes_paiement: ModePaiementOption[];
     periode: string;
+    statut: string;
 }>();
 
 const { can } = usePermissions();
@@ -78,15 +79,12 @@ const periodes = [
 ];
 
 function setPeriode(p: string) {
-    router.get(
-        '/factures',
-        { periode: p },
-        { preserveScroll: true, replace: true },
-    );
+    const params: Record<string, string> = { periode: p };
+    if (props.statut !== 'tous') params.statut = props.statut;
+    router.get('/factures', params, { preserveScroll: true, replace: true });
 }
 
-// ── Filtre par statut ────────────────────────────────────────────────────────
-const filtreStatut = ref<string>('tous');
+// ── Filtre par statut (server-driven) ────────────────────────────────────────
 const filtres = [
     { value: 'tous', label: 'Toutes' },
     { value: 'impayee', label: 'Impayées' },
@@ -95,27 +93,48 @@ const filtres = [
     { value: 'annulee', label: 'Annulées' },
 ];
 
+function setStatut(s: string) {
+    const params: Record<string, string> = { periode: props.periode };
+    if (s !== 'tous') params.statut = s;
+    router.get('/factures', params, { preserveScroll: true, replace: true });
+}
+
+// ── Recherche locale ──────────────────────────────────────────────────────────
 const search = ref('');
 
+// Applique uniquement la recherche (statut déjà filtré côté serveur)
 const facturesFiltrees = computed(() => {
-    let list = props.factures;
-
-    if (filtreStatut.value !== 'tous') {
-        list = list.filter((f) => f.statut_facture === filtreStatut.value);
-    }
-
     const q = search.value.toLowerCase().trim();
-    if (q) {
-        list = list.filter(
-            (f) =>
-                f.reference.toLowerCase().includes(q) ||
-                (f.vehicule_nom && f.vehicule_nom.toLowerCase().includes(q)) ||
-                (f.client_nom && f.client_nom.toLowerCase().includes(q)) ||
-                (f.site_nom && f.site_nom.toLowerCase().includes(q)),
-        );
-    }
+    if (!q) return props.factures;
+    return props.factures.filter(
+        (f) =>
+            f.reference.toLowerCase().includes(q) ||
+            (f.vehicule_nom && f.vehicule_nom.toLowerCase().includes(q)) ||
+            (f.client_nom && f.client_nom.toLowerCase().includes(q)) ||
+            (f.site_nom && f.site_nom.toLowerCase().includes(q)),
+    );
+});
 
-    return list;
+// Totaux recalculés depuis le dataset filtré (inclut la recherche locale)
+const totauxFiltres = computed(() => {
+    const list = facturesFiltrees.value;
+    const impayees = list.filter((f) => f.statut_facture === 'impayee');
+    const partielles = list.filter((f) => f.statut_facture === 'partiel');
+    const payees = list.filter((f) => f.statut_facture === 'payee');
+    return {
+        total_a_encaisser: list
+            .filter((f) => !['payee', 'annulee'].includes(f.statut_facture))
+            .reduce((sum, f) => sum + f.montant_restant, 0),
+        nb_impayees: impayees.length,
+        montant_impayees: impayees.reduce((s, f) => s + f.montant_restant, 0),
+        nb_partielles: partielles.length,
+        montant_partielles: partielles.reduce(
+            (s, f) => s + f.montant_restant,
+            0,
+        ),
+        nb_payees: payees.length,
+        montant_payees: payees.reduce((s, f) => s + f.montant_net, 0),
+    };
 });
 
 // ── Couleurs statut ───────────────────────────────────────────────────────────
@@ -148,12 +167,8 @@ const mobileSearch = ref('');
 
 const mobileFiltered = computed(() => {
     const q = mobileSearch.value.toLowerCase().trim();
-    let list = props.factures;
-    if (filtreStatut.value !== 'tous') {
-        list = list.filter((f) => f.statut_facture === filtreStatut.value);
-    }
-    if (!q) return list;
-    return list.filter(
+    if (!q) return props.factures;
+    return props.factures.filter(
         (f) =>
             f.reference.toLowerCase().includes(q) ||
             (f.vehicule_nom && f.vehicule_nom.toLowerCase().includes(q)) ||
@@ -231,7 +246,7 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-1 text-lg font-bold text-amber-600 tabular-nums dark:text-amber-400"
                     >
-                        {{ formatCompact(totaux.total_a_encaisser) }}
+                        {{ formatCompact(totauxFiltres.total_a_encaisser) }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
@@ -239,11 +254,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-1 text-lg font-bold text-amber-600 tabular-nums dark:text-amber-400"
                     >
-                        {{ formatCompact(totaux.montant_impayees) }}
+                        {{ formatCompact(totauxFiltres.montant_impayees) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        {{ totaux.nb_impayees }} facture{{
-                            totaux.nb_impayees > 1 ? 's' : ''
+                        {{ totauxFiltres.nb_impayees }} facture{{
+                            totauxFiltres.nb_impayees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -252,11 +267,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-1 text-lg font-bold text-blue-600 tabular-nums dark:text-blue-400"
                     >
-                        {{ formatCompact(totaux.montant_partielles) }}
+                        {{ formatCompact(totauxFiltres.montant_partielles) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        {{ totaux.nb_partielles }} facture{{
-                            totaux.nb_partielles > 1 ? 's' : ''
+                        {{ totauxFiltres.nb_partielles }} facture{{
+                            totauxFiltres.nb_partielles > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -265,11 +280,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-1 text-lg font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
                     >
-                        {{ formatCompact(totaux.montant_payees) }}
+                        {{ formatCompact(totauxFiltres.montant_payees) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        {{ totaux.nb_payees }} facture{{
-                            totaux.nb_payees > 1 ? 's' : ''
+                        {{ totauxFiltres.nb_payees }} facture{{
+                            totauxFiltres.nb_payees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -382,7 +397,7 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-2 text-2xl font-bold text-amber-600 tabular-nums dark:text-amber-400"
                     >
-                        {{ formatCompact(totaux.total_a_encaisser) }}
+                        {{ formatCompact(totauxFiltres.total_a_encaisser) }}
                     </p>
                 </div>
 
@@ -394,11 +409,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-2 text-2xl font-bold text-amber-600 tabular-nums dark:text-amber-400"
                     >
-                        {{ formatCompact(totaux.montant_impayees) }}
+                        {{ formatCompact(totauxFiltres.montant_impayees) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ totaux.nb_impayees }} facture{{
-                            totaux.nb_impayees > 1 ? 's' : ''
+                        {{ totauxFiltres.nb_impayees }} facture{{
+                            totauxFiltres.nb_impayees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -413,11 +428,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-2 text-2xl font-bold text-blue-600 tabular-nums dark:text-blue-400"
                     >
-                        {{ formatCompact(totaux.montant_partielles) }}
+                        {{ formatCompact(totauxFiltres.montant_partielles) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ totaux.nb_partielles }} facture{{
-                            totaux.nb_partielles > 1 ? 's' : ''
+                        {{ totauxFiltres.nb_partielles }} facture{{
+                            totauxFiltres.nb_partielles > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -430,11 +445,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-2 text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
                     >
-                        {{ formatCompact(totaux.montant_payees) }}
+                        {{ formatCompact(totauxFiltres.montant_payees) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ totaux.nb_payees }} facture{{
-                            totaux.nb_payees > 1 ? 's' : ''
+                        {{ totauxFiltres.nb_payees }} facture{{
+                            totauxFiltres.nb_payees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -469,10 +484,11 @@ function _progressPercent(f: FactureItem): number {
 
                     <!-- Statut dropdown -->
                     <Dropdown
-                        v-model="filtreStatut"
+                        :model-value="statut"
                         :options="filtres"
                         option-label="label"
                         option-value="value"
+                        @update:model-value="setStatut($event)"
                         class="w-36"
                     />
 
