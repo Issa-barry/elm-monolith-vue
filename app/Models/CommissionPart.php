@@ -20,6 +20,8 @@ class CommissionPart extends Model
         'taux_commission',
         'montant_brut',
         'frais_supplementaires',
+        'type_frais',
+        'commentaire_frais',
         'montant_net',
         'montant_verse',
         'statut',
@@ -110,10 +112,12 @@ class CommissionPart extends Model
     /**
      * Applique des frais et recalcule montant_net.
      */
-    public function appliquerFrais(float $frais): bool
+    public function appliquerFrais(float $frais, ?string $typeFrais = null, ?string $commentaireFrais = null): bool
     {
         $this->frais_supplementaires = max(0.0, $frais);
         $this->montant_net           = max(0.0, round((float) $this->montant_brut - $this->frais_supplementaires, 2));
+        $this->type_frais            = $frais > 0 ? $typeFrais : null;
+        $this->commentaire_frais     = ($frais > 0 && $typeFrais === 'autre') ? $commentaireFrais : null;
 
         return $this->save();
     }

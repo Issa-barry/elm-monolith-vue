@@ -113,6 +113,8 @@ class CommissionVenteController extends Controller
                 'taux_commission'       => (float) $p->taux_commission,
                 'montant_brut'          => (float) $p->montant_brut,
                 'frais_supplementaires' => (float) $p->frais_supplementaires,
+                'type_frais'            => $p->type_frais,
+                'commentaire_frais'     => $p->commentaire_frais,
                 'montant_net'           => (float) $p->montant_net,
                 'montant_verse'         => (float) $p->montant_verse,
                 'montant_restant'       => (float) $p->montant_restant,

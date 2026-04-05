@@ -37,6 +37,8 @@ interface CommissionPart {
     taux_commission: number;
     montant_brut: number;
     frais_supplementaires: number;
+    type_frais: string | null;
+    commentaire_frais: string | null;
     montant_net: number;
     montant_verse: number;
     montant_restant: number;
@@ -152,8 +154,22 @@ function submitVersement(part: CommissionPart) {
 
 // ── Frais supplémentaires (part propriétaire uniquement) ─────────────────────
 
+const typesFraisOptions = [
+    { value: 'carburant', label: 'Carburant' },
+    { value: 'reparation', label: 'Réparation' },
+    { value: 'autre', label: 'Autre' },
+];
+
+const typesFraisLabels: Record<string, string> = {
+    carburant: 'Carburant',
+    reparation: 'Réparation',
+    autre: 'Autre',
+};
+
 interface FraisForm {
     frais: number;
+    type_frais: string;
+    commentaire_frais: string;
     processing: boolean;
 }
 
@@ -164,6 +180,8 @@ function initFraisForms() {
         if (part.type_beneficiaire === 'proprietaire') {
             fraisForms[part.id] = {
                 frais: part.frais_supplementaires,
+                type_frais: part.type_frais ?? '',
+                commentaire_frais: part.commentaire_frais ?? '',
                 processing: false,
             };
         }
@@ -189,7 +207,11 @@ function saveFrais(part: CommissionPart) {
     f.processing = true;
     router.patch(
         `/commissions/${props.commission.id}/parts/${part.id}/frais`,
-        { frais_supplementaires: f.frais },
+        {
+            frais_supplementaires: f.frais,
+            type_frais: f.frais > 0 ? f.type_frais || null : null,
+            commentaire_frais: (f.frais > 0 && f.type_frais === 'autre') ? f.commentaire_frais : null,
+        },
         {
             preserveScroll: true,
             onFinish: () => { f.processing = false; },
@@ -318,8 +340,16 @@ const totalVersements = computed(() =>
                             </div>
                             <template v-if="part.type_beneficiaire === 'proprietaire' && part.frais_supplementaires > 0">
                                 <div>
-                                    <p class="text-xs text-muted-foreground">Frais</p>
+                                    <p class="text-xs text-muted-foreground">
+                                        Frais
+                                        <span v-if="part.type_frais" class="ml-1 font-normal">
+                                            ({{ typesFraisLabels[part.type_frais] ?? part.type_frais }})
+                                        </span>
+                                    </p>
                                     <p class="mt-0.5 font-semibold tabular-nums text-destructive">− {{ formatGNF(part.frais_supplementaires) }}</p>
+                                    <p v-if="part.commentaire_frais" class="mt-0.5 max-w-[180px] truncate text-xs text-muted-foreground/70" :title="part.commentaire_frais">
+                                        {{ part.commentaire_frais }}
+                                    </p>
                                 </div>
                                 <div>
                                     <p class="text-xs text-muted-foreground">Net</p>
@@ -342,9 +372,11 @@ const totalVersements = computed(() =>
                         <!-- Frais supplémentaires (propriétaire uniquement) -->
                         <div
                             v-if="part.type_beneficiaire === 'proprietaire' && !commission.is_annulee && can('ventes.update')"
-                            class="rounded-lg border bg-muted/20 p-4"
+                            class="rounded-lg border bg-muted/20 p-4 space-y-4"
                         >
-                            <p class="mb-3 text-xs font-semibold text-muted-foreground uppercase">Frais supplémentaires</p>
+                            <p class="text-xs font-semibold text-muted-foreground uppercase">Frais supplémentaires</p>
+
+                            <!-- Ligne montant -->
                             <div class="flex flex-wrap items-end gap-4">
                                 <div class="space-y-0.5">
                                     <p class="text-xs text-muted-foreground">Part brute</p>
@@ -367,16 +399,52 @@ const totalVersements = computed(() =>
                                     <p class="text-xs text-muted-foreground">Part nette</p>
                                     <p class="font-semibold tabular-nums">{{ formatGNF(fraisNettePreview(part)) }}</p>
                                 </div>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    class="h-9"
-                                    :disabled="fraisForms[part.id]?.processing"
-                                    @click="saveFrais(part)"
-                                >
-                                    Appliquer
-                                </Button>
                             </div>
+
+                            <!-- Type de frais (visible si montant > 0) -->
+                            <div v-if="fraisForms[part.id]?.frais > 0" class="space-y-3">
+                                <div>
+                                    <Label class="mb-1.5 block text-xs font-medium">
+                                        Type de frais <span class="text-destructive">*</span>
+                                    </Label>
+                                    <Dropdown
+                                        v-model="fraisForms[part.id].type_frais"
+                                        :options="typesFraisOptions"
+                                        option-label="label"
+                                        option-value="value"
+                                        placeholder="Sélectionner…"
+                                        class="w-full"
+                                    />
+                                </div>
+
+                                <!-- Commentaire obligatoire si type = autre -->
+                                <div v-if="fraisForms[part.id]?.type_frais === 'autre'">
+                                    <Label class="mb-1.5 block text-xs font-medium">
+                                        Commentaire <span class="text-destructive">*</span>
+                                        <span class="ml-1 font-normal text-muted-foreground">
+                                            ({{ (fraisForms[part.id]?.commentaire_frais ?? '').length }}/150)
+                                        </span>
+                                    </Label>
+                                    <InputText
+                                        v-model="fraisForms[part.id].commentaire_frais"
+                                        :maxlength="150"
+                                        placeholder="Précisez le motif des frais…"
+                                        class="w-full"
+                                    />
+                                </div>
+                            </div>
+
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-9"
+                                :disabled="fraisForms[part.id]?.processing
+                                    || (fraisForms[part.id]?.frais > 0 && !fraisForms[part.id]?.type_frais)
+                                    || (fraisForms[part.id]?.type_frais === 'autre' && !(fraisForms[part.id]?.commentaire_frais?.trim()))"
+                                @click="saveFrais(part)"
+                            >
+                                Appliquer
+                            </Button>
                         </div>
 
                         <!-- Formulaire versement -->

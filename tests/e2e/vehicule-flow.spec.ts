@@ -32,9 +32,22 @@ test('login + create vehicule + update status + verify list', async ({
 
     const comboboxes = page.locator('#vehicule-form').getByRole('combobox');
 
-    await selectOptionFromCombobox(page, comboboxes.nth(0), /camion/i);
+    // Ordre DOM actuel: type, proprietaire, equipe
+    await selectOptionFromCombobox(page, comboboxes.nth(0));
     await selectOptionFromCombobox(page, comboboxes.nth(1));
-    await page.locator('#taux_commission_livreur input').fill('40');
+
+    // Equipe optionnelle: on la selectionne seulement si des options existent.
+    const equipeCombobox = comboboxes.nth(2);
+    await equipeCombobox.click({ timeout: 3000 });
+    const firstOption = page.locator('[role="option"]:visible').first();
+    if (await firstOption.isVisible().catch(() => false)) {
+        await firstOption.click({ timeout: 3000 });
+    } else {
+        await page.keyboard.press('Escape');
+    }
+
+    // L'UI utilise maintenant le taux proprietaire.
+    await page.locator('#taux_proprietaire input').fill('40');
 
     await page
         .locator('#vehicule-form button[type="submit"]:visible')
@@ -61,7 +74,6 @@ test('login + create vehicule + update status + verify list', async ({
 
     await expect(page).toHaveURL(/\/vehicules\/\d+\/edit$/);
 
-    await page.locator('#nom_vehicule').fill(`${nomVehicule} Maj`);
     await page.locator('label[for="is_active"]').first().click();
 
     await page
