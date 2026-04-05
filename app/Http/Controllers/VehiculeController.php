@@ -44,7 +44,6 @@ class VehiculeController extends Controller
                 'taux_commission' => (float) $m->taux_commission,
             ])->values()->all(),
             'taux_commission_proprietaire' => (float) $v->taux_commission_proprietaire,
-            'commission_active'            => $v->commission_active,
             'pris_en_charge_par_usine'     => $v->pris_en_charge_par_usine,
             'photo_url'                    => $v->photo_url,
             'is_active'                    => $v->is_active,
@@ -95,14 +94,13 @@ class VehiculeController extends Controller
             'proprietaire_id'              => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
             'equipe_livraison_id'          => ['nullable', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
             'taux_commission_proprietaire' => 'nullable|numeric|min:0|max:100',
-            'commission_active'            => 'boolean',
             'pris_en_charge_par_usine'     => 'boolean',
             'photo'                        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active'                    => 'boolean',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
-        $this->validateTauxSiCommissionActive($data, $orgId);
+        $this->validateTauxSiEquipeAssignee($data, $orgId);
 
         if ($request->hasFile('photo')) {
             $data['photo_path'] = (new ImageService)->storeAsWebp($request->file('photo'), 'vehicules');
@@ -148,14 +146,13 @@ class VehiculeController extends Controller
             'proprietaire_id'              => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
             'equipe_livraison_id'          => ['nullable', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
             'taux_commission_proprietaire' => 'nullable|numeric|min:0|max:100',
-            'commission_active'            => 'boolean',
             'pris_en_charge_par_usine'     => 'boolean',
             'photo'                        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active'                    => 'boolean',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
-        $this->validateTauxSiCommissionActive($data, $orgId);
+        $this->validateTauxSiEquipeAssignee($data, $orgId);
 
         if ($request->hasFile('photo')) {
             $imageService = new ImageService;
@@ -215,12 +212,11 @@ class VehiculeController extends Controller
     }
 
     /**
-     * Si commission_active = true et une équipe est assignée,
-     * vérifie que taux_proprietaire + somme_membres = 100.
+     * Si une équipe est assignée, vérifie que taux_proprietaire + somme_membres = 100.
      */
-    private function validateTauxSiCommissionActive(array $data, int $orgId): void
+    private function validateTauxSiEquipeAssignee(array $data, int $orgId): void
     {
-        if (empty($data['commission_active']) || empty($data['equipe_livraison_id'])) {
+        if (empty($data['equipe_livraison_id'])) {
             return;
         }
 

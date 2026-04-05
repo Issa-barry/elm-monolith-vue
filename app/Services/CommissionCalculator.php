@@ -48,12 +48,6 @@ class CommissionCalculator
             throw new InvalidArgumentException('La commande ne possède pas de véhicule lié.');
         }
 
-        if (! $vehicule->commission_active) {
-            throw new InvalidArgumentException(
-                "Les commissions ne sont pas activées sur le véhicule « {$vehicule->nom_vehicule} »."
-            );
-        }
-
         if (! $vehicule->equipe) {
             throw new InvalidArgumentException(
                 "Le véhicule « {$vehicule->nom_vehicule} » n'a pas d'équipe de livraison assignée."

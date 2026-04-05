@@ -40,7 +40,6 @@ const form = useForm({
     capacite_packs: null as number | null,
     proprietaire_id: null as number | null,
     equipe_livraison_id: null as number | null,
-    commission_active: false,
     pris_en_charge_par_usine: false,
     taux_commission_proprietaire: null as number | null,
     photo: null as File | null,

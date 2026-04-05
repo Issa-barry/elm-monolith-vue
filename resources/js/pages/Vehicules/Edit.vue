@@ -29,7 +29,6 @@ interface VehiculeData {
     capacite_packs: number | null;
     proprietaire_id: number | null;
     equipe_livraison_id: number | null;
-    commission_active: boolean;
     pris_en_charge_par_usine: boolean;
     taux_commission_proprietaire: number | null;
     photo_url: string | null;
@@ -57,7 +56,6 @@ const form = useForm({
     capacite_packs: props.vehicule.capacite_packs,
     proprietaire_id: props.vehicule.proprietaire_id,
     equipe_livraison_id: props.vehicule.equipe_livraison_id,
-    commission_active: props.vehicule.commission_active,
     pris_en_charge_par_usine: props.vehicule.pris_en_charge_par_usine,
     taux_commission_proprietaire: props.vehicule.taux_commission_proprietaire,
     photo: null as File | null,

@@ -33,7 +33,6 @@ interface FormData {
     proprietaire_id: number | null;
     equipe_livraison_id: number | null;
     taux_commission_proprietaire: number | null;
-    commission_active: boolean;
     pris_en_charge_par_usine: boolean;
     photo: File | null;
     is_active: boolean;
@@ -265,18 +264,6 @@ const totalTaux = computed(() => {
             <div class="grid gap-5 sm:grid-cols-2">
                 <div class="flex items-start gap-3 sm:col-span-2">
                     <Checkbox
-                        id="commission_active"
-                        :model-value="Boolean(form.commission_active)"
-                        @update:model-value="$emit('update:form', { ...form, commission_active: $event === true })"
-                    />
-                    <div>
-                        <Label for="commission_active" class="cursor-pointer font-medium">Commissions activées</Label>
-                        <p class="text-xs text-muted-foreground">Génère des commissions à chaque facture payée</p>
-                    </div>
-                </div>
-
-                <div class="flex items-start gap-3 sm:col-span-2">
-                    <Checkbox
                         id="pris_en_charge_par_usine"
                         :model-value="Boolean(form.pris_en_charge_par_usine)"
                         @update:model-value="$emit('update:form', { ...form, pris_en_charge_par_usine: $event === true })"
@@ -303,7 +290,7 @@ const totalTaux = computed(() => {
                         class="w-full"
                     />
                     <p
-                        v-if="selectedEquipe && form.commission_active"
+                        v-if="selectedEquipe"
                         class="mt-1 text-xs"
                         :class="Math.abs(totalTaux - 100) > 0.01 ? 'text-destructive' : 'text-emerald-600'"
                     >

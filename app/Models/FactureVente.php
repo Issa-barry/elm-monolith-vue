@@ -3,14 +3,11 @@
 namespace App\Models;
 
 use App\Enums\StatutFactureVente;
-use App\Models\CommissionPart;
-use App\Services\CommissionCalculator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class FactureVente extends Model
@@ -37,8 +34,8 @@ class FactureVente extends Model
     protected function casts(): array
     {
         return [
-            'montant_brut' => 'decimal:2',
-            'montant_net' => 'decimal:2',
+            'montant_brut'   => 'decimal:2',
+            'montant_net'    => 'decimal:2',
             'statut_facture' => StatutFactureVente::class,
         ];
     }
@@ -65,8 +62,6 @@ class FactureVente extends Model
         });
     }
 
-    // ── Relations ─────────────────────────────────────────────────────────────
-
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
@@ -92,8 +87,6 @@ class FactureVente extends Model
         return $this->hasMany(EncaissementVente::class, 'facture_vente_id');
     }
 
-    // ── Accessors ─────────────────────────────────────────────────────────────
-
     public function getStatutLabelAttribute(): string
     {
         return $this->statut_facture instanceof StatutFactureVente ? $this->statut_facture->label() : '';
@@ -112,8 +105,6 @@ class FactureVente extends Model
     {
         return max(0, (float) $this->montant_net - $this->montant_encaisse);
     }
-
-    // ── Méthodes métier ───────────────────────────────────────────────────────
 
     public function isPayee(): bool
     {
@@ -144,69 +135,7 @@ class FactureVente extends Model
             $this->statut_facture = StatutFactureVente::PARTIEL;
         }
 
-        $saved = $this->saveQuietly();
-
-        // Générer la commission au moment où la facture devient PAYEE
-        if (! $etaitPayee && $this->isPayee()) {
-            $this->genererCommission();
-        }
-
-        return $saved;
-    }
-
-    private function genererCommission(): void
-    {
-        $this->load('commande.vehicule.equipe.membres.livreur', 'commande.vehicule.proprietaire', 'commande.lignes');
-        $commande = $this->commande;
-
-        if (! $commande || ! $commande->vehicule_id) {
-            return;
-        }
-
-        // Ne pas créer en doublon
-        if (CommissionVente::where('commande_vente_id', $commande->id)->exists()) {
-            return;
-        }
-
-        try {
-            $calc = CommissionCalculator::fromCommande($commande);
-        } catch (\InvalidArgumentException $e) {
-            Log::warning('Commission non générée : '.$e->getMessage(), [
-                'commande_id' => $commande->id,
-                'facture_id'  => $this->id,
-            ]);
-
-            return;
-        }
-
-        $vehicule = $commande->vehicule;
-
-        // Créer l'entête commission
-        $commission = CommissionVente::create([
-            'organization_id'          => $commande->organization_id,
-            'commande_vente_id'        => $commande->id,
-            'vehicule_id'              => $vehicule->id,
-            'montant_commande'         => (float) $commande->total_commande,
-            'montant_commission_totale'=> $calc['commission_totale'],
-            'montant_verse'            => 0,
-            'statut'                   => 'en_attente',
-        ]);
-
-        // Créer une part par bénéficiaire (membres équipe + propriétaire)
-        foreach ($calc['parts'] as $part) {
-            CommissionPart::create([
-                'commission_vente_id'   => $commission->id,
-                'type_beneficiaire'     => $part['type_beneficiaire'],
-                'livreur_id'            => $part['livreur_id'],
-                'proprietaire_id'       => $part['proprietaire_id'],
-                'beneficiaire_nom'      => $part['beneficiaire_nom'],
-                'taux_commission'       => $part['taux_commission'],
-                'montant_brut'          => $part['montant_brut'],
-                'frais_supplementaires' => $part['frais_supplementaires'],
-                'montant_net'           => $part['montant_net'],
-                'montant_verse'         => 0,
-                'statut'                => 'en_attente',
-            ]);
-        }
+        return $this->saveQuietly();
     }
 }
+

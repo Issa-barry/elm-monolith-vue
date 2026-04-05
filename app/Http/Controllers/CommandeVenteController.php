@@ -13,6 +13,7 @@ use App\Models\FactureVente;
 use App\Models\Produit;
 use App\Models\Site;
 use App\Models\Vehicule;
+use App\Services\CommissionGenerator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -191,6 +192,11 @@ class CommandeVenteController extends Controller
             'montant_net' => $totalCommande,
         ]);
 
+        $commande->loadMissing('vehicule');
+        if ($commande->vehicule) {
+            CommissionGenerator::generateForCommandeIfMissing($commande, null, 'commande_creee');
+        }
+
         return redirect()->route('ventes.show', $commande)
             ->with('success', 'Commande créée avec succès.');
     }
@@ -306,3 +312,4 @@ class CommandeVenteController extends Controller
             ->with('success', 'Commande supprimée.');
     }
 }
+

@@ -22,7 +22,6 @@ return new class extends Migration
             $table->foreignId('equipe_livraison_id')->nullable()->constrained('equipes_livraison')->nullOnDelete();
             // Taux propriétaire : sa part sur la commission totale
             $table->decimal('taux_commission_proprietaire', 5, 2)->default(0);
-            $table->boolean('commission_active')->default(false);
             $table->boolean('pris_en_charge_par_usine')->default(false);
             $table->string('photo_path')->nullable();
             $table->boolean('is_active')->default(true);
