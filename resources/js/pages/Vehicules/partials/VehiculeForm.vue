@@ -2,7 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Save, Upload, X } from 'lucide-vue-next';
+import { Lock, Save, Upload, X } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
@@ -47,6 +47,7 @@ const props = defineProps<{
     equipes: EquipeOption[];
     types: TypeOption[];
     photoUrl?: string | null;
+    affectationFirst?: boolean;
 }>();
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
@@ -67,6 +68,13 @@ function onTypeChange(value: string) {
         ...props.form,
         type_vehicule: value,
         capacite_packs: type ? type.capacite_defaut : props.form.capacite_packs,
+    });
+}
+
+function onEquipeChange(value: number | null) {
+    emit('update:form', {
+        ...props.form,
+        equipe_livraison_id: value,
     });
 }
 
@@ -92,6 +100,8 @@ const selectedEquipe = computed(() =>
     props.equipes.find((e) => e.value === props.form.equipe_livraison_id),
 );
 
+const isAffectationFirst = computed(() => props.affectationFirst === true);
+
 // Taux restant pour le propriétaire = 100 - somme_taux_équipe
 const tauxRestantPourProprietaire = computed(() => {
     if (!selectedEquipe.value) return 100;
@@ -101,9 +111,11 @@ const tauxRestantPourProprietaire = computed(() => {
 // Quand l'équipe change, suggère automatiquement le taux propriétaire restant
 watch(
     () => props.form.equipe_livraison_id,
-    () => {
+    (equipeId) => {
+        const equipe = props.equipes.find((e) => e.value === equipeId);
         emit('update:form', {
             ...props.form,
+            nom_vehicule: equipe ? equipe.label : props.form.nom_vehicule,
             taux_commission_proprietaire: tauxRestantPourProprietaire.value,
         });
     },
@@ -119,24 +131,42 @@ const totalTaux = computed(() => {
 <template>
     <form
         id="vehicule-form"
-        class="space-y-4 sm:space-y-6"
+        class="flex flex-col gap-4 sm:gap-6"
         @submit.prevent="emit('submit')"
     >
         <!-- Identification -->
-        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div
+            :class="[
+                isAffectationFirst ? 'order-2' : 'order-1',
+                'rounded-xl border bg-card p-4 shadow-sm sm:p-6',
+            ]"
+        >
             <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">
                 Identification
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
-                    <Label for="nom_vehicule" class="mb-1.5 block">Nom <span class="text-destructive">*</span></Label>
-                    <InputText
-                        id="nom_vehicule"
-                        :model-value="form.nom_vehicule"
-                        @update:model-value="$emit('update:form', { ...form, nom_vehicule: String($event ?? '') })"
-                        class="w-full"
-                        :class="{ 'p-invalid': errors.nom_vehicule }"
-                    />
+                    <Label for="nom_vehicule" class="mb-1.5 block">Nom du v&eacute;hicule <span class="text-destructive">*</span></Label>
+                    <div class="relative">
+                        <InputText
+                            id="nom_vehicule"
+                            :model-value="form.nom_vehicule"
+                            @update:model-value="$emit('update:form', { ...form, nom_vehicule: String($event ?? '') })"
+                            :readonly="Boolean(selectedEquipe)"
+                            class="w-full"
+                            :class="[
+                                { 'p-invalid': errors.nom_vehicule },
+                                selectedEquipe ? 'bg-muted/60 pr-10 text-muted-foreground cursor-not-allowed' : '',
+                            ]"
+                        />
+                        <Lock
+                            v-if="selectedEquipe"
+                            class="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-muted-foreground/80"
+                        />
+                    </div>
+                    <p v-if="selectedEquipe" class="mt-1 text-xs text-muted-foreground">
+                        Nom de vehicule = Nom de l'equipe.
+                    </p>
                     <p v-if="errors.nom_vehicule" class="mt-1 text-xs text-destructive">{{ errors.nom_vehicule }}</p>
                 </div>
 
@@ -187,7 +217,12 @@ const totalTaux = computed(() => {
         </div>
 
         <!-- Affectation -->
-        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div
+            :class="[
+                isAffectationFirst ? 'order-1' : 'order-2',
+                'rounded-xl border bg-card p-4 shadow-sm sm:p-6',
+            ]"
+        >
             <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">Affectation</h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
@@ -209,7 +244,7 @@ const totalTaux = computed(() => {
                     <Label class="mb-1.5 block">Équipe de livraison</Label>
                     <Dropdown
                         :model-value="form.equipe_livraison_id"
-                        @update:model-value="$emit('update:form', { ...form, equipe_livraison_id: $event })"
+                        @update:model-value="onEquipeChange($event)"
                         :options="equipes"
                         option-label="label"
                         option-value="value"
@@ -225,7 +260,7 @@ const totalTaux = computed(() => {
         </div>
 
         <!-- Commission -->
-        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div class="order-3 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">Commission & Charges</h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div class="flex items-start gap-3 sm:col-span-2">
@@ -280,7 +315,7 @@ const totalTaux = computed(() => {
         </div>
 
         <!-- Photo -->
-        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div class="order-4 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">Photo</h3>
             <div class="flex items-start gap-6">
                 <div class="shrink-0">
@@ -305,7 +340,7 @@ const totalTaux = computed(() => {
         </div>
 
         <!-- Statut -->
-        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div class="order-5 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">Statut</h3>
             <div class="flex items-center gap-3">
                 <Checkbox
@@ -321,7 +356,7 @@ const totalTaux = computed(() => {
         </div>
 
         <!-- Pied -->
-        <div class="hidden items-center justify-between sm:flex">
+        <div class="order-6 hidden items-center justify-between sm:flex">
             <a href="/vehicules">
                 <Button type="button" variant="outline">Retour</Button>
             </a>
@@ -330,6 +365,6 @@ const totalTaux = computed(() => {
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
         </div>
-        <div class="h-20 sm:hidden" />
+        <div class="order-7 h-20 sm:hidden" />
     </form>
 </template>

@@ -95,8 +95,8 @@ function submit() {
             </div>
         </div>
 
-        <div class="mx-auto max-w-3xl pb-6 sm:p-6">
-            <div class="mx-auto hidden max-w-3xl px-6 pt-6 pb-0 sm:block">
+        <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
+            <div class="hidden sm:block">
                 <div class="mb-8">
                     <h1 class="text-2xl font-semibold tracking-tight">
                         Modifier le véhicule
