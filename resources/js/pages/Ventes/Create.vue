@@ -87,10 +87,6 @@ function searchVehicule(event: { query: string }) {
 
 function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
-    if (v) {
-        form.client_id = null;
-        clientSelected.value = null;
-    }
 }
 
 function onVehiculeClear() {
@@ -120,10 +116,6 @@ function searchClient(event: { query: string }) {
 
 function onClientSelect(c: ClientOption | null) {
     form.client_id = c?.id ?? null;
-    if (c) {
-        form.vehicule_id = null;
-        vehiculeSelected.value = null;
-    }
 }
 
 function onClientClear() {
@@ -279,14 +271,7 @@ function submit() {
                     >
                         Informations générales
                     </h2>
-                    <div
-                        class="grid gap-4"
-                        :class="
-                            form.vehicule_id || form.client_id
-                                ? 'sm:grid-cols-2'
-                                : 'sm:grid-cols-3'
-                        "
-                    >
+                    <div class="grid gap-4 sm:grid-cols-3">
                         <!-- Site -->
                         <div>
                             <Label class="mb-1.5 block text-sm"
@@ -313,15 +298,9 @@ function submit() {
                         </div>
 
                         <!-- Véhicule -->
-                        <div v-if="!form.client_id">
+                        <div>
                             <Label class="mb-1.5 block text-sm">
                                 Véhicule
-                                <span
-                                    v-if="!form.client_id"
-                                    class="text-destructive"
-                                >
-                                    *</span
-                                >
                             </Label>
                             <AutoComplete
                                 v-model="vehiculeSelected"
@@ -375,15 +354,9 @@ function submit() {
                         </div>
 
                         <!-- Client -->
-                        <div v-if="!form.vehicule_id">
+                        <div>
                             <Label class="mb-1.5 block text-sm">
                                 Client
-                                <span
-                                    v-if="!form.vehicule_id"
-                                    class="text-destructive"
-                                >
-                                    *</span
-                                >
                             </Label>
                             <AutoComplete
                                 v-model="clientSelected"

@@ -11,6 +11,7 @@ import {
     ChevronRight,
     HandCoins,
     Hourglass,
+    Phone,
     Search,
     Sigma,
     Truck,
@@ -30,6 +31,7 @@ interface PartItem {
     vehicule_nom: string | null;
     immatriculation: string | null;
     equipe_nom: string | null;
+    livreur_principal_telephone: string | null;
     type_beneficiaire: 'livreur' | 'proprietaire';
     beneficiaire_nom: string;
     taux_commission: number;
@@ -396,7 +398,7 @@ const tabSubtitle = computed(() =>
                                 <th class="px-4 py-3 text-left font-medium text-muted-foreground">Commande</th>
                                 <th class="px-4 py-3 text-left font-medium text-muted-foreground">Véhicule</th>
                                 <th class="px-4 py-3 text-left font-medium text-muted-foreground">
-                                    {{ tab === 'livreurs' ? 'Livreur / Équipe' : 'Propriétaire' }}
+                                    {{ tab === 'livreurs' ? 'Livreur' : 'Propriétaire' }}
                                 </th>
                                 <th class="px-4 py-3 text-right font-medium text-muted-foreground">Commission</th>
                                 <th class="px-4 py-3 text-right font-medium text-muted-foreground">Versé</th>
@@ -433,8 +435,10 @@ const tabSubtitle = computed(() =>
                                 <!-- Bénéficiaire -->
                                 <td class="px-4 py-3">
                                     <p class="font-medium">{{ p.beneficiaire_nom }}</p>
-                                    <p class="text-xs text-muted-foreground">{{ p.taux_commission }}%</p>
-                                    <p v-if="tab === 'livreurs' && p.equipe_nom" class="text-xs text-muted-foreground/70">{{ p.equipe_nom }}</p>
+                                    <p v-if="tab === 'livreurs' && p.livreur_principal_telephone" class="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                        <Phone class="h-3 w-3" />
+                                        {{ p.livreur_principal_telephone }}
+                                    </p>
                                 </td>
 
                                 <!-- Commission -->
@@ -453,7 +457,7 @@ const tabSubtitle = computed(() =>
 
                                 <!-- Restant -->
                                 <td class="px-4 py-3 text-right tabular-nums">
-                                    <span :class="p.montant_restant > 0 ? 'font-semibold text-amber-600 dark:text-amber-400' : 'text-muted-foreground'">
+                                    <span :class="p.montant_restant > 0 ? 'font-semibold text-foreground' : 'text-muted-foreground'">
                                         {{ formatGNF(p.montant_restant) }}
                                     </span>
                                 </td>

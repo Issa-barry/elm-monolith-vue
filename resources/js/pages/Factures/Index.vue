@@ -8,10 +8,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     ArrowLeft,
-    BadgeCheck,
-    Clock,
     CreditCard,
-    Hourglass,
     Search,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
@@ -244,7 +241,7 @@ function _progressPercent(f: FactureItem): number {
                         Restant à encaisser
                     </p>
                     <p
-                        class="mt-1 text-lg font-bold text-amber-600 tabular-nums dark:text-amber-400"
+                        class="mt-1 text-lg font-bold text-foreground tabular-nums"
                     >
                         {{ formatCompact(totauxFiltres.total_a_encaisser) }}
                     </p>
@@ -252,7 +249,7 @@ function _progressPercent(f: FactureItem): number {
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
                     <p class="text-xs text-muted-foreground">Impayées</p>
                     <p
-                        class="mt-1 text-lg font-bold text-amber-600 tabular-nums dark:text-amber-400"
+                        class="mt-1 text-lg font-bold text-foreground tabular-nums"
                     >
                         {{ formatCompact(totauxFiltres.montant_impayees) }}
                     </p>
@@ -265,7 +262,7 @@ function _progressPercent(f: FactureItem): number {
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
                     <p class="text-xs text-muted-foreground">Partielles</p>
                     <p
-                        class="mt-1 text-lg font-bold text-blue-600 tabular-nums dark:text-blue-400"
+                        class="mt-1 text-lg font-bold text-foreground tabular-nums"
                     >
                         {{ formatCompact(totauxFiltres.montant_partielles) }}
                     </p>
@@ -388,26 +385,20 @@ function _progressPercent(f: FactureItem): number {
             <!-- Cartes de synthèse -->
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <div class="flex items-center justify-between">
-                        <p class="text-sm text-muted-foreground">
-                            Restant à encaisser
-                        </p>
-                        <CreditCard class="h-4 w-4 text-muted-foreground" />
-                    </div>
+                    <p class="text-sm text-muted-foreground">
+                        Restant à encaisser
+                    </p>
                     <p
-                        class="mt-2 text-2xl font-bold text-amber-600 tabular-nums dark:text-amber-400"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
                         {{ formatCompact(totauxFiltres.total_a_encaisser) }}
                     </p>
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <div class="flex items-center justify-between">
-                        <p class="text-sm text-muted-foreground">Impayées</p>
-                        <Hourglass class="h-4 w-4 text-amber-500" />
-                    </div>
+                    <p class="text-sm text-muted-foreground">Impayées</p>
                     <p
-                        class="mt-2 text-2xl font-bold text-amber-600 tabular-nums dark:text-amber-400"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
                         {{ formatCompact(totauxFiltres.montant_impayees) }}
                     </p>
@@ -419,14 +410,11 @@ function _progressPercent(f: FactureItem): number {
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <div class="flex items-center justify-between">
-                        <p class="text-sm text-muted-foreground">
-                            Partiellement payées
-                        </p>
-                        <Clock class="h-4 w-4 text-blue-500" />
-                    </div>
+                    <p class="text-sm text-muted-foreground">
+                        Partiellement payées
+                    </p>
                     <p
-                        class="mt-2 text-2xl font-bold text-blue-600 tabular-nums dark:text-blue-400"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
                         {{ formatCompact(totauxFiltres.montant_partielles) }}
                     </p>
@@ -438,10 +426,7 @@ function _progressPercent(f: FactureItem): number {
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <div class="flex items-center justify-between">
-                        <p class="text-sm text-muted-foreground">Soldées</p>
-                        <BadgeCheck class="h-4 w-4 text-emerald-500" />
-                    </div>
+                    <p class="text-sm text-muted-foreground">Soldées</p>
                     <p
                         class="mt-2 text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
                     >

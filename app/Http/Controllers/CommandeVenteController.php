@@ -69,7 +69,7 @@ class CommandeVenteController extends Controller
                 'prix_usine' => (int) $p->prix_usine,
             ]);
 
-        $vehicules = Vehicule::with('livreurPrincipal')
+        $vehicules = Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'principal')])
             ->where('organization_id', $orgId)
             ->where('is_active', true)
             ->orderBy('nom_vehicule')
@@ -78,8 +78,8 @@ class CommandeVenteController extends Controller
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
-                'livreur_nom' => $v->livreurPrincipal
-                    ? trim($v->livreurPrincipal->prenom.' '.$v->livreurPrincipal->nom)
+                'livreur_nom' => ($l = $v->equipe?->livreurs->first())
+                    ? trim($l->prenom.' '.$l->nom)
                     : null,
             ]);
 

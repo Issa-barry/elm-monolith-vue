@@ -26,7 +26,7 @@ class DatabaseSeeder extends Seeder
             VehiculesSeeder::class,             // 7 véhicules (avec équipe assignée)
 
             // ── Module Commissions ────────────────────────────────────────────
-            CommissionsSeeder::class,           // 6 commissions : EN_ATTENTE / PARTIELLE / VERSÉE
+            // CommissionsSeeder::class,           // 6 commissions : EN_ATTENTE / PARTIELLE / VERSÉE
         ]);
     }
 }

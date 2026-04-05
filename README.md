@@ -1,4 +1,14 @@
 # Eau maman — Monolithe
+
+
+# magic 
+composer2 update
+php artisan migrate:fresh --seed
+php artisan optimize:clear
+php artisan optimize
+
+
+
 # Sur ton PC
 npm run build
 git add public/build

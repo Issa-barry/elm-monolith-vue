@@ -28,7 +28,12 @@ class CommissionVenteController extends Controller
         $typeBeneficiaire = $tab === 'proprietaires' ? 'proprietaire' : 'livreur';
 
         $query = CommissionPart::with([
-            'commission' => fn ($q) => $q->with(['commande.site', 'vehicule.equipe']),
+            'commission' => fn ($q) => $q->with([
+                'commande.site',
+                'vehicule.equipe.membres' => fn ($mq) => $mq
+                    ->where('role', 'principal')
+                    ->with('livreur:id,telephone'),
+            ]),
         ])
         ->whereHas('commission', function ($q) use ($orgId, $periode) {
             $q->where('organization_id', $orgId);
@@ -95,6 +100,7 @@ class CommissionVenteController extends Controller
     private function mapPart(CommissionPart $p): array
     {
         $commission = $p->commission;
+        $principalTelephone = $commission->vehicule?->equipe?->membres?->first()?->livreur?->telephone;
 
         return [
             'id'                    => $p->id,
@@ -105,6 +111,7 @@ class CommissionVenteController extends Controller
             'vehicule_nom'          => $commission->vehicule?->nom_vehicule,
             'immatriculation'       => $commission->vehicule?->immatriculation,
             'equipe_nom'            => $commission->vehicule?->equipe?->nom,
+            'livreur_principal_telephone' => $principalTelephone,
             'type_beneficiaire'     => $p->type_beneficiaire,
             'beneficiaire_nom'      => $p->beneficiaire_nom,
             'taux_commission'       => (float) $p->taux_commission,
