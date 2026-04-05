@@ -14,7 +14,7 @@ class RolesAndPermissionsSeeder extends Seeder
 {
     private const RESOURCES = [
         'clients', 'prestataires', 'livreurs', 'proprietaires',
-        'vehicules', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres',
+        'vehicules', 'equipes-livraison', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres',
     ];
 
     private const ACTIONS = ['create', 'read', 'update', 'delete'];
@@ -43,41 +43,44 @@ class RolesAndPermissionsSeeder extends Seeder
         $superAdmin->syncPermissions(Permission::all());
 
         $adminEntreprise->syncPermissions([
-            'clients.create',      'clients.read',      'clients.update',      'clients.delete',
-            'prestataires.create', 'prestataires.read', 'prestataires.update', 'prestataires.delete',
-            'livreurs.create',     'livreurs.read',     'livreurs.update',     'livreurs.delete',
-            'proprietaires.create', 'proprietaires.read', 'proprietaires.update', 'proprietaires.delete',
-            'vehicules.create',    'vehicules.read',    'vehicules.update',    'vehicules.delete',
-            'sites.create',        'sites.read',        'sites.update',        'sites.delete',
-            'produits.create',     'produits.read',     'produits.update',     'produits.delete',
-            'packings.create',     'packings.read',     'packings.update',     'packings.delete',
-            'ventes.create',       'ventes.read',       'ventes.update',       'ventes.delete',
-            'achats.create',       'achats.read',       'achats.update',       'achats.delete',
-            'users.create',        'users.read',        'users.update',
-            'parametres.read',     'parametres.update',
+            'clients.create',           'clients.read',           'clients.update',           'clients.delete',
+            'prestataires.create',      'prestataires.read',      'prestataires.update',      'prestataires.delete',
+            'livreurs.create',          'livreurs.read',          'livreurs.update',          'livreurs.delete',
+            'proprietaires.create',     'proprietaires.read',     'proprietaires.update',     'proprietaires.delete',
+            'vehicules.create',         'vehicules.read',         'vehicules.update',         'vehicules.delete',
+            'equipes-livraison.create', 'equipes-livraison.read', 'equipes-livraison.update', 'equipes-livraison.delete',
+            'sites.create',             'sites.read',             'sites.update',             'sites.delete',
+            'produits.create',          'produits.read',          'produits.update',          'produits.delete',
+            'packings.create',          'packings.read',          'packings.update',          'packings.delete',
+            'ventes.create',            'ventes.read',            'ventes.update',            'ventes.delete',
+            'achats.create',            'achats.read',            'achats.update',            'achats.delete',
+            'users.create',             'users.read',             'users.update',
+            'parametres.read',          'parametres.update',
         ]);
 
         $manager->syncPermissions([
-            'clients.create',      'clients.read',      'clients.update',
-            'prestataires.create', 'prestataires.read', 'prestataires.update',
-            'livreurs.create',     'livreurs.read',     'livreurs.update',
+            'clients.create',           'clients.read',           'clients.update',
+            'prestataires.create',      'prestataires.read',      'prestataires.update',
+            'livreurs.create',          'livreurs.read',          'livreurs.update',
             'proprietaires.read',
-            'vehicules.create',    'vehicules.read',    'vehicules.update',
-            'sites.create',        'sites.read',        'sites.update',
-            'produits.read',       'produits.create',   'produits.update',
-            'packings.read',       'packings.create',   'packings.update',
-            'ventes.create',       'ventes.read',       'ventes.update',
-            'achats.create',       'achats.read',       'achats.update',
+            'vehicules.create',         'vehicules.read',         'vehicules.update',
+            'equipes-livraison.create', 'equipes-livraison.read', 'equipes-livraison.update',
+            'sites.create',             'sites.read',             'sites.update',
+            'produits.read',            'produits.create',        'produits.update',
+            'packings.read',            'packings.create',        'packings.update',
+            'ventes.create',            'ventes.read',            'ventes.update',
+            'achats.create',            'achats.read',            'achats.update',
             'users.read',
             'parametres.read',
         ]);
 
         $commerciale->syncPermissions([
-            'clients.create',      'clients.read',      'clients.update',
-            'prestataires.create', 'prestataires.read', 'prestataires.update',
-            'livreurs.create',     'livreurs.read',     'livreurs.update',
+            'clients.create',      'clients.read',           'clients.update',
+            'prestataires.create', 'prestataires.read',      'prestataires.update',
+            'livreurs.create',     'livreurs.read',          'livreurs.update',
             'proprietaires.read',
-            'vehicules.create',    'vehicules.read',    'vehicules.update',
+            'vehicules.create',    'vehicules.read',         'vehicules.update',
+            'equipes-livraison.read',
             'sites.read',
             'produits.read',
             'packings.read',
@@ -85,9 +88,10 @@ class RolesAndPermissionsSeeder extends Seeder
         ]);
 
         $comptable->syncPermissions([
-            'clients.read',        'prestataires.read', 'livreurs.read',
-            'proprietaires.read',  'vehicules.read',    'sites.read',
-            'produits.read',       'packings.read',     'ventes.read',
+            'clients.read',           'prestataires.read',      'livreurs.read',
+            'proprietaires.read',     'vehicules.read',         'equipes-livraison.read',
+            'sites.read',             'produits.read',          'packings.read',
+            'ventes.read',
         ]);
 
         // ── 3. Organisation par défaut ────────────────────────────────────────

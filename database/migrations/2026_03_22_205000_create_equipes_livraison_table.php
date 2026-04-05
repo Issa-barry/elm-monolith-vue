@@ -8,23 +8,20 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('livreurs', function (Blueprint $table) {
+        Schema::create('equipes_livraison', function (Blueprint $table) {
             $table->id();
             $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
-            $table->string('nom');
-            $table->string('prenom');
-            $table->string('telephone', 30);
+            $table->string('nom', 100);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
 
-            // Unicité du téléphone par organisation (pas globale multi-org)
-            $table->unique(['telephone', 'organization_id']);
+            $table->index(['organization_id', 'is_active']);
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('livreurs');
+        Schema::dropIfExists('equipes_livraison');
     }
 };

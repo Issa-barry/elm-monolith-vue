@@ -12,6 +12,13 @@ interface Option {
     value: number | string;
     label: string;
 }
+
+interface EquipeOption {
+    value: number;
+    label: string;
+    somme_taux: number;
+}
+
 interface TypeOption {
     value: string;
     label: string;
@@ -24,10 +31,10 @@ interface FormData {
     type_vehicule: string | null;
     capacite_packs: number | null;
     proprietaire_id: number | null;
-    livreur_principal_id: number | null;
-    pris_en_charge_par_usine: boolean;
-    taux_commission_livreur: number | null;
+    equipe_livraison_id: number | null;
     taux_commission_proprietaire: number | null;
+    commission_active: boolean;
+    pris_en_charge_par_usine: boolean;
     photo: File | null;
     is_active: boolean;
 }
@@ -37,7 +44,7 @@ const props = defineProps<{
     errors: Partial<Record<keyof FormData, string>>;
     processing: boolean;
     proprietaires: Option[];
-    livreurs: Option[];
+    equipes: EquipeOption[];
     types: TypeOption[];
     photoUrl?: string | null;
 }>();
@@ -81,18 +88,32 @@ const selectedType = computed(() =>
     props.types.find((t) => t.value === props.form.type_vehicule),
 );
 
-// Taux propriétaire = 100 - taux livreur, calculé automatiquement
+const selectedEquipe = computed(() =>
+    props.equipes.find((e) => e.value === props.form.equipe_livraison_id),
+);
+
+// Taux restant pour le propriétaire = 100 - somme_taux_équipe
+const tauxRestantPourProprietaire = computed(() => {
+    if (!selectedEquipe.value) return 100;
+    return Math.max(0, 100 - selectedEquipe.value.somme_taux);
+});
+
+// Quand l'équipe change, suggère automatiquement le taux propriétaire restant
 watch(
-    () => props.form.taux_commission_livreur,
-    (taux) => {
-        const livreur = taux ?? 0;
-        const proprietaire = Math.max(0, 100 - livreur);
+    () => props.form.equipe_livraison_id,
+    () => {
         emit('update:form', {
             ...props.form,
-            taux_commission_proprietaire: proprietaire,
+            taux_commission_proprietaire: tauxRestantPourProprietaire.value,
         });
     },
 );
+
+const totalTaux = computed(() => {
+    const equipe = selectedEquipe.value?.somme_taux ?? 0;
+    const prop = props.form.taux_commission_proprietaire ?? 0;
+    return Math.round((equipe + prop) * 100) / 100;
+});
 </script>
 
 <template>
@@ -103,70 +124,37 @@ watch(
     >
         <!-- Identification -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
+            <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">
                 Identification
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
-                <!-- Nom -->
                 <div>
-                    <Label for="nom_vehicule" class="mb-1.5 block"
-                        >Nom du véhicule
-                        <span class="text-destructive">*</span></Label
-                    >
+                    <Label for="nom_vehicule" class="mb-1.5 block">Nom <span class="text-destructive">*</span></Label>
                     <InputText
                         id="nom_vehicule"
                         :model-value="form.nom_vehicule"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                nom_vehicule: String($event ?? ''),
-                            })
-                        "
+                        @update:model-value="$emit('update:form', { ...form, nom_vehicule: String($event ?? '') })"
                         class="w-full"
                         :class="{ 'p-invalid': errors.nom_vehicule }"
                     />
-                    <p
-                        v-if="errors.nom_vehicule"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ errors.nom_vehicule }}
-                    </p>
+                    <p v-if="errors.nom_vehicule" class="mt-1 text-xs text-destructive">{{ errors.nom_vehicule }}</p>
                 </div>
 
-                <!-- Immatriculation -->
                 <div>
-                    <Label for="immatriculation" class="mb-1.5 block"
-                        >Immatriculation
-                        <span class="text-destructive">*</span></Label
-                    >
+                    <Label for="immatriculation" class="mb-1.5 block">Immatriculation <span class="text-destructive">*</span></Label>
                     <InputText
                         id="immatriculation"
                         :model-value="form.immatriculation"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                immatriculation: String($event).toUpperCase(),
-                            })
-                        "
+                        @update:model-value="$emit('update:form', { ...form, immatriculation: String($event).toUpperCase() })"
                         class="w-full font-mono uppercase"
                         :class="{ 'p-invalid': errors.immatriculation }"
                         placeholder="EX-123-GN"
                     />
-                    <p
-                        v-if="errors.immatriculation"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ errors.immatriculation }}
-                    </p>
+                    <p v-if="errors.immatriculation" class="mt-1 text-xs text-destructive">{{ errors.immatriculation }}</p>
                 </div>
 
-                <!-- Type -->
                 <div>
-                    <Label class="mb-1.5 block"
-                        >Type <span class="text-destructive">*</span></Label
-                    >
+                    <Label class="mb-1.5 block">Type <span class="text-destructive">*</span></Label>
                     <Dropdown
                         :model-value="form.type_vehicule"
                         @update:model-value="onTypeChange($event)"
@@ -177,33 +165,18 @@ watch(
                         class="w-full"
                         :class="{ 'p-invalid': errors.type_vehicule }"
                     />
-                    <p
-                        v-if="errors.type_vehicule"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ errors.type_vehicule }}
-                    </p>
+                    <p v-if="errors.type_vehicule" class="mt-1 text-xs text-destructive">{{ errors.type_vehicule }}</p>
                 </div>
 
-                <!-- Capacité -->
                 <div>
                     <Label for="capacite_packs" class="mb-1.5 block">
                         Capacité (packs)
-                        <span
-                            v-if="selectedType"
-                            class="ml-1 text-xs text-muted-foreground"
-                            >défaut : {{ selectedType.capacite_defaut }}</span
-                        >
+                        <span v-if="selectedType" class="ml-1 text-xs text-muted-foreground">défaut : {{ selectedType.capacite_defaut }}</span>
                     </Label>
                     <InputNumber
                         id="capacite_packs"
                         :model-value="form.capacite_packs"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                capacite_packs: $event,
-                            })
-                        "
+                        @update:model-value="$emit('update:form', { ...form, capacite_packs: $event })"
                         :min="1"
                         :max="99999"
                         :use-grouping="false"
@@ -215,26 +188,13 @@ watch(
 
         <!-- Affectation -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
-                Affectation
-            </h3>
+            <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">Affectation</h3>
             <div class="grid gap-5 sm:grid-cols-2">
-                <!-- Propriétaire -->
                 <div>
-                    <Label class="mb-1.5 block"
-                        >Propriétaire
-                        <span class="text-destructive">*</span></Label
-                    >
+                    <Label class="mb-1.5 block">Propriétaire <span class="text-destructive">*</span></Label>
                     <Dropdown
                         :model-value="form.proprietaire_id"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                proprietaire_id: $event,
-                            })
-                        "
+                        @update:model-value="$emit('update:form', { ...form, proprietaire_id: $event })"
                         :options="proprietaires"
                         option-label="label"
                         option-value="value"
@@ -242,206 +202,120 @@ watch(
                         class="w-full"
                         :class="{ 'p-invalid': errors.proprietaire_id }"
                     />
-                    <p
-                        v-if="errors.proprietaire_id"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ errors.proprietaire_id }}
-                    </p>
+                    <p v-if="errors.proprietaire_id" class="mt-1 text-xs text-destructive">{{ errors.proprietaire_id }}</p>
                 </div>
 
-                <!-- Livreur principal -->
                 <div>
-                    <Label class="mb-1.5 block">Livreur principal</Label>
+                    <Label class="mb-1.5 block">Équipe de livraison</Label>
                     <Dropdown
-                        :model-value="form.livreur_principal_id"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                livreur_principal_id: $event,
-                            })
-                        "
-                        :options="livreurs"
+                        :model-value="form.equipe_livraison_id"
+                        @update:model-value="$emit('update:form', { ...form, equipe_livraison_id: $event })"
+                        :options="equipes"
                         option-label="label"
                         option-value="value"
-                        placeholder="Aucun"
+                        placeholder="Aucune"
                         :show-clear="true"
                         class="w-full"
                     />
+                    <p v-if="selectedEquipe" class="mt-1 text-xs text-muted-foreground">
+                        Σ taux équipe : <span class="font-semibold">{{ selectedEquipe.somme_taux }}%</span>
+                    </p>
                 </div>
             </div>
         </div>
 
         <!-- Commission -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
-                Commission & Charges
-            </h3>
+            <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">Commission & Charges</h3>
             <div class="grid gap-5 sm:grid-cols-2">
+                <div class="flex items-start gap-3 sm:col-span-2">
+                    <Checkbox
+                        id="commission_active"
+                        :model-value="Boolean(form.commission_active)"
+                        @update:model-value="$emit('update:form', { ...form, commission_active: $event === true })"
+                    />
+                    <div>
+                        <Label for="commission_active" class="cursor-pointer font-medium">Commissions activées</Label>
+                        <p class="text-xs text-muted-foreground">Génère des commissions à chaque facture payée</p>
+                    </div>
+                </div>
+
                 <div class="flex items-start gap-3 sm:col-span-2">
                     <Checkbox
                         id="pris_en_charge_par_usine"
                         :model-value="Boolean(form.pris_en_charge_par_usine)"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                pris_en_charge_par_usine: $event === true,
-                            })
-                        "
+                        @update:model-value="$emit('update:form', { ...form, pris_en_charge_par_usine: $event === true })"
                     />
                     <div>
-                        <Label
-                            for="pris_en_charge_par_usine"
-                            class="cursor-pointer font-medium"
-                            >Pris en charge par l'usine</Label
-                        >
-                        <p class="text-xs text-muted-foreground">
-                            Les frais du véhicule sont supportés par
-                            l'organisation
-                        </p>
+                        <Label for="pris_en_charge_par_usine" class="cursor-pointer font-medium">Pris en charge par l'usine</Label>
+                        <p class="text-xs text-muted-foreground">Les frais du véhicule sont supportés par l'organisation</p>
                     </div>
                 </div>
 
                 <div>
-                    <Label for="taux_commission_livreur" class="mb-1.5 block"
-                        >Taux livreur (%)</Label
-                    >
+                    <Label for="taux_proprietaire" class="mb-1.5 block">
+                        Taux propriétaire (%)
+                        <span v-if="selectedEquipe" class="ml-1 text-xs text-muted-foreground">— suggéré : {{ tauxRestantPourProprietaire }}%</span>
+                    </Label>
                     <InputNumber
-                        id="taux_commission_livreur"
-                        :model-value="form.taux_commission_livreur"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                taux_commission_livreur: $event,
-                            })
-                        "
+                        id="taux_proprietaire"
+                        :model-value="form.taux_commission_proprietaire"
+                        @update:model-value="$emit('update:form', { ...form, taux_commission_proprietaire: $event })"
                         :min="0"
                         :max="100"
                         :max-fraction-digits="2"
                         suffix=" %"
                         class="w-full"
                     />
-                </div>
-
-                <div>
-                    <Label
-                        for="taux_commission_proprietaire"
-                        class="mb-1.5 block"
+                    <p
+                        v-if="selectedEquipe && form.commission_active"
+                        class="mt-1 text-xs"
+                        :class="Math.abs(totalTaux - 100) > 0.01 ? 'text-destructive' : 'text-emerald-600'"
                     >
-                        Taux propriétaire (%)
-                        <span class="ml-1 text-xs text-muted-foreground"
-                            >— calculé automatiquement</span
-                        >
-                    </Label>
-                    <InputNumber
-                        id="taux_commission_proprietaire"
-                        :model-value="form.taux_commission_proprietaire"
-                        :disabled="true"
-                        :min="0"
-                        :max="100"
-                        :max-fraction-digits="2"
-                        suffix=" %"
-                        class="w-full opacity-70"
-                    />
+                        Total : {{ totalTaux }}%
+                        {{ Math.abs(totalTaux - 100) > 0.01 ? '— doit être égal à 100 %' : '✓' }}
+                    </p>
                 </div>
             </div>
         </div>
 
         <!-- Photo -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
-                Photo
-            </h3>
+            <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">Photo</h3>
             <div class="flex items-start gap-6">
-                <!-- Aperçu -->
                 <div class="shrink-0">
-                    <div
-                        class="flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl border bg-muted/30"
-                    >
-                        <img
-                            v-if="photoPreview"
-                            :src="photoPreview"
-                            alt="Aperçu"
-                            class="h-full w-full object-cover"
-                        />
-                        <span v-else class="text-3xl text-muted-foreground/40"
-                            >🚗</span
-                        >
+                    <div class="flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl border bg-muted/30">
+                        <img v-if="photoPreview" :src="photoPreview" alt="Aperçu" class="h-full w-full object-cover" />
+                        <span v-else class="text-3xl text-muted-foreground/40">🚗</span>
                     </div>
                 </div>
-
-                <!-- Contrôles -->
                 <div class="flex flex-col gap-3">
-                    <input
-                        ref="fileInput"
-                        type="file"
-                        accept="image/jpg,image/jpeg,image/png,image/webp"
-                        class="hidden"
-                        @change="onPhotoChange"
-                    />
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        @click="fileInput?.click()"
-                    >
+                    <input ref="fileInput" type="file" accept="image/jpg,image/jpeg,image/png,image/webp" class="hidden" @change="onPhotoChange" />
+                    <Button type="button" variant="outline" size="sm" @click="fileInput?.click()">
                         <Upload class="mr-2 h-4 w-4" />
-                        {{
-                            photoPreview
-                                ? 'Changer la photo'
-                                : 'Ajouter une photo'
-                        }}
+                        {{ photoPreview ? 'Changer' : 'Ajouter une photo' }}
                     </Button>
-                    <Button
-                        v-if="photoPreview"
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        class="text-destructive hover:text-destructive"
-                        @click="removePhoto"
-                    >
-                        <X class="mr-2 h-4 w-4" />
-                        Supprimer la photo
+                    <Button v-if="photoPreview" type="button" variant="ghost" size="sm" class="text-destructive hover:text-destructive" @click="removePhoto">
+                        <X class="mr-2 h-4 w-4" /> Supprimer
                     </Button>
-                    <p class="text-xs text-muted-foreground">
-                        JPG, PNG ou WebP — max 3 Mo
-                    </p>
-                    <p v-if="errors.photo" class="text-xs text-destructive">
-                        {{ errors.photo }}
-                    </p>
+                    <p class="text-xs text-muted-foreground">JPG, PNG ou WebP — max 3 Mo</p>
+                    <p v-if="errors.photo" class="text-xs text-destructive">{{ errors.photo }}</p>
                 </div>
             </div>
         </div>
 
         <!-- Statut -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
-                Statut
-            </h3>
+            <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">Statut</h3>
             <div class="flex items-center gap-3">
                 <Checkbox
                     id="is_active"
                     :model-value="Boolean(form.is_active)"
-                    @update:model-value="
-                        $emit('update:form', {
-                            ...form,
-                            is_active: $event === true,
-                        })
-                    "
+                    @update:model-value="$emit('update:form', { ...form, is_active: $event === true })"
                 />
                 <div>
-                    <Label for="is_active" class="cursor-pointer font-medium"
-                        >Véhicule actif</Label
-                    >
-                    <p class="text-xs text-muted-foreground">
-                        Décochez pour retirer le véhicule de la flotte active
-                    </p>
+                    <Label for="is_active" class="cursor-pointer font-medium">Véhicule actif</Label>
+                    <p class="text-xs text-muted-foreground">Décochez pour retirer le véhicule de la flotte active</p>
                 </div>
             </div>
         </div>
@@ -449,7 +323,7 @@ watch(
         <!-- Pied -->
         <div class="hidden items-center justify-between sm:flex">
             <a href="/vehicules">
-                <Button type="button" variant="outline"> Retour </Button>
+                <Button type="button" variant="outline">Retour</Button>
             </a>
             <Button type="submit" :disabled="processing">
                 <Save class="mr-2 h-4 w-4" />
