@@ -38,6 +38,9 @@ class VehiculeController extends Controller
             'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
             'equipe_livraison_id'          => $v->equipe_livraison_id,
             'equipe_nom'                   => $equipe?->nom,
+            'livreur_principal_nom'        => $membres->first()?->livreur
+                ? trim($membres->first()->livreur->prenom.' '.$membres->first()->livreur->nom)
+                : null,
             'equipe_membres'               => $membres->map(fn ($m) => [
                 'livreur_nom'     => $m->livreur ? trim($m->livreur->prenom.' '.$m->livreur->nom) : null,
                 'role'            => $m->role,

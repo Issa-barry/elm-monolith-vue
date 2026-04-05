@@ -49,6 +49,7 @@ interface Vehicule {
     proprietaire_telephone: string | null;
     proprietaire_code_phone_pays: string | null;
     equipe_nom: string | null;
+    livreur_principal_nom: string | null;
     equipe_membres: EquipeMembre[];
     photo_url: string | null;
     is_active: boolean;
@@ -438,12 +439,10 @@ function confirmDelete(v: Vehicule) {
                                     {{ data.equipe_nom ?? '—' }}
                                 </div>
                                 <div
-                                    v-for="m in data.equipe_membres"
-                                    :key="m.livreur_nom"
+                                    v-if="data.livreur_principal_nom"
                                     class="mt-0.5 text-xs text-muted-foreground/70"
                                 >
-                                    {{ m.livreur_nom }}
-                                    <span class="ml-1 font-mono text-foreground/60">{{ m.taux_commission }}%</span>
+                                    {{ data.livreur_principal_nom }}
                                 </div>
                             </div>
                         </template>

@@ -262,7 +262,7 @@ const totalTaux = computed(() => {
         <div class="order-3 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5">Commission & Charges</h3>
             <div class="grid gap-5 sm:grid-cols-2">
-                <div class="flex items-start gap-3 sm:col-span-2">
+                <div class="flex items-start gap-3">
                     <Checkbox
                         id="pris_en_charge_par_usine"
                         :model-value="Boolean(form.pris_en_charge_par_usine)"

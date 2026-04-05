@@ -66,7 +66,9 @@
       "Bash(vendor/bin/pint app/Http/Controllers/FactureVenteController.php --test)",
       "Bash(grep -E \"\\\\.\\(php|vue\\)$\")",
       "Bash(grep -n 'protected $fillable\\\\|nom\\\\|prenom' c:/laragon/www/elm-monolithe/app/Models/Proprietaire.php)",
-      "Bash(php -l app/Models/Vehicule.php app/Services/CommissionCalculator.php app/Services/CommissionGenerator.php app/Http/Controllers/VehiculeController.php app/Http/Controllers/CommandeVenteController.php app/Models/FactureVente.php database/factories/VehiculeFactory.php database/seeders/VehiculesSeeder.php database/migrations/2026_03_22_210000_create_vehicules_table.php database/migrations/2026_04_05_150000_add_commission_on_order_creation_to_vehicules_table.php)"
+      "Bash(php -l app/Models/Vehicule.php app/Services/CommissionCalculator.php app/Services/CommissionGenerator.php app/Http/Controllers/VehiculeController.php app/Http/Controllers/CommandeVenteController.php app/Models/FactureVente.php database/factories/VehiculeFactory.php database/seeders/VehiculesSeeder.php database/migrations/2026_03_22_210000_create_vehicules_table.php database/migrations/2026_04_05_150000_add_commission_on_order_creation_to_vehicules_table.php)",
+      "Bash(php -l app/Http/Controllers/VehiculeController.php)",
+      "Bash(php -l c:/laragon/www/elm-monolithe/app/Http/Controllers/VehiculeController.php)"
     ]
   }
 }
