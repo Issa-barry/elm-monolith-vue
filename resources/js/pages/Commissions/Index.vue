@@ -284,36 +284,10 @@ const tabSubtitle = computed(() =>
         <!-- ══════════════════════ DESKTOP ═════════════════════════════════════ -->
         <div class="hidden w-full space-y-6 p-6 sm:block">
 
-            <!-- En-tête + tabs -->
+            <!-- En-tête -->
             <div>
                 <h1 class="text-2xl font-semibold tracking-tight">Commissions</h1>
                 <p class="mt-1 text-sm text-muted-foreground">{{ tabSubtitle }}</p>
-
-                <!-- Tabs -->
-                <div class="mt-5 flex gap-0 border-b">
-                    <button
-                        class="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors"
-                        :class="tab === 'livreurs'
-                            ? 'border-b-2 border-primary text-foreground'
-                            : 'border-b-2 border-transparent text-muted-foreground hover:text-foreground'"
-                        @click="setTab('livreurs')"
-                    >
-                        <Truck class="h-4 w-4" />
-                        Livreurs
-                        <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">Hebdo</span>
-                    </button>
-                    <button
-                        class="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors"
-                        :class="tab === 'proprietaires'
-                            ? 'border-b-2 border-primary text-foreground'
-                            : 'border-b-2 border-transparent text-muted-foreground hover:text-foreground'"
-                        @click="setTab('proprietaires')"
-                    >
-                        <User class="h-4 w-4" />
-                        Propriétaires
-                        <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">Mensuel</span>
-                    </button>
-                </div>
             </div>
 
             <!-- KPI cards -->
@@ -340,6 +314,30 @@ const tabSubtitle = computed(() =>
                     <p class="mt-2 text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400">{{ formatGNF(totaux.montant_versees) }}</p>
                     <p class="mt-0.5 text-xs text-muted-foreground">{{ totaux.nb_versees }} part{{ totaux.nb_versees > 1 ? 's' : '' }}</p>
                 </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="inline-flex items-center gap-1 rounded-xl border bg-card p-1 shadow-sm">
+                <button
+                    class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                    :class="tab === 'livreurs'
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
+                    @click="setTab('livreurs')"
+                >
+                    Livreurs
+                    <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">Hebdo</span>
+                </button>
+                <button
+                    class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                    :class="tab === 'proprietaires'
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
+                    @click="setTab('proprietaires')"
+                >
+                    Propriétaires
+                    <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">Mensuel</span>
+                </button>
             </div>
 
             <!-- Tableau -->
