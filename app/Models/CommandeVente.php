@@ -31,6 +31,8 @@ class CommandeVente extends Model
         'motif_annulation',
         'annulee_at',
         'annulee_par',
+        'validated_at',
+        'closed_at',
         'created_by',
         'updated_by',
     ];
@@ -41,8 +43,10 @@ class CommandeVente extends Model
     {
         return [
             'total_commande' => 'decimal:2',
-            'statut' => StatutCommandeVente::class,
-            'annulee_at' => 'datetime',
+            'statut'         => StatutCommandeVente::class,
+            'annulee_at'     => 'datetime',
+            'validated_at'   => 'datetime',
+            'closed_at'      => 'datetime',
         ];
     }
 
@@ -53,7 +57,7 @@ class CommandeVente extends Model
                 $c->reference = self::TEMP_PREFIX.Str::uuid();
             }
             if (empty($c->statut)) {
-                $c->statut = StatutCommandeVente::EN_COURS;
+                $c->statut = StatutCommandeVente::BROUILLON;
             }
             if (Auth::check()) {
                 $c->created_by = Auth::id();
@@ -132,7 +136,22 @@ class CommandeVente extends Model
         return $this->statut instanceof StatutCommandeVente ? $this->statut->label() : '';
     }
 
-    // ── Méthodes métier ───────────────────────────────────────────────────────
+    // ── Méthodes d'état ───────────────────────────────────────────────────────
+
+    public function isBrouillon(): bool
+    {
+        return $this->statut === StatutCommandeVente::BROUILLON;
+    }
+
+    public function isValidee(): bool
+    {
+        return $this->statut === StatutCommandeVente::VALIDEE;
+    }
+
+    public function isCloturee(): bool
+    {
+        return $this->statut === StatutCommandeVente::CLOTUREE;
+    }
 
     public function isAnnulee(): bool
     {
@@ -144,17 +163,26 @@ class CommandeVente extends Model
         return number_format((float) $this->total_commande, 0, ',', ' ').' GNF';
     }
 
+    // ── Auto-clôture sur paiement complet ─────────────────────────────────────
+
+    /**
+     * Clôture automatiquement la commande si sa facture est entièrement payée.
+     * N'agit que sur les commandes en statut VALIDEE.
+     */
     public function cloturerSiComplete(): bool
     {
-        if ($this->isAnnulee()) {
+        if (! $this->isValidee()) {
             return false;
         }
+
         $facture = $this->facture ?? $this->load('facture')->facture;
         if (! $facture) {
             return false;
         }
+
         if ($facture->isPayee()) {
-            $this->statut = StatutCommandeVente::CLOTUREE;
+            $this->statut    = StatutCommandeVente::CLOTUREE;
+            $this->closed_at = now();
 
             return $this->saveQuietly();
         }

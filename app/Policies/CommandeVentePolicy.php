@@ -35,6 +35,16 @@ class CommandeVentePolicy
             && $this->sameOrganization($user, $commande);
     }
 
+    /**
+     * Seuls les administrateurs (super_admin ou admin_entreprise)
+     * peuvent annuler une commande.
+     */
+    public function annuler(User $user, CommandeVente $commande): bool
+    {
+        return $user->hasAnyRole(['super_admin', 'admin_entreprise'])
+            && $this->sameOrganization($user, $commande);
+    }
+
     private function sameOrganization(User $user, CommandeVente $commande): bool
     {
         return $user->organization_id === $commande->organization_id;

@@ -1,23 +1,24 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
-import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { formatPhoneDisplay } from '@/lib/utils';
 import {
     ArrowLeft,
-    BadgeCheck,
     ChevronRight,
-    HandCoins,
-    Hourglass,
     Search,
-    Sigma,
     Truck,
     User,
 } from 'lucide-vue-next';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
 import Dropdown from 'primevue/dropdown';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
+import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -64,8 +65,6 @@ const props = defineProps<{
     periode: string;
     tab: 'livreurs' | 'proprietaires';
 }>();
-
-const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -320,173 +319,163 @@ const tabSubtitle = computed(() =>
             <!-- KPI cards -->
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <div class="flex items-center justify-between">
-                        <p class="text-sm text-muted-foreground">Total {{ tabLabel }}</p>
-                        <Sigma class="h-4 w-4 text-primary" />
-                    </div>
+                    <p class="text-sm text-muted-foreground">Total {{ tabLabel }}</p>
                     <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(totalBrut) }}</p>
                     <p class="mt-0.5 text-xs text-muted-foreground">{{ parts.filter(p => p.statut !== 'annulee').length }} part{{ parts.filter(p => p.statut !== 'annulee').length > 1 ? 's' : '' }}</p>
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <div class="flex items-center justify-between">
-                        <p class="text-sm text-muted-foreground">Restant à verser</p>
-                        <HandCoins class="h-4 w-4 text-muted-foreground" />
-                    </div>
+                    <p class="text-sm text-muted-foreground">Restant à verser</p>
                     <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(totaux.total_a_verser) }}</p>
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <div class="flex items-center justify-between">
-                        <p class="text-sm text-muted-foreground">En attente</p>
-                        <Hourglass class="h-4 w-4 text-amber-500" />
-                    </div>
+                    <p class="text-sm text-muted-foreground">En attente</p>
                     <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(totaux.montant_en_attente) }}</p>
                     <p class="mt-0.5 text-xs text-muted-foreground">{{ totaux.nb_en_attente }} part{{ totaux.nb_en_attente > 1 ? 's' : '' }}</p>
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <div class="flex items-center justify-between">
-                        <p class="text-sm text-muted-foreground">Versées</p>
-                        <BadgeCheck class="h-4 w-4 text-emerald-500" />
-                    </div>
+                    <p class="text-sm text-muted-foreground">Versées</p>
                     <p class="mt-2 text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400">{{ formatGNF(totaux.montant_versees) }}</p>
                     <p class="mt-0.5 text-xs text-muted-foreground">{{ totaux.nb_versees }} part{{ totaux.nb_versees > 1 ? 's' : '' }}</p>
                 </div>
             </div>
 
-            <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <div class="relative max-w-xs flex-1">
-                    <Search class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                        v-model="search"
-                        type="text"
-                        :placeholder="tab === 'livreurs' ? 'Commande, livreur, équipe, véhicule…' : 'Commande, propriétaire, véhicule…'"
-                        class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                </div>
-
-                <Dropdown
-                    v-model="filtreStatut"
-                    :options="filtresStatut"
-                    option-label="label"
-                    option-value="value"
-                    class="w-36"
-                />
-
-                <Dropdown
-                    :model-value="periode"
-                    :options="periodes"
-                    option-label="label"
-                    option-value="value"
-                    class="w-40"
-                    @update:model-value="setPeriode($event)"
-                />
-
-                <span class="text-xs text-muted-foreground">
-                    {{ partsFiltrees.length }} résultat{{ partsFiltrees.length > 1 ? 's' : '' }}
-                </span>
-            </div>
-
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b bg-muted/40">
-                                <th class="px-4 py-3 text-left font-medium text-muted-foreground">Commande</th>
-                                <th class="px-4 py-3 text-left font-medium text-muted-foreground">Véhicule</th>
-                                <th class="px-4 py-3 text-left font-medium text-muted-foreground">
-                                    {{ tab === 'livreurs' ? 'Livreur' : 'Propriétaire' }}
-                                </th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Commission</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Versé</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Restant</th>
-                                <th class="px-4 py-3 text-left font-medium text-muted-foreground">Statut</th>
-                                <th class="px-4 py-3"></th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y">
-                            <tr
-                                v-for="p in partsFiltrees"
-                                :key="p.id"
-                                class="transition-colors hover:bg-muted/10"
+                <DataTable
+                    :value="partsFiltrees"
+                    :paginator="partsFiltrees.length > 20"
+                    :rows="20"
+                    data-key="id"
+                    striped-rows
+                    removable-sort
+                    class="text-sm"
+                    :pt="{
+                        root: { class: 'w-full' },
+                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
+                        tbody: { class: 'divide-y' },
+                    }"
+                >
+                    <template #header>
+                        <div class="flex items-center gap-3">
+                            <IconField class="max-w-sm flex-1">
+                                <InputIcon class="pointer-events-none">
+                                    <Search class="h-4 w-4 text-muted-foreground" />
+                                </InputIcon>
+                                <InputText
+                                    v-model="search"
+                                    :placeholder="tab === 'livreurs' ? 'Commande, livreur, équipe, véhicule…' : 'Commande, propriétaire, véhicule…'"
+                                    class="w-full text-sm"
+                                />
+                            </IconField>
+                            <Select
+                                v-model="filtreStatut"
+                                :options="filtresStatut"
+                                option-label="label"
+                                option-value="value"
+                                class="w-40"
+                            />
+                            <Select
+                                :model-value="periode"
+                                :options="periodes"
+                                option-label="label"
+                                option-value="value"
+                                class="w-44"
+                                @update:model-value="setPeriode($event)"
+                            />
+                            <span class="text-xs text-muted-foreground">
+                                {{ partsFiltrees.length }} résultat{{ partsFiltrees.length !== 1 ? 's' : '' }}
+                            </span>
+                        </div>
+                    </template>
+
+                    <Column field="commande_reference" header="Commande" sortable style="min-width: 190px">
+                        <template #body="{ data }">
+                            <Link
+                                v-if="data.commande_id"
+                                :href="`/ventes/${data.commande_id}`"
+                                class="font-mono text-xs font-semibold text-primary hover:underline"
                             >
-                                <!-- Commande -->
-                                <td class="px-4 py-3">
-                                    <Link
-                                        v-if="p.commande_id"
-                                        :href="`/ventes/${p.commande_id}`"
-                                        class="font-mono text-xs font-semibold text-primary hover:underline"
-                                    >
-                                        {{ p.commande_reference ?? '—' }}
-                                    </Link>
-                                    <span v-else class="font-mono text-xs">{{ p.commande_reference ?? '—' }}</span>
-                                    <p class="text-xs text-muted-foreground">{{ p.created_at }}</p>
-                                </td>
+                                {{ data.commande_reference ?? '—' }}
+                            </Link>
+                            <span v-else class="font-mono text-xs">{{ data.commande_reference ?? '—' }}</span>
+                            <p class="text-xs text-muted-foreground">{{ data.created_at }}</p>
+                        </template>
+                    </Column>
 
-                                <!-- Véhicule -->
-                                <td class="px-4 py-3">
-                                    <p class="font-medium">{{ p.vehicule_nom ?? '—' }}</p>
-                                    <p v-if="p.immatriculation" class="font-mono text-xs text-muted-foreground">{{ p.immatriculation }}</p>
-                                </td>
+                    <Column field="vehicule_nom" header="Véhicule" sortable style="min-width: 180px">
+                        <template #body="{ data }">
+                            <p class="font-medium">{{ data.vehicule_nom ?? '—' }}</p>
+                            <p v-if="data.immatriculation" class="font-mono text-xs text-muted-foreground">{{ data.immatriculation }}</p>
+                        </template>
+                    </Column>
 
-                                <!-- Bénéficiaire -->
-                                <td class="px-4 py-3">
-                                    <p class="font-medium">{{ p.beneficiaire_nom }}</p>
-                                    <p v-if="tab === 'livreurs' && p.livreur_principal_telephone" class="mt-0.5 text-xs text-muted-foreground">
-                                        {{ formatPhoneDisplay(p.livreur_principal_telephone) }}
-                                    </p>
-                                </td>
+                    <Column :field="'beneficiaire_nom'" :header="tab === 'livreurs' ? 'Livreur' : 'Propriétaire'" sortable style="min-width: 190px">
+                        <template #body="{ data }">
+                            <p class="font-medium">{{ data.beneficiaire_nom }}</p>
+                            <p v-if="tab === 'livreurs' && data.livreur_principal_telephone" class="mt-0.5 text-xs text-muted-foreground">
+                                {{ formatPhoneDisplay(data.livreur_principal_telephone) }}
+                            </p>
+                        </template>
+                    </Column>
 
-                                <!-- Commission -->
-                                <td class="px-4 py-3 text-right">
-                                    <span class="font-semibold tabular-nums">{{ formatGNF(p.montant_net) }}</span>
-                                    <p
-                                        v-if="tab === 'proprietaires' && p.frais_supplementaires > 0"
-                                        class="mt-0.5 text-xs text-destructive tabular-nums"
-                                    >
-                                        − {{ formatGNF(p.frais_supplementaires) }} frais
-                                    </p>
-                                </td>
+                    <Column field="montant_net" header="Commission" sortable style="width: 160px">
+                        <template #body="{ data }">
+                            <span class="font-semibold tabular-nums">{{ formatGNF(data.montant_net) }}</span>
+                            <p
+                                v-if="tab === 'proprietaires' && data.frais_supplementaires > 0"
+                                class="mt-0.5 text-xs text-destructive tabular-nums"
+                            >
+                                − {{ formatGNF(data.frais_supplementaires) }} frais
+                            </p>
+                        </template>
+                    </Column>
 
-                                <!-- Versé -->
-                                <td class="px-4 py-3 text-right tabular-nums text-muted-foreground">{{ formatGNF(p.montant_verse) }}</td>
+                    <Column field="montant_verse" header="Versé" sortable style="width: 140px">
+                        <template #body="{ data }">
+                            <span class="tabular-nums text-muted-foreground">{{ formatGNF(data.montant_verse) }}</span>
+                        </template>
+                    </Column>
 
-                                <!-- Restant -->
-                                <td class="px-4 py-3 text-right tabular-nums">
-                                    <span :class="p.montant_restant > 0 ? 'font-semibold text-foreground' : 'text-muted-foreground'">
-                                        {{ formatGNF(p.montant_restant) }}
-                                    </span>
-                                </td>
+                    <Column field="montant_restant" header="Restant" sortable style="width: 140px">
+                        <template #body="{ data }">
+                            <span :class="data.montant_restant > 0 ? 'font-semibold tabular-nums text-foreground' : 'tabular-nums text-muted-foreground'">
+                                {{ formatGNF(data.montant_restant) }}
+                            </span>
+                        </template>
+                    </Column>
 
-                                <!-- Statut -->
-                                <td class="px-4 py-3">
-                                    <StatusDot
-                                        :label="p.statut_label"
-                                        :dot-class="statutDotColor[p.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
-                                        class="text-muted-foreground"
-                                    />
-                                </td>
+                    <Column field="statut_label" header="Statut" sortable style="width: 130px">
+                        <template #body="{ data }">
+                            <StatusDot
+                                :label="data.statut_label"
+                                :dot-class="statutDotColor[data.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                class="text-muted-foreground"
+                            />
+                        </template>
+                    </Column>
 
-                                <!-- Action -->
-                                <td class="px-4 py-3 text-right">
-                                    <Link :href="`/commissions/${p.commission_id}`">
-                                        <Button size="sm" variant="ghost" class="h-8 gap-1.5 text-xs">
-                                            Détails
-                                            <ChevronRight class="h-3.5 w-3.5" />
-                                        </Button>
-                                    </Link>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <Column header="" style="width: 110px">
+                        <template #body="{ data }">
+                            <div class="flex justify-end">
+                                <Link :href="`/commissions/${data.commission_id}`">
+                                    <Button size="sm" variant="ghost" class="h-8 gap-1.5 text-xs">
+                                        Détails
+                                        <ChevronRight class="h-3.5 w-3.5" />
+                                    </Button>
+                                </Link>
+                            </div>
+                        </template>
+                    </Column>
 
-                    <div v-if="partsFiltrees.length === 0" class="py-16 text-center text-sm text-muted-foreground">
-                        Aucune commission trouvée pour cette période.
-                    </div>
-                </div>
+                    <template #empty>
+                        <div class="py-16 text-center text-sm text-muted-foreground">
+                            Aucune commission trouvée pour cette période.
+                        </div>
+                    </template>
+                </DataTable>
             </div>
         </div>
     </AppLayout>

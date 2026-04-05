@@ -72,7 +72,8 @@
       "Bash(php -l app/Models/CommissionPart.php app/Http/Controllers/CommissionPartController.php app/Http/Controllers/CommissionVenteController.php database/migrations/2026_04_05_160000_add_type_frais_to_commission_parts_table.php)",
       "Bash(php -l app/Http/Controllers/CommissionVenteController.php)",
       "Bash(php -l app/Models/CommissionPart.php app/Services/CommissionCalculator.php app/Services/CommissionGenerator.php app/Http/Controllers/CommissionVenteController.php database/migrations/2026_04_05_170000_add_role_to_commission_parts_table.php)",
-      "Read(//c/Users/issab/AppData/Local/Temp/claude/c--laragon-www-elm-monolithe//**)"
+      "Read(//c/Users/issab/AppData/Local/Temp/claude/c--laragon-www-elm-monolithe//**)",
+      "Bash(find c:/laragon/www/elm-monolithe/app -name \"HandleInertiaRequests.php\" -exec cat {} \\\\;)"
     ]
   }
 }
