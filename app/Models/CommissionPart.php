@@ -17,6 +17,7 @@ class CommissionPart extends Model
         'livreur_id',
         'proprietaire_id',
         'beneficiaire_nom',
+        'role',
         'taux_commission',
         'montant_brut',
         'frais_supplementaires',

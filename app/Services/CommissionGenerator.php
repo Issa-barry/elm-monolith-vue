@@ -59,6 +59,7 @@ class CommissionGenerator
                 'livreur_id'            => $part['livreur_id'],
                 'proprietaire_id'       => $part['proprietaire_id'],
                 'beneficiaire_nom'      => $part['beneficiaire_nom'],
+                'role'                  => $part['role'] ?? null,
                 'taux_commission'       => $part['taux_commission'],
                 'montant_brut'          => $part['montant_brut'],
                 'frais_supplementaires' => $part['frais_supplementaires'],

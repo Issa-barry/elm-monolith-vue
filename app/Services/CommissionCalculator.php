@@ -103,6 +103,7 @@ class CommissionCalculator
                 'livreur_id'         => $livreur?->id,
                 'proprietaire_id'    => null,
                 'beneficiaire_nom'   => $livreur ? trim($livreur->prenom.' '.$livreur->nom) : "Livreur #{$membre->livreur_id}",
+                'role'               => $membre->role ?? null,
                 'taux_commission'    => $taux,
                 'montant_brut'       => $brut,
                 'frais_supplementaires' => 0.0,

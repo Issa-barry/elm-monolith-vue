@@ -12,45 +12,60 @@ use Inertia\Response;
 
 class CommissionVenteController extends Controller
 {
+    // ── Index : liste des parts par onglet ───────────────────────────────────
+
     public function index(Request $request): Response
     {
         $this->authorize('viewAny', \App\Models\CommandeVente::class);
 
-        $orgId  = auth()->user()->organization_id;
-        $periode = $request->input('periode', 'month');
+        $orgId = auth()->user()->organization_id;
+        $tab   = $request->input('tab', 'livreurs'); // livreurs | proprietaires
 
-        $query = CommissionVente::with(['commande.site', 'vehicule.equipe', 'vehicule.proprietaire', 'parts'])
-            ->where('organization_id', $orgId);
+        // Période par défaut selon l'onglet
+        $periodeDefault = $tab === 'proprietaires' ? 'month' : 'week';
+        $periode        = $request->input('periode', $periodeDefault);
 
-        match ($periode) {
-            'today' => $query->whereDate('created_at', now()),
-            'week'  => $query->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]),
-            'month' => $query->whereYear('created_at', now()->year)->whereMonth('created_at', now()->month),
-            default => null,
-        };
+        $typeBeneficiaire = $tab === 'proprietaires' ? 'proprietaire' : 'livreur';
 
-        $commissions = $query->orderByDesc('created_at')
-            ->get()
-            ->map(fn (CommissionVente $c) => $this->mapCommission($c));
+        $query = CommissionPart::with([
+            'commission' => fn ($q) => $q->with(['commande.site', 'vehicule.equipe']),
+        ])
+        ->whereHas('commission', function ($q) use ($orgId, $periode) {
+            $q->where('organization_id', $orgId);
+            match ($periode) {
+                'today' => $q->whereDate('created_at', now()),
+                'week'  => $q->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]),
+                'month' => $q->whereYear('created_at', now()->year)->whereMonth('created_at', now()->month),
+                default => null,
+            };
+        })
+        ->where('type_beneficiaire', $typeBeneficiaire)
+        ->orderByDesc('commission_vente_id');
 
-        $actives = $commissions->whereNotIn('statut', [StatutCommission::ANNULEE->value]);
+        $parts = $query->get()->map(fn (CommissionPart $p) => $this->mapPart($p));
+
+        $actives = $parts->whereNotIn('statut', [StatutCommission::ANNULEE->value]);
 
         $totaux = [
-            'total_a_verser'    => $actives->whereNotIn('statut', [StatutCommission::VERSEE->value])->sum('montant_restant'),
-            'nb_en_attente'     => $commissions->where('statut', StatutCommission::EN_ATTENTE->value)->count(),
-            'montant_en_attente'=> $commissions->where('statut', StatutCommission::EN_ATTENTE->value)->sum('montant_commission_totale'),
-            'nb_partielles'     => $commissions->where('statut', StatutCommission::PARTIELLE->value)->count(),
-            'montant_partielles'=> $commissions->where('statut', StatutCommission::PARTIELLE->value)->sum('montant_restant'),
-            'nb_versees'        => $commissions->where('statut', StatutCommission::VERSEE->value)->count(),
-            'montant_versees'   => $commissions->where('statut', StatutCommission::VERSEE->value)->sum('montant_verse'),
+            'total_commission'   => $actives->sum('montant_brut'),
+            'total_a_verser'     => $actives->whereNotIn('statut', [StatutCommission::VERSEE->value])->sum('montant_restant'),
+            'nb_en_attente'      => $parts->where('statut', StatutCommission::EN_ATTENTE->value)->count(),
+            'montant_en_attente' => $parts->where('statut', StatutCommission::EN_ATTENTE->value)->sum('montant_net'),
+            'nb_partielles'      => $parts->where('statut', StatutCommission::PARTIELLE->value)->count(),
+            'montant_partielles' => $parts->where('statut', StatutCommission::PARTIELLE->value)->sum('montant_restant'),
+            'nb_versees'         => $parts->where('statut', StatutCommission::VERSEE->value)->count(),
+            'montant_versees'    => $parts->where('statut', StatutCommission::VERSEE->value)->sum('montant_verse'),
         ];
 
         return Inertia::render('Commissions/Index', [
-            'commissions' => $commissions->values(),
-            'totaux'      => $totaux,
-            'periode'     => $periode,
+            'parts'   => $parts->values(),
+            'totaux'  => $totaux,
+            'periode' => $periode,
+            'tab'     => $tab,
         ]);
     }
+
+    // ── Détail ───────────────────────────────────────────────────────────────
 
     public function show(CommissionVente $commission_vente): Response
     {
@@ -70,37 +85,65 @@ class CommissionVenteController extends Controller
         ]);
 
         return Inertia::render('Commissions/Show', [
-            'commission'    => $this->mapCommission($commission_vente, withParts: true),
-            'modes_paiement'=> ModePaiement::options(),
+            'commission'     => $this->mapCommission($commission_vente, withParts: true),
+            'modes_paiement' => ModePaiement::options(),
         ]);
     }
 
-    // ── Mapping ───────────────────────────────────────────────────────────────
+    // ── Mapping part (pour l'index) ───────────────────────────────────────────
+
+    private function mapPart(CommissionPart $p): array
+    {
+        $commission = $p->commission;
+
+        return [
+            'id'                    => $p->id,
+            'commission_id'         => $commission->id,
+            'commande_id'           => $commission->commande_vente_id,
+            'commande_reference'    => $commission->commande?->reference,
+            'site_nom'              => $commission->commande?->site?->nom,
+            'vehicule_nom'          => $commission->vehicule?->nom_vehicule,
+            'immatriculation'       => $commission->vehicule?->immatriculation,
+            'equipe_nom'            => $commission->vehicule?->equipe?->nom,
+            'type_beneficiaire'     => $p->type_beneficiaire,
+            'beneficiaire_nom'      => $p->beneficiaire_nom,
+            'taux_commission'       => (float) $p->taux_commission,
+            'montant_brut'          => (float) $p->montant_brut,
+            'frais_supplementaires' => (float) $p->frais_supplementaires,
+            'montant_net'           => (float) $p->montant_net,
+            'montant_verse'         => (float) $p->montant_verse,
+            'montant_restant'       => (float) $p->montant_restant,
+            'statut'                => $p->statut?->value,
+            'statut_label'          => $p->statut_label,
+            'created_at'            => $commission->created_at?->format('d/m/Y'),
+        ];
+    }
+
+    // ── Mapping commission (pour le détail) ───────────────────────────────────
 
     private function mapCommission(CommissionVente $c, bool $withParts = false): array
     {
         $data = [
-            'id'                       => $c->id,
-            'commande_id'              => $c->commande_vente_id,
-            'commande_reference'       => $c->commande?->reference,
-            'site_nom'                 => $c->commande?->site?->nom,
-            'vehicule_nom'             => $c->vehicule?->nom_vehicule,
-            'immatriculation'          => $c->vehicule?->immatriculation,
-            'equipe_nom'               => $c->vehicule?->equipe?->nom,
-            'proprietaire_nom'         => $c->vehicule?->proprietaire
-                ? trim(($c->vehicule->proprietaire->prenom ?? '') . ' ' . ($c->vehicule->proprietaire->nom ?? ''))
+            'id'                        => $c->id,
+            'commande_id'               => $c->commande_vente_id,
+            'commande_reference'        => $c->commande?->reference,
+            'site_nom'                  => $c->commande?->site?->nom,
+            'vehicule_nom'              => $c->vehicule?->nom_vehicule,
+            'immatriculation'           => $c->vehicule?->immatriculation,
+            'equipe_nom'                => $c->vehicule?->equipe?->nom,
+            'proprietaire_nom'          => $c->vehicule?->proprietaire
+                ? trim(($c->vehicule->proprietaire->prenom ?? '').' '.($c->vehicule->proprietaire->nom ?? ''))
                 : null,
-            'montant_commande'         => (float) $c->montant_commande,
-            'montant_commission_totale'=> (float) $c->montant_commission_totale,
-            'montant_verse'            => (float) $c->montant_verse,
-            'montant_restant'          => (float) $c->montant_restant,
-            'statut'                   => $c->statut?->value,
-            'statut_label'             => $c->statut_label,
-            'is_versee'                => $c->isVersee(),
-            'is_annulee'               => $c->isAnnulee(),
-            'created_at'               => $c->created_at?->format('d/m/Y'),
-            // Résumé des parts pour l'index
-            'nb_parts'                 => $c->relationLoaded('parts') ? $c->parts->count() : null,
+            'montant_commande'          => (float) $c->montant_commande,
+            'montant_commission_totale' => (float) $c->montant_commission_totale,
+            'montant_verse'             => (float) $c->montant_verse,
+            'montant_restant'           => (float) $c->montant_restant,
+            'statut'                    => $c->statut?->value,
+            'statut_label'              => $c->statut_label,
+            'is_versee'                 => $c->isVersee(),
+            'is_annulee'                => $c->isAnnulee(),
+            'created_at'                => $c->created_at?->format('d/m/Y'),
+            'nb_parts'                  => $c->relationLoaded('parts') ? $c->parts->count() : null,
         ];
 
         if ($withParts) {
@@ -110,6 +153,7 @@ class CommissionVenteController extends Controller
                 'id'                    => $p->id,
                 'type_beneficiaire'     => $p->type_beneficiaire,
                 'beneficiaire_nom'      => $p->beneficiaire_nom,
+                'role'                  => $p->role,
                 'taux_commission'       => (float) $p->taux_commission,
                 'montant_brut'          => (float) $p->montant_brut,
                 'frais_supplementaires' => (float) $p->frais_supplementaires,
@@ -125,14 +169,15 @@ class CommissionVenteController extends Controller
                     ->sortByDesc(fn ($v) => $v->created_at?->timestamp ?? 0)
                     ->values()
                     ->map(fn ($v) => [
-                        'id'            => $v->id,
-                        'date_versement'=> $v->date_versement?->format('d/m/Y'),
-                        'mode_paiement' => $v->mode_paiement instanceof \App\Enums\ModePaiement
+                        'id'             => $v->id,
+                        'date_versement' => $v->date_versement?->format('d/m/Y'),
+                        'enregistre_le'  => $v->created_at?->format('d/m/Y H:i'),
+                        'mode_paiement'  => $v->mode_paiement instanceof ModePaiement
                             ? $v->mode_paiement->label()
                             : (string) $v->mode_paiement,
-                        'montant'       => (float) $v->montant,
-                        'note'          => $v->note,
-                        'created_by'    => $v->creator?->name,
+                        'montant'        => (float) $v->montant,
+                        'note'           => $v->note,
+                        'created_by'     => $v->creator?->name,
                     ])
                     ->all(),
             ])->values()->all();
