@@ -317,27 +317,29 @@ const tabSubtitle = computed(() =>
             </div>
 
             <!-- Tabs -->
-            <div class="inline-flex items-center gap-1 rounded-xl border bg-card p-1 shadow-sm">
-                <button
-                    class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-                    :class="tab === 'livreurs'
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
-                    @click="setTab('livreurs')"
-                >
-                    Livreurs
-                    <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">Hebdo</span>
-                </button>
-                <button
-                    class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-                    :class="tab === 'proprietaires'
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
-                    @click="setTab('proprietaires')"
-                >
-                    Propriétaires
-                    <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">Mensuel</span>
-                </button>
+            <div class="flex justify-center">
+                <div class="inline-flex items-center gap-1 rounded-xl border bg-card p-1 shadow-sm">
+                    <button
+                        class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                        :class="tab === 'livreurs'
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
+                        @click="setTab('livreurs')"
+                    >
+                        Livreurs
+                        <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">Hebdo</span>
+                    </button>
+                    <button
+                        class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                        :class="tab === 'proprietaires'
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
+                        @click="setTab('proprietaires')"
+                    >
+                        Propriétaires
+                        <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">Mensuel</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Tableau -->
