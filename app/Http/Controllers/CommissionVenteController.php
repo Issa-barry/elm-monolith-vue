@@ -87,6 +87,8 @@ class CommissionVenteController extends Controller
             'vehicule.equipe',
             'vehicule.proprietaire',
             'parts.versements.creator',
+            'parts.proprietaire:id,telephone',
+            'parts.livreur:id,telephone',
         ]);
 
         return Inertia::render('Commissions/Show', [
@@ -160,6 +162,7 @@ class CommissionVenteController extends Controller
                 'id'                    => $p->id,
                 'type_beneficiaire'     => $p->type_beneficiaire,
                 'beneficiaire_nom'      => $p->beneficiaire_nom,
+                'beneficiaire_telephone'=> $p->proprietaire?->telephone ?? $p->livreur?->telephone,
                 'role'                  => $p->role,
                 'taux_commission'       => (float) $p->taux_commission,
                 'montant_brut'          => (float) $p->montant_brut,

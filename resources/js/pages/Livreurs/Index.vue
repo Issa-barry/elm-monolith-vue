@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { Head, Link } from '@inertiajs/vue3';
 import { Users } from 'lucide-vue-next';
 import Column from 'primevue/column';
@@ -123,8 +124,8 @@ const livreursFiltres = computed(() => {
                 <Column field="nom_complet" header="Livreur" sortable>
                     <template #body="{ data }">
                         <div class="font-medium">{{ data.nom_complet }}</div>
-                        <div v-if="data.telephone" class="font-mono text-xs text-muted-foreground">
-                            {{ data.telephone }}
+                        <div v-if="data.telephone" class="text-xs text-muted-foreground">
+                            {{ formatPhoneDisplay(data.telephone) }}
                         </div>
                     </template>
                 </Column>

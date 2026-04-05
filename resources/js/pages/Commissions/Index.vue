@@ -5,13 +5,13 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { formatPhoneDisplay } from '@/lib/utils';
 import {
     ArrowLeft,
     BadgeCheck,
     ChevronRight,
     HandCoins,
     Hourglass,
-    Phone,
     Search,
     Sigma,
     Truck,
@@ -435,9 +435,8 @@ const tabSubtitle = computed(() =>
                                 <!-- Bénéficiaire -->
                                 <td class="px-4 py-3">
                                     <p class="font-medium">{{ p.beneficiaire_nom }}</p>
-                                    <p v-if="tab === 'livreurs' && p.livreur_principal_telephone" class="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground">
-                                        <Phone class="h-3 w-3" />
-                                        {{ p.livreur_principal_telephone }}
+                                    <p v-if="tab === 'livreurs' && p.livreur_principal_telephone" class="mt-0.5 text-xs text-muted-foreground">
+                                        {{ formatPhoneDisplay(p.livreur_principal_telephone) }}
                                     </p>
                                 </td>
 

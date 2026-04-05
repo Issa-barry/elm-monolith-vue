@@ -238,7 +238,7 @@ const progressPercent = computed(() => {
             </div>
         </div>
 
-        <div class="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
+        <div class="mr-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
             <!-- En-tête commande ──────────────────────────────────────────────── -->
             <div class="hidden items-start justify-between gap-4 sm:flex">
                 <div class="flex items-start gap-4">

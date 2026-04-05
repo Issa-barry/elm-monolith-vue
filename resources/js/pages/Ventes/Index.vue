@@ -394,6 +394,29 @@ function confirmDelete(c: Commande) {
                         </template>
                     </Column>
 
+                    <!-- Restant dû -->
+                    <Column
+                        field="facture_montant_restant"
+                        header="Restant dû"
+                        sortable
+                        style="width: 150px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                v-if="data.facture_montant_restant !== null"
+                                class="font-medium tabular-nums"
+                                :class="
+                                    data.facture_montant_restant > 0
+                                        ? 'text-amber-600 dark:text-amber-400'
+                                        : 'text-emerald-600 dark:text-emerald-400'
+                                "
+                            >
+                                {{ formatGNF(data.facture_montant_restant) }}
+                            </span>
+                            <span v-else class="text-muted-foreground">—</span>
+                        </template>
+                    </Column>
+
                     <!-- Statut commande -->
                     <Column
                         field="statut"
@@ -430,29 +453,6 @@ function confirmDelete(c: Commande) {
                                 "
                                 class="text-muted-foreground"
                             />
-                            <span v-else class="text-muted-foreground">—</span>
-                        </template>
-                    </Column>
-
-                    <!-- Restant dû -->
-                    <Column
-                        field="facture_montant_restant"
-                        header="Restant dû"
-                        sortable
-                        style="width: 150px"
-                    >
-                        <template #body="{ data }">
-                            <span
-                                v-if="data.facture_montant_restant !== null"
-                                class="font-medium tabular-nums"
-                                :class="
-                                    data.facture_montant_restant > 0
-                                        ? 'text-amber-600 dark:text-amber-400'
-                                        : 'text-emerald-600 dark:text-emerald-400'
-                                "
-                            >
-                                {{ formatGNF(data.facture_montant_restant) }}
-                            </span>
                             <span v-else class="text-muted-foreground">—</span>
                         </template>
                     </Column>

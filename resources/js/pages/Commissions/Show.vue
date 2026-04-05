@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
@@ -47,6 +48,7 @@ interface CommissionPart {
     id: number;
     type_beneficiaire: 'livreur' | 'proprietaire';
     beneficiaire_nom: string;
+    beneficiaire_telephone: string | null;
     role: string | null;
     taux_commission: number;
     montant_brut: number;
@@ -322,14 +324,6 @@ function isVersementDisabled(part: CommissionPart): boolean {
 
             <!-- ── En-tête ──────────────────────────────────────────────────── -->
             <div>
-                <Link
-                    href="/commissions"
-                    class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-                >
-                    <ArrowLeft class="h-4 w-4" />
-                    Commissions
-                </Link>
-
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div>
                         <p class="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">
@@ -525,7 +519,12 @@ function isVersementDisabled(part: CommissionPart): boolean {
                                     :key="part.id"
                                     class="transition-colors hover:bg-muted/10"
                                 >
-                                    <td class="px-4 py-3 font-medium">{{ part.beneficiaire_nom }}</td>
+                                    <td class="px-4 py-3">
+                                        <p class="font-medium">{{ part.beneficiaire_nom }}</p>
+                                        <p v-if="part.beneficiaire_telephone" class="mt-0.5 font-mono text-xs text-muted-foreground">
+                                            {{ formatPhoneDisplay(part.beneficiaire_telephone) }}
+                                        </p>
+                                    </td>
                                     <td class="px-4 py-3 text-right tabular-nums text-muted-foreground">{{ part.taux_commission }}%</td>
                                     <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatGNF(part.montant_brut) }}</td>
                                     <td class="px-4 py-3 text-right tabular-nums">
@@ -591,6 +590,16 @@ function isVersementDisabled(part: CommissionPart): boolean {
                         </table>
                     </div>
                 </div>
+            </div>
+
+            <!-- ── Pied de page ───────────────────────────────────────────────── -->
+            <div class="flex items-center">
+                <Link href="/commissions">
+                    <Button variant="outline" class="gap-2">
+                        <ArrowLeft class="h-4 w-4" />
+                        Retour
+                    </Button>
+                </Link>
             </div>
 
         </div>
