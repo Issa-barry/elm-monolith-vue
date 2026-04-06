@@ -140,7 +140,6 @@ const facturesFiltrees = computed(() => {
 const totauxFiltres = computed(() => {
     const list = facturesFiltrees.value;
     const impayees = list.filter((f) => f.statut_facture === 'impayee');
-    const partielles = list.filter((f) => f.statut_facture === 'partiel');
     const payees = list.filter((f) => f.statut_facture === 'payee');
     return {
         total: list
@@ -168,18 +167,6 @@ const statutColor: Record<string, string> = {
 // ── Formatage ─────────────────────────────────────────────────────────────────
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
-}
-
-function formatCompact(val: number): string {
-    if (val >= 1_000_000) {
-        const n = val / 1_000_000;
-        return (Number.isInteger(n) ? n : n.toFixed(1)) + 'M GNF';
-    }
-    if (val >= 1_000) {
-        const n = val / 1_000;
-        return (Number.isInteger(n) ? n : n.toFixed(1)) + 'K GNF';
-    }
-    return val + ' GNF';
 }
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ import { useConfirm } from 'primevue/useconfirm';
 import { computed, ref } from 'vue';
 import MembreModal, { type MembreFormData } from './MembreModal.vue';
 
-interface Membre extends MembreFormData {}
+type Membre = MembreFormData;
 
 interface FormData {
     nom: string;
@@ -110,6 +110,7 @@ function onMembreConfirm(data: MembreFormData) {
             acceptLabel: 'Remplacer',
             accept: () => {
                 // Rétrograder l'ancien principal en assistant
+                // eslint-disable-next-line vue/no-mutating-props
                 props.form.membres[existingPrincipalIdx].role = 'assistant';
                 applyMembreData(data);
             },
@@ -125,6 +126,7 @@ function applyMembreData(data: MembreFormData) {
         Object.assign(props.form.membres[editingIndex.value], data);
     } else {
         // Ajout
+        // eslint-disable-next-line vue/no-mutating-props
         props.form.membres.push({
             ...data,
             ordre: props.form.membres.length,
@@ -135,6 +137,7 @@ function applyMembreData(data: MembreFormData) {
 }
 
 function removeMembre(index: number) {
+    // eslint-disable-next-line vue/no-mutating-props
     props.form.membres.splice(index, 1);
     props.form.membres.forEach((m, i) => (m.ordre = i));
 }
@@ -145,6 +148,11 @@ function initiales(prenom: string, nom: string): string {
     const p = prenom.trim()[0] ?? '';
     const n = nom.trim()[0] ?? '';
     return (p + n).toUpperCase();
+}
+
+function setIsActive(val: boolean | string) {
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.is_active = val === true;
 }
 
 // ── Submit ────────────────────────────────────────────────────────────────────
@@ -169,6 +177,7 @@ function handleSubmit() {
                     <Label for="nom" class="mb-1.5 block">
                         Nom de l'équipe <span class="text-destructive">*</span>
                     </Label>
+                    <!-- eslint-disable vue/no-mutating-props -->
                     <input
                         id="nom"
                         v-model="form.nom"
@@ -177,6 +186,7 @@ function handleSubmit() {
                         :class="{ 'border-destructive': form.errors?.nom }"
                         placeholder="Ex: Équipe Centre-ville"
                     />
+                    <!-- eslint-enable vue/no-mutating-props -->
                     <p
                         v-if="form.errors?.nom"
                         class="mt-1 text-xs text-destructive"
@@ -194,9 +204,7 @@ function handleSubmit() {
                         <Checkbox
                             id="is_active"
                             :model-value="Boolean(form.is_active)"
-                            @update:model-value="
-                                form.is_active = $event === true
-                            "
+                            @update:model-value="setIsActive($event)"
                         />
                         <div>
                             <Label
