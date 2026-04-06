@@ -150,7 +150,7 @@ class CommissionsSeeder extends Seeder
             VersementCommission::create([
                 'commission_part_id' => $part->id,
                 'montant' => $montant,
-                'date_versement' => $date ?? now()->subDays(rand(1, 30))->format('Y-m-d'),
+                'date_versement' => $date ?? now()->subDays(random_int(1, 30))->format('Y-m-d'),
                 'mode_paiement' => $mode,
                 'note' => null,
             ]);

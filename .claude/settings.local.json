@@ -85,7 +85,9 @@
       "Bash(grep -A 20 'protected $fillable' app/Models/EquipeLivraison.php)",
       "Bash(grep -A 15 'protected $fillable' app/Models/EquipeLivreur.php)",
       "Read(//c/Users/issab/.claude/projects/c--laragon-www-elm-monolithe/c8a538b9-2342-4122-9051-69ad3d690d79/tool-results/**)",
-      "Bash(./vendor/bin/pint tests/Feature/VersementCommissionTest.php tests/Unit/FactureVenteTest.php)"
+      "Bash(./vendor/bin/pint tests/Feature/VersementCommissionTest.php tests/Unit/FactureVenteTest.php)",
+      "Bash(php -l database/seeders/CommissionsSeeder.php)",
+      "Bash(./vendor/bin/pint --test database/seeders/CommissionsSeeder.php)"
     ]
   }
 }
