@@ -1,4 +1,4 @@
-ï»¿import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 export const E2E_EMAIL = process.env.E2E_EMAIL ?? 'superadmin@admin.com';
 export const E2E_PHONE = process.env.E2E_PHONE ?? '+33758855039';
@@ -166,7 +166,7 @@ export async function login(page: Page): Promise<void> {
                 .innerText()
                 .catch(() => '');
             const isRateLimited =
-                /too many|trop de tentatives|veuillez patienter|please wait|seconds|secondes|r[Ã©e]essayez|requests|429/i.test(
+                /too many|trop de tentatives|veuillez patienter|please wait|seconds|secondes|r[ée]essayez|requests|429/i.test(
                     bodyText,
                 );
 
@@ -208,6 +208,31 @@ export async function selectOptionFromCombobox(
     await option.click({ timeout: 3000 });
 }
 
+export async function ensureModuleEnabled(
+    page: Page,
+    moduleKey: string,
+): Promise<void> {
+    await page.goto('/settings/modules');
+    await expect(page).toHaveURL(/\/settings\/modules$/);
+
+    const row = page
+        .locator('div.divide-y > div', { hasText: moduleKey })
+        .first();
+
+    await expect(row).toBeVisible({ timeout: 15_000 });
+
+    const toggle = row.getByRole('switch').first();
+    await expect(toggle).toBeVisible({ timeout: 10_000 });
+
+    const current = await toggle.getAttribute('aria-checked');
+    if (current !== 'true') {
+        await toggle.click({ timeout: 5_000 });
+        await expect(toggle).toHaveAttribute('aria-checked', 'true', {
+            timeout: 15_000,
+        });
+    }
+}
+
 interface CreateUserParams {
     prenom: string;
     nom: string;
@@ -235,7 +260,7 @@ export async function fillUserInfoAndAdvance(
     await selectOptionFromCombobox(
         page,
         form.getByRole('combobox').first(),
-        /guinÃ©e$/i,
+        /guinée$/i,
     );
     await page.locator('#prenom').fill(prenom);
     await page.locator('#nom').fill(nom);

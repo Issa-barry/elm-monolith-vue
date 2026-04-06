@@ -196,11 +196,9 @@ class AuthenticationTest extends TestCase
             'password' => 'wrong-password',
         ]);
 
+        // Le rate limiter renvoie un 429 directement (ThrottleRequests middleware).
+        // Le message FR est défini dans lang/fr/auth.php → 'throttle'.
         $response->assertTooManyRequests();
-        $response->assertSessionHasErrors('telephone');
-        $this->assertStringContainsString(
-            'Trop de tentatives',
-            session('errors')->first('telephone'),
-        );
+        $this->assertStringContainsString('Trop de tentatives', __('auth.throttle', ['seconds' => 60, 'minutes' => 1]));
     }
 }

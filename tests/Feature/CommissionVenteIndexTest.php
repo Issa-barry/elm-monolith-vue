@@ -57,10 +57,10 @@ class CommissionVenteIndexTest extends TestCase
             ->get(route('commissions.index'))
             ->assertStatus(200)
             ->assertInertia(fn ($page) => $page
-                ->has('commissions')
+                ->has('parts')
                 ->has('totaux')
-                ->has('modes_paiement')
                 ->has('periode')
+                ->has('tab')
             );
     }
 
@@ -75,7 +75,7 @@ class CommissionVenteIndexTest extends TestCase
             ->get(route('commissions.index', ['periode' => 'all']))
             ->assertStatus(200)
             ->assertInertia(fn ($page) => $page
-                ->has('commissions', 1)
+                ->has('parts')
             );
     }
 

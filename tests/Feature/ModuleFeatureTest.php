@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Features\ModuleFeature;
 use App\Models\Organization;
+use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
@@ -39,6 +40,14 @@ class ModuleFeatureTest extends TestCase
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
         $user->givePermissionTo($perms);
+
+        $site = Site::create([
+            'organization_id' => $org->id,
+            'nom' => 'Site Test',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
 
         return $user;
     }
@@ -210,11 +219,19 @@ class ModuleFeatureTest extends TestCase
     {
         $org = Organization::factory()->create();
 
-        // Sans entrée en base, le module doit être actif (valeur par défaut = true)
-        foreach (ModuleFeature::ALL as $module) {
+        $defaultActive = array_diff(ModuleFeature::ALL, ModuleFeature::DEFAULT_DISABLED);
+
+        foreach ($defaultActive as $module) {
             $this->assertTrue(
                 Feature::for($org)->active($module),
                 "Le module {$module} devrait être actif par défaut",
+            );
+        }
+
+        foreach (ModuleFeature::DEFAULT_DISABLED as $module) {
+            $this->assertFalse(
+                Feature::for($org)->active($module),
+                "Le module {$module} devrait être inactif par défaut",
             );
         }
     }

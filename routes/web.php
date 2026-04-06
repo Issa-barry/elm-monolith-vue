@@ -108,10 +108,10 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::resource('vehicules', VehiculeController::class)->except(['show']);
         Route::resource('proprietaires', ProprietaireController::class);
         // Livreurs : gestion centralisée depuis les Équipes (lecture seule + API modale)
-        Route::get('livreurs', [LivreurController::class, 'index']);
-        Route::post('livreurs', [LivreurController::class, 'store']);
-        Route::patch('livreurs/{livreur}/toggle', [LivreurController::class, 'toggle']);
-        Route::delete('livreurs/{livreur}', [LivreurController::class, 'destroy']);
+        Route::get('livreurs', [LivreurController::class, 'index'])->name('livreurs.index');
+        Route::post('livreurs', [LivreurController::class, 'store'])->name('livreurs.store');
+        Route::patch('livreurs/{livreur}/toggle', [LivreurController::class, 'toggle'])->name('livreurs.toggle');
+        Route::delete('livreurs/{livreur}', [LivreurController::class, 'destroy'])->name('livreurs.destroy');
 
         Route::resource('equipes-livraison', EquipeLivraisonController::class)->except(['show']);
     });

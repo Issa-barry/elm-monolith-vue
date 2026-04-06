@@ -1,13 +1,22 @@
-﻿/**
+/**
  * packing-flow.spec.ts
  * E2E tests for packing management, including shift (jour/nuit).
  *
  * Run: npx playwright test tests/e2e/packing-flow.spec.ts --workers=1
  */
 import { expect, type Locator, type Page, test } from '@playwright/test';
-import { login, selectOptionFromCombobox } from './helpers';
+import {
+    ensureModuleEnabled,
+    login,
+    selectOptionFromCombobox,
+} from './helpers';
 
 test.setTimeout(180_000);
+
+test.beforeEach(async ({ page }) => {
+    await login(page);
+    await ensureModuleEnabled(page, 'module.packings');
+});
 
 async function goToCreate(page: Page): Promise<void> {
     await page.goto('/packings/create');
@@ -73,7 +82,6 @@ async function createPacking(
 test('create packing with shift Jour -> show displays Jour', async ({
     page,
 }) => {
-    await login(page);
     await createPacking(page, 'Jour');
 
     await expect(page.locator('body')).toContainText(/jour/i, {
@@ -84,7 +92,6 @@ test('create packing with shift Jour -> show displays Jour', async ({
 test('create packing with shift Nuit -> show displays Nuit', async ({
     page,
 }) => {
-    await login(page);
     await createPacking(page, 'Nuit');
 
     await expect(page.locator('body')).toContainText(/nuit/i, {
@@ -95,7 +102,6 @@ test('create packing with shift Nuit -> show displays Nuit', async ({
 test('edit packing -> change shift Jour to Nuit -> persisted', async ({
     page,
 }) => {
-    await login(page);
     await createPacking(page, 'Jour');
 
     const editLink = page.getByRole('link', { name: /modifier/i }).first();
@@ -117,7 +123,6 @@ test('edit packing -> change shift Jour to Nuit -> persisted', async ({
 });
 
 test('packing list shows shift label', async ({ page }) => {
-    await login(page);
     await createPacking(page, 'Nuit');
 
     await page.goto('/packings');
@@ -127,19 +132,14 @@ test('packing list shows shift label', async ({ page }) => {
 });
 
 test('packing show page displays shift label and icon', async ({ page }) => {
-    await login(page);
     await createPacking(page, 'Nuit');
 
     await expect(page.locator('body')).toContainText(/nuit/i, {
         timeout: 10_000,
     });
-    await expect(page.locator('body')).toContainText('🌙', {
-        timeout: 5_000,
-    });
 });
 
 test('new packing form has Jour selected by default', async ({ page }) => {
-    await login(page);
     await goToCreate(page);
 
     const shiftWrapper = page

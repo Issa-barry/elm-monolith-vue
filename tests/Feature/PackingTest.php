@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Enums\PackingShift;
 use App\Enums\PackingStatut;
+use App\Features\ModuleFeature;
 use App\Models\Organization;
 use App\Models\Packing;
 use App\Models\Prestataire;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -20,6 +22,7 @@ class PackingTest extends TestCase
     {
         parent::setUp();
         $this->initOrgAndUser(['packings.read', 'packings.create', 'packings.update', 'packings.delete']);
+        Feature::for($this->org)->activate(ModuleFeature::PACKINGS);
     }
 
     private function makePrestataire(Organization $org): Prestataire

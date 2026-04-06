@@ -81,6 +81,14 @@ class ContactTest extends TestCase
         $user = \App\Models\User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
 
+        $site = \App\Models\Site::create([
+            'organization_id' => $org->id,
+            'nom' => 'Site Test',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
         $msg = ContactMessage::factory()->create(['organization_id' => $org->id]);
 
         $this->actingAs($user)
