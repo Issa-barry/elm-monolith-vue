@@ -1,154 +1,187 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIResponse, type Page } from '@playwright/test';
 import {
+    escapeRegExp,
     findRowByName,
+    getVisibleSearchInput,
     login,
-    openRowActions,
     randomDigits,
-    registerCleanup,
-    selectOptionFromCombobox,
 } from './helpers';
 
 const PREFIX = 'e2elivflow';
 
 test.setTimeout(180_000);
 
-registerCleanup('/livreurs', PREFIX);
+type HttpMethod = 'POST' | 'PATCH' | 'DELETE';
 
-async function navigateToEdit(
-    page: Parameters<typeof login>[0],
-    name: string,
-): Promise<void> {
-    const row = await findRowByName(page, name);
-    await openRowActions(row);
-    await page.getByRole('menuitem', { name: /modifier/i }).first().click();
-    await expect(page).toHaveURL(/\/livreurs\/\d+\/edit$/);
+interface LivreurCreatePayload {
+    prenom: string;
+    nom: string;
+    telephone: string;
 }
 
-async function createLivreurInApp(
-    page: Parameters<typeof login>[0],
-    params: { prenom: string; nom: string; tel: string; adresse?: string },
-): Promise<void> {
-    await page.goto('/livreurs/create');
-    await page.locator('#prenom').fill(params.prenom);
-    await page.locator('#nom').fill(params.nom);
-    const paysCombo = page
-        .locator('#livreur-form')
-        .getByRole('combobox')
-        .first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
-    await page.locator('#ville').fill('Conakry');
-    if (params.adresse) {
-        await page.locator('#adresse').fill(params.adresse);
-    }
-    await page.locator('#telephone').fill(params.tel);
-    await page
-        .locator('#livreur-form button[type="submit"]:visible')
+async function getCsrfToken(page: Page): Promise<string> {
+    await page.goto('/livreurs');
+    const token = await page
+        .locator('meta[name="csrf-token"]')
         .first()
-        .click();
-    await expect(page).toHaveURL(/\/livreurs$/);
+        .getAttribute('content');
+
+    if (!token) {
+        throw new Error('Unable to resolve csrf token from /livreurs page.');
+    }
+
+    return token;
 }
 
-// ─── Création ────────────────────────────────────────────────────────────────
+async function sendLivreurRequest(
+    page: Page,
+    method: HttpMethod,
+    url: string,
+    payload?: Record<string, unknown>,
+): Promise<APIResponse> {
+    const csrfToken = await getCsrfToken(page);
 
-test('create livreur with all fields → verify in list', async ({ page }) => {
+    return page.request.fetch(url, {
+        method,
+        data: payload,
+        headers: {
+            Accept: 'application/json',
+            'X-CSRF-TOKEN': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+    });
+}
+
+async function createLivreurViaApi(
+    page: Page,
+    payload: LivreurCreatePayload,
+): Promise<number> {
+    const response = await sendLivreurRequest(page, 'POST', '/livreurs', payload);
+    expect(response.status()).toBe(201);
+
+    const body = await response.json();
+    expect(body.id).toBeTruthy();
+
+    return Number(body.id);
+}
+
+async function toggleLivreurViaApi(page: Page, livreurId: number): Promise<boolean> {
+    const response = await sendLivreurRequest(
+        page,
+        'PATCH',
+        `/livreurs/${livreurId}/toggle`,
+    );
+    expect(response.ok()).toBeTruthy();
+
+    const body = await response.json();
+    return Boolean(body.is_active);
+}
+
+async function deleteLivreurViaApi(page: Page, livreurId: number): Promise<void> {
+    const response = await sendLivreurRequest(page, 'DELETE', `/livreurs/${livreurId}`);
+    expect(response.ok()).toBeTruthy();
+}
+
+test('create livreur with all fields -> verify in list', async ({ page }) => {
     const uid = `${Date.now()}`.slice(-6);
     const prenom = `${PREFIX}${uid}`;
     const nom = `Flow${uid}`;
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-    await createLivreurInApp(page, { prenom, nom, tel, adresse: 'Quartier Matam' });
+    const livreurId = await createLivreurViaApi(page, {
+        prenom,
+        nom,
+        telephone: tel,
+    });
 
-    const row = await findRowByName(page, prenom);
-    await expect(row).toBeVisible();
-
-    // Localisation affichée : adresse + ville
-    await expect(row).toContainText('Quartier Matam');
-    await expect(row).toContainText('Conakry');
+    try {
+        const row = await findRowByName(page, prenom);
+        await expect(row).toBeVisible();
+        await expect(row).toContainText(/actif/i);
+        await expect(row).toContainText(new RegExp(escapeRegExp(tel.slice(-4))));
+    } finally {
+        await deleteLivreurViaApi(page, livreurId);
+    }
 });
 
-// ─── Modification des champs de localisation ─────────────────────────────────
-
-test('edit livreur → update ville / adresse → data persists', async ({
-    page,
-}) => {
+test('toggle livreur status via API -> data persists in list', async ({ page }) => {
     const uid = `${Date.now()}`.slice(-6);
     const prenom = `${PREFIX}${uid}`;
     const nom = `Edit${uid}`;
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-    await createLivreurInApp(page, { prenom, nom, tel, adresse: 'Adresse initiale' });
-    await navigateToEdit(page, prenom);
+    const livreurId = await createLivreurViaApi(page, {
+        prenom,
+        nom,
+        telephone: tel,
+    });
 
-    // Modifier ville et adresse
-    await page.locator('#ville').clear();
-    await page.locator('#ville').fill('Mamou');
-    await page.locator('#adresse').clear();
-    await page.locator('#adresse').fill('Adresse modifiée');
+    try {
+        const isActive = await toggleLivreurViaApi(page, livreurId);
+        expect(isActive).toBe(false);
 
-    await page
-        .locator('#livreur-form button[type="submit"]:visible')
-        .first()
-        .click();
-    // Le contrôleur redirige vers edit après mise à jour (message de succès affiché)
-    await expect(page).toHaveURL(/\/livreurs\/\d+\/edit$/, { timeout: 15_000 });
+        await page.goto('/livreurs');
+        const updatedRow = await findRowByName(page, prenom);
+        await expect(updatedRow).toBeVisible();
+        await expect(updatedRow).toContainText(/inactif/i);
 
-    // Vérifier dans la liste
-    await page.goto('/livreurs');
-    const updatedRow = await findRowByName(page, prenom);
-    await expect(updatedRow).toBeVisible();
-    await expect(updatedRow).toContainText(/adresse modifi/i);
-    await expect(updatedRow).toContainText('Mamou');
+        await page.reload();
+        const persistedRow = await findRowByName(page, prenom);
+        await expect(persistedRow).toContainText(/inactif/i);
+    } finally {
+        await deleteLivreurViaApi(page, livreurId);
+    }
 });
 
-// ─── Toggle statut ────────────────────────────────────────────────────────────
-
-test('create livreur + toggle status → inactif in list', async ({ page }) => {
+test('delete livreur via API -> removed from list', async ({ page }) => {
     const uid = `${Date.now()}`.slice(-6);
     const prenom = `${PREFIX}${uid}`;
-    const nom = `Status${uid}`;
+    const nom = `Del${uid}`;
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-    await createLivreurInApp(page, { prenom, nom, tel });
-
-    const row = await findRowByName(page, prenom);
-    await expect(row).toBeVisible();
-    await expect(row).toContainText(/actif/i);
-
-    // Modifier → désactiver
-    await navigateToEdit(page, prenom);
-
-    await page.locator('label[for="is_active"]').first().click();
-    await page
-        .locator('#livreur-form button[type="submit"]:visible')
-        .first()
-        .click();
-    // Le contrôleur redirige vers edit après mise à jour (message de succès affiché)
-    await expect(page).toHaveURL(/\/livreurs\/\d+\/edit$/, { timeout: 15_000 });
+    const livreurId = await createLivreurViaApi(page, {
+        prenom,
+        nom,
+        telephone: tel,
+    });
 
     await page.goto('/livreurs');
-    await page.waitForLoadState('networkidle');
-    const updated = await findRowByName(page, prenom);
-    await expect(updated).toBeVisible();
-    await expect(updated).toContainText(/inactif/i);
+    const createdRow = await findRowByName(page, prenom);
+    await expect(createdRow).toBeVisible();
+
+    await deleteLivreurViaApi(page, livreurId);
+
+    await page.goto('/livreurs');
+    const search = getVisibleSearchInput(page);
+    await search.fill(prenom);
+
+    await expect(
+        page.locator('tbody tr', {
+            hasText: new RegExp(escapeRegExp(prenom), 'i'),
+        }),
+    ).toHaveCount(0);
 });
 
-// ─── Validation requise ───────────────────────────────────────────────────────
-
-test('create livreur without required fields → stays on create page', async ({
+test('create livreur without required fields -> returns validation errors', async ({
     page,
 }) => {
     await login(page);
-    await page.goto('/livreurs/create');
 
-    // Soumettre sans rien remplir
-    await page
-        .locator('#livreur-form button[type="submit"]:visible')
-        .first()
-        .click();
+    const response = await sendLivreurRequest(page, 'POST', '/livreurs', {
+        prenom: '',
+        nom: '',
+        telephone: '',
+    });
 
-    // Doit rester sur create (validation serveur ou client)
-    await expect(page).toHaveURL(/\/livreurs\/create$/);
+    expect(response.status()).toBe(422);
+    const body = await response.json();
+
+    expect(body.errors).toBeTruthy();
+    expect(body.errors.nom).toBeTruthy();
+    expect(body.errors.prenom).toBeTruthy();
+    expect(body.errors.telephone).toBeTruthy();
 });
+

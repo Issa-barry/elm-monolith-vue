@@ -61,6 +61,11 @@ function matchesOptionText(
     );
     return safeRegex.test(raw) || safeRegex.test(fixed);
 }
+function visibleComboboxOptions(page: Page): Locator {
+    return page.locator(
+        '[role="listbox"]:visible [role="option"], [role="option"]:visible',
+    );
+}
 
 export function randomDigits(length: number): string {
     const max = 10 ** length;
@@ -222,9 +227,31 @@ export async function selectOptionFromCombobox(
     combobox: Locator,
     optionName?: string | RegExp,
 ): Promise<void> {
-    await combobox.click({ timeout: 3000 });
+    await combobox.scrollIntoViewIfNeeded().catch(() => undefined);
 
-    const visibleOptions = page.locator('[role="option"]:visible');
+    const visibleOptions = visibleComboboxOptions(page);
+    for (let attempt = 0; attempt < 3; attempt++) {
+        await combobox.click({ timeout: 3_000, force: true });
+        const hasVisibleOptions = await visibleOptions
+            .first()
+            .isVisible({ timeout: 5_000 })
+            .catch(() => false);
+        if (hasVisibleOptions) {
+            break;
+        }
+
+        await combobox.press('ArrowDown').catch(() => undefined);
+        const hasOptionsAfterKeyboard = await visibleOptions
+            .first()
+            .isVisible({ timeout: 3_000 })
+            .catch(() => false);
+        if (hasOptionsAfterKeyboard) {
+            break;
+        }
+
+        await page.keyboard.press('Escape').catch(() => undefined);
+    }
+
     await expect(visibleOptions.first()).toBeVisible({ timeout: 15_000 });
 
     let option = visibleOptions.first();
@@ -256,7 +283,7 @@ export async function selectOptionFromCombobox(
     }
 
     await expect(option).toBeVisible({ timeout: 15_000 });
-    await option.click({ timeout: 3000 });
+    await option.click({ timeout: 3_000 });
 }
 
 export async function ensureModuleEnabled(
@@ -308,9 +335,11 @@ export async function fillUserInfoAndAdvance(
     }: Omit<CreateUserParams, 'password'>,
 ): Promise<void> {
     const form = page.locator('#user-form');
+    const formComboboxes = form.getByRole('combobox');
+
     await selectOptionFromCombobox(
         page,
-        form.getByRole('combobox').first(),
+        formComboboxes.first(),
         /guin(?!.*bissau)/i,
     );
     await page.locator('#prenom').fill(prenom);
@@ -319,13 +348,28 @@ export async function fillUserInfoAndAdvance(
     if (email) {
         await page.locator('#email').fill(email);
     }
-    await selectOptionFromCombobox(
-        page,
-        form.getByRole('combobox').nth(1),
-        role,
-    );
-    await form.getByRole('combobox').nth(2).click();
-    await page.locator('[role="option"]:visible').first().click();
+
+    const roleComboboxByText = formComboboxes
+        .filter({
+            hasText: /choisir un role|role|manager|comptable|commercial|administrateur/i,
+        })
+        .first();
+    const roleCombobox =
+        (await roleComboboxByText.count()) > 0
+            ? roleComboboxByText
+            : formComboboxes.nth(1);
+
+    await selectOptionFromCombobox(page, roleCombobox, role);
+
+    const siteComboboxByText = formComboboxes
+        .filter({ hasText: /choisir un site|site/i })
+        .first();
+    if ((await siteComboboxByText.count()) > 0) {
+        await selectOptionFromCombobox(page, siteComboboxByText);
+    } else if ((await formComboboxes.count()) >= 3) {
+        await selectOptionFromCombobox(page, formComboboxes.nth(2));
+    }
+
     await form.locator('button[type="submit"]:visible').click();
     await expect(page.locator('#password')).toBeVisible();
 }
@@ -441,3 +485,4 @@ export async function cleanupRowsByPrefix(
         await searchInput.fill(prefix);
     }
 }
+

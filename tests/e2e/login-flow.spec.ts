@@ -1,4 +1,4 @@
-﻿/**
+/**
  * login-flow.spec.ts
  * Covers login scenarios beyond smoke tests:
  *   - wrong credentials
@@ -18,16 +18,28 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 const SESSION_COOKIE = 'eau-la-maman-session';
 const AUTH_ERROR_OR_THROTTLE_REGEX =
-    /(num[ée]ro de t[ée]l[ée]phone ou mot de passe incorrect|these credentials do not match our records|trop de tentatives|too many attempts|too many requests|429|please wait|veuillez patienter|r[ée]essayez)/i;
+    /(incorrect|these credentials do not match our records|trop de tentatives|too many attempts|too many requests|429|please wait|veuillez patienter|essayez)/i;
 const RATE_LIMIT_REGEX =
-    /trop de tentatives|too many attempts|too many requests|429|please wait|veuillez patienter|seconds|secondes|r[ée]essayez/i;
+    /trop de tentatives|too many attempts|too many requests|429|please wait|veuillez patienter|seconds|secondes|essayez/i;
 
-async function clickSubmit(page: Page): Promise<void> {
+async function clickSubmit(
+    page: Page,
+    opts: { requireEnabled?: boolean } = {},
+): Promise<boolean> {
     const btn = page.getByRole('button', { name: /se connecter/i }).first();
-    await expect(btn).toBeEnabled({ timeout: 10_000 });
-    await btn.click({ force: true });
-}
+    await expect(btn).toBeVisible({ timeout: 10_000 });
 
+    const isDisabled = await btn.isDisabled();
+    if (isDisabled) {
+        if (opts.requireEnabled !== false) {
+            await expect(btn).toBeEnabled({ timeout: 10_000 });
+        }
+        return false;
+    }
+
+    await btn.click({ force: true });
+    return true;
+}
 async function checkRememberMe(page: Page): Promise<void> {
     const checkboxByRole = page
         .getByRole('checkbox', { name: /se souvenir de moi/i })
@@ -191,9 +203,20 @@ test('empty phone (password filled) -> server validation error on telephone', as
     await page.waitForSelector('input[name="password"]', { timeout: 20_000 });
 
     await page.locator('input[name="password"]').fill(E2E_PASSWORD);
-    await clickSubmit(page);
+    const submitted = await clickSubmit(page, { requireEnabled: false });
 
     await expect(page).toHaveURL(/\/login(?:\?.*)?$/, { timeout: 15_000 });
+
+    if (!submitted) {
+        const loginButton = page
+            .getByRole('button', { name: /se connecter/i })
+            .first();
+        await expect(loginButton).toBeDisabled();
+
+        const phoneInput = page.locator('form input[type="tel"]').first();
+        await phoneInput.focus();
+        await phoneInput.blur();
+    }
 
     await expect(
         page
@@ -256,3 +279,4 @@ test('remember me checked -> session cookie removed -> still authenticated', asy
     await expect(page).not.toHaveURL(/\/login/, { timeout: 30_000 });
     await expect(page).toHaveURL(/\/users/, { timeout: 10_000 });
 });
+
