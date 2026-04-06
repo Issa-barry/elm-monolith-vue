@@ -3,8 +3,8 @@ import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
 import { formatPhoneDisplay } from '@/lib/utils';
+import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
 import { Users } from 'lucide-vue-next';
 import Column from 'primevue/column';
@@ -66,15 +66,26 @@ const livreursFiltres = computed(() => {
             <!-- En-tête -->
             <div class="flex items-center justify-between gap-4">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">Livreurs</h1>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Livreurs
+                    </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ livreursFiltres.length }} livreur{{ livreursFiltres.length !== 1 ? 's' : '' }}
+                        {{ livreursFiltres.length }} livreur{{
+                            livreursFiltres.length !== 1 ? 's' : ''
+                        }}
                         — Gérez les livreurs depuis les
-                        <Link href="/equipes-livraison" class="underline underline-offset-2 hover:text-foreground">
-                            Équipes de livraison</Link>.
+                        <Link
+                            href="/equipes-livraison"
+                            class="underline underline-offset-2 hover:text-foreground"
+                        >
+                            Équipes de livraison</Link
+                        >.
                     </p>
                 </div>
-                <Link v-if="can('equipes-livraison.read')" href="/equipes-livraison">
+                <Link
+                    v-if="can('equipes-livraison.read')"
+                    href="/equipes-livraison"
+                >
                     <Button variant="outline">
                         <Users class="mr-2 h-4 w-4" />
                         Gérer les équipes
@@ -86,17 +97,23 @@ const livreursFiltres = computed(() => {
             <div class="flex flex-wrap items-center gap-3">
                 <IconField class="max-w-xs flex-1">
                     <InputIcon class="pi pi-search" />
-                    <InputText v-model="search" placeholder="Rechercher un livreur…" class="w-full" />
+                    <InputText
+                        v-model="search"
+                        placeholder="Rechercher un livreur…"
+                        class="w-full"
+                    />
                 </IconField>
                 <div class="flex gap-1.5">
                     <Button
-                        v-for="opt in ([
+                        v-for="opt in [
                             { value: 'tous', label: 'Tous' },
                             { value: 'actif', label: 'Actif' },
                             { value: 'inactif', label: 'Inactif' },
-                        ] as const)"
+                        ] as const"
                         :key="opt.value"
-                        :variant="statutFilter === opt.value ? 'default' : 'outline'"
+                        :variant="
+                            statutFilter === opt.value ? 'default' : 'outline'
+                        "
                         size="sm"
                         @click="statutFilter = opt.value"
                     >
@@ -116,7 +133,9 @@ const livreursFiltres = computed(() => {
                 class="rounded-xl border bg-card shadow-sm"
             >
                 <template #empty>
-                    <div class="py-16 text-center text-sm text-muted-foreground">
+                    <div
+                        class="py-16 text-center text-sm text-muted-foreground"
+                    >
                         Aucun livreur trouvé.
                     </div>
                 </template>
@@ -124,7 +143,10 @@ const livreursFiltres = computed(() => {
                 <Column field="nom_complet" header="Livreur" sortable>
                     <template #body="{ data }">
                         <div class="font-medium">{{ data.nom_complet }}</div>
-                        <div v-if="data.telephone" class="text-xs text-muted-foreground">
+                        <div
+                            v-if="data.telephone"
+                            class="text-xs text-muted-foreground"
+                        >
                             {{ formatPhoneDisplay(data.telephone) }}
                         </div>
                     </template>
@@ -132,7 +154,10 @@ const livreursFiltres = computed(() => {
 
                 <Column header="Équipes">
                     <template #body="{ data }">
-                        <div v-if="data.equipes.length" class="flex flex-wrap gap-1.5">
+                        <div
+                            v-if="data.equipes.length"
+                            class="flex flex-wrap gap-1.5"
+                        >
                             <Link
                                 v-for="eq in data.equipes"
                                 :key="eq.id"
@@ -152,15 +177,26 @@ const livreursFiltres = computed(() => {
                                 </span>
                             </Link>
                         </div>
-                        <span v-else class="text-xs text-muted-foreground">— aucune équipe</span>
+                        <span v-else class="text-xs text-muted-foreground"
+                            >— aucune équipe</span
+                        >
                     </template>
                 </Column>
 
-                <Column field="is_active" header="Statut" sortable style="width:110px">
+                <Column
+                    field="is_active"
+                    header="Statut"
+                    sortable
+                    style="width: 110px"
+                >
                     <template #body="{ data }">
                         <StatusDot
                             :label="data.is_active ? 'Actif' : 'Inactif'"
-                            :dot-class="data.is_active ? 'bg-emerald-500' : 'bg-zinc-400'"
+                            :dot-class="
+                                data.is_active
+                                    ? 'bg-emerald-500'
+                                    : 'bg-zinc-400'
+                            "
                             class="text-muted-foreground"
                         />
                     </template>

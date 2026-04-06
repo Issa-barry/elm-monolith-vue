@@ -55,9 +55,13 @@ const principalIndex = computed(() =>
 const hasPrincipal = computed(() => principalIndex.value >= 0);
 
 const principalWarning = computed(() => {
-    const count = props.form.membres.filter((m) => m.role === 'principal').length;
-    if (count === 0) return "L'équipe doit avoir exactement un livreur principal.";
-    if (count > 1) return "L'équipe ne peut avoir qu'un seul livreur principal.";
+    const count = props.form.membres.filter(
+        (m) => m.role === 'principal',
+    ).length;
+    if (count === 0)
+        return "L'équipe doit avoir exactement un livreur principal.";
+    if (count > 1)
+        return "L'équipe ne peut avoir qu'un seul livreur principal.";
     return null;
 });
 
@@ -74,11 +78,15 @@ const tauxWarning = computed(() => {
 });
 
 const maxTauxDisponible = computed(() => {
-    const totalSansMembreEdite = props.form.membres.reduce((sum, membre, index) => {
-        if (editingIndex.value !== null && index === editingIndex.value) return sum;
-        const taux = Number(membre.taux_commission);
-        return sum + (Number.isFinite(taux) ? taux : 0);
-    }, 0);
+    const totalSansMembreEdite = props.form.membres.reduce(
+        (sum, membre, index) => {
+            if (editingIndex.value !== null && index === editingIndex.value)
+                return sum;
+            const taux = Number(membre.taux_commission);
+            return sum + (Number.isFinite(taux) ? taux : 0);
+        },
+        0,
+    );
 
     return Math.max(0, Number((100 - totalSansMembreEdite).toFixed(2)));
 });
@@ -151,7 +159,9 @@ function handleSubmit() {
     <form class="space-y-4 sm:space-y-6" @submit.prevent="handleSubmit">
         <!-- Identification -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+            <h3
+                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+            >
                 Identification
             </h3>
             <div class="grid gap-4 sm:grid-cols-2">
@@ -163,26 +173,37 @@ function handleSubmit() {
                         id="nom"
                         v-model="form.nom"
                         type="text"
-                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         :class="{ 'border-destructive': form.errors?.nom }"
                         placeholder="Ex: Équipe Centre-ville"
                     />
-                    <p v-if="form.errors?.nom" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="form.errors?.nom"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ form.errors.nom }}
                     </p>
                 </div>
                 <div class="sm:col-span-2">
-                    <h4 class="mb-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+                    <h4
+                        class="mb-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
                         Statut
                     </h4>
                     <div class="flex items-start gap-3">
                         <Checkbox
                             id="is_active"
                             :model-value="Boolean(form.is_active)"
-                            @update:model-value="form.is_active = $event === true"
+                            @update:model-value="
+                                form.is_active = $event === true
+                            "
                         />
                         <div>
-                            <Label for="is_active" class="cursor-pointer font-medium">Actif</Label>
+                            <Label
+                                for="is_active"
+                                class="cursor-pointer font-medium"
+                                >Actif</Label
+                            >
                             <p class="text-xs text-muted-foreground">
                                 Décochez pour désactiver l'équipe.
                             </p>
@@ -197,19 +218,31 @@ function handleSubmit() {
             <!-- En-tête section -->
             <div class="mb-4 flex items-start justify-between gap-4">
                 <div>
-                    <h3 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+                    <h3
+                        class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
                         Membres
                     </h3>
                     <p class="mt-0.5 text-xs text-muted-foreground">
                         Σ taux équipe :
                         <span
                             class="font-semibold"
-                            :class="sommeTaux > 100 ? 'text-destructive' : 'text-foreground'"
+                            :class="
+                                sommeTaux > 100
+                                    ? 'text-destructive'
+                                    : 'text-foreground'
+                            "
                             >{{ sommeTaux }}%</span
                         >
                         <span class="ml-1"
                             >(reste
-                            <span :class="(100 - sommeTaux) < 0 ? 'text-destructive font-semibold' : ''">
+                            <span
+                                :class="
+                                    100 - sommeTaux < 0
+                                        ? 'font-semibold text-destructive'
+                                        : ''
+                                "
+                            >
                                 {{ 100 - sommeTaux }}%
                             </span>
                             pour le propriétaire)</span
@@ -239,7 +272,10 @@ function handleSubmit() {
                 {{ tauxWarning }}
             </div>
 
-            <p v-if="form.errors?.membres" class="mb-3 text-xs text-destructive">
+            <p
+                v-if="form.errors?.membres"
+                class="mb-3 text-xs text-destructive"
+            >
                 {{ form.errors.membres }}
             </p>
 
@@ -249,7 +285,13 @@ function handleSubmit() {
                 class="rounded-lg border border-dashed py-10 text-center"
             >
                 <p class="text-sm text-muted-foreground">Aucun membre.</p>
-                <Button type="button" variant="outline" size="sm" class="mt-3" @click="openNewMembre">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    class="mt-3"
+                    @click="openNewMembre"
+                >
                     <Plus class="mr-1.5 h-3.5 w-3.5" />
                     Ajouter le premier membre
                 </Button>
@@ -278,7 +320,9 @@ function handleSubmit() {
                             <div class="truncate text-sm font-medium">
                                 {{ membre.prenom }} {{ membre.nom }}
                             </div>
-                            <div class="font-mono text-xs text-muted-foreground">
+                            <div
+                                class="font-mono text-xs text-muted-foreground"
+                            >
                                 {{ formatPhoneDisplay(membre.telephone) }}
                             </div>
                         </div>
@@ -287,7 +331,7 @@ function handleSubmit() {
                     <!-- Zone milieu : rôle centré -->
                     <div class="w-28 shrink-0 text-center">
                         <span
-                            class="inline-block rounded-sm px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                            class="inline-block rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
                             :class="
                                 membre.role === 'principal'
                                     ? 'bg-primary/10 text-primary'
@@ -300,7 +344,9 @@ function handleSubmit() {
 
                     <!-- Zone droite : taux + actions -->
                     <div class="flex shrink-0 items-center gap-3">
-                        <span class="w-12 text-right font-mono text-sm font-medium tabular-nums">
+                        <span
+                            class="w-12 text-right font-mono text-sm font-medium tabular-nums"
+                        >
                             {{ membre.taux_commission }}%
                         </span>
                         <div class="flex gap-0.5">
@@ -331,7 +377,12 @@ function handleSubmit() {
             <a href="/equipes-livraison">
                 <Button type="button" variant="outline">Retour</Button>
             </a>
-            <Button type="submit" :disabled="form.processing || !!principalWarning || !!tauxWarning">
+            <Button
+                type="submit"
+                :disabled="
+                    form.processing || !!principalWarning || !!tauxWarning
+                "
+            >
                 {{ form.processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
         </div>

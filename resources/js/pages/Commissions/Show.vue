@@ -11,8 +11,8 @@ import {
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
 import { formatPhoneDisplay } from '@/lib/utils';
+import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
@@ -129,7 +129,9 @@ const livreurParts = computed(() =>
     props.commission.parts.filter((p) => p.type_beneficiaire === 'livreur'),
 );
 const proprietaireParts = computed(() =>
-    props.commission.parts.filter((p) => p.type_beneficiaire === 'proprietaire'),
+    props.commission.parts.filter(
+        (p) => p.type_beneficiaire === 'proprietaire',
+    ),
 );
 
 const activePartTab = ref<'livreurs' | 'proprietaires'>(
@@ -157,7 +159,8 @@ const versementForm = reactive<VersementForm>({
 
 function openVersementDialog(part: CommissionPart) {
     dialogPart.value = part;
-    versementForm.montant = part.montant_restant > 0 ? part.montant_restant : null;
+    versementForm.montant =
+        part.montant_restant > 0 ? part.montant_restant : null;
     versementForm.mode_paiement = 'especes';
     versementForm.note = null;
     versementForm.processing = false;
@@ -195,7 +198,9 @@ function submitVersementDialog() {
         {
             preserveScroll: true,
             onSuccess: () => closeDialog(),
-            onFinish: () => { versementForm.processing = false; },
+            onFinish: () => {
+                versementForm.processing = false;
+            },
         },
     );
 }
@@ -285,12 +290,17 @@ function saveFrais(part: CommissionPart, onSuccess?: () => void) {
         {
             frais_supplementaires: f.frais,
             type_frais: f.frais > 0 ? f.type_frais || null : null,
-            commentaire_frais: (f.frais > 0 && f.type_frais === 'autre') ? f.commentaire_frais : null,
+            commentaire_frais:
+                f.frais > 0 && f.type_frais === 'autre'
+                    ? f.commentaire_frais
+                    : null,
         },
         {
             preserveScroll: true,
             onSuccess: () => onSuccess?.(),
-            onFinish: () => { f.processing = false; },
+            onFinish: () => {
+                f.processing = false;
+            },
         },
     );
 }
@@ -304,14 +314,17 @@ function submitFraisDialog() {
 // ── Suppression versement ─────────────────────────────────────────────────────
 
 function deleteVersement(versementId: number) {
-    router.delete(`/versements-commissions/${versementId}`, { preserveScroll: true });
+    router.delete(`/versements-commissions/${versementId}`, {
+        preserveScroll: true,
+    });
 }
 function isVersementDisabled(part: CommissionPart): boolean {
-    return part.montant_restant <= 0 || props.commission.is_annulee || !can('ventes.update');
+    return (
+        part.montant_restant <= 0 ||
+        props.commission.is_annulee ||
+        !can('ventes.update')
+    );
 }
-
-
-
 </script>
 
 <template>
@@ -319,28 +332,46 @@ function isVersementDisabled(part: CommissionPart): boolean {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-
             <!-- ── En-tête ──────────────────────────────────────────────────── -->
             <div>
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                        <p class="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                        <p
+                            class="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase"
+                        >
                             Versement commission
                         </p>
-                        <p class="mt-1 font-mono text-xl font-semibold leading-none">
+                        <p
+                            class="mt-1 font-mono text-xl leading-none font-semibold"
+                        >
                             {{ commission.commande_reference ?? '—' }}
                         </p>
-                        <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                            <span v-if="commission.vehicule_nom" class="inline-flex items-center gap-1.5">
+                        <div
+                            class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground"
+                        >
+                            <span
+                                v-if="commission.vehicule_nom"
+                                class="inline-flex items-center gap-1.5"
+                            >
                                 <Car class="h-3.5 w-3.5" />
                                 {{ commission.vehicule_nom }}
-                                <span v-if="commission.immatriculation" class="font-mono text-xs">({{ commission.immatriculation }})</span>
+                                <span
+                                    v-if="commission.immatriculation"
+                                    class="font-mono text-xs"
+                                    >({{ commission.immatriculation }})</span
+                                >
                             </span>
-                            <span v-if="commission.equipe_nom" class="inline-flex items-center gap-1.5">
+                            <span
+                                v-if="commission.equipe_nom"
+                                class="inline-flex items-center gap-1.5"
+                            >
                                 <Users class="h-3.5 w-3.5" />
                                 {{ commission.equipe_nom }}
                             </span>
-                            <span v-if="commission.site_nom" class="inline-flex items-center gap-1.5">
+                            <span
+                                v-if="commission.site_nom"
+                                class="inline-flex items-center gap-1.5"
+                            >
                                 <MapPin class="h-3.5 w-3.5" />
                                 {{ commission.site_nom }}
                             </span>
@@ -349,7 +380,10 @@ function isVersementDisabled(part: CommissionPart): boolean {
                     <div class="flex items-center gap-3">
                         <StatusDot
                             :label="commission.statut_label"
-                            :dot-class="statutDotColor[commission.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                            :dot-class="
+                                statutDotColor[commission.statut] ??
+                                'bg-zinc-400 dark:bg-zinc-500'
+                            "
                             class="text-sm text-muted-foreground"
                         />
                     </div>
@@ -360,19 +394,37 @@ function isVersementDisabled(part: CommissionPart): boolean {
             <div class="rounded-xl border bg-card p-5 shadow-sm">
                 <div class="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                        <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Total commission</p>
-                        <p class="mt-1 text-2xl font-bold tabular-nums">{{ formatGNF(commission.montant_commission_totale) }}</p>
+                        <p
+                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
+                            Total commission
+                        </p>
+                        <p class="mt-1 text-2xl font-bold tabular-nums">
+                            {{
+                                formatGNF(commission.montant_commission_totale)
+                            }}
+                        </p>
                     </div>
                     <div class="text-right">
                         <p class="text-xs text-muted-foreground">Versé</p>
-                        <p class="text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{{ formatGNF(commission.montant_verse) }}</p>
+                        <p
+                            class="text-lg font-semibold text-emerald-600 tabular-nums dark:text-emerald-400"
+                        >
+                            {{ formatGNF(commission.montant_verse) }}
+                        </p>
                     </div>
                     <div class="text-right">
                         <p class="text-xs text-muted-foreground">Restant</p>
                         <p
                             class="text-lg font-semibold tabular-nums"
-                            :class="commission.montant_restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
-                        >{{ formatGNF(commission.montant_restant) }}</p>
+                            :class="
+                                commission.montant_restant > 0
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-muted-foreground'
+                            "
+                        >
+                            {{ formatGNF(commission.montant_restant) }}
+                        </p>
                     </div>
                 </div>
             </div>
@@ -381,33 +433,47 @@ function isVersementDisabled(part: CommissionPart): boolean {
             <div class="space-y-4">
                 <!-- Tab switcher -->
                 <div class="flex items-center justify-between">
-                    <h2 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">Parts de commission</h2>
-                    <div class="flex rounded-lg border bg-muted/30 p-0.5 gap-0.5">
+                    <h2
+                        class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
+                        Parts de commission
+                    </h2>
+                    <div
+                        class="flex gap-0.5 rounded-lg border bg-muted/30 p-0.5"
+                    >
                         <button
                             class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors"
-                            :class="activePartTab === 'livreurs'
-                                ? 'bg-background text-foreground shadow-sm'
-                                : 'text-muted-foreground hover:text-foreground'"
+                            :class="
+                                activePartTab === 'livreurs'
+                                    ? 'bg-background text-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            "
                             :disabled="livreurParts.length === 0"
                             @click="activePartTab = 'livreurs'"
                         >
                             <Truck class="h-3.5 w-3.5" />
                             Livreurs
-                            <span class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] tabular-nums text-primary">
+                            <span
+                                class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary tabular-nums"
+                            >
                                 {{ livreurParts.length }}
                             </span>
                         </button>
                         <button
                             class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors"
-                            :class="activePartTab === 'proprietaires'
-                                ? 'bg-background text-foreground shadow-sm'
-                                : 'text-muted-foreground hover:text-foreground'"
+                            :class="
+                                activePartTab === 'proprietaires'
+                                    ? 'bg-background text-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            "
                             :disabled="proprietaireParts.length === 0"
                             @click="activePartTab = 'proprietaires'"
                         >
                             <User class="h-3.5 w-3.5" />
                             Propriétaire
-                            <span class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] tabular-nums text-primary">
+                            <span
+                                class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary tabular-nums"
+                            >
                                 {{ proprietaireParts.length }}
                             </span>
                         </button>
@@ -415,19 +481,54 @@ function isVersementDisabled(part: CommissionPart): boolean {
                 </div>
 
                 <!-- ── Tab Livreurs : tableau compact ──────────────────────────── -->
-                <div v-if="activePartTab === 'livreurs'" class="rounded-xl border bg-card shadow-sm overflow-hidden">
+                <div
+                    v-if="activePartTab === 'livreurs'"
+                    class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                >
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b bg-muted/40">
-                                    <th class="px-4 py-3 text-left font-medium text-muted-foreground">Livreur</th>
-                                    <th class="px-4 py-3 text-left font-medium text-muted-foreground">Rôle</th>
-                                    <th class="px-4 py-3 text-right font-medium text-muted-foreground">Taux</th>
-                                    <th class="px-4 py-3 text-right font-medium text-muted-foreground">Montant</th>
-                                    <th class="px-4 py-3 text-right font-medium text-muted-foreground">Versé</th>
-                                    <th class="px-4 py-3 text-right font-medium text-muted-foreground">Restant</th>
-                                    <th class="px-4 py-3 text-left font-medium text-muted-foreground">Statut</th>
-                                    <th class="px-4 py-3 text-center font-medium text-muted-foreground">Action</th>
+                                    <th
+                                        class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                    >
+                                        Livreur
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                    >
+                                        Rôle
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                    >
+                                        Taux
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                    >
+                                        Montant
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                    >
+                                        Versé
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                    >
+                                        Restant
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                    >
+                                        Statut
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-center font-medium text-muted-foreground"
+                                    >
+                                        Action
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
@@ -436,52 +537,102 @@ function isVersementDisabled(part: CommissionPart): boolean {
                                     :key="part.id"
                                     class="transition-colors hover:bg-muted/10"
                                 >
-                                    <td class="px-4 py-3 font-medium">{{ part.beneficiaire_nom }}</td>
+                                    <td class="px-4 py-3 font-medium">
+                                        {{ part.beneficiaire_nom }}
+                                    </td>
                                     <td class="px-4 py-3 text-muted-foreground">
                                         <span
                                             class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
                                         >
-                                            {{ part.role ? (roleLabels[part.role] ?? part.role) : '—' }}
+                                            {{
+                                                part.role
+                                                    ? (roleLabels[part.role] ??
+                                                      part.role)
+                                                    : '—'
+                                            }}
                                         </span>
                                     </td>
-                                    <td class="px-4 py-3 text-right tabular-nums text-muted-foreground">{{ part.taux_commission }}%</td>
-                                    <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatGNF(part.montant_brut) }}</td>
-                                    <td class="px-4 py-3 text-right tabular-nums text-foreground">
+                                    <td
+                                        class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                    >
+                                        {{ part.taux_commission }}%
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-right font-semibold tabular-nums"
+                                    >
+                                        {{ formatGNF(part.montant_brut) }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-right text-foreground tabular-nums"
+                                    >
                                         {{ formatGNF(part.montant_verse) }}
                                     </td>
-                                    <td class="px-4 py-3 text-right font-semibold tabular-nums text-foreground">
+                                    <td
+                                        class="px-4 py-3 text-right font-semibold text-foreground tabular-nums"
+                                    >
                                         {{ formatGNF(part.montant_restant) }}
                                     </td>
                                     <td class="px-4 py-3">
                                         <StatusDot
                                             :label="part.statut_label"
-                                            :dot-class="statutDotColor[part.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                            :dot-class="
+                                                statutDotColor[part.statut] ??
+                                                'bg-zinc-400 dark:bg-zinc-500'
+                                            "
                                             class="text-xs text-muted-foreground"
                                         />
                                     </td>
                                     <td class="px-4 py-3 text-center">
                                         <DropdownMenu>
                                             <DropdownMenuTrigger as-child>
-                                                <Button variant="ghost" size="icon" class="h-8 w-8">
-                                                    <MoreVertical class="h-4 w-4" />
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    class="h-8 w-8"
+                                                >
+                                                    <MoreVertical
+                                                        class="h-4 w-4"
+                                                    />
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuItem
-                                                    v-if="part.versements.length > 0"
+                                                    v-if="
+                                                        part.versements.length >
+                                                        0
+                                                    "
                                                     class="gap-2"
-                                                    @click="openHistoryDialog(part)"
+                                                    @click="
+                                                        openHistoryDialog(part)
+                                                    "
                                                 >
                                                     <History class="h-4 w-4" />
-                                                    Historique ({{ part.versements.length }})
+                                                    Historique ({{
+                                                        part.versements.length
+                                                    }})
                                                 </DropdownMenuItem>
-                                                <DropdownMenuSeparator v-if="part.versements.length > 0" />
+                                                <DropdownMenuSeparator
+                                                    v-if="
+                                                        part.versements.length >
+                                                        0
+                                                    "
+                                                />
                                                 <DropdownMenuItem
                                                     class="gap-2"
-                                                    :disabled="isVersementDisabled(part)"
-                                                    @click="openVersementDialog(part)"
+                                                    :disabled="
+                                                        isVersementDisabled(
+                                                            part,
+                                                        )
+                                                    "
+                                                    @click="
+                                                        openVersementDialog(
+                                                            part,
+                                                        )
+                                                    "
                                                 >
-                                                    <HandCoins class="h-4 w-4" />
+                                                    <HandCoins
+                                                        class="h-4 w-4"
+                                                    />
                                                     Versement
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
@@ -491,24 +642,62 @@ function isVersementDisabled(part: CommissionPart): boolean {
                             </tbody>
                         </table>
                     </div>
-
                 </div>
 
                 <!-- ── Tab Propriétaires : cartes inchangées ────────────────────── -->
-                <div v-if="activePartTab === 'proprietaires'" class="rounded-xl border bg-card shadow-sm overflow-hidden">
+                <div
+                    v-if="activePartTab === 'proprietaires'"
+                    class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                >
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b bg-muted/40">
-                                    <th class="px-4 py-3 text-left font-medium text-muted-foreground">Propriétaire</th>
-                                    <th class="px-4 py-3 text-right font-medium text-muted-foreground">Taux</th>
-                                    <th class="px-4 py-3 text-right font-medium text-muted-foreground">Brut</th>
-                                    <th class="px-4 py-3 text-right font-medium text-muted-foreground">Frais</th>
-                                    <th class="px-4 py-3 text-right font-medium text-muted-foreground">Net</th>
-                                    <th class="px-4 py-3 text-right font-medium text-muted-foreground">Versé</th>
-                                    <th class="px-4 py-3 text-right font-medium text-muted-foreground">Restant</th>
-                                    <th class="px-4 py-3 text-left font-medium text-muted-foreground">Statut</th>
-                                    <th class="px-4 py-3 text-center font-medium text-muted-foreground">Action</th>
+                                    <th
+                                        class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                    >
+                                        Propriétaire
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                    >
+                                        Taux
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                    >
+                                        Brut
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                    >
+                                        Frais
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                    >
+                                        Net
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                    >
+                                        Versé
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                    >
+                                        Restant
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                    >
+                                        Statut
+                                    </th>
+                                    <th
+                                        class="px-4 py-3 text-center font-medium text-muted-foreground"
+                                    >
+                                        Action
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
@@ -518,66 +707,154 @@ function isVersementDisabled(part: CommissionPart): boolean {
                                     class="transition-colors hover:bg-muted/10"
                                 >
                                     <td class="px-4 py-3">
-                                        <p class="font-medium">{{ part.beneficiaire_nom }}</p>
-                                        <p v-if="part.beneficiaire_telephone" class="mt-0.5 font-mono text-xs text-muted-foreground">
-                                            {{ formatPhoneDisplay(part.beneficiaire_telephone) }}
+                                        <p class="font-medium">
+                                            {{ part.beneficiaire_nom }}
+                                        </p>
+                                        <p
+                                            v-if="part.beneficiaire_telephone"
+                                            class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                        >
+                                            {{
+                                                formatPhoneDisplay(
+                                                    part.beneficiaire_telephone,
+                                                )
+                                            }}
                                         </p>
                                     </td>
-                                    <td class="px-4 py-3 text-right tabular-nums text-muted-foreground">{{ part.taux_commission }}%</td>
-                                    <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatGNF(part.montant_brut) }}</td>
-                                    <td class="px-4 py-3 text-right tabular-nums">
-                                        <div v-if="part.frais_supplementaires > 0" class="space-y-0.5">
-                                            <p class="font-semibold text-destructive">− {{ formatGNF(part.frais_supplementaires) }}</p>
-                                            <p class="text-[11px] text-muted-foreground">
-                                                {{ part.type_frais ? (typesFraisLabels[part.type_frais] ?? part.type_frais) : 'Frais' }}
+                                    <td
+                                        class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                    >
+                                        {{ part.taux_commission }}%
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-right font-semibold tabular-nums"
+                                    >
+                                        {{ formatGNF(part.montant_brut) }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-right tabular-nums"
+                                    >
+                                        <div
+                                            v-if="
+                                                part.frais_supplementaires > 0
+                                            "
+                                            class="space-y-0.5"
+                                        >
+                                            <p
+                                                class="font-semibold text-destructive"
+                                            >
+                                                −
+                                                {{
+                                                    formatGNF(
+                                                        part.frais_supplementaires,
+                                                    )
+                                                }}
+                                            </p>
+                                            <p
+                                                class="text-[11px] text-muted-foreground"
+                                            >
+                                                {{
+                                                    part.type_frais
+                                                        ? (typesFraisLabels[
+                                                              part.type_frais
+                                                          ] ?? part.type_frais)
+                                                        : 'Frais'
+                                                }}
                                             </p>
                                         </div>
-                                        <span v-else class="text-muted-foreground">{{ formatGNF(0) }}</span>
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
+                                            >{{ formatGNF(0) }}</span
+                                        >
                                     </td>
-                                    <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatGNF(part.montant_net) }}</td>
-                                    <td class="px-4 py-3 text-right tabular-nums text-foreground">
+                                    <td
+                                        class="px-4 py-3 text-right font-semibold tabular-nums"
+                                    >
+                                        {{ formatGNF(part.montant_net) }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-right text-foreground tabular-nums"
+                                    >
                                         {{ formatGNF(part.montant_verse) }}
                                     </td>
-                                    <td class="px-4 py-3 text-right font-semibold tabular-nums text-foreground">
+                                    <td
+                                        class="px-4 py-3 text-right font-semibold text-foreground tabular-nums"
+                                    >
                                         {{ formatGNF(part.montant_restant) }}
                                     </td>
                                     <td class="px-4 py-3">
                                         <StatusDot
                                             :label="part.statut_label"
-                                            :dot-class="statutDotColor[part.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                            :dot-class="
+                                                statutDotColor[part.statut] ??
+                                                'bg-zinc-400 dark:bg-zinc-500'
+                                            "
                                             class="text-xs text-muted-foreground"
                                         />
                                     </td>
                                     <td class="px-4 py-3 text-center">
                                         <DropdownMenu>
                                             <DropdownMenuTrigger as-child>
-                                                <Button variant="ghost" size="icon" class="h-8 w-8">
-                                                    <MoreVertical class="h-4 w-4" />
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    class="h-8 w-8"
+                                                >
+                                                    <MoreVertical
+                                                        class="h-4 w-4"
+                                                    />
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuItem
-                                                    v-if="part.versements.length > 0"
+                                                    v-if="
+                                                        part.versements.length >
+                                                        0
+                                                    "
                                                     class="gap-2"
-                                                    @click="openHistoryDialog(part)"
+                                                    @click="
+                                                        openHistoryDialog(part)
+                                                    "
                                                 >
                                                     <History class="h-4 w-4" />
-                                                    Historique ({{ part.versements.length }})
+                                                    Historique ({{
+                                                        part.versements.length
+                                                    }})
                                                 </DropdownMenuItem>
-                                                <DropdownMenuSeparator v-if="part.versements.length > 0" />
+                                                <DropdownMenuSeparator
+                                                    v-if="
+                                                        part.versements.length >
+                                                        0
+                                                    "
+                                                />
                                                 <DropdownMenuItem
                                                     class="gap-2"
-                                                    :disabled="isFraisDisabled()"
-                                                    @click="openFraisDialog(part)"
+                                                    :disabled="
+                                                        isFraisDisabled()
+                                                    "
+                                                    @click="
+                                                        openFraisDialog(part)
+                                                    "
                                                 >
                                                     Frais supplémentaires
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
                                                     class="gap-2"
-                                                    :disabled="isVersementDisabled(part)"
-                                                    @click="openVersementDialog(part)"
+                                                    :disabled="
+                                                        isVersementDisabled(
+                                                            part,
+                                                        )
+                                                    "
+                                                    @click="
+                                                        openVersementDialog(
+                                                            part,
+                                                        )
+                                                    "
                                                 >
-                                                    <HandCoins class="h-4 w-4" />
+                                                    <HandCoins
+                                                        class="h-4 w-4"
+                                                    />
                                                     Versement
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
@@ -599,7 +876,6 @@ function isVersementDisabled(part: CommissionPart): boolean {
                     </Button>
                 </Link>
             </div>
-
         </div>
     </AppLayout>
 
@@ -614,32 +890,56 @@ function isVersementDisabled(part: CommissionPart): boolean {
     >
         <template #header>
             <div>
-                <p class="font-semibold">{{ fraisDialogPart?.beneficiaire_nom }}</p>
+                <p class="font-semibold">
+                    {{ fraisDialogPart?.beneficiaire_nom }}
+                </p>
                 <p class="mt-0.5 text-xs text-muted-foreground">
-                    Propriétaire · {{ fraisDialogPart?.taux_commission }}%
-                    · Brut : {{ fraisDialogPart ? formatGNF(fraisDialogPart.montant_brut) : '' }}
+                    Propriétaire · {{ fraisDialogPart?.taux_commission }}% ·
+                    Brut :
+                    {{
+                        fraisDialogPart
+                            ? formatGNF(fraisDialogPart.montant_brut)
+                            : ''
+                    }}
                 </p>
             </div>
         </template>
 
-        <div v-if="fraisDialogPart" class="space-y-4 pb-1 pt-2">
-            <div class="grid grid-cols-3 gap-3 rounded-md border bg-muted/20 p-3 text-sm">
+        <div v-if="fraisDialogPart" class="space-y-4 pt-2 pb-1">
+            <div
+                class="grid grid-cols-3 gap-3 rounded-md border bg-muted/20 p-3 text-sm"
+            >
                 <div>
                     <p class="text-xs text-muted-foreground">Part brute</p>
-                    <p class="mt-0.5 font-medium tabular-nums">{{ formatGNF(fraisDialogPart.montant_brut) }}</p>
+                    <p class="mt-0.5 font-medium tabular-nums">
+                        {{ formatGNF(fraisDialogPart.montant_brut) }}
+                    </p>
                 </div>
                 <div>
                     <p class="text-xs text-muted-foreground">Frais</p>
-                    <p class="mt-0.5 font-semibold tabular-nums text-destructive">− {{ formatGNF(fraisForms[fraisDialogPart.id]?.frais ?? 0) }}</p>
+                    <p
+                        class="mt-0.5 font-semibold text-destructive tabular-nums"
+                    >
+                        −
+                        {{
+                            formatGNF(
+                                fraisForms[fraisDialogPart.id]?.frais ?? 0,
+                            )
+                        }}
+                    </p>
                 </div>
                 <div>
                     <p class="text-xs text-muted-foreground">Part nette</p>
-                    <p class="mt-0.5 font-semibold tabular-nums">{{ formatGNF(fraisNettePreview(fraisDialogPart)) }}</p>
+                    <p class="mt-0.5 font-semibold tabular-nums">
+                        {{ formatGNF(fraisNettePreview(fraisDialogPart)) }}
+                    </p>
                 </div>
             </div>
 
             <div>
-                <Label class="mb-1.5 block text-xs font-medium">Frais à déduire</Label>
+                <Label class="mb-1.5 block text-xs font-medium"
+                    >Frais à déduire</Label
+                >
                 <InputNumber
                     v-model="fraisForms[fraisDialogPart.id].frais"
                     :min="0"
@@ -653,7 +953,10 @@ function isVersementDisabled(part: CommissionPart): boolean {
                 />
             </div>
 
-            <div v-if="fraisForms[fraisDialogPart.id]?.frais > 0" class="space-y-3">
+            <div
+                v-if="fraisForms[fraisDialogPart.id]?.frais > 0"
+                class="space-y-3"
+            >
                 <div>
                     <Label class="mb-1.5 block text-xs font-medium">
                         Type de frais <span class="text-destructive">*</span>
@@ -668,15 +971,26 @@ function isVersementDisabled(part: CommissionPart): boolean {
                     />
                 </div>
 
-                <div v-if="fraisForms[fraisDialogPart.id]?.type_frais === 'autre'">
+                <div
+                    v-if="
+                        fraisForms[fraisDialogPart.id]?.type_frais === 'autre'
+                    "
+                >
                     <Label class="mb-1.5 block text-xs font-medium">
                         Commentaire <span class="text-destructive">*</span>
                         <span class="ml-1 font-normal text-muted-foreground">
-                            ({{ (fraisForms[fraisDialogPart.id]?.commentaire_frais ?? '').length }}/150)
+                            ({{
+                                (
+                                    fraisForms[fraisDialogPart.id]
+                                        ?.commentaire_frais ?? ''
+                                ).length
+                            }}/150)
                         </span>
                     </Label>
                     <InputText
-                        v-model="fraisForms[fraisDialogPart.id].commentaire_frais"
+                        v-model="
+                            fraisForms[fraisDialogPart.id].commentaire_frais
+                        "
                         :maxlength="150"
                         placeholder="Précisez le motif des frais…"
                         class="w-full"
@@ -687,14 +1001,21 @@ function isVersementDisabled(part: CommissionPart): boolean {
 
         <template #footer>
             <div class="flex justify-end gap-2">
-                <Button type="button" variant="outline" size="sm" @click="closeFraisDialog">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    @click="closeFraisDialog"
+                >
                     Annuler
                 </Button>
                 <Button
                     type="button"
                     size="sm"
                     class="gap-2"
-                    :disabled="!fraisDialogPart || isFraisFormInvalid(fraisDialogPart)"
+                    :disabled="
+                        !fraisDialogPart || isFraisFormInvalid(fraisDialogPart)
+                    "
                     @click="submitFraisDialog"
                 >
                     Appliquer
@@ -712,10 +1033,21 @@ function isVersementDisabled(part: CommissionPart): boolean {
     >
         <template #header>
             <div>
-                <p class="font-semibold">Historique — {{ historyDialogPart?.beneficiaire_nom }}</p>
+                <p class="font-semibold">
+                    Historique — {{ historyDialogPart?.beneficiaire_nom }}
+                </p>
                 <p class="mt-0.5 text-xs text-muted-foreground">
-                    {{ historyDialogPart?.versements.length }} versement{{ (historyDialogPart?.versements.length ?? 0) > 1 ? 's' : '' }}
-                    · Versé : {{ historyDialogPart ? formatGNF(historyDialogPart.montant_verse) : '' }}
+                    {{ historyDialogPart?.versements.length }} versement{{
+                        (historyDialogPart?.versements.length ?? 0) > 1
+                            ? 's'
+                            : ''
+                    }}
+                    · Versé :
+                    {{
+                        historyDialogPart
+                            ? formatGNF(historyDialogPart.montant_verse)
+                            : ''
+                    }}
                 </p>
             </div>
         </template>
@@ -724,12 +1056,35 @@ function isVersementDisabled(part: CommissionPart): boolean {
             <table class="w-full text-sm">
                 <thead>
                     <tr class="border-b bg-muted/40">
-                        <th class="px-3 py-2.5 text-left font-medium text-muted-foreground">Date versement</th>
-                        <th class="px-3 py-2.5 text-left font-medium text-muted-foreground">Mode</th>
-                        <th class="px-3 py-2.5 text-right font-medium text-muted-foreground">Montant</th>
-                        <th class="px-3 py-2.5 text-left font-medium text-muted-foreground">Note</th>
-                        <th class="px-3 py-2.5 text-left font-medium text-muted-foreground">Saisi par</th>
-                        <th v-if="can('ventes.update')" class="px-3 py-2.5"></th>
+                        <th
+                            class="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                        >
+                            Date versement
+                        </th>
+                        <th
+                            class="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                        >
+                            Mode
+                        </th>
+                        <th
+                            class="px-3 py-2.5 text-right font-medium text-muted-foreground"
+                        >
+                            Montant
+                        </th>
+                        <th
+                            class="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                        >
+                            Note
+                        </th>
+                        <th
+                            class="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                        >
+                            Saisi par
+                        </th>
+                        <th
+                            v-if="can('ventes.update')"
+                            class="px-3 py-2.5"
+                        ></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
@@ -739,16 +1094,37 @@ function isVersementDisabled(part: CommissionPart): boolean {
                         class="transition-colors hover:bg-muted/10"
                     >
                         <td class="px-3 py-2.5 tabular-nums">
-                            <span class="text-xs text-muted-foreground">{{ v.date_versement ?? '—' }}</span>
-                            <span v-if="v.enregistre_le" class="ml-1.5 text-xs font-medium text-foreground">{{ v.enregistre_le.split(' ')[1] }}</span>
+                            <span class="text-xs text-muted-foreground">{{
+                                v.date_versement ?? '—'
+                            }}</span>
+                            <span
+                                v-if="v.enregistre_le"
+                                class="ml-1.5 text-xs font-medium text-foreground"
+                                >{{ v.enregistre_le.split(' ')[1] }}</span
+                            >
                         </td>
-                        <td class="px-3 py-2.5 text-muted-foreground">{{ v.mode_paiement }}</td>
-                        <td class="px-3 py-2.5 text-right font-semibold tabular-nums">{{ formatGNF(v.montant) }}</td>
                         <td class="px-3 py-2.5 text-muted-foreground">
-                            <span class="block max-w-[160px] truncate text-xs" :title="v.note ?? ''">{{ v.note ?? '—' }}</span>
+                            {{ v.mode_paiement }}
                         </td>
-                        <td class="px-3 py-2.5 text-xs text-muted-foreground">{{ v.created_by ?? '—' }}</td>
-                        <td v-if="can('ventes.update')" class="px-3 py-2.5 text-right">
+                        <td
+                            class="px-3 py-2.5 text-right font-semibold tabular-nums"
+                        >
+                            {{ formatGNF(v.montant) }}
+                        </td>
+                        <td class="px-3 py-2.5 text-muted-foreground">
+                            <span
+                                class="block max-w-[160px] truncate text-xs"
+                                :title="v.note ?? ''"
+                                >{{ v.note ?? '—' }}</span
+                            >
+                        </td>
+                        <td class="px-3 py-2.5 text-xs text-muted-foreground">
+                            {{ v.created_by ?? '—' }}
+                        </td>
+                        <td
+                            v-if="can('ventes.update')"
+                            class="px-3 py-2.5 text-right"
+                        >
                             <button
                                 type="button"
                                 class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
@@ -777,13 +1153,20 @@ function isVersementDisabled(part: CommissionPart): boolean {
             <div>
                 <p class="font-semibold">{{ dialogPart?.beneficiaire_nom }}</p>
                 <p class="mt-0.5 text-xs text-muted-foreground">
-                    {{ dialogPart?.type_beneficiaire === 'proprietaire' ? 'Propriétaire' : 'Livreur' }} · {{ dialogPart?.taux_commission }}%
-                    · Restant : {{ dialogPart ? formatGNF(dialogPart.montant_restant) : '' }}
+                    {{
+                        dialogPart?.type_beneficiaire === 'proprietaire'
+                            ? 'Propriétaire'
+                            : 'Livreur'
+                    }}
+                    · {{ dialogPart?.taux_commission }}% · Restant :
+                    {{
+                        dialogPart ? formatGNF(dialogPart.montant_restant) : ''
+                    }}
                 </p>
             </div>
         </template>
 
-        <div class="space-y-4 pb-1 pt-2">
+        <div class="space-y-4 pt-2 pb-1">
             <div>
                 <Label class="mb-1.5 block text-xs font-medium">Montant</Label>
                 <InputNumber
@@ -799,7 +1182,9 @@ function isVersementDisabled(part: CommissionPart): boolean {
                 />
             </div>
             <div>
-                <Label class="mb-1.5 block text-xs font-medium">Mode de paiement</Label>
+                <Label class="mb-1.5 block text-xs font-medium"
+                    >Mode de paiement</Label
+                >
                 <Dropdown
                     v-model="versementForm.mode_paiement"
                     :options="modes_paiement"
@@ -809,7 +1194,9 @@ function isVersementDisabled(part: CommissionPart): boolean {
                 />
             </div>
             <div>
-                <Label class="mb-1.5 block text-xs font-medium">Note (optionnel)</Label>
+                <Label class="mb-1.5 block text-xs font-medium"
+                    >Note (optionnel)</Label
+                >
                 <InputText
                     v-model="versementForm.note as string"
                     class="w-full"
@@ -820,14 +1207,22 @@ function isVersementDisabled(part: CommissionPart): boolean {
 
         <template #footer>
             <div class="flex justify-end gap-2">
-                <Button type="button" variant="outline" size="sm" @click="closeDialog">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    @click="closeDialog"
+                >
                     Annuler
                 </Button>
                 <Button
                     type="button"
                     size="sm"
                     class="gap-2"
-                    :disabled="versementForm.processing || !(versementForm.montant && versementForm.montant > 0)"
+                    :disabled="
+                        versementForm.processing ||
+                        !(versementForm.montant && versementForm.montant > 0)
+                    "
                     @click="submitVersementDialog"
                 >
                     <HandCoins class="h-4 w-4" />
@@ -837,4 +1232,3 @@ function isVersementDisabled(part: CommissionPart): boolean {
         </template>
     </Dialog>
 </template>
-

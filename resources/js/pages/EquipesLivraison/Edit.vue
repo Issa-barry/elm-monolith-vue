@@ -54,11 +54,18 @@ function submit() {
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
             <div class="hidden sm:block">
-                <Link href="/equipes-livraison" class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+                <Link
+                    href="/equipes-livraison"
+                    class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                >
                     <ArrowLeft class="h-4 w-4" /> Équipes
                 </Link>
-                <h1 class="text-2xl font-semibold tracking-tight">{{ equipe.nom }}</h1>
-                <p class="mt-1 text-sm text-muted-foreground">Modifier les membres et taux.</p>
+                <h1 class="text-2xl font-semibold tracking-tight">
+                    {{ equipe.nom }}
+                </h1>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Modifier les membres et taux.
+                </p>
             </div>
             <EquipeForm :form="form" @submit="submit" />
         </div>

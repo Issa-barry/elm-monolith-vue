@@ -267,9 +267,15 @@ function submit() {
                         Informations générales
                     </h2>
                     <!-- Site rattaché (lecture seule) -->
-                    <div class="mb-4 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2.5">
-                        <span class="text-xs text-muted-foreground">Site :</span>
-                        <span class="text-sm font-medium">{{ user_site.label }}</span>
+                    <div
+                        class="mb-4 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2.5"
+                    >
+                        <span class="text-xs text-muted-foreground"
+                            >Site :</span
+                        >
+                        <span class="text-sm font-medium">{{
+                            user_site.label
+                        }}</span>
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-2">
@@ -331,9 +337,7 @@ function submit() {
 
                         <!-- Client -->
                         <div>
-                            <Label class="mb-1.5 block text-sm">
-                                Client
-                            </Label>
+                            <Label class="mb-1.5 block text-sm"> Client </Label>
                             <AutoComplete
                                 v-model="clientSelected"
                                 :suggestions="clientSuggests"

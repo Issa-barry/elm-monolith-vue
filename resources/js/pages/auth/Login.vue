@@ -249,7 +249,9 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                                     class="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                                 />
                             </div>
-                            <InputError :message="phoneClientError ?? errors.telephone" />
+                            <InputError
+                                :message="phoneClientError ?? errors.telephone"
+                            />
                         </div>
 
                         <!-- Mot de passe -->

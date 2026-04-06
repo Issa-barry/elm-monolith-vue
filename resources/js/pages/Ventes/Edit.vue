@@ -73,12 +73,12 @@ const breadcrumbs: BreadcrumbItem[] = [
 // ── Form ──────────────────────────────────────────────────────────────────────
 const form = useForm({
     vehicule_id: props.commande.vehicule_id as number | null,
-    client_id:   props.commande.client_id   as number | null,
+    client_id: props.commande.client_id as number | null,
     lignes: props.commande.lignes.map((l) => ({
-        produit_id:  l.produit_id,
-        qte:         l.qte,
-        prix_vente:  l.prix_vente,
-        total:       l.prix_vente * l.qte,
+        produit_id: l.produit_id,
+        qte: l.qte,
+        prix_vente: l.prix_vente,
+        total: l.prix_vente * l.qte,
     })) as LigneForm[],
 });
 
@@ -172,7 +172,8 @@ function onProduitChange(index: number, produitId: number | null) {
     if (existingIndex !== -1) {
         form.lignes[existingIndex].qte += form.lignes[index].qte;
         form.lignes[existingIndex].total =
-            form.lignes[existingIndex].prix_vente * form.lignes[existingIndex].qte;
+            form.lignes[existingIndex].prix_vente *
+            form.lignes[existingIndex].qte;
         form.lignes.splice(index, 1);
         return;
     }
@@ -265,7 +266,8 @@ function submit() {
                     {{ commande.reference }}
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Modifiez cette commande en brouillon. Les changements sont enregistrés immédiatement.
+                    Modifiez cette commande en brouillon. Les changements sont
+                    enregistrés immédiatement.
                 </p>
             </div>
 
@@ -279,9 +281,15 @@ function submit() {
                     </h2>
 
                     <!-- Site rattaché (lecture seule) -->
-                    <div class="mb-4 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2.5">
-                        <span class="text-xs text-muted-foreground">Site :</span>
-                        <span class="text-sm font-medium">{{ user_site.label }}</span>
+                    <div
+                        class="mb-4 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2.5"
+                    >
+                        <span class="text-xs text-muted-foreground"
+                            >Site :</span
+                        >
+                        <span class="text-sm font-medium">{{
+                            user_site.label
+                        }}</span>
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-2">
@@ -293,12 +301,16 @@ function submit() {
                                 :suggestions="vehiculeSuggests"
                                 :option-label="vehiculeLabel"
                                 @complete="searchVehicule"
-                                @item-select="onVehiculeSelect(vehiculeSelected)"
+                                @item-select="
+                                    onVehiculeSelect(vehiculeSelected)
+                                "
                                 @clear="onVehiculeClear"
                                 placeholder="Nom, immatriculation, livreur…"
                                 class="w-full"
                                 input-class="w-full"
-                                :class="{ 'p-invalid': form.errors.vehicule_id }"
+                                :class="{
+                                    'p-invalid': form.errors.vehicule_id,
+                                }"
                                 dropdown
                                 force-selection
                             >
@@ -307,19 +319,31 @@ function submit() {
                                         <div class="leading-tight font-medium">
                                             {{ option.nom_vehicule }}
                                         </div>
-                                        <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                                            <span class="font-mono">{{ option.immatriculation }}</span>
-                                            <span v-if="option.livreur_nom" class="before:mr-2 before:content-['·']">
+                                        <div
+                                            class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground"
+                                        >
+                                            <span class="font-mono">{{
+                                                option.immatriculation
+                                            }}</span>
+                                            <span
+                                                v-if="option.livreur_nom"
+                                                class="before:mr-2 before:content-['·']"
+                                            >
                                                 {{ option.livreur_nom }}
                                             </span>
                                         </div>
                                     </div>
                                 </template>
                                 <template #empty>
-                                    <span class="text-sm text-muted-foreground">Aucun véhicule trouvé.</span>
+                                    <span class="text-sm text-muted-foreground"
+                                        >Aucun véhicule trouvé.</span
+                                    >
                                 </template>
                             </AutoComplete>
-                            <p v-if="form.errors.vehicule_id" class="mt-1 text-xs text-destructive">
+                            <p
+                                v-if="form.errors.vehicule_id"
+                                class="mt-1 text-xs text-destructive"
+                            >
                                 {{ form.errors.vehicule_id }}
                             </p>
                         </div>
@@ -344,18 +368,34 @@ function submit() {
                                 <template #option="{ option }">
                                     <div class="py-0.5">
                                         <div class="leading-tight font-medium">
-                                            {{ [option.prenom, option.nom].filter(Boolean).join(' ') }}
+                                            {{
+                                                [option.prenom, option.nom]
+                                                    .filter(Boolean)
+                                                    .join(' ')
+                                            }}
                                         </div>
-                                        <div v-if="option.telephone" class="mt-0.5 text-xs text-muted-foreground">
-                                            {{ formatPhoneDisplay(option.telephone) }}
+                                        <div
+                                            v-if="option.telephone"
+                                            class="mt-0.5 text-xs text-muted-foreground"
+                                        >
+                                            {{
+                                                formatPhoneDisplay(
+                                                    option.telephone,
+                                                )
+                                            }}
                                         </div>
                                     </div>
                                 </template>
                                 <template #empty>
-                                    <span class="text-sm text-muted-foreground">Aucun client trouvé.</span>
+                                    <span class="text-sm text-muted-foreground"
+                                        >Aucun client trouvé.</span
+                                    >
                                 </template>
                             </AutoComplete>
-                            <p v-if="form.errors.client_id" class="mt-1 text-xs text-destructive">
+                            <p
+                                v-if="form.errors.client_id"
+                                class="mt-1 text-xs text-destructive"
+                            >
                                 {{ form.errors.client_id }}
                             </p>
                         </div>
@@ -377,20 +417,47 @@ function submit() {
                         Lignes de commande
                     </h2>
 
-                    <p v-if="form.errors.lignes" class="mb-3 text-xs text-destructive">
+                    <p
+                        v-if="form.errors.lignes"
+                        class="mb-3 text-xs text-destructive"
+                    >
                         {{ form.errors.lignes }}
                     </p>
 
                     <!-- ── Tableau desktop ── -->
-                    <div class="hidden overflow-hidden rounded-lg border sm:block">
+                    <div
+                        class="hidden overflow-hidden rounded-lg border sm:block"
+                    >
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b bg-muted/40">
-                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Produit</th>
-                                    <th class="px-4 py-2.5 text-center font-medium text-muted-foreground" style="width: 110px">Qté</th>
-                                    <th class="px-4 py-2.5 text-right font-medium text-muted-foreground" style="width: 180px">Prix unit.</th>
-                                    <th class="px-4 py-2.5 text-right font-medium text-muted-foreground" style="width: 160px">Total</th>
-                                    <th class="px-4 py-2.5" style="width: 48px"></th>
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Produit
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 110px"
+                                    >
+                                        Qté
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                        style="width: 180px"
+                                    >
+                                        Prix unit.
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                        style="width: 160px"
+                                    >
+                                        Total
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5"
+                                        style="width: 48px"
+                                    ></th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
@@ -402,26 +469,42 @@ function submit() {
                                     <td class="px-4 py-3">
                                         <Dropdown
                                             :model-value="ligne.produit_id"
-                                            @update:model-value="onProduitChange(index, $event)"
+                                            @update:model-value="
+                                                onProduitChange(index, $event)
+                                            "
                                             :options="produitOptions"
                                             option-label="label"
                                             option-value="value"
                                             placeholder="Choisir un produit..."
                                             filter
                                             class="w-full"
-                                            :class="{ 'p-invalid': (form.errors as any)[`lignes.${index}.produit_id`] }"
+                                            :class="{
+                                                'p-invalid': (
+                                                    form.errors as any
+                                                )[`lignes.${index}.produit_id`],
+                                            }"
                                         />
                                         <p
-                                            v-if="(form.errors as any)[`lignes.${index}.produit_id`]"
+                                            v-if="
+                                                (form.errors as any)[
+                                                    `lignes.${index}.produit_id`
+                                                ]
+                                            "
                                             class="mt-1 text-xs text-destructive"
                                         >
-                                            {{ (form.errors as any)[`lignes.${index}.produit_id`] }}
+                                            {{
+                                                (form.errors as any)[
+                                                    `lignes.${index}.produit_id`
+                                                ]
+                                            }}
                                         </p>
                                     </td>
                                     <td class="px-4 py-3">
                                         <InputNumber
                                             :model-value="ligne.qte"
-                                            @update:model-value="onQteChange(index, $event)"
+                                            @update:model-value="
+                                                onQteChange(index, $event)
+                                            "
                                             :min="1"
                                             :use-grouping="false"
                                             class="w-full"
@@ -431,7 +514,9 @@ function submit() {
                                     <td class="px-4 py-3">
                                         <InputNumber
                                             :model-value="ligne.prix_vente"
-                                            @update:model-value="onPrixChange(index, $event)"
+                                            @update:model-value="
+                                                onPrixChange(index, $event)
+                                            "
                                             :min="0"
                                             :use-grouping="false"
                                             suffix=" GNF"
@@ -439,8 +524,14 @@ function submit() {
                                             input-class="w-full text-right"
                                         />
                                     </td>
-                                    <td class="px-4 py-3 text-right font-medium tabular-nums">
-                                        {{ ligne.total > 0 ? formatGNF(ligne.total) : '—' }}
+                                    <td
+                                        class="px-4 py-3 text-right font-medium tabular-nums"
+                                    >
+                                        {{
+                                            ligne.total > 0
+                                                ? formatGNF(ligne.total)
+                                                : '—'
+                                        }}
                                     </td>
                                     <td class="px-4 py-3 text-center">
                                         <Button
@@ -468,22 +559,34 @@ function submit() {
                         >
                             <Dropdown
                                 :model-value="ligne.produit_id"
-                                @update:model-value="onProduitChange(index, $event)"
+                                @update:model-value="
+                                    onProduitChange(index, $event)
+                                "
                                 :options="produitOptions"
                                 option-label="label"
                                 option-value="value"
                                 placeholder="Choisir un produit..."
                                 filter
                                 class="w-full"
-                                :class="{ 'p-invalid': (form.errors as any)[`lignes.${index}.produit_id`] }"
+                                :class="{
+                                    'p-invalid': (form.errors as any)[
+                                        `lignes.${index}.produit_id`
+                                    ],
+                                }"
                             />
 
                             <div class="mt-2.5 grid grid-cols-2 gap-2.5">
                                 <div>
-                                    <p class="mb-1 text-[11px] font-medium text-muted-foreground">Quantité</p>
+                                    <p
+                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
+                                    >
+                                        Quantité
+                                    </p>
                                     <InputNumber
                                         :model-value="ligne.qte"
-                                        @update:model-value="onQteChange(index, $event)"
+                                        @update:model-value="
+                                            onQteChange(index, $event)
+                                        "
                                         :min="1"
                                         :use-grouping="false"
                                         class="w-full"
@@ -491,10 +594,16 @@ function submit() {
                                     />
                                 </div>
                                 <div>
-                                    <p class="mb-1 text-[11px] font-medium text-muted-foreground">Prix unit. (GNF)</p>
+                                    <p
+                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
+                                    >
+                                        Prix unit. (GNF)
+                                    </p>
                                     <InputNumber
                                         :model-value="ligne.prix_vente"
-                                        @update:model-value="onPrixChange(index, $event)"
+                                        @update:model-value="
+                                            onPrixChange(index, $event)
+                                        "
                                         :min="0"
                                         :use-grouping="false"
                                         class="w-full"
@@ -503,11 +612,23 @@ function submit() {
                                 </div>
                             </div>
 
-                            <div class="mt-2.5 flex items-center justify-between">
+                            <div
+                                class="mt-2.5 flex items-center justify-between"
+                            >
                                 <div>
-                                    <p class="text-[11px] text-muted-foreground">Total ligne</p>
-                                    <p class="text-sm font-semibold tabular-nums">
-                                        {{ ligne.total > 0 ? formatGNF(ligne.total) : '—' }}
+                                    <p
+                                        class="text-[11px] text-muted-foreground"
+                                    >
+                                        Total ligne
+                                    </p>
+                                    <p
+                                        class="text-sm font-semibold tabular-nums"
+                                    >
+                                        {{
+                                            ligne.total > 0
+                                                ? formatGNF(ligne.total)
+                                                : '—'
+                                        }}
                                     </p>
                                 </div>
                                 <Button
@@ -526,13 +647,24 @@ function submit() {
 
                     <!-- Ajouter + Total -->
                     <div class="mt-4 flex items-center justify-between">
-                        <Button type="button" variant="outline" size="sm" @click="addLigne">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            @click="addLigne"
+                        >
                             <Plus class="mr-2 h-4 w-4" />
                             Ajouter une ligne
                         </Button>
                         <div class="text-right">
-                            <p class="text-xs tracking-wider text-muted-foreground uppercase">Total commande</p>
-                            <p class="text-2xl font-bold tabular-nums">{{ formatGNF(totalGeneral) }}</p>
+                            <p
+                                class="text-xs tracking-wider text-muted-foreground uppercase"
+                            >
+                                Total commande
+                            </p>
+                            <p class="text-2xl font-bold tabular-nums">
+                                {{ formatGNF(totalGeneral) }}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -546,7 +678,11 @@ function submit() {
                         <Button type="button" variant="outline">Retour</Button>
                     </Link>
                     <Button type="submit" :disabled="!canSubmit">
-                        {{ form.processing ? 'Enregistrement…' : 'Enregistrer les modifications' }}
+                        {{
+                            form.processing
+                                ? 'Enregistrement…'
+                                : 'Enregistrer les modifications'
+                        }}
                     </Button>
                 </div>
             </form>
@@ -558,7 +694,11 @@ function submit() {
         >
             <Button class="w-full" :disabled="!canSubmit" @click="submit">
                 <Save class="mr-2 h-4 w-4" />
-                {{ form.processing ? 'Enregistrement…' : 'Enregistrer les modifications' }}
+                {{
+                    form.processing
+                        ? 'Enregistrement…'
+                        : 'Enregistrer les modifications'
+                }}
             </Button>
         </div>
     </AppLayout>

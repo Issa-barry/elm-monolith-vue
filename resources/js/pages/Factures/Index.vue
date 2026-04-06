@@ -143,7 +143,9 @@ const totauxFiltres = computed(() => {
     const partielles = list.filter((f) => f.statut_facture === 'partiel');
     const payees = list.filter((f) => f.statut_facture === 'payee');
     return {
-        total: list.filter((f) => f.statut_facture !== 'annulee').reduce((s, f) => s + f.montant_net, 0),
+        total: list
+            .filter((f) => f.statut_facture !== 'annulee')
+            .reduce((s, f) => s + f.montant_net, 0),
         nb_total: list.filter((f) => f.statut_facture !== 'annulee').length,
         total_a_encaisser: list
             .filter((f) => !['payee', 'annulee'].includes(f.statut_facture))
@@ -268,35 +270,51 @@ function _progressPercent(f: FactureItem): number {
             <div class="grid grid-cols-2 gap-3 p-4">
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
                     <p class="text-xs text-muted-foreground">Total</p>
-                    <p class="mt-1 text-lg font-bold text-foreground tabular-nums">
+                    <p
+                        class="mt-1 text-lg font-bold text-foreground tabular-nums"
+                    >
                         {{ formatGNF(totauxFiltres.total) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_total }} facture{{ totauxFiltres.nb_total > 1 ? 's' : '' }}
+                        {{ totauxFiltres.nb_total }} facture{{
+                            totauxFiltres.nb_total > 1 ? 's' : ''
+                        }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Restant à encaisser</p>
-                    <p class="mt-1 text-lg font-bold text-foreground tabular-nums">
+                    <p class="text-xs text-muted-foreground">
+                        Restant à encaisser
+                    </p>
+                    <p
+                        class="mt-1 text-lg font-bold text-foreground tabular-nums"
+                    >
                         {{ formatGNF(totauxFiltres.total_a_encaisser) }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
                     <p class="text-xs text-muted-foreground">Impayées</p>
-                    <p class="mt-1 text-lg font-bold text-foreground tabular-nums">
+                    <p
+                        class="mt-1 text-lg font-bold text-foreground tabular-nums"
+                    >
                         {{ formatGNF(totauxFiltres.montant_impayees) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_impayees }} facture{{ totauxFiltres.nb_impayees > 1 ? 's' : '' }}
+                        {{ totauxFiltres.nb_impayees }} facture{{
+                            totauxFiltres.nb_impayees > 1 ? 's' : ''
+                        }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
                     <p class="text-xs text-muted-foreground">Soldées</p>
-                    <p class="mt-1 text-lg font-bold text-foreground tabular-nums">
+                    <p
+                        class="mt-1 text-lg font-bold text-foreground tabular-nums"
+                    >
                         {{ formatGNF(totauxFiltres.montant_payees) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_payees }} facture{{ totauxFiltres.nb_payees > 1 ? 's' : '' }}
+                        {{ totauxFiltres.nb_payees }} facture{{
+                            totauxFiltres.nb_payees > 1 ? 's' : ''
+                        }}
                     </p>
                 </div>
             </div>
@@ -387,8 +405,12 @@ function _progressPercent(f: FactureItem): number {
             <!-- En-tête -->
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">Factures de vente</h1>
-                    <p class="mt-1 text-sm text-muted-foreground">Suivi et encaissement des factures.</p>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Factures de vente
+                    </h1>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        Suivi et encaissement des factures.
+                    </p>
                 </div>
             </div>
 
@@ -396,38 +418,54 @@ function _progressPercent(f: FactureItem): number {
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Total</p>
-                    <p class="mt-2 text-2xl font-bold text-foreground tabular-nums">
+                    <p
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
+                    >
                         {{ formatGNF(totauxFiltres.total) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_total }} facture{{ totauxFiltres.nb_total > 1 ? 's' : '' }}
+                        {{ totauxFiltres.nb_total }} facture{{
+                            totauxFiltres.nb_total > 1 ? 's' : ''
+                        }}
                     </p>
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Restant à encaisser</p>
-                    <p class="mt-2 text-2xl font-bold text-foreground tabular-nums">
+                    <p class="text-sm text-muted-foreground">
+                        Restant à encaisser
+                    </p>
+                    <p
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
+                    >
                         {{ formatGNF(totauxFiltres.total_a_encaisser) }}
                     </p>
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Impayées</p>
-                    <p class="mt-2 text-2xl font-bold text-foreground tabular-nums">
+                    <p
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
+                    >
                         {{ formatGNF(totauxFiltres.montant_impayees) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_impayees }} facture{{ totauxFiltres.nb_impayees > 1 ? 's' : '' }}
+                        {{ totauxFiltres.nb_impayees }} facture{{
+                            totauxFiltres.nb_impayees > 1 ? 's' : ''
+                        }}
                     </p>
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Soldées</p>
-                    <p class="mt-2 text-2xl font-bold text-foreground tabular-nums">
+                    <p
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
+                    >
                         {{ formatGNF(totauxFiltres.montant_payees) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_payees }} facture{{ totauxFiltres.nb_payees > 1 ? 's' : '' }}
+                        {{ totauxFiltres.nb_payees }} facture{{
+                            totauxFiltres.nb_payees > 1 ? 's' : ''
+                        }}
                     </p>
                 </div>
             </div>
@@ -452,7 +490,9 @@ function _progressPercent(f: FactureItem): number {
                         <div class="flex items-center gap-3">
                             <IconField class="max-w-sm flex-1">
                                 <InputIcon class="pointer-events-none">
-                                    <Search class="h-4 w-4 text-muted-foreground" />
+                                    <Search
+                                        class="h-4 w-4 text-muted-foreground"
+                                    />
                                 </InputIcon>
                                 <InputText
                                     v-model="search"
@@ -477,72 +517,140 @@ function _progressPercent(f: FactureItem): number {
                                 class="w-40"
                             />
                             <span class="text-xs text-muted-foreground">
-                                {{ facturesFiltrees.length }} résultat{{ facturesFiltrees.length !== 1 ? 's' : '' }}
+                                {{ facturesFiltrees.length }} résultat{{
+                                    facturesFiltrees.length !== 1 ? 's' : ''
+                                }}
                             </span>
                         </div>
                     </template>
 
                     <!-- Référence -->
-                    <Column field="reference" header="Référence" sortable style="min-width: 180px">
+                    <Column
+                        field="reference"
+                        header="Référence"
+                        sortable
+                        style="min-width: 180px"
+                    >
                         <template #body="{ data }">
-                            <span class="inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{{ data.reference }}</span>
+                            <span
+                                class="inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+                                >{{ data.reference }}</span
+                            >
                         </template>
                     </Column>
 
                     <!-- Véhicule / Client -->
                     <Column header="Véhicule / Client" style="min-width: 160px">
                         <template #body="{ data }">
-                            <div v-if="data.vehicule_nom" class="font-medium">{{ data.vehicule_nom }}</div>
-                            <div v-if="data.client_nom" class="text-muted-foreground" :class="{ 'text-xs': data.vehicule_nom }">{{ data.client_nom }}</div>
-                            <span v-if="!data.vehicule_nom && !data.client_nom" class="text-muted-foreground">—</span>
+                            <div v-if="data.vehicule_nom" class="font-medium">
+                                {{ data.vehicule_nom }}
+                            </div>
+                            <div
+                                v-if="data.client_nom"
+                                class="text-muted-foreground"
+                                :class="{ 'text-xs': data.vehicule_nom }"
+                            >
+                                {{ data.client_nom }}
+                            </div>
+                            <span
+                                v-if="!data.vehicule_nom && !data.client_nom"
+                                class="text-muted-foreground"
+                                >—</span
+                            >
                         </template>
                     </Column>
 
                     <!-- Site -->
-                    <Column field="site_nom" header="Site" sortable style="min-width: 120px">
+                    <Column
+                        field="site_nom"
+                        header="Site"
+                        sortable
+                        style="min-width: 120px"
+                    >
                         <template #body="{ data }">
-                            <span class="text-muted-foreground">{{ data.site_nom ?? '—' }}</span>
+                            <span class="text-muted-foreground">{{
+                                data.site_nom ?? '—'
+                            }}</span>
                         </template>
                     </Column>
 
                     <!-- Montant -->
-                    <Column field="montant_net" header="Montant" sortable style="width: 140px">
+                    <Column
+                        field="montant_net"
+                        header="Montant"
+                        sortable
+                        style="width: 140px"
+                    >
                         <template #body="{ data }">
-                            <span class="tabular-nums">{{ formatGNF(data.montant_net) }}</span>
+                            <span class="tabular-nums">{{
+                                formatGNF(data.montant_net)
+                            }}</span>
                         </template>
                     </Column>
 
                     <!-- Encaissé -->
-                    <Column field="montant_encaisse" header="Encaissé" sortable style="width: 140px">
+                    <Column
+                        field="montant_encaisse"
+                        header="Encaissé"
+                        sortable
+                        style="width: 140px"
+                    >
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground">{{ formatGNF(data.montant_encaisse) }}</span>
+                            <span class="text-muted-foreground tabular-nums">{{
+                                formatGNF(data.montant_encaisse)
+                            }}</span>
                         </template>
                     </Column>
 
                     <!-- Restant -->
-                    <Column field="montant_restant" header="Restant" sortable style="width: 140px">
+                    <Column
+                        field="montant_restant"
+                        header="Restant"
+                        sortable
+                        style="width: 140px"
+                    >
                         <template #body="{ data }">
-                            <span class="tabular-nums text-muted-foreground">
-                                {{ data.montant_restant > 0 ? formatGNF(data.montant_restant) : '—' }}
+                            <span class="text-muted-foreground tabular-nums">
+                                {{
+                                    data.montant_restant > 0
+                                        ? formatGNF(data.montant_restant)
+                                        : '—'
+                                }}
                             </span>
                         </template>
                     </Column>
 
                     <!-- Statut -->
-                    <Column field="statut_label" header="Statut" sortable style="width: 120px">
+                    <Column
+                        field="statut_label"
+                        header="Statut"
+                        sortable
+                        style="width: 120px"
+                    >
                         <template #body="{ data }">
                             <StatusDot
                                 :label="data.statut_label"
-                                :dot-class="statutColor[data.statut_facture] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                :dot-class="
+                                    statutColor[data.statut_facture] ??
+                                    'bg-zinc-400 dark:bg-zinc-500'
+                                "
                                 class="text-muted-foreground"
                             />
                         </template>
                     </Column>
 
                     <!-- Date -->
-                    <Column field="created_at" header="Date" sortable style="width: 110px">
+                    <Column
+                        field="created_at"
+                        header="Date"
+                        sortable
+                        style="width: 110px"
+                    >
                         <template #body="{ data }">
-                            <span class="text-xs text-muted-foreground tabular-nums">{{ data.created_at }}</span>
+                            <span
+                                class="text-xs text-muted-foreground tabular-nums"
+                                >{{ data.created_at }}</span
+                            >
                         </template>
                     </Column>
 
@@ -552,18 +660,37 @@ function _progressPercent(f: FactureItem): number {
                             <div class="flex justify-end">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger as-child>
-                                        <Button variant="ghost" size="icon" class="h-8 w-8">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-8 w-8"
+                                        >
                                             <MoreVertical class="h-4 w-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" class="w-48">
-                                        <DropdownMenuItem class="cursor-pointer" @click="openHistory(data)">
+                                    <DropdownMenuContent
+                                        align="end"
+                                        class="w-48"
+                                    >
+                                        <DropdownMenuItem
+                                            class="cursor-pointer"
+                                            @click="openHistory(data)"
+                                        >
                                             <History class="h-4 w-4" />
                                             Historique
                                         </DropdownMenuItem>
-                                        <template v-if="!data.is_annulee && !data.is_payee && can('ventes.update')">
+                                        <template
+                                            v-if="
+                                                !data.is_annulee &&
+                                                !data.is_payee &&
+                                                can('ventes.update')
+                                            "
+                                        >
                                             <DropdownMenuSeparator />
-                                            <DropdownMenuItem class="cursor-pointer" @click="openDialog(data)">
+                                            <DropdownMenuItem
+                                                class="cursor-pointer"
+                                                @click="openDialog(data)"
+                                            >
                                                 <CreditCard class="h-4 w-4" />
                                                 Encaisser
                                             </DropdownMenuItem>
@@ -575,7 +702,11 @@ function _progressPercent(f: FactureItem): number {
                     </Column>
 
                     <template #empty>
-                        <div class="py-16 text-center text-sm text-muted-foreground">Aucune facture trouvée.</div>
+                        <div
+                            class="py-16 text-center text-sm text-muted-foreground"
+                        >
+                            Aucune facture trouvée.
+                        </div>
                     </template>
                 </DataTable>
             </div>
@@ -585,37 +716,102 @@ function _progressPercent(f: FactureItem): number {
         <Dialog
             v-model:visible="historyVisible"
             modal
-            :header="factureHistory ? `Historique — ${factureHistory.reference}` : 'Historique'"
+            :header="
+                factureHistory
+                    ? `Historique — ${factureHistory.reference}`
+                    : 'Historique'
+            "
             :style="{ width: '560px' }"
         >
             <div v-if="factureHistory">
-                <div v-if="factureHistory.encaissements.length === 0" class="py-8 text-center text-sm text-muted-foreground">
+                <div
+                    v-if="factureHistory.encaissements.length === 0"
+                    class="py-8 text-center text-sm text-muted-foreground"
+                >
                     Aucun encaissement enregistré.
                 </div>
                 <table v-else class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/30">
-                            <th class="px-3 py-2 text-left font-medium text-muted-foreground">Date versement</th>
-                            <th class="px-3 py-2 text-left font-medium text-muted-foreground">Heure</th>
-                            <th class="px-3 py-2 text-left font-medium text-muted-foreground">Mode</th>
-                            <th class="px-3 py-2 text-right font-medium text-muted-foreground">Montant</th>
-                            <th class="px-3 py-2 text-left font-medium text-muted-foreground">Par</th>
+                            <th
+                                class="px-3 py-2 text-left font-medium text-muted-foreground"
+                            >
+                                Date versement
+                            </th>
+                            <th
+                                class="px-3 py-2 text-left font-medium text-muted-foreground"
+                            >
+                                Heure
+                            </th>
+                            <th
+                                class="px-3 py-2 text-left font-medium text-muted-foreground"
+                            >
+                                Mode
+                            </th>
+                            <th
+                                class="px-3 py-2 text-right font-medium text-muted-foreground"
+                            >
+                                Montant
+                            </th>
+                            <th
+                                class="px-3 py-2 text-left font-medium text-muted-foreground"
+                            >
+                                Par
+                            </th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
-                        <tr v-for="e in factureHistory.encaissements" :key="e.id" class="hover:bg-muted/10">
-                            <td class="px-3 py-2 tabular-nums text-muted-foreground">{{ e.date_encaissement ?? '—' }}</td>
-                            <td class="px-3 py-2 tabular-nums text-muted-foreground">{{ e.enregistre_le ? e.enregistre_le.split(' ')[1] : '—' }}</td>
-                            <td class="px-3 py-2 text-muted-foreground">{{ e.mode_paiement }}</td>
-                            <td class="px-3 py-2 text-right tabular-nums font-medium">{{ formatGNF(e.montant) }}</td>
-                            <td class="px-3 py-2 text-xs text-muted-foreground">{{ e.created_by ?? '—' }}</td>
+                        <tr
+                            v-for="e in factureHistory.encaissements"
+                            :key="e.id"
+                            class="hover:bg-muted/10"
+                        >
+                            <td
+                                class="px-3 py-2 text-muted-foreground tabular-nums"
+                            >
+                                {{ e.date_encaissement ?? '—' }}
+                            </td>
+                            <td
+                                class="px-3 py-2 text-muted-foreground tabular-nums"
+                            >
+                                {{
+                                    e.enregistre_le
+                                        ? e.enregistre_le.split(' ')[1]
+                                        : '—'
+                                }}
+                            </td>
+                            <td class="px-3 py-2 text-muted-foreground">
+                                {{ e.mode_paiement }}
+                            </td>
+                            <td
+                                class="px-3 py-2 text-right font-medium tabular-nums"
+                            >
+                                {{ formatGNF(e.montant) }}
+                            </td>
+                            <td class="px-3 py-2 text-xs text-muted-foreground">
+                                {{ e.created_by ?? '—' }}
+                            </td>
                         </tr>
                     </tbody>
                     <tfoot>
                         <tr class="border-t">
-                            <td colspan="3" class="px-3 py-2 text-sm font-semibold">Total encaissé</td>
-                            <td class="px-3 py-2 text-right tabular-nums font-semibold">
-                                {{ formatGNF(factureHistory.encaissements.reduce((s, e) => s + e.montant, 0)) }}
+                            <td
+                                colspan="3"
+                                class="px-3 py-2 text-sm font-semibold"
+                            >
+                                Total encaissé
+                            </td>
+                            <td
+                                class="px-3 py-2 text-right font-semibold tabular-nums"
+                            >
+                                {{
+                                    formatGNF(
+                                        factureHistory.encaissements.reduce(
+                                            (s, e) => s + e.montant,
+                                            0,
+                                        ),
+                                    )
+                                }}
                             </td>
                             <td></td>
                         </tr>

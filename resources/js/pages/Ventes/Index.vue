@@ -78,9 +78,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 // ── Statut couleurs ───────────────────────────────────────────────────────────
 const statutCommandeColor: Record<string, string> = {
     brouillon: 'bg-zinc-400 dark:bg-zinc-500',
-    en_cours:  'bg-blue-500',
-    cloturee:  'bg-emerald-500',
-    annulee:   'bg-red-400',
+    en_cours: 'bg-blue-500',
+    cloturee: 'bg-emerald-500',
+    annulee: 'bg-red-400',
 };
 
 const statutFactureColor: Record<string, string> = {
@@ -114,11 +114,20 @@ const validationProcessing = ref(false);
 function valider(commande: Commande) {
     if (validationProcessing.value) return;
     validationProcessing.value = true;
-    router.patch(`/ventes/${commande.id}/valider`, {}, {
-        onSuccess: () =>
-            toast.add({ severity: 'success', summary: 'Validée', detail: 'Commande validée, facture créée.', life: 3000 }),
-        onFinish: () => (validationProcessing.value = false),
-    });
+    router.patch(
+        `/ventes/${commande.id}/valider`,
+        {},
+        {
+            onSuccess: () =>
+                toast.add({
+                    severity: 'success',
+                    summary: 'Validée',
+                    detail: 'Commande validée, facture créée.',
+                    life: 3000,
+                }),
+            onFinish: () => (validationProcessing.value = false),
+        },
+    );
 }
 
 // ── Annulation ────────────────────────────────────────────────────────────────

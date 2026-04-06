@@ -80,7 +80,8 @@
       "Bash(php -l app/Http/Controllers/CommandeVenteController.php)",
       "Bash(php -l database/factories/CommandeVenteFactory.php)",
       "Bash(php -l c:/laragon/www/elm-monolithe/app/Http/Controllers/CommandeVenteController.php)",
-      "Bash(php -l c:/laragon/www/elm-monolithe/routes/web.php)"
+      "Bash(php -l c:/laragon/www/elm-monolithe/routes/web.php)",
+      "Bash(node node_modules/.bin/prettier --check resources/)"
     ]
   }
 }
