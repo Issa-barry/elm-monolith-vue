@@ -17,13 +17,13 @@ class CommissionVenteFactory extends Factory
         $montantCommissionTotale = round($montantCommande * 0.10, 2);
 
         return [
-            'organization_id'           => $org->id,
-            'commande_vente_id'         => CommandeVente::factory()->create(['organization_id' => $org->id])->id,
-            'vehicule_id'               => Vehicule::factory()->create(['organization_id' => $org->id])->id,
-            'montant_commande'          => $montantCommande,
+            'organization_id' => $org->id,
+            'commande_vente_id' => CommandeVente::factory()->create(['organization_id' => $org->id])->id,
+            'vehicule_id' => Vehicule::factory()->create(['organization_id' => $org->id])->id,
+            'montant_commande' => $montantCommande,
             'montant_commission_totale' => $montantCommissionTotale,
-            'montant_verse'             => 0,
-            'statut'                    => StatutCommission::EN_ATTENTE,
+            'montant_verse' => 0,
+            'statut' => StatutCommission::EN_ATTENTE,
         ];
     }
 }

@@ -76,11 +76,11 @@ class CommissionCalculator
             : $vehicule->load('equipe.membres.livreur')->equipe;
 
         if (! $equipe) {
-            throw new InvalidArgumentException("Aucune équipe assignée au véhicule.");
+            throw new InvalidArgumentException('Aucune équipe assignée au véhicule.');
         }
 
         $tauxProprietaire = (float) $vehicule->taux_commission_proprietaire;
-        $proprietaire     = $vehicule->relationLoaded('proprietaire')
+        $proprietaire = $vehicule->relationLoaded('proprietaire')
             ? $vehicule->proprietaire
             : $vehicule->load('proprietaire')->proprietaire;
 
@@ -95,40 +95,40 @@ class CommissionCalculator
 
         foreach ($membres as $membre) {
             $livreur = $membre->livreur;
-            $taux    = (float) $membre->taux_commission;
-            $brut    = round($commissionTotale * $taux / 100, 2);
+            $taux = (float) $membre->taux_commission;
+            $brut = round($commissionTotale * $taux / 100, 2);
 
             $parts[] = [
-                'type_beneficiaire'  => 'livreur',
-                'livreur_id'         => $livreur?->id,
-                'proprietaire_id'    => null,
-                'beneficiaire_nom'   => $livreur ? trim($livreur->prenom.' '.$livreur->nom) : "Livreur #{$membre->livreur_id}",
-                'role'               => $membre->role ?? null,
-                'taux_commission'    => $taux,
-                'montant_brut'       => $brut,
+                'type_beneficiaire' => 'livreur',
+                'livreur_id' => $livreur?->id,
+                'proprietaire_id' => null,
+                'beneficiaire_nom' => $livreur ? trim($livreur->prenom.' '.$livreur->nom) : "Livreur #{$membre->livreur_id}",
+                'role' => $membre->role ?? null,
+                'taux_commission' => $taux,
+                'montant_brut' => $brut,
                 'frais_supplementaires' => 0.0,
-                'montant_net'        => $brut,
+                'montant_net' => $brut,
             ];
         }
 
         // Part propriétaire
         $brutProp = round($commissionTotale * $tauxProprietaire / 100, 2);
         $parts[] = [
-            'type_beneficiaire'  => 'proprietaire',
-            'livreur_id'         => null,
-            'proprietaire_id'    => $proprietaire?->id,
-            'beneficiaire_nom'   => $proprietaire
+            'type_beneficiaire' => 'proprietaire',
+            'livreur_id' => null,
+            'proprietaire_id' => $proprietaire?->id,
+            'beneficiaire_nom' => $proprietaire
                 ? trim($proprietaire->prenom.' '.$proprietaire->nom)
                 : 'Propriétaire',
-            'taux_commission'    => $tauxProprietaire,
-            'montant_brut'       => $brutProp,
+            'taux_commission' => $tauxProprietaire,
+            'montant_brut' => $brutProp,
             'frais_supplementaires' => 0.0,
-            'montant_net'        => $brutProp,
+            'montant_net' => $brutProp,
         ];
 
         return [
             'commission_totale' => $commissionTotale,
-            'parts'             => $parts,
+            'parts' => $parts,
         ];
     }
 

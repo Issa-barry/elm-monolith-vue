@@ -33,12 +33,12 @@ class CommissionPart extends Model
     protected function casts(): array
     {
         return [
-            'taux_commission'      => 'decimal:2',
-            'montant_brut'         => 'decimal:2',
-            'frais_supplementaires'=> 'decimal:2',
-            'montant_net'          => 'decimal:2',
-            'montant_verse'        => 'decimal:2',
-            'statut'               => StatutCommission::class,
+            'taux_commission' => 'decimal:2',
+            'montant_brut' => 'decimal:2',
+            'frais_supplementaires' => 'decimal:2',
+            'montant_net' => 'decimal:2',
+            'montant_verse' => 'decimal:2',
+            'statut' => StatutCommission::class,
         ];
     }
 
@@ -90,7 +90,7 @@ class CommissionPart extends Model
     public function recalculStatut(): bool
     {
         $verse = (float) $this->versements()->sum('montant');
-        $net   = (float) $this->montant_net;
+        $net = (float) $this->montant_net;
 
         $this->montant_verse = $verse;
 
@@ -116,9 +116,9 @@ class CommissionPart extends Model
     public function appliquerFrais(float $frais, ?string $typeFrais = null, ?string $commentaireFrais = null): bool
     {
         $this->frais_supplementaires = max(0.0, $frais);
-        $this->montant_net           = max(0.0, round((float) $this->montant_brut - $this->frais_supplementaires, 2));
-        $this->type_frais            = $frais > 0 ? $typeFrais : null;
-        $this->commentaire_frais     = ($frais > 0 && $typeFrais === 'autre') ? $commentaireFrais : null;
+        $this->montant_net = max(0.0, round((float) $this->montant_brut - $this->frais_supplementaires, 2));
+        $this->type_frais = $frais > 0 ? $typeFrais : null;
+        $this->commentaire_frais = ($frais > 0 && $typeFrais === 'autre') ? $commentaireFrais : null;
 
         return $this->save();
     }

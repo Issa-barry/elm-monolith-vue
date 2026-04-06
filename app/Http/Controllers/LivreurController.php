@@ -24,15 +24,15 @@ class LivreurController extends Controller
             ->orderBy('nom')
             ->get()
             ->map(fn (Livreur $l) => [
-                'id'          => $l->id,
-                'nom'         => $l->nom,
-                'prenom'      => $l->prenom,
+                'id' => $l->id,
+                'nom' => $l->nom,
+                'prenom' => $l->prenom,
                 'nom_complet' => $l->nom_complet,
-                'telephone'   => $l->telephone,
-                'is_active'   => $l->is_active,
-                'equipes'     => $l->equipes->map(fn ($e) => [
-                    'id'   => $e->id,
-                    'nom'  => $e->nom,
+                'telephone' => $l->telephone,
+                'is_active' => $l->is_active,
+                'equipes' => $l->equipes->map(fn ($e) => [
+                    'id' => $e->id,
+                    'nom' => $e->nom,
                     'role' => $e->pivot->role,
                 ])->values(),
             ]);
@@ -51,27 +51,27 @@ class LivreurController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'nom'       => 'required|string|max:255',
-            'prenom'    => 'required|string|max:255',
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
             'telephone' => [
                 'required', 'string', 'max:30',
                 Rule::unique('livreurs', 'telephone')->where('organization_id', $orgId),
             ],
         ], [
-            'nom.required'       => 'Le nom est obligatoire.',
-            'prenom.required'    => 'Le prénom est obligatoire.',
+            'nom.required' => 'Le nom est obligatoire.',
+            'prenom.required' => 'Le prénom est obligatoire.',
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
-            'telephone.unique'   => 'Ce numéro de téléphone est déjà utilisé dans votre organisation.',
+            'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé dans votre organisation.',
         ]);
 
         $livreur = Livreur::create([...$data, 'organization_id' => $orgId, 'is_active' => true]);
 
         return response()->json([
-            'id'        => $livreur->id,
-            'value'     => $livreur->id,
-            'label'     => $livreur->nom_complet,
-            'nom'       => $livreur->nom,
-            'prenom'    => $livreur->prenom,
+            'id' => $livreur->id,
+            'value' => $livreur->id,
+            'label' => $livreur->nom_complet,
+            'nom' => $livreur->nom,
+            'prenom' => $livreur->prenom,
             'telephone' => $livreur->telephone,
             'is_active' => true,
         ], 201);
@@ -104,8 +104,8 @@ class LivreurController extends Controller
             $livreur->update(['is_active' => false]);
 
             return response()->json([
-                'action'    => 'deactivated',
-                'message'   => 'Ce livreur est référencé dans des commissions. Il a été désactivé plutôt que supprimé.',
+                'action' => 'deactivated',
+                'message' => 'Ce livreur est référencé dans des commissions. Il a été désactivé plutôt que supprimé.',
                 'is_active' => false,
             ]);
         }

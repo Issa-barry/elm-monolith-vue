@@ -65,15 +65,15 @@ class FactureVenteController extends Controller
                     ->sortByDesc(fn ($e) => $e->created_at?->timestamp ?? 0)
                     ->values()
                     ->map(fn ($e) => [
-                        'id'               => $e->id,
-                        'montant'          => (float) $e->montant,
-                        'date_encaissement'=> $e->date_encaissement?->format('d/m/Y'),
-                        'enregistre_le'    => $e->created_at?->format('d/m/Y H:i'),
-                        'mode_paiement'    => $e->mode_paiement instanceof \App\Enums\ModePaiement
+                        'id' => $e->id,
+                        'montant' => (float) $e->montant,
+                        'date_encaissement' => $e->date_encaissement?->format('d/m/Y'),
+                        'enregistre_le' => $e->created_at?->format('d/m/Y H:i'),
+                        'mode_paiement' => $e->mode_paiement instanceof \App\Enums\ModePaiement
                             ? $e->mode_paiement->label()
                             : (string) $e->mode_paiement,
-                        'note'             => $e->note,
-                        'created_by'       => $e->creator?->name,
+                        'note' => $e->note,
+                        'created_by' => $e->creator?->name,
                     ])
                     ->all(),
             ]);

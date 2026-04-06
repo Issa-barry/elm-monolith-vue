@@ -34,8 +34,8 @@ class FactureVente extends Model
     protected function casts(): array
     {
         return [
-            'montant_brut'   => 'decimal:2',
-            'montant_net'    => 'decimal:2',
+            'montant_brut' => 'decimal:2',
+            'montant_net' => 'decimal:2',
             'statut_facture' => StatutFactureVente::class,
         ];
     }
@@ -138,4 +138,3 @@ class FactureVente extends Model
         return $this->saveQuietly();
     }
 }
-

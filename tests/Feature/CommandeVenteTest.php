@@ -31,9 +31,9 @@ class CommandeVenteTest extends TestCase
         // Attacher un site par défaut pour passer le middleware RequireSiteAssigned
         $this->defaultSite = Site::create([
             'organization_id' => $this->org->id,
-            'nom'             => 'Site Principal',
-            'type'            => 'depot',
-            'localisation'    => 'Conakry',
+            'nom' => 'Site Principal',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
         ]);
         $this->user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
     }
@@ -42,15 +42,15 @@ class CommandeVenteTest extends TestCase
     {
         $produit = Produit::create([
             'organization_id' => $org->id,
-            'nom'             => 'Rouleau',
-            'type'            => 'materiel',
-            'statut'          => 'actif',
-            'prix_vente'      => 2000,
-            'prix_usine'      => 1500,
+            'nom' => 'Rouleau',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_vente' => 2000,
+            'prix_usine' => 1500,
         ]);
 
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
-        $vehicule     = Vehicule::factory()->create([
+        $vehicule = Vehicule::factory()->create([
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
         ]);
@@ -101,7 +101,7 @@ class CommandeVenteTest extends TestCase
         $response = $this->actingAs($this->user)
             ->post(route('ventes.store'), [
                 'vehicule_id' => $vehicule->id,
-                'lignes'      => [
+                'lignes' => [
                     ['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 2000],
                 ],
             ]);
@@ -110,8 +110,8 @@ class CommandeVenteTest extends TestCase
 
         $this->assertDatabaseHas('commandes_ventes', [
             'organization_id' => $this->org->id,
-            'vehicule_id'     => $vehicule->id,
-            'statut'          => 'brouillon',
+            'vehicule_id' => $vehicule->id,
+            'statut' => 'brouillon',
         ]);
     }
 
@@ -122,7 +122,7 @@ class CommandeVenteTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
                 'client_id' => $client->id,
-                'lignes'    => [
+                'lignes' => [
                     ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 1500],
                 ],
             ])
@@ -130,8 +130,8 @@ class CommandeVenteTest extends TestCase
 
         $this->assertDatabaseHas('commandes_ventes', [
             'organization_id' => $this->org->id,
-            'client_id'       => $client->id,
-            'statut'          => 'brouillon',
+            'client_id' => $client->id,
+            'statut' => 'brouillon',
         ]);
     }
 
@@ -155,7 +155,7 @@ class CommandeVenteTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
                 'vehicule_id' => $vehicule->id,
-                'lignes'      => [],
+                'lignes' => [],
             ])
             ->assertSessionHasErrors('lignes');
     }
@@ -194,9 +194,9 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'site_id'         => $this->defaultSite->id,
-            'statut'          => StatutCommandeVente::BROUILLON,
-            'total_commande'  => 5000,
+            'site_id' => $this->defaultSite->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => 5000,
         ]);
 
         $this->actingAs($this->user)
@@ -210,9 +210,9 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'site_id'         => $this->defaultSite->id,
-            'statut'          => StatutCommandeVente::BROUILLON,
-            'total_commande'  => 8000,
+            'site_id' => $this->defaultSite->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => 8000,
         ]);
 
         $this->actingAs($this->user)
@@ -221,7 +221,7 @@ class CommandeVenteTest extends TestCase
 
         $this->assertDatabaseHas('factures_ventes', [
             'commande_vente_id' => $commande->id,
-            'montant_brut'      => 8000,
+            'montant_brut' => 8000,
         ]);
     }
 
@@ -231,7 +231,7 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut'          => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::EN_COURS,
         ]);
 
         $this->actingAs($this->user)
@@ -247,7 +247,7 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut'          => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::EN_COURS,
         ]);
 
         $this->actingAs($this->user)
@@ -259,7 +259,7 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut'          => StatutCommandeVente::ANNULEE,
+            'statut' => StatutCommandeVente::ANNULEE,
         ]);
 
         $this->actingAs($this->user)
@@ -273,22 +273,22 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'site_id'         => $this->defaultSite->id,
-            'statut'          => StatutCommandeVente::EN_COURS,
+            'site_id' => $this->defaultSite->id,
+            'statut' => StatutCommandeVente::EN_COURS,
         ]);
 
         $facture = FactureVente::create([
-            'organization_id'   => $this->org->id,
+            'organization_id' => $this->org->id,
             'commande_vente_id' => $commande->id,
-            'montant_brut'      => 5000,
-            'montant_net'       => 5000,
+            'montant_brut' => 5000,
+            'montant_net' => 5000,
         ]);
 
         EncaissementVente::create([
-            'facture_vente_id'  => $facture->id,
-            'montant'           => 5000,
+            'facture_vente_id' => $facture->id,
+            'montant' => 5000,
             'date_encaissement' => now()->toDateString(),
-            'mode_paiement'     => 'especes',
+            'mode_paiement' => 'especes',
         ]);
 
         $this->actingAs($this->user)
@@ -304,25 +304,25 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'site_id'         => $this->defaultSite->id,
-            'statut'          => StatutCommandeVente::EN_COURS,
-            'total_commande'  => 5000,
+            'site_id' => $this->defaultSite->id,
+            'statut' => StatutCommandeVente::EN_COURS,
+            'total_commande' => 5000,
         ]);
 
         $facture = FactureVente::create([
-            'organization_id'   => $this->org->id,
-            'site_id'           => $this->defaultSite->id,
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
             'commande_vente_id' => $commande->id,
-            'montant_brut'      => 5000,
-            'montant_net'       => 5000,
+            'montant_brut' => 5000,
+            'montant_net' => 5000,
         ]);
 
         // Ajouter un encaissement qui solde entièrement la facture
         $this->actingAs($this->user)
             ->post(route('encaissements.store', $facture), [
-                'montant'           => 5000,
+                'montant' => 5000,
                 'date_encaissement' => now()->toDateString(),
-                'mode_paiement'     => 'especes',
+                'mode_paiement' => 'especes',
             ])
             ->assertRedirect();
 
@@ -336,7 +336,7 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut'          => StatutCommandeVente::ANNULEE,
+            'statut' => StatutCommandeVente::ANNULEE,
         ]);
 
         $this->actingAs($this->user)
@@ -350,7 +350,7 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut'          => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::EN_COURS,
         ]);
 
         $this->actingAs($this->user)

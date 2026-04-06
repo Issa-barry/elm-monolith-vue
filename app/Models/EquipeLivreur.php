@@ -24,7 +24,7 @@ class EquipeLivreur extends Model
     {
         return [
             'taux_commission' => 'decimal:2',
-            'ordre'           => 'integer',
+            'ordre' => 'integer',
         ];
     }
 

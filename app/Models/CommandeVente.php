@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\StatutCommandeVente;
-use App\Models\CommissionVente;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -44,10 +43,10 @@ class CommandeVente extends Model
     {
         return [
             'total_commande' => 'decimal:2',
-            'statut'         => StatutCommandeVente::class,
-            'annulee_at'     => 'datetime',
-            'validated_at'   => 'datetime',
-            'closed_at'      => 'datetime',
+            'statut' => StatutCommandeVente::class,
+            'annulee_at' => 'datetime',
+            'validated_at' => 'datetime',
+            'closed_at' => 'datetime',
         ];
     }
 
@@ -197,7 +196,7 @@ class CommandeVente extends Model
             }
         }
 
-        $this->statut    = StatutCommandeVente::CLOTUREE;
+        $this->statut = StatutCommandeVente::CLOTUREE;
         $this->closed_at = now();
 
         return $this->saveQuietly();

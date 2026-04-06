@@ -24,9 +24,9 @@ class UserSitesSeeder extends Seeder
         $org = Organization::where('slug', 'elm')->firstOrFail();
 
         // ── Récupération des sites ────────────────────────────────────────────
-        $siege     = Site::where('organization_id', $org->id)->where('nom', 'Matoto')->firstOrFail();
-        $usine     = Site::where('organization_id', $org->id)->where('nom', 'Lansanaya')->firstOrFail();
-        $agence    = Site::where('organization_id', $org->id)->where('nom', 'Lambagny')->firstOrFail();
+        $siege = Site::where('organization_id', $org->id)->where('nom', 'Matoto')->firstOrFail();
+        $usine = Site::where('organization_id', $org->id)->where('nom', 'Lansanaya')->firstOrFail();
+        $agence = Site::where('organization_id', $org->id)->where('nom', 'Lambagny')->firstOrFail();
         // $depot  = Site::where('organization_id', $org->id)->where('nom', 'Dabompa')->firstOrFail();
 
         // ── Matrice : téléphone/identifiant → site ────────────────────────────
@@ -58,6 +58,7 @@ class UserSitesSeeder extends Seeder
 
             if (! $user) {
                 $this->command->warn('Utilisateur introuvable : '.json_encode($item['lookup']));
+
                 continue;
             }
 

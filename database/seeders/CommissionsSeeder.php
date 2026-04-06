@@ -37,42 +37,42 @@ class CommissionsSeeder extends Seeder
         $org = Organization::where('slug', 'elm')->firstOrFail();
 
         // ── Helpers ───────────────────────────────────────────────────────────
-        $veh  = fn (string $immat) => Vehicule::where('immatriculation', $immat)
+        $veh = fn (string $immat) => Vehicule::where('immatriculation', $immat)
             ->where('organization_id', $org->id)->firstOrFail();
 
         $prop = fn (string $tel) => Proprietaire::where('telephone', $tel)
             ->where('organization_id', $org->id)->firstOrFail();
 
-        $liv  = fn (string $tel) => Livreur::where('telephone', $tel)
+        $liv = fn (string $tel) => Livreur::where('telephone', $tel)
             ->where('organization_id', $org->id)->firstOrFail();
 
         // ── Entités référencées ───────────────────────────────────────────────
-        $camionAlpha  = $veh('RC-001-GN');  // Équipe Nord : Ibrahima 5%, Sékou 3%, prop 92%
-        $tricycle01   = $veh('TC-001-GN');  // Équipe Sud  : Mariama 6%, prop 94%
+        $camionAlpha = $veh('RC-001-GN');  // Équipe Nord : Ibrahima 5%, Sékou 3%, prop 92%
+        $tricycle01 = $veh('TC-001-GN');  // Équipe Sud  : Mariama 6%, prop 94%
         $vanneExpress = $veh('VN-001-GN');  // Équipe Est  : Mamadou 5%, Fatoumata K. 3%, prop 92%
-        $camionBeta   = $veh('RC-002-GN');  // Équipe Ouest: Boubacar 7%, Alpha 2%, prop 91%
-        $tricycle02   = $veh('TC-002-GN');  // Équipe Centre: Oumar 5%, Abdoulaye 3%, Kadiatou 2%, prop 90%
-        $tricycle03   = $veh('TC-003-GN');  // Équipe Nord : Ibrahima 5%, Sékou 3%, prop 92%
+        $camionBeta = $veh('RC-002-GN');  // Équipe Ouest: Boubacar 7%, Alpha 2%, prop 91%
+        $tricycle02 = $veh('TC-002-GN');  // Équipe Centre: Oumar 5%, Abdoulaye 3%, Kadiatou 2%, prop 90%
+        $tricycle03 = $veh('TC-003-GN');  // Équipe Nord : Ibrahima 5%, Sékou 3%, prop 92%
 
-        $pBarry    = $prop('+224621000001');  // Mamadou BARRY
-        $pDiallo   = $prop('+224621000002');  // Fatoumata DIALLO
+        $pBarry = $prop('+224621000001');  // Mamadou BARRY
+        $pDiallo = $prop('+224621000002');  // Fatoumata DIALLO
         $pTounkara = $prop('+224621000003');  // Issa TOUNKARA
-        $pConde    = $prop('+224621000004');  // Saran CONDÉ
+        $pConde = $prop('+224621000004');  // Saran CONDÉ
 
-        $ibrahima   = $liv('+224622000001');
-        $sekou      = $liv('+224622000002');
-        $mariama    = $liv('+224622000003');
-        $mamadouS   = $liv('+224622000004');
+        $ibrahima = $liv('+224622000001');
+        $sekou = $liv('+224622000002');
+        $mariama = $liv('+224622000003');
+        $mamadouS = $liv('+224622000004');
         $fatoumataK = $liv('+224622000005');
-        $boubacar   = $liv('+224622000006');
-        $alpha      = $liv('+224622000007');
-        $oumar      = $liv('+224622000008');
-        $abdoulaye  = $liv('+224622000009');
-        $kadiatou   = $liv('+224622000010');
+        $boubacar = $liv('+224622000006');
+        $alpha = $liv('+224622000007');
+        $oumar = $liv('+224622000008');
+        $abdoulaye = $liv('+224622000009');
+        $kadiatou = $liv('+224622000010');
 
         // ── Commandes fictives (insertion directe pour contourner les boot hooks) ──
         // On vérifie d'abord que les references n'existent pas déjà.
-        $refs = ['VNT-SEED-001','VNT-SEED-002','VNT-SEED-003','VNT-SEED-004','VNT-SEED-005','VNT-SEED-006'];
+        $refs = ['VNT-SEED-001', 'VNT-SEED-002', 'VNT-SEED-003', 'VNT-SEED-004', 'VNT-SEED-005', 'VNT-SEED-006'];
         $existing = DB::table('commandes_ventes')
             ->whereIn('reference', $refs)
             ->pluck('id', 'reference')
@@ -94,12 +94,12 @@ class CommissionsSeeder extends Seeder
             } else {
                 $commandeIds[$cmd['ref']] = DB::table('commandes_ventes')->insertGetId([
                     'organization_id' => $org->id,
-                    'vehicule_id'     => $cmd['vehicule']->id,
-                    'reference'       => $cmd['ref'],
-                    'total_commande'  => $cmd['total'],
-                    'statut'          => 'livree',
-                    'created_at'      => $now,
-                    'updated_at'      => $now,
+                    'vehicule_id' => $cmd['vehicule']->id,
+                    'reference' => $cmd['ref'],
+                    'total_commande' => $cmd['total'],
+                    'statut' => 'livree',
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ]);
             }
         }
@@ -109,11 +109,11 @@ class CommissionsSeeder extends Seeder
             return CommissionVente::firstOrCreate(
                 ['commande_vente_id' => $data['commande_vente_id'], 'organization_id' => $org->id],
                 [
-                    'vehicule_id'               => $data['vehicule_id'],
-                    'montant_commande'          => $data['montant_commande'],
+                    'vehicule_id' => $data['vehicule_id'],
+                    'montant_commande' => $data['montant_commande'],
                     'montant_commission_totale' => $data['montant_commission_totale'],
-                    'montant_verse'             => 0,
-                    'statut'                    => StatutCommission::EN_ATTENTE,
+                    'montant_verse' => 0,
+                    'statut' => StatutCommission::EN_ATTENTE,
                 ]
             );
         };
@@ -123,22 +123,22 @@ class CommissionsSeeder extends Seeder
             return CommissionPart::firstOrCreate(
                 ['commission_vente_id' => $commission->id, 'beneficiaire_nom' => $data['beneficiaire_nom']],
                 [
-                    'type_beneficiaire'     => $data['type'],
-                    'livreur_id'            => $data['livreur_id'] ?? null,
-                    'proprietaire_id'       => $data['proprietaire_id'] ?? null,
-                    'beneficiaire_nom'      => $data['beneficiaire_nom'],
-                    'taux_commission'       => $data['taux'],
-                    'montant_brut'          => $data['brut'],
+                    'type_beneficiaire' => $data['type'],
+                    'livreur_id' => $data['livreur_id'] ?? null,
+                    'proprietaire_id' => $data['proprietaire_id'] ?? null,
+                    'beneficiaire_nom' => $data['beneficiaire_nom'],
+                    'taux_commission' => $data['taux'],
+                    'montant_brut' => $data['brut'],
                     'frais_supplementaires' => $data['frais'] ?? 0,
-                    'montant_net'           => $data['net'] ?? $data['brut'],
-                    'montant_verse'         => 0,
-                    'statut'                => StatutCommission::EN_ATTENTE,
+                    'montant_net' => $data['net'] ?? $data['brut'],
+                    'montant_verse' => 0,
+                    'statut' => StatutCommission::EN_ATTENTE,
                 ]
             );
         };
 
         // ── Helper : créer un versement (déclenche recalculStatut via boot) ──
-        $makeVersement = function (CommissionPart $part, float $montant, string $mode = 'especes', string $date = null): void {
+        $makeVersement = function (CommissionPart $part, float $montant, string $mode = 'especes', ?string $date = null): void {
             // Idempotent : ne recrée pas un versement identique
             $alreadyExists = $part->versements()
                 ->where('montant', $montant)
@@ -149,10 +149,10 @@ class CommissionsSeeder extends Seeder
             }
             VersementCommission::create([
                 'commission_part_id' => $part->id,
-                'montant'            => $montant,
-                'date_versement'     => $date ?? now()->subDays(rand(1, 30))->format('Y-m-d'),
-                'mode_paiement'      => $mode,
-                'note'               => null,
+                'montant' => $montant,
+                'date_versement' => $date ?? now()->subDays(rand(1, 30))->format('Y-m-d'),
+                'mode_paiement' => $mode,
+                'note' => null,
             ]);
             // Boot hook VersementCommission::created déclenche :
             //   part->recalculStatut() → commission->recalculStatutGlobal()
@@ -166,9 +166,9 @@ class CommissionsSeeder extends Seeder
         //   M. BARRY 92% → 46 000 GNF  (versé)
         // ══════════════════════════════════════════════════════════════════════
         $c1 = $makeCommission([
-            'commande_vente_id'         => $commandeIds['VNT-SEED-001'],
-            'vehicule_id'               => $camionAlpha->id,
-            'montant_commande'          => 200000,
+            'commande_vente_id' => $commandeIds['VNT-SEED-001'],
+            'vehicule_id' => $camionAlpha->id,
+            'montant_commande' => 200000,
             'montant_commission_totale' => 50000,
         ]);
 
@@ -185,9 +185,9 @@ class CommissionsSeeder extends Seeder
             'beneficiaire_nom' => 'Mamadou BARRY', 'taux' => 92.00, 'brut' => 46000,
         ]);
 
-        $makeVersement($c1p_ibrahima, 2500,  'especes',      '2026-02-10');
-        $makeVersement($c1p_sekou,    1500,  'mobile_money', '2026-02-10');
-        $makeVersement($c1p_barry,   46000,  'virement',     '2026-02-12');
+        $makeVersement($c1p_ibrahima, 2500, 'especes', '2026-02-10');
+        $makeVersement($c1p_sekou, 1500, 'mobile_money', '2026-02-10');
+        $makeVersement($c1p_barry, 46000, 'virement', '2026-02-12');
 
         // ══════════════════════════════════════════════════════════════════════
         // C2 — Tricycle 01 · Équipe Sud · PARTIELLE
@@ -196,9 +196,9 @@ class CommissionsSeeder extends Seeder
         //   F. DIALLO 94% → 23 500 GNF  (10 000 versé, reste 13 500)
         // ══════════════════════════════════════════════════════════════════════
         $c2 = $makeCommission([
-            'commande_vente_id'         => $commandeIds['VNT-SEED-002'],
-            'vehicule_id'               => $tricycle01->id,
-            'montant_commande'          => 100000,
+            'commande_vente_id' => $commandeIds['VNT-SEED-002'],
+            'vehicule_id' => $tricycle01->id,
+            'montant_commande' => 100000,
             'montant_commission_totale' => 25000,
         ]);
 
@@ -211,8 +211,8 @@ class CommissionsSeeder extends Seeder
             'beneficiaire_nom' => 'Fatoumata DIALLO', 'taux' => 94.00, 'brut' => 23500,
         ]);
 
-        $makeVersement($c2p_mariama, 1500,  'especes',  '2026-02-15');
-        $makeVersement($c2p_diallo, 10000,  'especes',  '2026-02-18');
+        $makeVersement($c2p_mariama, 1500, 'especes', '2026-02-15');
+        $makeVersement($c2p_diallo, 10000, 'especes', '2026-02-18');
         // 13 500 restants → statut PARTIELLE
 
         // ══════════════════════════════════════════════════════════════════════
@@ -223,9 +223,9 @@ class CommissionsSeeder extends Seeder
         //   M. BARRY   92% → 27 600 GNF  (non versé)
         // ══════════════════════════════════════════════════════════════════════
         $c3 = $makeCommission([
-            'commande_vente_id'         => $commandeIds['VNT-SEED-003'],
-            'vehicule_id'               => $vanneExpress->id,
-            'montant_commande'          => 150000,
+            'commande_vente_id' => $commandeIds['VNT-SEED-003'],
+            'vehicule_id' => $vanneExpress->id,
+            'montant_commande' => 150000,
             'montant_commission_totale' => 30000,
         ]);
 
@@ -252,9 +252,9 @@ class CommissionsSeeder extends Seeder
         //                    30 000 versé, reste 37 800
         // ══════════════════════════════════════════════════════════════════════
         $c4 = $makeCommission([
-            'commande_vente_id'         => $commandeIds['VNT-SEED-004'],
-            'vehicule_id'               => $camionBeta->id,
-            'montant_commande'          => 300000,
+            'commande_vente_id' => $commandeIds['VNT-SEED-004'],
+            'vehicule_id' => $camionBeta->id,
+            'montant_commande' => 300000,
             'montant_commission_totale' => 80000,
         ]);
 
@@ -267,18 +267,18 @@ class CommissionsSeeder extends Seeder
             'beneficiaire_nom' => 'Alpha BARRY', 'taux' => 2.00, 'brut' => 1600,
         ]);
         $c4p_tounkara = $makePart($c4, [
-            'type'            => 'proprietaire',
+            'type' => 'proprietaire',
             'proprietaire_id' => $pTounkara->id,
-            'beneficiaire_nom'=> 'Issa TOUNKARA',
-            'taux'            => 91.00,
-            'brut'            => 72800,
-            'frais'           => 5000,
-            'net'             => 67800,   // brut - frais
+            'beneficiaire_nom' => 'Issa TOUNKARA',
+            'taux' => 91.00,
+            'brut' => 72800,
+            'frais' => 5000,
+            'net' => 67800,   // brut - frais
         ]);
 
-        $makeVersement($c4p_boubacar, 5600, 'especes',      '2026-03-01');
-        $makeVersement($c4p_alpha,    1600, 'mobile_money', '2026-03-01');
-        $makeVersement($c4p_tounkara, 30000, 'virement',    '2026-03-05');
+        $makeVersement($c4p_boubacar, 5600, 'especes', '2026-03-01');
+        $makeVersement($c4p_alpha, 1600, 'mobile_money', '2026-03-01');
+        $makeVersement($c4p_tounkara, 30000, 'virement', '2026-03-05');
         // 37 800 restants pour Tounkara → statut PARTIELLE
 
         // ══════════════════════════════════════════════════════════════════════
@@ -290,9 +290,9 @@ class CommissionsSeeder extends Seeder
         //   S. CONDÉ   90% → 18 000 GNF  (non versé)
         // ══════════════════════════════════════════════════════════════════════
         $c5 = $makeCommission([
-            'commande_vente_id'         => $commandeIds['VNT-SEED-005'],
-            'vehicule_id'               => $tricycle02->id,
-            'montant_commande'          => 80000,
+            'commande_vente_id' => $commandeIds['VNT-SEED-005'],
+            'vehicule_id' => $tricycle02->id,
+            'montant_commande' => 80000,
             'montant_commission_totale' => 20000,
         ]);
 
@@ -322,9 +322,9 @@ class CommissionsSeeder extends Seeder
         //   I. TOUNKARA 92% → 27 600 GNF  (versé)
         // ══════════════════════════════════════════════════════════════════════
         $c6 = $makeCommission([
-            'commande_vente_id'         => $commandeIds['VNT-SEED-006'],
-            'vehicule_id'               => $tricycle03->id,
-            'montant_commande'          => 120000,
+            'commande_vente_id' => $commandeIds['VNT-SEED-006'],
+            'vehicule_id' => $tricycle03->id,
+            'montant_commande' => 120000,
             'montant_commission_totale' => 30000,
         ]);
 
@@ -341,8 +341,8 @@ class CommissionsSeeder extends Seeder
             'beneficiaire_nom' => 'Issa TOUNKARA', 'taux' => 92.00, 'brut' => 27600,
         ]);
 
-        $makeVersement($c6p_ibrahima,  1500, 'especes',  '2026-03-20');
-        $makeVersement($c6p_sekou,      900, 'especes',  '2026-03-20');
+        $makeVersement($c6p_ibrahima, 1500, 'especes', '2026-03-20');
+        $makeVersement($c6p_sekou, 900, 'especes', '2026-03-20');
         $makeVersement($c6p_tounkara, 27600, 'virement', '2026-03-22');
     }
 }

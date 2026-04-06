@@ -26,15 +26,15 @@ class VersementCommissionController extends Controller
         $restant = $part->montant_restant;
 
         $data = $request->validate([
-            'montant'        => ['required', 'numeric', 'min:0.01', "max:{$restant}"],
+            'montant' => ['required', 'numeric', 'min:0.01', "max:{$restant}"],
             'date_versement' => 'required|date',
-            'mode_paiement'  => ['required', Rule::in(array_column(ModePaiement::cases(), 'value'))],
-            'note'           => 'nullable|string|max:2000',
+            'mode_paiement' => ['required', Rule::in(array_column(ModePaiement::cases(), 'value'))],
+            'note' => 'nullable|string|max:2000',
         ], [
-            'montant.required'       => 'Le montant est obligatoire.',
-            'montant.min'            => 'Le montant doit être supérieur à 0.',
-            'montant.max'            => 'Le montant dépasse le restant dû.',
-            'date_versement.required'=> 'La date est obligatoire.',
+            'montant.required' => 'Le montant est obligatoire.',
+            'montant.min' => 'Le montant doit être supérieur à 0.',
+            'montant.max' => 'Le montant dépasse le restant dû.',
+            'date_versement.required' => 'La date est obligatoire.',
             'mode_paiement.required' => 'Le mode de paiement est obligatoire.',
         ]);
 

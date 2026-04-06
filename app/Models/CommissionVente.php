@@ -30,10 +30,10 @@ class CommissionVente extends Model
     protected function casts(): array
     {
         return [
-            'montant_commande'         => 'decimal:2',
-            'montant_commission_totale'=> 'decimal:2',
-            'montant_verse'            => 'decimal:2',
-            'statut'                   => StatutCommission::class,
+            'montant_commande' => 'decimal:2',
+            'montant_commission_totale' => 'decimal:2',
+            'montant_verse' => 'decimal:2',
+            'statut' => StatutCommission::class,
         ];
     }
 
@@ -94,7 +94,7 @@ class CommissionVente extends Model
         $parts = $this->parts()->get();
 
         $totalVerse = $parts->sum('montant_verse');
-        $totalNet   = $parts->sum('montant_net');
+        $totalNet = $parts->sum('montant_net');
 
         $this->montant_verse = $totalVerse;
 

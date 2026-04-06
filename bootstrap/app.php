@@ -15,8 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'role'         => \Spatie\Permission\Middleware\RoleMiddleware::class,
-            'module'       => \App\Http\Middleware\RequireModuleEnabled::class,
+            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'module' => \App\Http\Middleware\RequireModuleEnabled::class,
             'require.site' => \App\Http\Middleware\RequireSiteAssigned::class,
         ]);
 

@@ -20,36 +20,36 @@ class VehiculeController extends Controller
 {
     private function vehiculeData(Vehicule $v): array
     {
-        $equipe  = $v->equipe;
+        $equipe = $v->equipe;
         $membres = $equipe ? ($equipe->relationLoaded('membres') ? $equipe->membres : $equipe->load('membres.livreur')->membres) : collect();
 
         return [
-            'id'                           => $v->id,
-            'nom_vehicule'                 => $v->nom_vehicule,
-            'marque'                       => $v->marque,
-            'modele'                       => $v->modele,
-            'immatriculation'              => $v->immatriculation,
-            'type_vehicule'                => $v->type_vehicule?->value,
-            'type_label'                   => $v->type_label,
-            'capacite_packs'               => $v->capacite_packs,
-            'proprietaire_id'              => $v->proprietaire_id,
-            'proprietaire_nom'             => $v->proprietaire ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom) : null,
-            'proprietaire_telephone'       => $v->proprietaire?->telephone,
+            'id' => $v->id,
+            'nom_vehicule' => $v->nom_vehicule,
+            'marque' => $v->marque,
+            'modele' => $v->modele,
+            'immatriculation' => $v->immatriculation,
+            'type_vehicule' => $v->type_vehicule?->value,
+            'type_label' => $v->type_label,
+            'capacite_packs' => $v->capacite_packs,
+            'proprietaire_id' => $v->proprietaire_id,
+            'proprietaire_nom' => $v->proprietaire ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom) : null,
+            'proprietaire_telephone' => $v->proprietaire?->telephone,
             'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
-            'equipe_livraison_id'          => $v->equipe_livraison_id,
-            'equipe_nom'                   => $equipe?->nom,
-            'livreur_principal_nom'        => $membres->first()?->livreur
+            'equipe_livraison_id' => $v->equipe_livraison_id,
+            'equipe_nom' => $equipe?->nom,
+            'livreur_principal_nom' => $membres->first()?->livreur
                 ? trim($membres->first()->livreur->prenom.' '.$membres->first()->livreur->nom)
                 : null,
-            'equipe_membres'               => $membres->map(fn ($m) => [
-                'livreur_nom'     => $m->livreur ? trim($m->livreur->prenom.' '.$m->livreur->nom) : null,
-                'role'            => $m->role,
+            'equipe_membres' => $membres->map(fn ($m) => [
+                'livreur_nom' => $m->livreur ? trim($m->livreur->prenom.' '.$m->livreur->nom) : null,
+                'role' => $m->role,
                 'taux_commission' => (float) $m->taux_commission,
             ])->values()->all(),
             'taux_commission_proprietaire' => (float) $v->taux_commission_proprietaire,
-            'pris_en_charge_par_usine'     => $v->pris_en_charge_par_usine,
-            'photo_url'                    => $v->photo_url,
-            'is_active'                    => $v->is_active,
+            'pris_en_charge_par_usine' => $v->pris_en_charge_par_usine,
+            'photo_url' => $v->photo_url,
+            'is_active' => $v->is_active,
         ];
     }
 
@@ -74,8 +74,8 @@ class VehiculeController extends Controller
 
         return Inertia::render('Vehicules/Create', [
             'proprietaires' => $this->proprietairesOptions(),
-            'equipes'       => $this->equipesOptions(),
-            'types'         => TypeVehicule::options(),
+            'equipes' => $this->equipesOptions(),
+            'types' => TypeVehicule::options(),
         ]);
     }
 
@@ -87,19 +87,19 @@ class VehiculeController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'nom_vehicule'                 => 'required|string|max:100',
-            'immatriculation'              => [
+            'nom_vehicule' => 'required|string|max:100',
+            'immatriculation' => [
                 'required', 'string', 'max:20',
                 Rule::unique('vehicules', 'immatriculation')->where('organization_id', $orgId),
             ],
-            'type_vehicule'                => ['required', Rule::in(TypeVehicule::allowedValues())],
-            'capacite_packs'               => 'nullable|integer|min:1|max:99999',
-            'proprietaire_id'              => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
-            'equipe_livraison_id'          => ['nullable', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
+            'type_vehicule' => ['required', Rule::in(TypeVehicule::allowedValues())],
+            'capacite_packs' => 'nullable|integer|min:1|max:99999',
+            'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
+            'equipe_livraison_id' => ['nullable', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
             'taux_commission_proprietaire' => 'nullable|numeric|min:0|max:100',
-            'pris_en_charge_par_usine'     => 'boolean',
-            'photo'                        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
-            'is_active'                    => 'boolean',
+            'pris_en_charge_par_usine' => 'boolean',
+            'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
+            'is_active' => 'boolean',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
@@ -123,10 +123,10 @@ class VehiculeController extends Controller
         $vehicule->load(['proprietaire', 'equipe.membres.livreur']);
 
         return Inertia::render('Vehicules/Edit', [
-            'vehicule'      => $this->vehiculeData($vehicule),
+            'vehicule' => $this->vehiculeData($vehicule),
             'proprietaires' => $this->proprietairesOptions(),
-            'equipes'       => $this->equipesOptions(),
-            'types'         => TypeVehicule::options(),
+            'equipes' => $this->equipesOptions(),
+            'types' => TypeVehicule::options(),
         ]);
     }
 
@@ -137,21 +137,21 @@ class VehiculeController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $data = $request->validate([
-            'nom_vehicule'                 => 'required|string|max:100',
-            'immatriculation'              => [
+            'nom_vehicule' => 'required|string|max:100',
+            'immatriculation' => [
                 'required', 'string', 'max:20',
                 Rule::unique('vehicules', 'immatriculation')
                     ->where('organization_id', $orgId)
                     ->ignore($vehicule->id),
             ],
-            'type_vehicule'                => ['required', Rule::in(TypeVehicule::allowedValues())],
-            'capacite_packs'               => 'nullable|integer|min:1|max:99999',
-            'proprietaire_id'              => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
-            'equipe_livraison_id'          => ['nullable', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
+            'type_vehicule' => ['required', Rule::in(TypeVehicule::allowedValues())],
+            'capacite_packs' => 'nullable|integer|min:1|max:99999',
+            'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
+            'equipe_livraison_id' => ['nullable', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
             'taux_commission_proprietaire' => 'nullable|numeric|min:0|max:100',
-            'pris_en_charge_par_usine'     => 'boolean',
-            'photo'                        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
-            'is_active'                    => 'boolean',
+            'pris_en_charge_par_usine' => 'boolean',
+            'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
+            'is_active' => 'boolean',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
@@ -207,8 +207,8 @@ class VehiculeController extends Controller
             ->orderBy('nom')
             ->get()
             ->map(fn (EquipeLivraison $e) => [
-                'value'      => $e->id,
-                'label'      => $e->nom,
+                'value' => $e->id,
+                'label' => $e->nom,
                 'somme_taux' => (float) $e->membres->sum('taux_commission'),
             ])
             ->toArray();
@@ -256,17 +256,17 @@ class VehiculeController extends Controller
     private function messages(): array
     {
         return [
-            'nom_vehicule.required'        => 'Le nom du véhicule est obligatoire.',
-            'immatriculation.required'     => "L'immatriculation est obligatoire.",
-            'immatriculation.unique'       => "Ce numéro d'immatriculation est déjà utilisé.",
-            'type_vehicule.required'       => 'Le type de véhicule est obligatoire.',
-            'type_vehicule.in'             => 'Type de véhicule invalide.',
-            'proprietaire_id.required'     => 'Le propriétaire est obligatoire.',
-            'proprietaire_id.exists'       => 'Le propriétaire sélectionné est introuvable.',
-            'equipe_livraison_id.exists'   => "L'équipe sélectionnée est introuvable.",
-            'photo.image'                  => 'Le fichier doit être une image.',
-            'photo.mimes'                  => 'La photo doit être au format jpg, jpeg, png ou webp.',
-            'photo.max'                    => 'La photo ne peut pas dépasser 3 Mo.',
+            'nom_vehicule.required' => 'Le nom du véhicule est obligatoire.',
+            'immatriculation.required' => "L'immatriculation est obligatoire.",
+            'immatriculation.unique' => "Ce numéro d'immatriculation est déjà utilisé.",
+            'type_vehicule.required' => 'Le type de véhicule est obligatoire.',
+            'type_vehicule.in' => 'Type de véhicule invalide.',
+            'proprietaire_id.required' => 'Le propriétaire est obligatoire.',
+            'proprietaire_id.exists' => 'Le propriétaire sélectionné est introuvable.',
+            'equipe_livraison_id.exists' => "L'équipe sélectionnée est introuvable.",
+            'photo.image' => 'Le fichier doit être une image.',
+            'photo.mimes' => 'La photo doit être au format jpg, jpeg, png ou webp.',
+            'photo.max' => 'La photo ne peut pas dépasser 3 Mo.',
         ];
     }
 }

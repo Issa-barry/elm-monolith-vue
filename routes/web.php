@@ -62,8 +62,8 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     // ── Module : Ventes ───────────────────────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
         Route::resource('ventes', CommandeVenteController::class)->except([]);
-        Route::patch('ventes/{commande_vente}/valider',  [CommandeVenteController::class, 'valider'])->name('ventes.valider');
-        Route::patch('ventes/{commande_vente}/annuler',  [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
+        Route::patch('ventes/{commande_vente}/valider', [CommandeVenteController::class, 'valider'])->name('ventes.valider');
+        Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
         Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
 
         // Commissions

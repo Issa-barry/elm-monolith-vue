@@ -31,10 +31,10 @@ class Vehicule extends Model
     protected function casts(): array
     {
         return [
-            'is_active'                => 'boolean',
+            'is_active' => 'boolean',
             'pris_en_charge_par_usine' => 'boolean',
-            'type_vehicule'            => TypeVehicule::class,
-            'capacite_packs'               => 'integer',
+            'type_vehicule' => TypeVehicule::class,
+            'capacite_packs' => 'integer',
             'taux_commission_proprietaire' => 'decimal:2',
         ];
     }

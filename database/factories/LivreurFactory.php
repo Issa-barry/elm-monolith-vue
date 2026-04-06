@@ -11,8 +11,8 @@ class LivreurFactory extends Factory
     {
         return [
             'organization_id' => Organization::factory(),
-            'nom'       => fake()->lastName(),
-            'prenom'    => fake()->firstName(),
+            'nom' => fake()->lastName(),
+            'prenom' => fake()->firstName(),
             'telephone' => '+224'.fake()->unique()->numerify('#########'),
             'is_active' => true,
         ];

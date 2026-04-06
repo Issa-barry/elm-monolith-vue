@@ -35,17 +35,17 @@ class CommandeVenteService
 
             if (! $commande->facture) {
                 FactureVente::create([
-                    'organization_id'  => $commande->organization_id,
-                    'site_id'          => $commande->site_id,
-                    'vehicule_id'      => $commande->vehicule_id,
-                    'commande_vente_id'=> $commande->id,
-                    'montant_brut'     => $commande->total_commande,
-                    'montant_net'      => $commande->total_commande,
+                    'organization_id' => $commande->organization_id,
+                    'site_id' => $commande->site_id,
+                    'vehicule_id' => $commande->vehicule_id,
+                    'commande_vente_id' => $commande->id,
+                    'montant_brut' => $commande->total_commande,
+                    'montant_net' => $commande->total_commande,
                 ]);
             }
 
             $commande->update([
-                'statut'       => StatutCommandeVente::EN_COURS,
+                'statut' => StatutCommandeVente::EN_COURS,
                 'validated_at' => now(),
             ]);
         });
@@ -92,10 +92,10 @@ class CommandeVenteService
 
         DB::transaction(function () use ($commande, $motif) {
             $commande->update([
-                'statut'           => StatutCommandeVente::ANNULEE,
+                'statut' => StatutCommandeVente::ANNULEE,
                 'motif_annulation' => $motif,
-                'annulee_at'       => now(),
-                'annulee_par'      => Auth::id(),
+                'annulee_at' => now(),
+                'annulee_par' => Auth::id(),
             ]);
 
             if ($commande->facture) {

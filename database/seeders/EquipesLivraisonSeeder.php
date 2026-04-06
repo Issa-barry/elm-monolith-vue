@@ -34,20 +34,20 @@ class EquipesLivraisonSeeder extends Seeder
 
         $equipes = [
             [
-                'nom'     => 'Nen Dow',
+                'nom' => 'Nen Dow',
                 'membres' => [
                     ['telephone' => '+224622000001', 'role' => 'principal', 'taux' => 25, 'ordre' => 0],
                     ['telephone' => '+224622000002', 'role' => 'assistant', 'taux' => 15, 'ordre' => 1],
                 ],
             ],
             [
-                'nom'     => 'Auto Dogomet',
+                'nom' => 'Auto Dogomet',
                 'membres' => [
                     ['telephone' => '+224622000003', 'role' => 'principal', 'taux' => 40, 'ordre' => 0],
                 ],
             ],
             [
-                'nom'     => 'Baba Ousou',
+                'nom' => 'Baba Ousou',
                 'membres' => [
                     ['telephone' => '+224622000008', 'role' => 'principal', 'taux' => 20, 'ordre' => 0],
                     ['telephone' => '+224622000009', 'role' => 'assistant', 'taux' => 15, 'ordre' => 1],

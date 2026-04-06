@@ -30,7 +30,7 @@ return new class extends Migration
         DB::table('commandes_ventes')
             ->where('statut', 'en_cours')
             ->update([
-                'statut'       => 'validee',
+                'statut' => 'validee',
                 'validated_at' => DB::raw('created_at'),
             ]);
 
@@ -38,7 +38,7 @@ return new class extends Migration
         DB::table('commandes_ventes')
             ->where('statut', 'livree')
             ->update([
-                'statut'    => 'cloturee',
+                'statut' => 'cloturee',
                 'closed_at' => DB::raw('updated_at'),
             ]);
     }

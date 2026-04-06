@@ -45,13 +45,13 @@ class CommissionPartController extends Controller
                 'max:150',
             ],
         ], [
-            'frais_supplementaires.required'   => 'Le montant des frais est obligatoire.',
-            'frais_supplementaires.min'        => 'Les frais ne peuvent pas être négatifs.',
-            'frais_supplementaires.max'        => 'Les frais ne peuvent pas dépasser la part brute.',
-            'type_frais.required'              => 'Le type de frais est obligatoire.',
-            'type_frais.in'                    => 'Type de frais invalide.',
-            'commentaire_frais.required'       => 'Le commentaire est obligatoire pour le type « Autre ».',
-            'commentaire_frais.max'            => 'Le commentaire ne peut pas dépasser 150 caractères.',
+            'frais_supplementaires.required' => 'Le montant des frais est obligatoire.',
+            'frais_supplementaires.min' => 'Les frais ne peuvent pas être négatifs.',
+            'frais_supplementaires.max' => 'Les frais ne peuvent pas dépasser la part brute.',
+            'type_frais.required' => 'Le type de frais est obligatoire.',
+            'type_frais.in' => 'Type de frais invalide.',
+            'commentaire_frais.required' => 'Le commentaire est obligatoire pour le type « Autre ».',
+            'commentaire_frais.max' => 'Le commentaire ne peut pas dépasser 150 caractères.',
         ]);
 
         $part->appliquerFrais(

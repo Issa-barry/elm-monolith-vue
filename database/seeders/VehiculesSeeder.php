@@ -36,52 +36,52 @@ class VehiculesSeeder extends Seeder
             ->where('organization_id', $org->id)
             ->firstOrFail();
 
-        $mamadouBarry    = $prop('+224621000001');
+        $mamadouBarry = $prop('+224621000001');
         $fatoumataDiallo = $prop('+224621000002');
 
-        $eqNenDow      = $equipe('Nen Dow');
+        $eqNenDow = $equipe('Nen Dow');
         $eqAutoDogomet = $equipe('Auto Dogomet');
-        $eqBabaOusou   = $equipe('Baba Ousou');
+        $eqBabaOusou = $equipe('Baba Ousou');
 
         $vehicules = [
             [
-                'nom_vehicule'                 => 'Nen Dow',
-                'marque'                       => 'Mercedes',
-                'modele'                       => 'Actros',
-                'immatriculation'              => 'RC-001-GN',
-                'type_vehicule'                => TypeVehicule::CAMION->value,
-                'capacite_packs'               => 500,
-                'proprietaire_id'              => $mamadouBarry->id,
-                'equipe_livraison_id'          => $eqNenDow->id,
+                'nom_vehicule' => 'Nen Dow',
+                'marque' => 'Mercedes',
+                'modele' => 'Actros',
+                'immatriculation' => 'RC-001-GN',
+                'type_vehicule' => TypeVehicule::CAMION->value,
+                'capacite_packs' => 500,
+                'proprietaire_id' => $mamadouBarry->id,
+                'equipe_livraison_id' => $eqNenDow->id,
                 'taux_commission_proprietaire' => 100 - $eqNenDow->sommeTaux(),
-                'pris_en_charge_par_usine'     => false,
-                'is_active'                    => true,
+                'pris_en_charge_par_usine' => false,
+                'is_active' => true,
             ],
             [
-                'nom_vehicule'                 => 'Kata Kata de Ali',
-                'marque'                       => 'Bajaj',
-                'modele'                       => 'RE',
-                'immatriculation'              => 'TC-001-GN',
-                'type_vehicule'                => TypeVehicule::TRICYCLE->value,
-                'capacite_packs'               => 80,
-                'proprietaire_id'              => $fatoumataDiallo->id,
-                'equipe_livraison_id'          => $eqAutoDogomet->id,
+                'nom_vehicule' => 'Kata Kata de Ali',
+                'marque' => 'Bajaj',
+                'modele' => 'RE',
+                'immatriculation' => 'TC-001-GN',
+                'type_vehicule' => TypeVehicule::TRICYCLE->value,
+                'capacite_packs' => 80,
+                'proprietaire_id' => $fatoumataDiallo->id,
+                'equipe_livraison_id' => $eqAutoDogomet->id,
                 'taux_commission_proprietaire' => 100 - $eqAutoDogomet->sommeTaux(),
-                'pris_en_charge_par_usine'     => false,
-                'is_active'                    => true,
+                'pris_en_charge_par_usine' => false,
+                'is_active' => true,
             ],
             [
-                'nom_vehicule'                 => 'Baba Ousou',
-                'marque'                       => 'Toyota',
-                'modele'                       => 'HiAce',
-                'immatriculation'              => 'VN-001-GN',
-                'type_vehicule'                => TypeVehicule::CAMIONNETTE->value,
-                'capacite_packs'               => 150,
-                'proprietaire_id'              => $mamadouBarry->id,
-                'equipe_livraison_id'          => $eqBabaOusou->id,
+                'nom_vehicule' => 'Baba Ousou',
+                'marque' => 'Toyota',
+                'modele' => 'HiAce',
+                'immatriculation' => 'VN-001-GN',
+                'type_vehicule' => TypeVehicule::CAMIONNETTE->value,
+                'capacite_packs' => 150,
+                'proprietaire_id' => $mamadouBarry->id,
+                'equipe_livraison_id' => $eqBabaOusou->id,
                 'taux_commission_proprietaire' => 100 - $eqBabaOusou->sommeTaux(),
-                'pris_en_charge_par_usine'     => false,
-                'is_active'                    => true,
+                'pris_en_charge_par_usine' => false,
+                'is_active' => true,
             ],
         ];
 
@@ -93,4 +93,3 @@ class VehiculesSeeder extends Seeder
         }
     }
 }
-
