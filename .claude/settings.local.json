@@ -87,7 +87,15 @@
       "Read(//c/Users/issab/.claude/projects/c--laragon-www-elm-monolithe/c8a538b9-2342-4122-9051-69ad3d690d79/tool-results/**)",
       "Bash(./vendor/bin/pint tests/Feature/VersementCommissionTest.php tests/Unit/FactureVenteTest.php)",
       "Bash(php -l database/seeders/CommissionsSeeder.php)",
-      "Bash(./vendor/bin/pint --test database/seeders/CommissionsSeeder.php)"
+      "Bash(./vendor/bin/pint --test database/seeders/CommissionsSeeder.php)",
+      "Bash(git -C c:/laragon/www/elm-monolithe log --oneline --follow tests/e2e/livreur-flow.spec.ts)",
+      "Bash(git -C c:/laragon/www/elm-monolithe log --oneline --follow app/Http/Controllers/LivreurController.php)",
+      "Bash(git -C c:/laragon/www/elm-monolithe show 4f0c4f6 --stat)",
+      "Bash(git -C c:/laragon/www/elm-monolithe diff HEAD~3 HEAD -- tests/e2e/livreur-flow.spec.ts)",
+      "Bash(git -C c:/laragon/www/elm-monolithe show HEAD:tests/e2e/livreur-flow.spec.ts)",
+      "Bash(python3 -c ':*)",
+      "Bash(node -e ':*)",
+      "Bash(kill %1)"
     ]
   }
 }

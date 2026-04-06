@@ -250,6 +250,12 @@ export async function selectOptionFromCombobox(
         }
 
         await page.keyboard.press('Escape').catch(() => undefined);
+        // Wait for any open overlay to fully close before the next attempt
+        await page
+            .locator('[role="listbox"]')
+            .first()
+            .waitFor({ state: 'hidden', timeout: 1_000 })
+            .catch(() => undefined);
     }
 
     await expect(visibleOptions.first()).toBeVisible({ timeout: 15_000 });

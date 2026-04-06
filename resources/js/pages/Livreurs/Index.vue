@@ -59,7 +59,9 @@ const livreursFiltres = computed(() => {
 </script>
 
 <template>
-    <Head title="Livreurs" />
+    <Head>
+        <title>Livreurs</title>
+    </Head>
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="space-y-6 p-4 sm:p-6">
@@ -205,3 +207,4 @@ const livreursFiltres = computed(() => {
         </div>
     </AppLayout>
 </template>
+

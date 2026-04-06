@@ -221,7 +221,7 @@ test('empty phone (password filled) -> server validation error on telephone', as
     await expect(
         page
             .locator(
-                '[data-slot="input-error"]:visible, .text-destructive:visible',
+                '[data-slot="input-error"]:visible, .text-destructive:visible, p.text-red-600:visible, p.text-red-500:visible',
             )
             .first(),
     ).toBeVisible({
