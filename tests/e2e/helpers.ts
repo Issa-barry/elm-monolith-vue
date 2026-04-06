@@ -32,6 +32,36 @@ export function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function tryFixMojibake(value: string): string {
+    try {
+        return Buffer.from(value, 'latin1').toString('utf8');
+    } catch {
+        return value;
+    }
+}
+
+function matchesOptionText(
+    optionText: string,
+    expected: string | RegExp,
+): boolean {
+    const raw = optionText.trim();
+    const fixed = tryFixMojibake(raw).trim();
+
+    if (typeof expected === 'string') {
+        const query = expected.trim().toLowerCase();
+        return (
+            raw.toLowerCase().includes(query) ||
+            fixed.toLowerCase().includes(query)
+        );
+    }
+
+    const safeRegex = new RegExp(
+        expected.source,
+        expected.flags.replaceAll('g', ''),
+    );
+    return safeRegex.test(raw) || safeRegex.test(fixed);
+}
+
 export function randomDigits(length: number): string {
     const max = 10 ** length;
     const array = new Uint32Array(1);
@@ -166,7 +196,7 @@ export async function login(page: Page): Promise<void> {
                 .innerText()
                 .catch(() => '');
             const isRateLimited =
-                /too many|trop de tentatives|veuillez patienter|please wait|seconds|secondes|r[ée]essayez|requests|429/i.test(
+                /too many|trop de tentatives|veuillez patienter|please wait|seconds|secondes|essayez|requests|429/i.test(
                     bodyText,
                 );
 
@@ -194,17 +224,38 @@ export async function selectOptionFromCombobox(
 ): Promise<void> {
     await combobox.click({ timeout: 3000 });
 
-    const option = optionName
-        ? typeof optionName === 'string'
-            ? page
-                  .getByRole('option', {
-                      name: new RegExp(escapeRegExp(optionName), 'i'),
-                  })
-                  .first()
-            : page.getByRole('option', { name: optionName }).first()
-        : page.locator('[role="option"]:visible').first();
+    const visibleOptions = page.locator('[role="option"]:visible');
+    await expect(visibleOptions.first()).toBeVisible({ timeout: 15_000 });
 
-    await expect(option).toBeVisible();
+    let option = visibleOptions.first();
+
+    if (optionName) {
+        const optionCount = await visibleOptions.count();
+        let selected: Locator | null = null;
+
+        for (let i = 0; i < optionCount; i++) {
+            const candidate = visibleOptions.nth(i);
+            const text = (await candidate.innerText().catch(() => '')).trim();
+            if (text && matchesOptionText(text, optionName)) {
+                selected = candidate;
+                break;
+            }
+        }
+
+        if (!selected) {
+            const preview = await visibleOptions
+                .allInnerTexts()
+                .then((items) => items.slice(0, 8).join(' | '))
+                .catch(() => 'no options');
+            throw new Error(
+                `Unable to find combobox option: ${String(optionName)}. Visible options: ${preview}`,
+            );
+        }
+
+        option = selected;
+    }
+
+    await expect(option).toBeVisible({ timeout: 15_000 });
     await option.click({ timeout: 3000 });
 }
 
@@ -260,7 +311,7 @@ export async function fillUserInfoAndAdvance(
     await selectOptionFromCombobox(
         page,
         form.getByRole('combobox').first(),
-        /guinée$/i,
+        /guin(?!.*bissau)/i,
     );
     await page.locator('#prenom').fill(prenom);
     await page.locator('#nom').fill(nom);
