@@ -5,7 +5,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, CheckCircle, Lock, Plus, Trash2, XCircle } from 'lucide-vue-next';
+import { ArrowLeft, CheckCircle, Lock, Pencil, Plus, Trash2, XCircle } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
@@ -64,11 +64,11 @@ interface CommandeData {
     annulee_at: string | null;
     validated_at: string | null;
     is_brouillon: boolean;
-    is_validee: boolean;
+    is_en_cours: boolean;
     is_cloturee: boolean;
     is_annulee: boolean;
+    can_modifier: boolean;
     can_valider: boolean;
-    can_cloturer: boolean;
     can_annuler: boolean;
     created_at: string;
     created_by: string | null;
@@ -101,7 +101,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 // ── Statut couleurs ───────────────────────────────────────────────────────────
 const statutCommandeColor: Record<string, string> = {
     brouillon: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-    validee:   'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+    en_cours:  'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
     cloturee:  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
     annulee:   'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400',
 };
@@ -132,16 +132,6 @@ function valider() {
     router.patch(`/ventes/${props.commande.id}/valider`, {}, {
         onSuccess: () =>
             toast.add({ severity: 'success', summary: 'Validée', detail: 'Commande validée, facture créée.', life: 3000 }),
-        onFinish: () => (actionProcessing.value = false),
-    });
-}
-
-function cloturer() {
-    if (actionProcessing.value) return;
-    actionProcessing.value = true;
-    router.patch(`/ventes/${props.commande.id}/cloturer`, {}, {
-        onSuccess: () =>
-            toast.add({ severity: 'success', summary: 'Clôturée', detail: 'Commande clôturée.', life: 3000 }),
         onFinish: () => (actionProcessing.value = false),
     });
 }
@@ -280,6 +270,17 @@ const progressPercent = computed(() => {
 
                 <!-- Boutons d'action selon statut -->
                 <div class="flex items-center gap-2">
+                    <!-- Modifier (brouillon) -->
+                    <Link
+                        v-if="commande.can_modifier"
+                        :href="`/ventes/${commande.id}/edit`"
+                    >
+                        <Button variant="outline" size="sm">
+                            <Pencil class="mr-2 h-4 w-4" />
+                            Modifier
+                        </Button>
+                    </Link>
+
                     <!-- Valider (brouillon) -->
                     <Button
                         v-if="commande.can_valider"
@@ -289,19 +290,6 @@ const progressPercent = computed(() => {
                     >
                         <CheckCircle class="mr-2 h-4 w-4" />
                         Valider la commande
-                    </Button>
-
-                    <!-- Clôturer (validée) -->
-                    <Button
-                        v-if="commande.can_cloturer"
-                        variant="outline"
-                        size="sm"
-                        class="border-emerald-300 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
-                        :disabled="actionProcessing"
-                        @click="cloturer"
-                    >
-                        <CheckCircle class="mr-2 h-4 w-4" />
-                        Clôturer
                     </Button>
 
                     <!-- Annuler (validée, admin uniquement) -->

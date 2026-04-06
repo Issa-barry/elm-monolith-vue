@@ -144,7 +144,6 @@ const dialogPart = ref<CommissionPart | null>(null);
 interface VersementForm {
     montant: number | null;
     mode_paiement: string;
-    date_versement: string;
     note: string | null;
     processing: boolean;
 }
@@ -152,7 +151,6 @@ interface VersementForm {
 const versementForm = reactive<VersementForm>({
     montant: null,
     mode_paiement: 'especes',
-    date_versement: new Date().toISOString().slice(0, 10),
     note: null,
     processing: false,
 });
@@ -161,7 +159,6 @@ function openVersementDialog(part: CommissionPart) {
     dialogPart.value = part;
     versementForm.montant = part.montant_restant > 0 ? part.montant_restant : null;
     versementForm.mode_paiement = 'especes';
-    versementForm.date_versement = new Date().toISOString().slice(0, 10);
     versementForm.note = null;
     versementForm.processing = false;
     dialogVisible.value = true;
@@ -186,12 +183,13 @@ function submitVersementDialog() {
     const part = dialogPart.value;
     if (!part || !versementForm.montant || versementForm.montant <= 0) return;
     versementForm.processing = true;
+    const today = new Date().toISOString().slice(0, 10);
     router.post(
         `/commissions/${props.commission.id}/parts/${part.id}/versements`,
         {
             montant: versementForm.montant,
             mode_paiement: versementForm.mode_paiement,
-            date_versement: versementForm.date_versement,
+            date_versement: today,
             note: versementForm.note,
         },
         {
@@ -800,25 +798,15 @@ function isVersementDisabled(part: CommissionPart): boolean {
                     autofocus
                 />
             </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <Label class="mb-1.5 block text-xs font-medium">Mode de paiement</Label>
-                    <Dropdown
-                        v-model="versementForm.mode_paiement"
-                        :options="modes_paiement"
-                        option-label="label"
-                        option-value="value"
-                        class="h-9 w-full"
-                    />
-                </div>
-                <div>
-                    <Label class="mb-1.5 block text-xs font-medium">Date</Label>
-                    <InputText
-                        v-model="versementForm.date_versement"
-                        type="date"
-                        class="h-9 w-full"
-                    />
-                </div>
+            <div>
+                <Label class="mb-1.5 block text-xs font-medium">Mode de paiement</Label>
+                <Dropdown
+                    v-model="versementForm.mode_paiement"
+                    :options="modes_paiement"
+                    option-label="label"
+                    option-value="value"
+                    class="h-9 w-full"
+                />
             </div>
             <div>
                 <Label class="mb-1.5 block text-xs font-medium">Note (optionnel)</Label>

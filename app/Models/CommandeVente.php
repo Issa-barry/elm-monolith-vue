@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\StatutCommandeVente;
+use App\Models\CommissionVente;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -114,6 +115,11 @@ class CommandeVente extends Model
         return $this->hasOne(FactureVente::class);
     }
 
+    public function commissions(): HasMany
+    {
+        return $this->hasMany(CommissionVente::class, 'commande_vente_id');
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -143,9 +149,9 @@ class CommandeVente extends Model
         return $this->statut === StatutCommandeVente::BROUILLON;
     }
 
-    public function isValidee(): bool
+    public function isEnCours(): bool
     {
-        return $this->statut === StatutCommandeVente::VALIDEE;
+        return $this->statut === StatutCommandeVente::EN_COURS;
     }
 
     public function isCloturee(): bool
@@ -166,27 +172,34 @@ class CommandeVente extends Model
     // ── Auto-clôture sur paiement complet ─────────────────────────────────────
 
     /**
-     * Clôture automatiquement la commande si sa facture est entièrement payée.
-     * N'agit que sur les commandes en statut VALIDEE.
+     * Clôture automatiquement la commande si :
+     *  - la facture est entièrement payée (isPayee)
+     *  - ET toutes les commissions associées sont entièrement versées (ou il n'y en a pas)
+     *
+     * N'agit que sur les commandes en statut EN_COURS.
      */
     public function cloturerSiComplete(): bool
     {
-        if (! $this->isValidee()) {
+        if (! $this->isEnCours()) {
             return false;
         }
 
         $facture = $this->facture ?? $this->load('facture')->facture;
-        if (! $facture) {
+        if (! $facture || ! $facture->isPayee()) {
             return false;
         }
 
-        if ($facture->isPayee()) {
-            $this->statut    = StatutCommandeVente::CLOTUREE;
-            $this->closed_at = now();
-
-            return $this->saveQuietly();
+        // Vérifie que toutes les commissions sont versées (ou absentes)
+        $commissions = $this->commissions()->get();
+        foreach ($commissions as $commission) {
+            if (! $commission->isVersee()) {
+                return false;
+            }
         }
 
-        return false;
+        $this->statut    = StatutCommandeVente::CLOTUREE;
+        $this->closed_at = now();
+
+        return $this->saveQuietly();
     }
 }

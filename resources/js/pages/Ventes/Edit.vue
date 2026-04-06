@@ -46,8 +46,17 @@ interface LigneForm {
     total: number;
 }
 
+interface CommandeExistante {
+    id: number;
+    reference: string;
+    vehicule_id: number | null;
+    client_id: number | null;
+    lignes: { produit_id: number; qte: number; prix_vente: number }[];
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
+    commande: CommandeExistante;
     produits: ProduitOption[];
     vehicules: VehiculeOption[];
     clients: ClientOption[];
@@ -57,20 +66,26 @@ const props = defineProps<{
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Ventes', href: '/ventes' },
-    { title: 'Nouvelle commande', href: '/ventes/create' },
+    { title: props.commande.reference, href: `/ventes/${props.commande.id}` },
+    { title: 'Modifier', href: '#' },
 ];
 
 // ── Form ──────────────────────────────────────────────────────────────────────
 const form = useForm({
-    vehicule_id: null as number | null,
-    client_id: null as number | null,
-    lignes: [
-        { produit_id: null, qte: 1, prix_vente: 0, total: 0 },
-    ] as LigneForm[],
+    vehicule_id: props.commande.vehicule_id as number | null,
+    client_id:   props.commande.client_id   as number | null,
+    lignes: props.commande.lignes.map((l) => ({
+        produit_id:  l.produit_id,
+        qte:         l.qte,
+        prix_vente:  l.prix_vente,
+        total:       l.prix_vente * l.qte,
+    })) as LigneForm[],
 });
 
 // ── AutoComplete : Véhicule ───────────────────────────────────────────────────
-const vehiculeSelected = ref<VehiculeOption | null>(null);
+const vehiculeSelected = ref<VehiculeOption | null>(
+    props.vehicules.find((v) => v.id === props.commande.vehicule_id) ?? null,
+);
 const vehiculeSuggests = ref<VehiculeOption[]>([]);
 
 function searchVehicule(event: { query: string }) {
@@ -99,7 +114,9 @@ function vehiculeLabel(v: VehiculeOption): string {
 }
 
 // ── AutoComplete : Client ─────────────────────────────────────────────────────
-const clientSelected = ref<ClientOption | null>(null);
+const clientSelected = ref<ClientOption | null>(
+    props.clients.find((c) => c.id === props.commande.client_id) ?? null,
+);
 const clientSuggests = ref<ClientOption[]>([]);
 
 function searchClient(event: { query: string }) {
@@ -149,14 +166,13 @@ function onProduitChange(index: number, produitId: number | null) {
         return;
     }
 
-    // Si le produit existe déjà sur une autre ligne → fusionner les quantités
     const existingIndex = form.lignes.findIndex(
         (l, i) => i !== index && l.produit_id === produitId,
     );
     if (existingIndex !== -1) {
-        const existing = form.lignes[existingIndex];
-        existing.qte += form.lignes[index].qte;
-        existing.total = existing.prix_vente * existing.qte;
+        form.lignes[existingIndex].qte += form.lignes[index].qte;
+        form.lignes[existingIndex].total =
+            form.lignes[existingIndex].prix_vente * form.lignes[existingIndex].qte;
         form.lignes.splice(index, 1);
         return;
     }
@@ -197,16 +213,9 @@ const totalGeneral = computed(() =>
 
 // ── Reset au montage (évite la persistance SPA entre navigations) ─────────────
 onMounted(() => {
-    form.reset();
-    vehiculeSelected.value = null;
-    clientSelected.value = null;
-
-    // Pré-sélectionner le premier produit sur la première ligne
-    if (props.produits.length > 0) {
-        const first = props.produits[0];
-        form.lignes[0].produit_id = first.id;
-        form.lignes[0].prix_vente = first.prix_vente;
-        form.lignes[0].total = first.prix_vente * form.lignes[0].qte;
+    // Ajouter une ligne vide si la commande n'avait aucune ligne
+    if (form.lignes.length === 0) {
+        form.lignes.push({ produit_id: null, qte: 1, prix_vente: 0, total: 0 });
     }
 });
 
@@ -220,12 +229,12 @@ const canSubmit = computed(
 
 // ── Soumission ────────────────────────────────────────────────────────────────
 function submit() {
-    form.post('/ventes');
+    form.put(`/ventes/${props.commande.id}`);
 }
 </script>
 
 <template>
-    <Head title="Nouvelle commande" />
+    <Head :title="`Modifier ${commande.reference}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- Mobile sticky header -->
@@ -234,27 +243,29 @@ function submit() {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/ventes"
+                    :href="`/ventes/${commande.id}`"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
                 <div class="text-center">
                     <h1 class="text-[17px] leading-tight font-semibold">
-                        Nouvelle vente
+                        Modifier la commande
                     </h1>
+                    <p class="font-mono text-[11px] text-muted-foreground">
+                        {{ commande.reference }}
+                    </p>
                 </div>
             </div>
         </div>
 
         <div class="mx-auto max-w-5xl p-4 sm:p-6">
             <div class="mb-6 hidden sm:block">
-                <h1 class="text-2xl font-semibold tracking-tight">
-                    Nouvelle commande de vente
+                <h1 class="font-mono text-2xl font-bold tracking-wide">
+                    {{ commande.reference }}
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Créez une commande et sa facture sera générée
-                    automatiquement.
+                    Modifiez cette commande en brouillon. Les changements sont enregistrés immédiatement.
                 </p>
             </div>
 
@@ -266,6 +277,7 @@ function submit() {
                     >
                         Informations générales
                     </h2>
+
                     <!-- Site rattaché (lecture seule) -->
                     <div class="mb-4 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2.5">
                         <span class="text-xs text-muted-foreground">Site :</span>
@@ -275,24 +287,18 @@ function submit() {
                     <div class="grid gap-4 sm:grid-cols-2">
                         <!-- Véhicule -->
                         <div>
-                            <Label class="mb-1.5 block text-sm">
-                                Véhicule
-                            </Label>
+                            <Label class="mb-1.5 block text-sm">Véhicule</Label>
                             <AutoComplete
                                 v-model="vehiculeSelected"
                                 :suggestions="vehiculeSuggests"
                                 :option-label="vehiculeLabel"
                                 @complete="searchVehicule"
-                                @item-select="
-                                    onVehiculeSelect(vehiculeSelected)
-                                "
+                                @item-select="onVehiculeSelect(vehiculeSelected)"
                                 @clear="onVehiculeClear"
                                 placeholder="Nom, immatriculation, livreur…"
                                 class="w-full"
                                 input-class="w-full"
-                                :class="{
-                                    'p-invalid': form.errors.vehicule_id,
-                                }"
+                                :class="{ 'p-invalid': form.errors.vehicule_id }"
                                 dropdown
                                 force-selection
                             >
@@ -301,39 +307,26 @@ function submit() {
                                         <div class="leading-tight font-medium">
                                             {{ option.nom_vehicule }}
                                         </div>
-                                        <div
-                                            class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground"
-                                        >
-                                            <span class="font-mono">{{
-                                                option.immatriculation
-                                            }}</span>
-                                            <span
-                                                v-if="option.livreur_nom"
-                                                class="before:mr-2 before:content-['·']"
-                                                >{{ option.livreur_nom }}</span
-                                            >
+                                        <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                            <span class="font-mono">{{ option.immatriculation }}</span>
+                                            <span v-if="option.livreur_nom" class="before:mr-2 before:content-['·']">
+                                                {{ option.livreur_nom }}
+                                            </span>
                                         </div>
                                     </div>
                                 </template>
                                 <template #empty>
-                                    <span class="text-sm text-muted-foreground"
-                                        >Aucun véhicule trouvé.</span
-                                    >
+                                    <span class="text-sm text-muted-foreground">Aucun véhicule trouvé.</span>
                                 </template>
                             </AutoComplete>
-                            <p
-                                v-if="form.errors.vehicule_id"
-                                class="mt-1 text-xs text-destructive"
-                            >
+                            <p v-if="form.errors.vehicule_id" class="mt-1 text-xs text-destructive">
                                 {{ form.errors.vehicule_id }}
                             </p>
                         </div>
 
                         <!-- Client -->
                         <div>
-                            <Label class="mb-1.5 block text-sm">
-                                Client
-                            </Label>
+                            <Label class="mb-1.5 block text-sm">Client</Label>
                             <AutoComplete
                                 v-model="clientSelected"
                                 :suggestions="clientSuggests"
@@ -351,40 +344,23 @@ function submit() {
                                 <template #option="{ option }">
                                     <div class="py-0.5">
                                         <div class="leading-tight font-medium">
-                                            {{
-                                                [option.prenom, option.nom]
-                                                    .filter(Boolean)
-                                                    .join(' ')
-                                            }}
+                                            {{ [option.prenom, option.nom].filter(Boolean).join(' ') }}
                                         </div>
-                                        <div
-                                            v-if="option.telephone"
-                                            class="mt-0.5 text-xs text-muted-foreground"
-                                        >
-                                            {{
-                                                formatPhoneDisplay(
-                                                    option.telephone,
-                                                )
-                                            }}
+                                        <div v-if="option.telephone" class="mt-0.5 text-xs text-muted-foreground">
+                                            {{ formatPhoneDisplay(option.telephone) }}
                                         </div>
                                     </div>
                                 </template>
                                 <template #empty>
-                                    <span class="text-sm text-muted-foreground"
-                                        >Aucun client trouvé.</span
-                                    >
+                                    <span class="text-sm text-muted-foreground">Aucun client trouvé.</span>
                                 </template>
                             </AutoComplete>
-                            <p
-                                v-if="form.errors.client_id"
-                                class="mt-1 text-xs text-destructive"
-                            >
+                            <p v-if="form.errors.client_id" class="mt-1 text-xs text-destructive">
                                 {{ form.errors.client_id }}
                             </p>
                         </div>
                     </div>
 
-                    <!-- Hint véhicule ou client -->
                     <p
                         v-if="!form.vehicule_id && !form.client_id"
                         class="mt-3 text-xs text-amber-600 dark:text-amber-400"
@@ -401,47 +377,20 @@ function submit() {
                         Lignes de commande
                     </h2>
 
-                    <p
-                        v-if="form.errors.lignes"
-                        class="mb-3 text-xs text-destructive"
-                    >
+                    <p v-if="form.errors.lignes" class="mb-3 text-xs text-destructive">
                         {{ form.errors.lignes }}
                     </p>
 
                     <!-- ── Tableau desktop ── -->
-                    <div
-                        class="hidden overflow-hidden rounded-lg border sm:block"
-                    >
+                    <div class="hidden overflow-hidden rounded-lg border sm:block">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b bg-muted/40">
-                                    <th
-                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                    >
-                                        Produit
-                                    </th>
-                                    <th
-                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                                        style="width: 110px"
-                                    >
-                                        Qté
-                                    </th>
-                                    <th
-                                        class="px-4 py-2.5 text-right font-medium text-muted-foreground"
-                                        style="width: 180px"
-                                    >
-                                        Prix unit.
-                                    </th>
-                                    <th
-                                        class="px-4 py-2.5 text-right font-medium text-muted-foreground"
-                                        style="width: 160px"
-                                    >
-                                        Total
-                                    </th>
-                                    <th
-                                        class="px-4 py-2.5"
-                                        style="width: 48px"
-                                    ></th>
+                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Produit</th>
+                                    <th class="px-4 py-2.5 text-center font-medium text-muted-foreground" style="width: 110px">Qté</th>
+                                    <th class="px-4 py-2.5 text-right font-medium text-muted-foreground" style="width: 180px">Prix unit.</th>
+                                    <th class="px-4 py-2.5 text-right font-medium text-muted-foreground" style="width: 160px">Total</th>
+                                    <th class="px-4 py-2.5" style="width: 48px"></th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
@@ -453,42 +402,26 @@ function submit() {
                                     <td class="px-4 py-3">
                                         <Dropdown
                                             :model-value="ligne.produit_id"
-                                            @update:model-value="
-                                                onProduitChange(index, $event)
-                                            "
+                                            @update:model-value="onProduitChange(index, $event)"
                                             :options="produitOptions"
                                             option-label="label"
                                             option-value="value"
                                             placeholder="Choisir un produit..."
                                             filter
                                             class="w-full"
-                                            :class="{
-                                                'p-invalid': (
-                                                    form.errors as any
-                                                )[`lignes.${index}.produit_id`],
-                                            }"
+                                            :class="{ 'p-invalid': (form.errors as any)[`lignes.${index}.produit_id`] }"
                                         />
                                         <p
-                                            v-if="
-                                                (form.errors as any)[
-                                                    `lignes.${index}.produit_id`
-                                                ]
-                                            "
+                                            v-if="(form.errors as any)[`lignes.${index}.produit_id`]"
                                             class="mt-1 text-xs text-destructive"
                                         >
-                                            {{
-                                                (form.errors as any)[
-                                                    `lignes.${index}.produit_id`
-                                                ]
-                                            }}
+                                            {{ (form.errors as any)[`lignes.${index}.produit_id`] }}
                                         </p>
                                     </td>
                                     <td class="px-4 py-3">
                                         <InputNumber
                                             :model-value="ligne.qte"
-                                            @update:model-value="
-                                                onQteChange(index, $event)
-                                            "
+                                            @update:model-value="onQteChange(index, $event)"
                                             :min="1"
                                             :use-grouping="false"
                                             class="w-full"
@@ -498,9 +431,7 @@ function submit() {
                                     <td class="px-4 py-3">
                                         <InputNumber
                                             :model-value="ligne.prix_vente"
-                                            @update:model-value="
-                                                onPrixChange(index, $event)
-                                            "
+                                            @update:model-value="onPrixChange(index, $event)"
                                             :min="0"
                                             :use-grouping="false"
                                             suffix=" GNF"
@@ -508,14 +439,8 @@ function submit() {
                                             input-class="w-full text-right"
                                         />
                                     </td>
-                                    <td
-                                        class="px-4 py-3 text-right font-medium tabular-nums"
-                                    >
-                                        {{
-                                            ligne.total > 0
-                                                ? formatGNF(ligne.total)
-                                                : '—'
-                                        }}
+                                    <td class="px-4 py-3 text-right font-medium tabular-nums">
+                                        {{ ligne.total > 0 ? formatGNF(ligne.total) : '—' }}
                                     </td>
                                     <td class="px-4 py-3 text-center">
                                         <Button
@@ -541,38 +466,24 @@ function submit() {
                             :key="index"
                             class="rounded-xl border bg-muted/20 p-3"
                         >
-                            <!-- Produit -->
                             <Dropdown
                                 :model-value="ligne.produit_id"
-                                @update:model-value="
-                                    onProduitChange(index, $event)
-                                "
+                                @update:model-value="onProduitChange(index, $event)"
                                 :options="produitOptions"
                                 option-label="label"
                                 option-value="value"
                                 placeholder="Choisir un produit..."
                                 filter
                                 class="w-full"
-                                :class="{
-                                    'p-invalid': (form.errors as any)[
-                                        `lignes.${index}.produit_id`
-                                    ],
-                                }"
+                                :class="{ 'p-invalid': (form.errors as any)[`lignes.${index}.produit_id`] }"
                             />
 
-                            <!-- Qté + Prix -->
                             <div class="mt-2.5 grid grid-cols-2 gap-2.5">
                                 <div>
-                                    <p
-                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
-                                    >
-                                        Quantité
-                                    </p>
+                                    <p class="mb-1 text-[11px] font-medium text-muted-foreground">Quantité</p>
                                     <InputNumber
                                         :model-value="ligne.qte"
-                                        @update:model-value="
-                                            onQteChange(index, $event)
-                                        "
+                                        @update:model-value="onQteChange(index, $event)"
                                         :min="1"
                                         :use-grouping="false"
                                         class="w-full"
@@ -580,16 +491,10 @@ function submit() {
                                     />
                                 </div>
                                 <div>
-                                    <p
-                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
-                                    >
-                                        Prix unit. (GNF)
-                                    </p>
+                                    <p class="mb-1 text-[11px] font-medium text-muted-foreground">Prix unit. (GNF)</p>
                                     <InputNumber
                                         :model-value="ligne.prix_vente"
-                                        @update:model-value="
-                                            onPrixChange(index, $event)
-                                        "
+                                        @update:model-value="onPrixChange(index, $event)"
                                         :min="0"
                                         :use-grouping="false"
                                         class="w-full"
@@ -598,24 +503,11 @@ function submit() {
                                 </div>
                             </div>
 
-                            <!-- Total + Supprimer -->
-                            <div
-                                class="mt-2.5 flex items-center justify-between"
-                            >
+                            <div class="mt-2.5 flex items-center justify-between">
                                 <div>
-                                    <p
-                                        class="text-[11px] text-muted-foreground"
-                                    >
-                                        Total ligne
-                                    </p>
-                                    <p
-                                        class="text-sm font-semibold tabular-nums"
-                                    >
-                                        {{
-                                            ligne.total > 0
-                                                ? formatGNF(ligne.total)
-                                                : '—'
-                                        }}
+                                    <p class="text-[11px] text-muted-foreground">Total ligne</p>
+                                    <p class="text-sm font-semibold tabular-nums">
+                                        {{ ligne.total > 0 ? formatGNF(ligne.total) : '—' }}
                                     </p>
                                 </div>
                                 <Button
@@ -634,24 +526,13 @@ function submit() {
 
                     <!-- Ajouter + Total -->
                     <div class="mt-4 flex items-center justify-between">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            @click="addLigne"
-                        >
+                        <Button type="button" variant="outline" size="sm" @click="addLigne">
                             <Plus class="mr-2 h-4 w-4" />
                             Ajouter une ligne
                         </Button>
                         <div class="text-right">
-                            <p
-                                class="text-xs tracking-wider text-muted-foreground uppercase"
-                            >
-                                Total commande
-                            </p>
-                            <p class="text-2xl font-bold tabular-nums">
-                                {{ formatGNF(totalGeneral) }}
-                            </p>
+                            <p class="text-xs tracking-wider text-muted-foreground uppercase">Total commande</p>
+                            <p class="text-2xl font-bold tabular-nums">{{ formatGNF(totalGeneral) }}</p>
                         </div>
                     </div>
                 </div>
@@ -661,15 +542,11 @@ function submit() {
 
                 <!-- Footer -->
                 <div class="flex items-center justify-between">
-                    <Link href="/ventes">
+                    <Link :href="`/ventes/${commande.id}`">
                         <Button type="button" variant="outline">Retour</Button>
                     </Link>
                     <Button type="submit" :disabled="!canSubmit">
-                        {{
-                            form.processing
-                                ? 'Enregistrement…'
-                                : 'Enregistrer la commande'
-                        }}
+                        {{ form.processing ? 'Enregistrement…' : 'Enregistrer les modifications' }}
                     </Button>
                 </div>
             </form>
@@ -681,9 +558,7 @@ function submit() {
         >
             <Button class="w-full" :disabled="!canSubmit" @click="submit">
                 <Save class="mr-2 h-4 w-4" />
-                {{
-                    form.processing ? 'Enregistrement…' : 'Enregistrer la vente'
-                }}
+                {{ form.processing ? 'Enregistrement…' : 'Enregistrer les modifications' }}
             </Button>
         </div>
     </AppLayout>

@@ -9,7 +9,6 @@ use App\Enums\StatutCommandeVente;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\Produit;
-use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use Illuminate\Http\RedirectResponse;
@@ -48,9 +47,10 @@ class CommandeVenteController extends Controller
                 'created_at'            => $c->created_at?->format('d/m/Y'),
                 'is_annulee'            => $c->isAnnulee(),
                 'is_brouillon'          => $c->isBrouillon(),
-                'is_validee'            => $c->isValidee(),
-                'can_valider'           => $c->isBrouillon() && $user->can('update', $c),
-                'can_annuler'           => $c->isValidee() && $user->can('annuler', $c),
+                'is_en_cours'           => $c->isEnCours(),
+                'can_modifier' => $c->isBrouillon() && $user->can('update', $c),
+                'can_valider' => $c->isBrouillon() && $user->can('update', $c),
+                'can_annuler' => $c->isEnCours() && $user->can('annuler', $c),
             ]);
 
         return Inertia::render('Ventes/Index', [
@@ -103,16 +103,28 @@ class CommandeVenteController extends Controller
                 'telephone' => $c->telephone,
             ]);
 
-        $sites = Site::where('organization_id', $orgId)
-            ->orderBy('nom')
-            ->get()
-            ->map(fn (Site $s) => ['id' => $s->id, 'nom' => $s->nom]);
+        // Site de l'utilisateur (rattachement obligatoire via user_sites)
+        $userSite = auth()->user()
+            ->sites()
+            ->wherePivot('is_default', true)
+            ->first(['sites.id', 'sites.nom', 'sites.type'])
+            ?? auth()->user()->sites()->first(['sites.id', 'sites.nom', 'sites.type']);
+
+        abort_if(
+            ! $userSite,
+            403,
+            "Votre compte n'est rattaché à aucun site. Contactez votre administrateur."
+        );
 
         return Inertia::render('Ventes/Create', [
             'produits'  => $produits,
             'vehicules' => $vehicules,
             'clients'   => $clients,
-            'sites'     => $sites,
+            'user_site' => [
+                'id'    => $userSite->id,
+                'nom'   => $userSite->nom,
+                'label' => ($userSite->type?->label() ?? '') . ' de ' . $userSite->nom,
+            ],
         ]);
     }
 
@@ -125,8 +137,20 @@ class CommandeVenteController extends Controller
         $orgId = auth()->user()->organization_id;
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
+        // Site récupéré depuis le profil de l'utilisateur (non modifiable par le client)
+        $userSite = auth()->user()
+            ->sites()
+            ->wherePivot('is_default', true)
+            ->first(['sites.id'])
+            ?? auth()->user()->sites()->first(['sites.id']);
+
+        abort_if(
+            ! $userSite,
+            403,
+            "Votre compte n'est rattaché à aucun site."
+        );
+
         $data = $request->validate([
-            'site_id'              => 'required|exists:sites,id',
             'vehicule_id'          => 'nullable|exists:vehicules,id',
             'client_id'            => 'nullable|exists:clients,id',
             'lignes'               => 'required|array|min:1',
@@ -134,8 +158,6 @@ class CommandeVenteController extends Controller
             'lignes.*.qte'         => 'required|integer|min:1',
             'lignes.*.prix_vente'  => 'required|numeric|min:0',
         ], [
-            'site_id.required'             => 'Le site est obligatoire.',
-            'site_id.exists'               => 'Le site sélectionné est introuvable.',
             'lignes.required'              => 'Au moins une ligne de commande est requise.',
             'lignes.min'                   => 'Au moins une ligne de commande est requise.',
             'lignes.*.produit_id.required' => 'Le produit est obligatoire pour chaque ligne.',
@@ -176,7 +198,7 @@ class CommandeVenteController extends Controller
         // Création en BROUILLON — aucune facture, aucune commission
         $commande = CommandeVente::create([
             'organization_id' => $orgId,
-            'site_id'         => $data['site_id'] ?? null,
+            'site_id'         => $userSite->id,
             'vehicule_id'     => $data['vehicule_id'] ?? null,
             'client_id'       => $data['client_id'] ?? null,
             'total_commande'  => $totalCommande,
@@ -255,12 +277,12 @@ class CommandeVenteController extends Controller
                 'annulee_at'        => $commande_vente->annulee_at?->toISOString(),
                 'validated_at'      => $commande_vente->validated_at?->format('d/m/Y'),
                 'is_brouillon'      => $commande_vente->isBrouillon(),
-                'is_validee'        => $commande_vente->isValidee(),
+                'is_en_cours'       => $commande_vente->isEnCours(),
                 'is_cloturee'       => $commande_vente->isCloturee(),
                 'is_annulee'        => $commande_vente->isAnnulee(),
-                'can_valider'       => $commande_vente->isBrouillon() && $user->can('update', $commande_vente),
-                'can_cloturer'      => $commande_vente->isValidee() && $user->can('update', $commande_vente),
-                'can_annuler'       => $commande_vente->isValidee() && $user->can('annuler', $commande_vente),
+                'can_modifier' => $commande_vente->isBrouillon() && $user->can('update', $commande_vente),
+                'can_valider'  => $commande_vente->isBrouillon() && $user->can('update', $commande_vente),
+                'can_annuler'  => $commande_vente->isEnCours() && $user->can('annuler', $commande_vente),
                 'created_at'        => $commande_vente->created_at?->format('d/m/Y'),
                 'created_by'        => $commande_vente->createdBy?->name,
                 'lignes'            => $lignes,
@@ -270,7 +292,152 @@ class CommandeVenteController extends Controller
         ]);
     }
 
-    // ── Valider : BROUILLON → VALIDEE ─────────────────────────────────────────
+    // ── Edit ─────────────────────────────────────────────────────────────────────
+
+    public function edit(CommandeVente $vente): Response
+    {
+        $this->authorize('update', $vente);
+        abort_if(! $vente->isBrouillon(), 403, 'Seule une commande en brouillon peut être modifiée.');
+
+        $orgId = auth()->user()->organization_id;
+        $vente->load(['lignes']);
+
+        $produits = Produit::where('organization_id', $orgId)
+            ->where('statut', ProduitStatut::ACTIF)
+            ->whereIn('type', ProduitType::vendableValues())
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (Produit $p) => [
+                'id'         => $p->id,
+                'nom'        => $p->nom,
+                'prix_vente' => (int) $p->prix_vente,
+                'prix_usine' => (int) $p->prix_usine,
+            ]);
+
+        $vehicules = Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'principal')])
+            ->where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->orderBy('nom_vehicule')
+            ->get()
+            ->map(fn (Vehicule $v) => [
+                'id'              => $v->id,
+                'nom_vehicule'    => $v->nom_vehicule,
+                'immatriculation' => $v->immatriculation,
+                'livreur_nom'     => ($l = $v->equipe?->livreurs->first())
+                    ? trim($l->prenom.' '.$l->nom)
+                    : null,
+            ]);
+
+        $clients = Client::where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (Client $c) => [
+                'id'        => $c->id,
+                'nom'       => $c->nom,
+                'prenom'    => $c->prenom,
+                'telephone' => $c->telephone,
+            ]);
+
+        $userSite = auth()->user()
+            ->sites()
+            ->wherePivot('is_default', true)
+            ->first(['sites.id', 'sites.nom', 'sites.type'])
+            ?? auth()->user()->sites()->first(['sites.id', 'sites.nom', 'sites.type']);
+
+        abort_if(! $userSite, 403, "Votre compte n'est rattaché à aucun site.");
+
+        return Inertia::render('Ventes/Edit', [
+            'commande'  => [
+                'id'          => $vente->id,
+                'reference'   => $vente->reference,
+                'vehicule_id' => $vente->vehicule_id,
+                'client_id'   => $vente->client_id,
+                'lignes'      => $vente->lignes->map(fn ($l) => [
+                    'produit_id' => $l->produit_id,
+                    'qte'        => (int) $l->qte,
+                    'prix_vente' => (float) $l->prix_vente_snapshot,
+                ]),
+            ],
+            'produits'  => $produits,
+            'vehicules' => $vehicules,
+            'clients'   => $clients,
+            'user_site' => [
+                'id'    => $userSite->id,
+                'nom'   => $userSite->nom,
+                'label' => ($userSite->type?->label() ?? '').' de '.$userSite->nom,
+            ],
+        ]);
+    }
+
+    // ── Update : modification d'un BROUILLON ──────────────────────────────────
+
+    public function update(Request $request, CommandeVente $vente): RedirectResponse
+    {
+        $this->authorize('update', $vente);
+        abort_if(! $vente->isBrouillon(), 403, 'Seule une commande en brouillon peut être modifiée.');
+
+        $data = $request->validate([
+            'vehicule_id'          => 'nullable|exists:vehicules,id',
+            'client_id'            => 'nullable|exists:clients,id',
+            'lignes'               => 'required|array|min:1',
+            'lignes.*.produit_id'  => 'required|exists:produits,id',
+            'lignes.*.qte'         => 'required|integer|min:1',
+            'lignes.*.prix_vente'  => 'required|numeric|min:0',
+        ], [
+            'lignes.required'              => 'Au moins une ligne de commande est requise.',
+            'lignes.min'                   => 'Au moins une ligne de commande est requise.',
+            'lignes.*.produit_id.required' => 'Le produit est obligatoire pour chaque ligne.',
+            'lignes.*.produit_id.exists'   => 'Le produit sélectionné est introuvable.',
+            'lignes.*.qte.required'        => 'La quantité est obligatoire pour chaque ligne.',
+            'lignes.*.qte.min'             => 'La quantité doit être supérieure à 0.',
+            'lignes.*.prix_vente.required' => 'Le prix de vente est obligatoire pour chaque ligne.',
+            'lignes.*.prix_vente.min'      => 'Le prix de vente ne peut pas être négatif.',
+        ]);
+
+        if (empty($data['vehicule_id']) && empty($data['client_id'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'vehicule_id' => 'Veuillez sélectionner un véhicule ou un client.',
+                'client_id'   => 'Veuillez sélectionner un véhicule ou un client.',
+            ]);
+        }
+
+        $lignesData    = [];
+        $totalCommande = 0;
+
+        foreach ($data['lignes'] as $ligne) {
+            $produit    = Produit::findOrFail($ligne['produit_id']);
+            $qte        = (int) $ligne['qte'];
+            $prixVente  = (float) $ligne['prix_vente'];
+            $totalLigne = $qte * $prixVente;
+
+            $lignesData[] = [
+                'produit_id'          => $produit->id,
+                'qte'                 => $qte,
+                'prix_usine_snapshot' => (float) $produit->prix_usine,
+                'prix_vente_snapshot' => $prixVente,
+                'total_ligne'         => $totalLigne,
+            ];
+
+            $totalCommande += $totalLigne;
+        }
+
+        $vente->update([
+            'vehicule_id'    => $data['vehicule_id'] ?? null,
+            'client_id'      => $data['client_id'] ?? null,
+            'total_commande' => $totalCommande,
+        ]);
+
+        $vente->lignes()->delete();
+        foreach ($lignesData as $ligneDatum) {
+            $vente->lignes()->create($ligneDatum);
+        }
+
+        return redirect()->route('ventes.show', $vente)
+            ->with('success', 'Commande mise à jour.');
+    }
+
+    // ── Valider : BROUILLON → EN_COURS ───────────────────────────────────────
 
     public function valider(CommandeVente $commande_vente): RedirectResponse
     {
@@ -279,17 +446,6 @@ class CommandeVenteController extends Controller
         $this->service->valider($commande_vente);
 
         return back()->with('success', 'Commande validée. Facture créée.');
-    }
-
-    // ── Clôturer : VALIDEE → CLOTUREE ────────────────────────────────────────
-
-    public function cloturer(CommandeVente $commande_vente): RedirectResponse
-    {
-        $this->authorize('update', $commande_vente);
-
-        $this->service->cloturer($commande_vente);
-
-        return back()->with('success', 'Commande clôturée.');
     }
 
     // ── Annuler : VALIDEE → ANNULEE (admin uniquement) ────────────────────────

@@ -59,7 +59,7 @@ class CommissionVenteController extends Controller
             'nb_partielles'      => $parts->where('statut', StatutCommission::PARTIELLE->value)->count(),
             'montant_partielles' => $parts->where('statut', StatutCommission::PARTIELLE->value)->sum('montant_restant'),
             'nb_versees'         => $parts->where('statut', StatutCommission::VERSEE->value)->count(),
-            'montant_versees'    => $parts->where('statut', StatutCommission::VERSEE->value)->sum('montant_verse'),
+            'montant_versees'    => $actives->sum('montant_verse'),
         ];
 
         return Inertia::render('Commissions/Index', [

@@ -10,19 +10,15 @@ use App\Models\Vehicule;
 use Illuminate\Database\Seeder;
 
 /**
- * Crée 7 véhicules.
+ * Cree 3 vehicules.
  *
- * Règle taux : taux_commission_proprietaire + Σ taux équipe = 100 (commission toujours active).
+ * Regle taux: taux_commission_proprietaire + somme taux equipe = 100.
  *
- * | Véhicule       | Type          | Propriétaire      | Équipe         | Taux prop | Σ équipe | Total |
- * |----------------|---------------|-------------------|----------------|-----------|----------|-------|
- * | Camion Alpha   | camion        | Mamadou BARRY     | Équipe Nord    |   92 %    |    8 %   | 100 % |
- * | Tricycle 01    | tricycle      | Fatoumata DIALLO  | Équipe Sud     |   94 %    |    6 %   | 100 % |
- * | Vanne Express  | camionnette   | Mamadou BARRY     | Équipe Est     |   92 %    |    8 %   | 100 % |
- * | Camion Bêta    | camion        | Issa TOUNKARA     | Équipe Ouest   |   91 %    |    9 %   | 100 % |
- * | Tricycle 02    | tricycle      | Saran CONDÉ       | Équipe Centre  |   90 %    |   10 %   | 100 % |
- * | Tricycle 03    | tricycle      | Issa TOUNKARA     | Équipe Nord    |   92 %    |    8 %   | 100 % |
- * | Pickup ELM     | voiture       | Mamadou BARRY     | (aucune)       | taux 0, pris en charge usine |
+ * | Vehicule          | Type        | Proprietaire      | Equipe       | Taux prop | Somme equipe |
+ * |-------------------|-------------|-------------------|--------------|-----------|--------------|
+ * | Nen Dow           | camion      | Mamadou BARRY     | Nen Dow      | 60 %      | 40 %         |
+ * | Kata Kata de Ali  | tricycle    | Fatoumata DIALLO  | Auto Dogomet | 60 %      | 40 %         |
+ * | Baba Ousou        | camionnette | Mamadou BARRY     | Baba Ousou   | 60 %      | 40 %         |
  */
 class VehiculesSeeder extends Seeder
 {
@@ -30,126 +26,71 @@ class VehiculesSeeder extends Seeder
     {
         $org = Organization::where('slug', 'elm')->firstOrFail();
 
-        // ── Helpers de lookup ─────────────────────────────────────────────────
-        $prop   = fn (string $tel) => Proprietaire::where('telephone', $tel)
+        $prop = fn (string $tel) => Proprietaire::query()
+            ->where('telephone', $tel)
             ->where('organization_id', $org->id)
             ->firstOrFail();
 
-        $equipe = fn (string $nom) => EquipeLivraison::where('nom', $nom)
+        $equipe = fn (string $nom) => EquipeLivraison::query()
+            ->where('nom', $nom)
             ->where('organization_id', $org->id)
             ->firstOrFail();
 
         $mamadouBarry    = $prop('+224621000001');
         $fatoumataDiallo = $prop('+224621000002');
-        $issaTounkara    = $prop('+224621000003');
-        $saranConde      = $prop('+224621000004');
 
-        $eqNord   = $equipe('Équipe Nord');
-        $eqSud    = $equipe('Équipe Sud');
-        $eqEst    = $equipe('Équipe Est');
-        $eqOuest  = $equipe('Équipe Ouest');
-        $eqCentre = $equipe('Équipe Centre');
+        $eqNenDow      = $equipe('Nen Dow');
+        $eqAutoDogomet = $equipe('Auto Dogomet');
+        $eqBabaOusou   = $equipe('Baba Ousou');
 
         $vehicules = [
             [
-                'nom_vehicule'                 => 'Camion Alpha',
+                'nom_vehicule'                 => 'Nen Dow',
                 'marque'                       => 'Mercedes',
                 'modele'                       => 'Actros',
                 'immatriculation'              => 'RC-001-GN',
                 'type_vehicule'                => TypeVehicule::CAMION->value,
                 'capacite_packs'               => 500,
                 'proprietaire_id'              => $mamadouBarry->id,
-                'equipe_livraison_id'          => $eqNord->id,
-                'taux_commission_proprietaire' => 92.00,
+                'equipe_livraison_id'          => $eqNenDow->id,
+                'taux_commission_proprietaire' => 100 - $eqNenDow->sommeTaux(),
                 'pris_en_charge_par_usine'     => false,
                 'is_active'                    => true,
             ],
             [
-                'nom_vehicule'                 => 'Tricycle 01',
+                'nom_vehicule'                 => 'Kata Kata de Ali',
                 'marque'                       => 'Bajaj',
                 'modele'                       => 'RE',
                 'immatriculation'              => 'TC-001-GN',
                 'type_vehicule'                => TypeVehicule::TRICYCLE->value,
                 'capacite_packs'               => 80,
                 'proprietaire_id'              => $fatoumataDiallo->id,
-                'equipe_livraison_id'          => $eqSud->id,
-                'taux_commission_proprietaire' => 94.00,
+                'equipe_livraison_id'          => $eqAutoDogomet->id,
+                'taux_commission_proprietaire' => 100 - $eqAutoDogomet->sommeTaux(),
                 'pris_en_charge_par_usine'     => false,
                 'is_active'                    => true,
             ],
             [
-                'nom_vehicule'                 => 'Vanne Express',
+                'nom_vehicule'                 => 'Baba Ousou',
                 'marque'                       => 'Toyota',
                 'modele'                       => 'HiAce',
                 'immatriculation'              => 'VN-001-GN',
                 'type_vehicule'                => TypeVehicule::CAMIONNETTE->value,
                 'capacite_packs'               => 150,
                 'proprietaire_id'              => $mamadouBarry->id,
-                'equipe_livraison_id'          => $eqEst->id,
-                'taux_commission_proprietaire' => 92.00,
+                'equipe_livraison_id'          => $eqBabaOusou->id,
+                'taux_commission_proprietaire' => 100 - $eqBabaOusou->sommeTaux(),
                 'pris_en_charge_par_usine'     => false,
-                'is_active'                    => true,
-            ],
-            [
-                'nom_vehicule'                 => 'Camion Bêta',
-                'marque'                       => 'MAN',
-                'modele'                       => 'TGX',
-                'immatriculation'              => 'RC-002-GN',
-                'type_vehicule'                => TypeVehicule::CAMION->value,
-                'capacite_packs'               => 400,
-                'proprietaire_id'              => $issaTounkara->id,
-                'equipe_livraison_id'          => $eqOuest->id,
-                'taux_commission_proprietaire' => 91.00,
-                'pris_en_charge_par_usine'     => false,
-                'is_active'                    => true,
-            ],
-            [
-                'nom_vehicule'                 => 'Tricycle 02',
-                'marque'                       => 'TVS',
-                'modele'                       => 'King',
-                'immatriculation'              => 'TC-002-GN',
-                'type_vehicule'                => TypeVehicule::TRICYCLE->value,
-                'capacite_packs'               => 100,
-                'proprietaire_id'              => $saranConde->id,
-                'equipe_livraison_id'          => $eqCentre->id,
-                'taux_commission_proprietaire' => 90.00,
-                'pris_en_charge_par_usine'     => false,
-                'is_active'                    => true,
-            ],
-            [
-                'nom_vehicule'                 => 'Tricycle 03',
-                'marque'                       => 'Bajaj',
-                'modele'                       => 'RE Diesel',
-                'immatriculation'              => 'TC-003-GN',
-                'type_vehicule'                => TypeVehicule::TRICYCLE->value,
-                'capacite_packs'               => 80,
-                'proprietaire_id'              => $issaTounkara->id,
-                'equipe_livraison_id'          => $eqNord->id,
-                'taux_commission_proprietaire' => 92.00,
-                'pris_en_charge_par_usine'     => false,
-                'is_active'                    => true,
-            ],
-            [
-                // Véhicule pris en charge par l'usine — taux 0, pas d'équipe → pas de commission générée
-                'nom_vehicule'                 => 'Pickup ELM',
-                'marque'                       => 'Toyota',
-                'modele'                       => 'Hilux',
-                'immatriculation'              => 'PK-001-GN',
-                'type_vehicule'                => TypeVehicule::VOITURE->value,
-                'capacite_packs'               => 40,
-                'proprietaire_id'              => $mamadouBarry->id,
-                'equipe_livraison_id'          => null,
-                'taux_commission_proprietaire' => 0.00,
-                'pris_en_charge_par_usine'     => true,
                 'is_active'                    => true,
             ],
         ];
 
         foreach ($vehicules as $data) {
-            Vehicule::firstOrCreate(
+            Vehicule::updateOrCreate(
                 ['immatriculation' => $data['immatriculation'], 'organization_id' => $org->id],
                 [...$data, 'organization_id' => $org->id]
             );
         }
     }
 }
+

@@ -18,6 +18,7 @@ import {
     CheckCircle,
     ChevronRight,
     MoreVertical,
+    Pencil,
     Plus,
     Search,
     ShoppingCart,
@@ -50,7 +51,8 @@ interface Commande {
     created_at: string;
     is_annulee: boolean;
     is_brouillon: boolean;
-    is_validee: boolean;
+    is_en_cours: boolean;
+    can_modifier: boolean;
     can_valider: boolean;
     can_annuler: boolean;
 }
@@ -76,7 +78,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 // ── Statut couleurs ───────────────────────────────────────────────────────────
 const statutCommandeColor: Record<string, string> = {
     brouillon: 'bg-zinc-400 dark:bg-zinc-500',
-    validee:   'bg-blue-500',
+    en_cours:  'bg-blue-500',
     cloturee:  'bg-emerald-500',
     annulee:   'bg-red-400',
 };
@@ -500,6 +502,18 @@ function confirmDelete(c: Commande) {
                                             >
                                                 <ShoppingCart class="h-4 w-4" />
                                                 Voir
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            v-if="data.can_modifier"
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="`/ventes/${data.id}/edit`"
+                                                class="flex w-full cursor-pointer items-center gap-2"
+                                            >
+                                                <Pencil class="h-4 w-4" />
+                                                Modifier
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem

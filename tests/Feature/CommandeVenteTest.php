@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Enums\StatutCommandeVente;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\EncaissementVente;
+use App\Models\FactureVente;
 use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\Proprietaire;
@@ -19,39 +21,43 @@ class CommandeVenteTest extends TestCase
 {
     use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
+    private Site $defaultSite;
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete']);
+
+        // Attacher un site par défaut pour passer le middleware RequireSiteAssigned
+        $this->defaultSite = Site::create([
+            'organization_id' => $this->org->id,
+            'nom'             => 'Site Principal',
+            'type'            => 'depot',
+            'localisation'    => 'Conakry',
+        ]);
+        $this->user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
     }
 
     private function makeContext(Organization $org): array
     {
-        $site = Site::create([
-            'organization_id' => $org->id,
-            'nom' => 'Depot Test',
-            'type' => 'depot',
-            'localisation' => 'Conakry',
-        ]);
-
         $produit = Produit::create([
             'organization_id' => $org->id,
-            'nom' => 'Rouleau',
-            'type' => 'materiel',
-            'statut' => 'actif',
-            'prix_vente' => 2000,
-            'prix_usine' => 1500,
+            'nom'             => 'Rouleau',
+            'type'            => 'materiel',
+            'statut'          => 'actif',
+            'prix_vente'      => 2000,
+            'prix_usine'      => 1500,
         ]);
 
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
-        $vehicule = Vehicule::factory()->create([
+        $vehicule     = Vehicule::factory()->create([
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
         ]);
 
         $client = Client::factory()->create(['organization_id' => $org->id]);
 
-        return compact('site', 'produit', 'vehicule', 'client');
+        return compact('produit', 'vehicule', 'client');
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
@@ -90,18 +96,13 @@ class CommandeVenteTest extends TestCase
 
     public function test_store_creates_commande_with_vehicule_and_redirects(): void
     {
-        ['site' => $site, 'produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
 
         $response = $this->actingAs($this->user)
             ->post(route('ventes.store'), [
-                'site_id' => $site->id,
                 'vehicule_id' => $vehicule->id,
-                'lignes' => [
-                    [
-                        'produit_id' => $produit->id,
-                        'qte' => 2,
-                        'prix_vente' => 2000,
-                    ],
+                'lignes'      => [
+                    ['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 2000],
                 ],
             ]);
 
@@ -109,41 +110,37 @@ class CommandeVenteTest extends TestCase
 
         $this->assertDatabaseHas('commandes_ventes', [
             'organization_id' => $this->org->id,
-            'vehicule_id' => $vehicule->id,
+            'vehicule_id'     => $vehicule->id,
+            'statut'          => 'brouillon',
         ]);
     }
 
     public function test_store_creates_commande_with_client_and_redirects(): void
     {
-        ['site' => $site, 'produit' => $produit, 'client' => $client] = $this->makeContext($this->org);
+        ['produit' => $produit, 'client' => $client] = $this->makeContext($this->org);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
-                'site_id' => $site->id,
                 'client_id' => $client->id,
-                'lignes' => [
-                    [
-                        'produit_id' => $produit->id,
-                        'qte' => 1,
-                        'prix_vente' => 1500,
-                    ],
+                'lignes'    => [
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 1500],
                 ],
             ])
             ->assertRedirect();
 
         $this->assertDatabaseHas('commandes_ventes', [
             'organization_id' => $this->org->id,
-            'client_id' => $client->id,
+            'client_id'       => $client->id,
+            'statut'          => 'brouillon',
         ]);
     }
 
     public function test_store_fails_without_vehicule_or_client(): void
     {
-        ['site' => $site, 'produit' => $produit] = $this->makeContext($this->org);
+        ['produit' => $produit] = $this->makeContext($this->org);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
-                'site_id' => $site->id,
                 'lignes' => [
                     ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 2000],
                 ],
@@ -151,24 +148,23 @@ class CommandeVenteTest extends TestCase
             ->assertSessionHasErrors();
     }
 
+    public function test_store_fails_with_empty_lignes(): void
+    {
+        ['vehicule' => $vehicule] = $this->makeContext($this->org);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes'      => [],
+            ])
+            ->assertSessionHasErrors('lignes');
+    }
+
     public function test_store_fails_with_empty_data(): void
     {
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [])
-            ->assertSessionHasErrors(['site_id', 'lignes']);
-    }
-
-    public function test_store_fails_with_empty_lignes(): void
-    {
-        ['site' => $site, 'vehicule' => $vehicule] = $this->makeContext($this->org);
-
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'site_id' => $site->id,
-                'vehicule_id' => $vehicule->id,
-                'lignes' => [],
-            ])
-            ->assertSessionHasErrors('lignes');
+            ->assertSessionHasErrors(['lignes']);
     }
 
     // ── show ──────────────────────────────────────────────────────────────────
@@ -192,13 +188,50 @@ class CommandeVenteTest extends TestCase
             ->assertStatus(403);
     }
 
-    // ── annuler ───────────────────────────────────────────────────────────────
+    // ── valider : BROUILLON → EN_COURS ───────────────────────────────────────
+
+    public function test_valider_transitions_brouillon_to_en_cours(): void
+    {
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id'         => $this->defaultSite->id,
+            'statut'          => StatutCommandeVente::BROUILLON,
+            'total_commande'  => 5000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('ventes.valider', $commande))
+            ->assertRedirect();
+
+        $this->assertEquals(StatutCommandeVente::EN_COURS, $commande->fresh()->statut);
+    }
+
+    public function test_valider_creates_facture_on_validation(): void
+    {
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id'         => $this->defaultSite->id,
+            'statut'          => StatutCommandeVente::BROUILLON,
+            'total_commande'  => 8000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('ventes.valider', $commande))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('factures_ventes', [
+            'commande_vente_id' => $commande->id,
+            'montant_brut'      => 8000,
+        ]);
+    }
+
+    // ── annuler : EN_COURS → ANNULEE ─────────────────────────────────────────
 
     public function test_annuler_sets_statut_annulee(): void
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut'          => StatutCommandeVente::EN_COURS,
         ]);
 
         $this->actingAs($this->user)
@@ -214,7 +247,7 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut'          => StatutCommandeVente::EN_COURS,
         ]);
 
         $this->actingAs($this->user)
@@ -226,7 +259,7 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut' => StatutCommandeVente::ANNULEE,
+            'statut'          => StatutCommandeVente::ANNULEE,
         ]);
 
         $this->actingAs($this->user)
@@ -236,13 +269,74 @@ class CommandeVenteTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_annuler_returns_422_if_encaissement_exists(): void
+    {
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id'         => $this->defaultSite->id,
+            'statut'          => StatutCommandeVente::EN_COURS,
+        ]);
+
+        $facture = FactureVente::create([
+            'organization_id'   => $this->org->id,
+            'commande_vente_id' => $commande->id,
+            'montant_brut'      => 5000,
+            'montant_net'       => 5000,
+        ]);
+
+        EncaissementVente::create([
+            'facture_vente_id'  => $facture->id,
+            'montant'           => 5000,
+            'date_encaissement' => now()->toDateString(),
+            'mode_paiement'     => 'especes',
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('ventes.annuler', $commande), [
+                'motif_annulation' => 'Test annulation avec encaissement',
+            ])
+            ->assertStatus(422);
+    }
+
+    // ── auto-clôture : EN_COURS → CLOTUREE ───────────────────────────────────
+
+    public function test_auto_cloture_when_facture_fully_paid_and_no_commissions(): void
+    {
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id'         => $this->defaultSite->id,
+            'statut'          => StatutCommandeVente::EN_COURS,
+            'total_commande'  => 5000,
+        ]);
+
+        $facture = FactureVente::create([
+            'organization_id'   => $this->org->id,
+            'site_id'           => $this->defaultSite->id,
+            'commande_vente_id' => $commande->id,
+            'montant_brut'      => 5000,
+            'montant_net'       => 5000,
+        ]);
+
+        // Ajouter un encaissement qui solde entièrement la facture
+        $this->actingAs($this->user)
+            ->post(route('encaissements.store', $facture), [
+                'montant'           => 5000,
+                'date_encaissement' => now()->toDateString(),
+                'mode_paiement'     => 'especes',
+            ])
+            ->assertRedirect();
+
+        // La commande doit être automatiquement clôturée
+        $this->assertEquals(StatutCommandeVente::CLOTUREE, $commande->fresh()->statut);
+    }
+
     // ── destroy ───────────────────────────────────────────────────────────────
 
     public function test_destroy_deletes_annulee_commande_and_redirects(): void
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut' => StatutCommandeVente::ANNULEE,
+            'statut'          => StatutCommandeVente::ANNULEE,
         ]);
 
         $this->actingAs($this->user)
@@ -256,44 +350,11 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut'          => StatutCommandeVente::EN_COURS,
         ]);
 
         $this->actingAs($this->user)
             ->delete(route('ventes.destroy', $commande))
             ->assertStatus(403);
-    }
-
-    // ── annuler with encaissement ─────────────────────────────────────────────
-
-    public function test_annuler_returns_422_if_encaissement_exists(): void
-    {
-        ['site' => $site] = $this->makeContext($this->org);
-
-        $commande = CommandeVente::factory()->create([
-            'organization_id' => $this->org->id,
-            'site_id' => $site->id,
-            'statut' => StatutCommandeVente::EN_COURS,
-        ]);
-
-        $facture = \App\Models\FactureVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $commande->id,
-            'montant_brut' => 5000,
-            'montant_net' => 5000,
-        ]);
-
-        \App\Models\EncaissementVente::create([
-            'facture_vente_id' => $facture->id,
-            'montant' => 5000,
-            'date_encaissement' => now()->toDateString(),
-            'mode_paiement' => 'especes',
-        ]);
-
-        $this->actingAs($this->user)
-            ->patch(route('ventes.annuler', $commande), [
-                'motif_annulation' => 'Test annulation avec encaissement',
-            ])
-            ->assertStatus(422);
     }
 }

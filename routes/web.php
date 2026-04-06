@@ -47,10 +47,10 @@ Route::post('contact', [ContactController::class, 'store'])->name('contact.store
 
 Route::get('dashboard', function () {
     return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable'])->name('dashboard');
+})->middleware(['auth', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->name('dashboard');
 
 // ── Espace staff ──────────────────────────────────────────────────────────────
-Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commerciale|comptable'])->group(function () {
+Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->group(function () {
 
     // Messages de contact
     Route::get('contact-messages/unread-count', [ContactController::class, 'unreadCount'])->name('contact-messages.unread-count');
@@ -61,9 +61,8 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 
     // ── Module : Ventes ───────────────────────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
-        Route::resource('ventes', CommandeVenteController::class)->except(['edit', 'update']);
+        Route::resource('ventes', CommandeVenteController::class)->except([]);
         Route::patch('ventes/{commande_vente}/valider',  [CommandeVenteController::class, 'valider'])->name('ventes.valider');
-        Route::patch('ventes/{commande_vente}/cloturer', [CommandeVenteController::class, 'cloturer'])->name('ventes.cloturer');
         Route::patch('ventes/{commande_vente}/annuler',  [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
         Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
 

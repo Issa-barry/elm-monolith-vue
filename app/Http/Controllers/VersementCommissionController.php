@@ -40,6 +40,12 @@ class VersementCommissionController extends Controller
 
         $part->versements()->create($data);
 
+        // Recalcul statut de la part puis de la commission
+        $part->recalculStatut();
+
+        // Auto-clôture commande si facture payée et commissions toutes versées
+        $commission->commande?->cloturerSiComplete();
+
         return redirect()
             ->route('commissions.show', $commission)
             ->with('success', 'Versement enregistré.');

@@ -9,18 +9,16 @@ use App\Models\Organization;
 use Illuminate\Database\Seeder;
 
 /**
- * Crée 5 équipes de livraison avec leurs membres et taux.
+ * Cree 3 equipes de livraison avec leurs membres et taux.
  *
- * Règle : SUM(taux membres) sera connu ici.
- * Le taux propriétaire = 100 - SUM(taux membres) est défini dans VehiculesSeeder.
+ * Regle: SUM(taux membres) est defini ici.
+ * Le taux proprietaire = 100 - SUM(taux membres) est defini dans VehiculesSeeder.
  *
- * | Équipe      | Principal         | Taux | Assistant(s)                        | Taux | Σ équipe |
- * |-------------|-------------------|------|-------------------------------------|------|----------|
- * | Nord        | Ibrahima CAMARA   |  5 % | Sékou KOUYATÉ                       |  3 % |    8 %   |
- * | Sud         | Mariama BAH       |  6 % | —                                   |  —   |    6 %   |
- * | Est         | Mamadou SOUMAH    |  5 % | Fatoumata KOUROUMA                  |  3 % |    8 %   |
- * | Ouest       | Boubacar DIALLO   |  7 % | Alpha BARRY                         |  2 % |    9 %   |
- * | Centre      | Oumar CAMARA      |  5 % | Abdoulaye SYLLA, Kadiatou TOURÉ     | 3+2 % |  10 %   |
+ * | Equipe        | Principal         | Taux | Assistant(s)                   | Taux   | Somme |
+ * |---------------|-------------------|------|--------------------------------|--------|-------|
+ * | Nen Dow       | Ibrahima CAMARA   | 25 % | Sekou KOUYATE                  | 15 %   | 40 %  |
+ * | Auto Dogomet  | Mariama BAH       | 40 % | -                              | -      | 40 %  |
+ * | Baba Ousou    | Oumar CAMARA      | 20 % | Abdoulaye SYLLA, Kadiatou TOURE| 15%+5% | 40 %  |
  */
 class EquipesLivraisonSeeder extends Seeder
 {
@@ -28,77 +26,56 @@ class EquipesLivraisonSeeder extends Seeder
     {
         $org = Organization::where('slug', 'elm')->firstOrFail();
 
-        // Récupère les livreurs par téléphone (créés par LivreursSeeder)
-        $lv = fn (string $tel) => Livreur::where('telephone', $tel)
+        // Recupere les livreurs par telephone (crees par LivreursSeeder).
+        $lv = fn (string $tel) => Livreur::query()
+            ->where('telephone', $tel)
             ->where('organization_id', $org->id)
             ->firstOrFail();
 
-        $ibrahima   = $lv('+224622000001');
-        $sekou      = $lv('+224622000002');
-        $mariama    = $lv('+224622000003');
-        $mamadouS   = $lv('+224622000004');
-        $fatoumataK = $lv('+224622000005');
-        $boubacar   = $lv('+224622000006');
-        $alpha      = $lv('+224622000007');
-        $oumar      = $lv('+224622000008');
-        $abdoulaye  = $lv('+224622000009');
-        $kadiatou   = $lv('+224622000010');
-
         $equipes = [
             [
-                'nom'     => 'Équipe Nord',
+                'nom'     => 'Nen Dow',
                 'membres' => [
-                    ['livreur' => $ibrahima,   'role' => 'principal', 'taux' => 5.00, 'ordre' => 0],
-                    ['livreur' => $sekou,      'role' => 'assistant', 'taux' => 3.00, 'ordre' => 1],
+                    ['telephone' => '+224622000001', 'role' => 'principal', 'taux' => 25, 'ordre' => 0],
+                    ['telephone' => '+224622000002', 'role' => 'assistant', 'taux' => 15, 'ordre' => 1],
                 ],
             ],
             [
-                'nom'     => 'Équipe Sud',
+                'nom'     => 'Auto Dogomet',
                 'membres' => [
-                    ['livreur' => $mariama,    'role' => 'principal', 'taux' => 6.00, 'ordre' => 0],
+                    ['telephone' => '+224622000003', 'role' => 'principal', 'taux' => 40, 'ordre' => 0],
                 ],
             ],
             [
-                'nom'     => 'Équipe Est',
+                'nom'     => 'Baba Ousou',
                 'membres' => [
-                    ['livreur' => $mamadouS,   'role' => 'principal', 'taux' => 5.00, 'ordre' => 0],
-                    ['livreur' => $fatoumataK, 'role' => 'assistant', 'taux' => 3.00, 'ordre' => 1],
-                ],
-            ],
-            [
-                'nom'     => 'Équipe Ouest',
-                'membres' => [
-                    ['livreur' => $boubacar,   'role' => 'principal', 'taux' => 7.00, 'ordre' => 0],
-                    ['livreur' => $alpha,      'role' => 'assistant', 'taux' => 2.00, 'ordre' => 1],
-                ],
-            ],
-            [
-                'nom'     => 'Équipe Centre',
-                'membres' => [
-                    ['livreur' => $oumar,      'role' => 'principal', 'taux' => 5.00, 'ordre' => 0],
-                    ['livreur' => $abdoulaye,  'role' => 'assistant', 'taux' => 3.00, 'ordre' => 1],
-                    ['livreur' => $kadiatou,   'role' => 'assistant', 'taux' => 2.00, 'ordre' => 2],
+                    ['telephone' => '+224622000008', 'role' => 'principal', 'taux' => 20, 'ordre' => 0],
+                    ['telephone' => '+224622000009', 'role' => 'assistant', 'taux' => 15, 'ordre' => 1],
+                    ['telephone' => '+224622000010', 'role' => 'assistant', 'taux' => 5, 'ordre' => 2],
                 ],
             ],
         ];
 
         foreach ($equipes as $equipeData) {
-            $equipe = EquipeLivraison::firstOrCreate(
+            $equipe = EquipeLivraison::updateOrCreate(
                 ['nom' => $equipeData['nom'], 'organization_id' => $org->id],
                 ['is_active' => true]
             );
 
-            // Idempotent : ne recrée pas les membres si déjà présents
-            if ($equipe->membres()->count() === 0) {
-                foreach ($equipeData['membres'] as $m) {
-                    EquipeLivreur::create([
-                        'equipe_id'        => $equipe->id,
-                        'livreur_id'       => $m['livreur']->id,
-                        'role'             => $m['role'],
-                        'taux_commission'  => $m['taux'],
-                        'ordre'            => $m['ordre'],
-                    ]);
-                }
+            foreach ($equipeData['membres'] as $m) {
+                $livreur = $lv($m['telephone']);
+
+                EquipeLivreur::updateOrCreate(
+                    [
+                        'equipe_id' => $equipe->id,
+                        'livreur_id' => $livreur->id,
+                    ],
+                    [
+                        'role' => $m['role'],
+                        'taux_commission' => $m['taux'],
+                        'ordre' => $m['ordre'],
+                    ]
+                );
             }
         }
     }

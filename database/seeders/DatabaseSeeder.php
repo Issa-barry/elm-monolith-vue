@@ -16,14 +16,15 @@ class DatabaseSeeder extends Seeder
             ClientSeeder::class,                // Comptes clients (utilisateurs)
             PrestatairesSeeder::class,          // Prestataires de service
             SitesSeeder::class,                 // Sites (siège, usine, agences, dépôts)
+            UserSitesSeeder::class,             // Rattachement utilisateurs → sites
             ProduitsSeeder::class,              // Catalogue produits
             ParametreSeeder::class,             // Paramètres applicatifs
 
             // ── Module Véhicules ──────────────────────────────────────────────
             LivreursSeeder::class,              // 10 livreurs
             ProprietairesSeeder::class,         // 4 propriétaires
-            EquipesLivraisonSeeder::class,      // 5 équipes (membres + taux)
-            VehiculesSeeder::class,             // 7 véhicules (avec équipe assignée)
+            EquipesLivraisonSeeder::class,      // 3 equipes (membres + taux)
+            VehiculesSeeder::class,             // 3 vehicules (avec equipe assignee)
 
             // ── Module Commissions ────────────────────────────────────────────
             // CommissionsSeeder::class,           // 6 commissions : EN_ATTENTE / PARTIELLE / VERSÉE

@@ -14,7 +14,6 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Dropdown from 'primevue/dropdown';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
@@ -127,11 +126,22 @@ function filterList(list: PartItem[], q: string): PartItem[] {
 const partsFiltrees = computed(() => filterList([...props.parts], search.value));
 const mobileFiltrees = computed(() => filterList([...props.parts], mobileSearch.value));
 
-// ── KPI locaux ────────────────────────────────────────────────────────────────
+// ── KPI locaux (calculés depuis les parts filtrées) ───────────────────────────
 
-const totalBrut = computed(() =>
-    props.parts.filter(p => p.statut !== 'annulee').reduce((s, p) => s + p.montant_brut, 0),
-);
+const kpi = computed(() => {
+    const list = partsFiltrees.value.filter((p) => p.statut !== 'annulee');
+    const versees = list.filter((p) => p.statut === 'versee');
+    const enAttente = list.filter((p) => p.statut === 'en_attente');
+    return {
+        total_brut:       list.reduce((s, p) => s + p.montant_brut, 0),
+        total_verse:      list.reduce((s, p) => s + p.montant_verse, 0),
+        total_a_verser:   list.filter((p) => p.statut !== 'versee').reduce((s, p) => s + p.montant_restant, 0),
+        nb_parts:         list.length,
+        nb_en_attente:    enAttente.length,
+        montant_en_attente: enAttente.reduce((s, p) => s + p.montant_net, 0),
+        nb_versees:       versees.length,
+    };
+});
 
 // ── Statut couleur ────────────────────────────────────────────────────────────
 
@@ -150,12 +160,6 @@ function formatGNF(val: number): string {
 
 const tabLabel = computed(() =>
     props.tab === 'livreurs' ? 'Livreurs' : 'Propriétaires',
-);
-
-const tabSubtitle = computed(() =>
-    props.tab === 'livreurs'
-        ? 'Commissions hebdomadaires des livreurs'
-        : 'Commissions mensuelles des propriétaires',
 );
 </script>
 
@@ -206,22 +210,17 @@ const tabSubtitle = computed(() =>
             <div class="grid grid-cols-2 gap-3 p-4">
                 <div class="rounded-xl border bg-card p-3 shadow-sm">
                     <p class="text-xs text-muted-foreground">Restant à verser</p>
-                    <p class="mt-1 text-base font-bold text-amber-600 tabular-nums dark:text-amber-400">{{ formatGNF(totaux.total_a_verser) }}</p>
+                    <p class="mt-1 text-base font-bold text-amber-600 tabular-nums dark:text-amber-400">{{ formatGNF(kpi.total_a_verser) }}</p>
                 </div>
                 <div class="rounded-xl border bg-card p-3 shadow-sm">
                     <p class="text-xs text-muted-foreground">En attente</p>
-                    <p class="mt-1 text-base font-bold text-amber-600 tabular-nums dark:text-amber-400">{{ formatGNF(totaux.montant_en_attente) }}</p>
-                    <p class="text-xs text-muted-foreground">{{ totaux.nb_en_attente }} part{{ totaux.nb_en_attente > 1 ? 's' : '' }}</p>
+                    <p class="mt-1 text-base font-bold text-amber-600 tabular-nums dark:text-amber-400">{{ formatGNF(kpi.montant_en_attente) }}</p>
+                    <p class="text-xs text-muted-foreground">{{ kpi.nb_en_attente }} part{{ kpi.nb_en_attente > 1 ? 's' : '' }}</p>
                 </div>
                 <div class="rounded-xl border bg-card p-3 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Partielles</p>
-                    <p class="mt-1 text-base font-bold text-blue-600 tabular-nums dark:text-blue-400">{{ formatGNF(totaux.montant_partielles) }}</p>
-                    <p class="text-xs text-muted-foreground">{{ totaux.nb_partielles }} part{{ totaux.nb_partielles > 1 ? 's' : '' }}</p>
-                </div>
-                <div class="rounded-xl border bg-card p-3 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Versées</p>
-                    <p class="mt-1 text-base font-bold text-emerald-600 tabular-nums dark:text-emerald-400">{{ formatGNF(totaux.montant_versees) }}</p>
-                    <p class="text-xs text-muted-foreground">{{ totaux.nb_versees }} part{{ totaux.nb_versees > 1 ? 's' : '' }}</p>
+                    <p class="text-xs text-muted-foreground">Total versé</p>
+                    <p class="mt-1 text-base font-bold text-emerald-600 tabular-nums dark:text-emerald-400">{{ formatGNF(kpi.total_verse) }}</p>
+                    <p class="text-xs text-muted-foreground">{{ kpi.nb_versees }} part{{ kpi.nb_versees > 1 ? 's' : '' }} soldée{{ kpi.nb_versees > 1 ? 's' : '' }}</p>
                 </div>
             </div>
 
@@ -236,7 +235,7 @@ const tabSubtitle = computed(() =>
                         class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                     />
                 </div>
-                <Dropdown
+                <Select
                     :model-value="periode"
                     :options="periodes"
                     option-label="label"
@@ -294,25 +293,25 @@ const tabSubtitle = computed(() =>
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Total {{ tabLabel }}</p>
-                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(totalBrut) }}</p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">{{ parts.filter(p => p.statut !== 'annulee').length }} part{{ parts.filter(p => p.statut !== 'annulee').length > 1 ? 's' : '' }}</p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(kpi.total_brut) }}</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">{{ kpi.nb_parts }} part{{ kpi.nb_parts > 1 ? 's' : '' }}</p>
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Restant à verser</p>
-                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(totaux.total_a_verser) }}</p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(kpi.total_a_verser) }}</p>
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">En attente</p>
-                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(totaux.montant_en_attente) }}</p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">{{ totaux.nb_en_attente }} part{{ totaux.nb_en_attente > 1 ? 's' : '' }}</p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(kpi.montant_en_attente) }}</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">{{ kpi.nb_en_attente }} part{{ kpi.nb_en_attente > 1 ? 's' : '' }}</p>
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Versées</p>
-                    <p class="mt-2 text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400">{{ formatGNF(totaux.montant_versees) }}</p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">{{ totaux.nb_versees }} part{{ totaux.nb_versees > 1 ? 's' : '' }}</p>
+                    <p class="text-sm text-muted-foreground">Total versé</p>
+                    <p class="mt-2 text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400">{{ formatGNF(kpi.total_verse) }}</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">{{ kpi.nb_versees }} part{{ kpi.nb_versees > 1 ? 's' : '' }} soldée{{ kpi.nb_versees > 1 ? 's' : '' }}</p>
                 </div>
             </div>
 

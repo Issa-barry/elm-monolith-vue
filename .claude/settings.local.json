@@ -73,7 +73,14 @@
       "Bash(php -l app/Http/Controllers/CommissionVenteController.php)",
       "Bash(php -l app/Models/CommissionPart.php app/Services/CommissionCalculator.php app/Services/CommissionGenerator.php app/Http/Controllers/CommissionVenteController.php database/migrations/2026_04_05_170000_add_role_to_commission_parts_table.php)",
       "Read(//c/Users/issab/AppData/Local/Temp/claude/c--laragon-www-elm-monolithe//**)",
-      "Bash(find c:/laragon/www/elm-monolithe/app -name \"HandleInertiaRequests.php\" -exec cat {} \\\\;)"
+      "Bash(find c:/laragon/www/elm-monolithe/app -name \"HandleInertiaRequests.php\" -exec cat {} \\\\;)",
+      "Bash(php -l app/Enums/StatutCommandeVente.php)",
+      "Bash(php -l app/Models/CommandeVente.php)",
+      "Bash(php -l app/Services/CommandeVenteService.php)",
+      "Bash(php -l app/Http/Controllers/CommandeVenteController.php)",
+      "Bash(php -l database/factories/CommandeVenteFactory.php)",
+      "Bash(php -l c:/laragon/www/elm-monolithe/app/Http/Controllers/CommandeVenteController.php)",
+      "Bash(php -l c:/laragon/www/elm-monolithe/routes/web.php)"
     ]
   }
 }

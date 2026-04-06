@@ -5,7 +5,7 @@ namespace App\Enums;
 enum StatutCommandeVente: string
 {
     case BROUILLON = 'brouillon';
-    case VALIDEE   = 'validee';
+    case EN_COURS  = 'en_cours';
     case CLOTUREE  = 'cloturee';
     case ANNULEE   = 'annulee';
 
@@ -13,7 +13,7 @@ enum StatutCommandeVente: string
     {
         return match ($this) {
             self::BROUILLON => 'Brouillon',
-            self::VALIDEE   => 'Validée',
+            self::EN_COURS  => 'En cours',
             self::CLOTUREE  => 'Clôturée',
             self::ANNULEE   => 'Annulée',
         };

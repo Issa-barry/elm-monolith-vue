@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 class CommandeVenteService
 {
-    // ── Validation : BROUILLON → VALIDEE ─────────────────────────────────────
+    // ── Validation : BROUILLON → EN_COURS ────────────────────────────────────
 
     /**
      * Valide une commande en brouillon.
@@ -45,7 +45,7 @@ class CommandeVenteService
             }
 
             $commande->update([
-                'statut'       => StatutCommandeVente::VALIDEE,
+                'statut'       => StatutCommandeVente::EN_COURS,
                 'validated_at' => now(),
             ]);
         });
@@ -61,29 +61,10 @@ class CommandeVenteService
         }
     }
 
-    // ── Clôture : VALIDEE → CLOTUREE ─────────────────────────────────────────
+    // ── Annulation : EN_COURS → ANNULEE ──────────────────────────────────────
 
     /**
-     * Clôture manuellement une commande validée.
-     */
-    public function cloturer(CommandeVente $commande): void
-    {
-        abort_if(
-            ! $commande->isValidee(),
-            422,
-            'Seule une commande validée peut être clôturée.'
-        );
-
-        $commande->update([
-            'statut'    => StatutCommandeVente::CLOTUREE,
-            'closed_at' => now(),
-        ]);
-    }
-
-    // ── Annulation : VALIDEE → ANNULEE ────────────────────────────────────────
-
-    /**
-     * Annule une commande validée.
+     * Annule une commande en cours.
      * - Vérifie que la facture est IMPAYEE (ou absente).
      * - Annule commande + facture dans la même transaction.
      */
@@ -92,9 +73,9 @@ class CommandeVenteService
         abort_if($commande->isAnnulee(), 422, 'Cette commande est déjà annulée.');
 
         abort_if(
-            ! $commande->isValidee(),
+            ! $commande->isEnCours(),
             422,
-            'Seule une commande validée peut être annulée.'
+            'Seule une commande en cours peut être annulée.'
         );
 
         if (! $commande->relationLoaded('facture')) {
