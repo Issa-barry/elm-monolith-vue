@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -7,8 +7,8 @@ import EquipeForm from './partials/EquipeForm.vue';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Équipes', href: '/equipes-livraison' },
-    { title: 'Nouvelle équipe', href: '#' },
+    { title: 'Ã‰quipes', href: '/equipes-livraison' },
+    { title: 'Nouvelle Ã©quipe', href: '#' },
 ];
 
 const form = useForm({
@@ -31,7 +31,9 @@ function submit() {
 </script>
 
 <template>
-    <Head title="Nouvelle équipe" />
+    <Head>
+        <title>Nouvelle équipe</title>
+    </Head>
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
             <div class="hidden sm:block">
@@ -39,13 +41,13 @@ function submit() {
                     href="/equipes-livraison"
                     class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
                 >
-                    <ArrowLeft class="h-4 w-4" /> Équipes
+                    <ArrowLeft class="h-4 w-4" /> Ã‰quipes
                 </Link>
                 <h1 class="text-2xl font-semibold tracking-tight">
-                    Nouvelle équipe
+                    Nouvelle Ã©quipe
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Définissez les membres et leurs taux.
+                    DÃ©finissez les membres et leurs taux.
                 </p>
             </div>
             <EquipeForm :form="form" @submit="submit" />

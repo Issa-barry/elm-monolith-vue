@@ -356,7 +356,6 @@ const tabLabel = computed(() =>
                 <h1 class="text-2xl font-semibold tracking-tight">
                     Commissions
                 </h1>
-                <!-- <p class="mt-1 text-sm text-muted-foreground">{{ tabSubtitle }}</p> -->
             </div>
 
             <!-- KPI cards -->

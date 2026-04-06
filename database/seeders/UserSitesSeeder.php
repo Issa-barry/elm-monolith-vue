@@ -27,7 +27,6 @@ class UserSitesSeeder extends Seeder
         $siege = Site::where('organization_id', $org->id)->where('nom', 'Matoto')->firstOrFail();
         $usine = Site::where('organization_id', $org->id)->where('nom', 'Lansanaya')->firstOrFail();
         $agence = Site::where('organization_id', $org->id)->where('nom', 'Lambagny')->firstOrFail();
-        // $depot  = Site::where('organization_id', $org->id)->where('nom', 'Dabompa')->firstOrFail();
 
         // ── Matrice : téléphone/identifiant → site ────────────────────────────
         // On identifie les users par téléphone (unique) ou par prénom+nom.

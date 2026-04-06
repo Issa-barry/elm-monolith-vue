@@ -17,6 +17,10 @@ use Inertia\Response;
 
 class CommandeVenteController extends Controller
 {
+    private const DATE_DISPLAY_FORMAT = 'd/m/Y';
+
+    private const LIGNES_REQUIRED_MESSAGE = 'Au moins une ligne de commande est requise.';
+
     public function __construct(private readonly CommandeVenteService $service) {}
 
     // ── Index ─────────────────────────────────────────────────────────────────
@@ -43,7 +47,7 @@ class CommandeVenteController extends Controller
                 'facture_statut' => $c->facture?->statut_facture?->value,
                 'facture_statut_label' => $c->facture?->statut_facture?->label(),
                 'facture_montant_restant' => $c->facture ? (float) $c->facture->montant_restant : null,
-                'created_at' => $c->created_at?->format('d/m/Y'),
+                'created_at' => $c->created_at?->format(self::DATE_DISPLAY_FORMAT),
                 'is_annulee' => $c->isAnnulee(),
                 'is_brouillon' => $c->isBrouillon(),
                 'is_en_cours' => $c->isEnCours(),
@@ -149,50 +153,14 @@ class CommandeVenteController extends Controller
             "Votre compte n'est rattaché à aucun site."
         );
 
-        $data = $request->validate([
-            'vehicule_id' => 'nullable|exists:vehicules,id',
-            'client_id' => 'nullable|exists:clients,id',
-            'lignes' => 'required|array|min:1',
-            'lignes.*.produit_id' => 'required|exists:produits,id',
-            'lignes.*.qte' => 'required|integer|min:1',
-            'lignes.*.prix_vente' => 'required|numeric|min:0',
-        ], [
-            'lignes.required' => 'Au moins une ligne de commande est requise.',
-            'lignes.min' => 'Au moins une ligne de commande est requise.',
-            'lignes.*.produit_id.required' => 'Le produit est obligatoire pour chaque ligne.',
-            'lignes.*.produit_id.exists' => 'Le produit sélectionné est introuvable.',
-            'lignes.*.qte.required' => 'La quantité est obligatoire pour chaque ligne.',
-            'lignes.*.qte.min' => 'La quantité doit être supérieure à 0.',
-            'lignes.*.prix_vente.required' => 'Le prix de vente est obligatoire pour chaque ligne.',
-            'lignes.*.prix_vente.min' => 'Le prix de vente ne peut pas être négatif.',
-        ]);
+        $data = $request->validate(
+            $this->commandeValidationRules(),
+            $this->commandeValidationMessages(),
+        );
 
-        if (empty($data['vehicule_id']) && empty($data['client_id'])) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'vehicule_id' => 'Veuillez sélectionner un véhicule ou un client.',
-                'client_id' => 'Veuillez sélectionner un véhicule ou un client.',
-            ]);
-        }
+        $this->ensureVehiculeOrClientSelected($data);
 
-        $lignesData = [];
-        $totalCommande = 0;
-
-        foreach ($data['lignes'] as $ligne) {
-            $produit = Produit::findOrFail($ligne['produit_id']);
-            $qte = (int) $ligne['qte'];
-            $prixVente = (float) $ligne['prix_vente'];
-            $totalLigne = $qte * $prixVente;
-
-            $lignesData[] = [
-                'produit_id' => $produit->id,
-                'qte' => $qte,
-                'prix_usine_snapshot' => (float) $produit->prix_usine,
-                'prix_vente_snapshot' => $prixVente,
-                'total_ligne' => $totalLigne,
-            ];
-
-            $totalCommande += $totalLigne;
-        }
+        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
         // Création en BROUILLON — aucune facture, aucune commission
         $commande = CommandeVente::create([
@@ -274,7 +242,7 @@ class CommandeVenteController extends Controller
                 'site_nom' => $commande_vente->site?->nom,
                 'motif_annulation' => $commande_vente->motif_annulation,
                 'annulee_at' => $commande_vente->annulee_at?->toISOString(),
-                'validated_at' => $commande_vente->validated_at?->format('d/m/Y'),
+                'validated_at' => $commande_vente->validated_at?->format(self::DATE_DISPLAY_FORMAT),
                 'is_brouillon' => $commande_vente->isBrouillon(),
                 'is_en_cours' => $commande_vente->isEnCours(),
                 'is_cloturee' => $commande_vente->isCloturee(),
@@ -282,7 +250,7 @@ class CommandeVenteController extends Controller
                 'can_modifier' => $commande_vente->isBrouillon() && $user->can('update', $commande_vente),
                 'can_valider' => $commande_vente->isBrouillon() && $user->can('update', $commande_vente),
                 'can_annuler' => $commande_vente->isEnCours() && $user->can('annuler', $commande_vente),
-                'created_at' => $commande_vente->created_at?->format('d/m/Y'),
+                'created_at' => $commande_vente->created_at?->format(self::DATE_DISPLAY_FORMAT),
                 'created_by' => $commande_vente->createdBy?->name,
                 'lignes' => $lignes,
             ],
@@ -376,50 +344,14 @@ class CommandeVenteController extends Controller
         $this->authorize('update', $vente);
         abort_if(! $vente->isBrouillon(), 403, 'Seule une commande en brouillon peut être modifiée.');
 
-        $data = $request->validate([
-            'vehicule_id' => 'nullable|exists:vehicules,id',
-            'client_id' => 'nullable|exists:clients,id',
-            'lignes' => 'required|array|min:1',
-            'lignes.*.produit_id' => 'required|exists:produits,id',
-            'lignes.*.qte' => 'required|integer|min:1',
-            'lignes.*.prix_vente' => 'required|numeric|min:0',
-        ], [
-            'lignes.required' => 'Au moins une ligne de commande est requise.',
-            'lignes.min' => 'Au moins une ligne de commande est requise.',
-            'lignes.*.produit_id.required' => 'Le produit est obligatoire pour chaque ligne.',
-            'lignes.*.produit_id.exists' => 'Le produit sélectionné est introuvable.',
-            'lignes.*.qte.required' => 'La quantité est obligatoire pour chaque ligne.',
-            'lignes.*.qte.min' => 'La quantité doit être supérieure à 0.',
-            'lignes.*.prix_vente.required' => 'Le prix de vente est obligatoire pour chaque ligne.',
-            'lignes.*.prix_vente.min' => 'Le prix de vente ne peut pas être négatif.',
-        ]);
+        $data = $request->validate(
+            $this->commandeValidationRules(),
+            $this->commandeValidationMessages(),
+        );
 
-        if (empty($data['vehicule_id']) && empty($data['client_id'])) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'vehicule_id' => 'Veuillez sélectionner un véhicule ou un client.',
-                'client_id' => 'Veuillez sélectionner un véhicule ou un client.',
-            ]);
-        }
+        $this->ensureVehiculeOrClientSelected($data);
 
-        $lignesData = [];
-        $totalCommande = 0;
-
-        foreach ($data['lignes'] as $ligne) {
-            $produit = Produit::findOrFail($ligne['produit_id']);
-            $qte = (int) $ligne['qte'];
-            $prixVente = (float) $ligne['prix_vente'];
-            $totalLigne = $qte * $prixVente;
-
-            $lignesData[] = [
-                'produit_id' => $produit->id,
-                'qte' => $qte,
-                'prix_usine_snapshot' => (float) $produit->prix_usine,
-                'prix_vente_snapshot' => $prixVente,
-                'total_ligne' => $totalLigne,
-            ];
-
-            $totalCommande += $totalLigne;
-        }
+        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
         $vente->update([
             'vehicule_id' => $data['vehicule_id'] ?? null,
@@ -475,5 +407,68 @@ class CommandeVenteController extends Controller
 
         return redirect()->route('ventes.index')
             ->with('success', 'Commande supprimée.');
+    }
+
+    private function commandeValidationRules(): array
+    {
+        return [
+            'vehicule_id' => 'nullable|exists:vehicules,id',
+            'client_id' => 'nullable|exists:clients,id',
+            'lignes' => 'required|array|min:1',
+            'lignes.*.produit_id' => 'required|exists:produits,id',
+            'lignes.*.qte' => 'required|integer|min:1',
+            'lignes.*.prix_vente' => 'required|numeric|min:0',
+        ];
+    }
+
+    private function commandeValidationMessages(): array
+    {
+        return [
+            'lignes.required' => self::LIGNES_REQUIRED_MESSAGE,
+            'lignes.min' => self::LIGNES_REQUIRED_MESSAGE,
+            'lignes.*.produit_id.required' => 'Le produit est obligatoire pour chaque ligne.',
+            'lignes.*.produit_id.exists' => 'Le produit sélectionné est introuvable.',
+            'lignes.*.qte.required' => 'La quantité est obligatoire pour chaque ligne.',
+            'lignes.*.qte.min' => 'La quantité doit être supérieure à 0.',
+            'lignes.*.prix_vente.required' => 'Le prix de vente est obligatoire pour chaque ligne.',
+            'lignes.*.prix_vente.min' => 'Le prix de vente ne peut pas être négatif.',
+        ];
+    }
+
+    private function ensureVehiculeOrClientSelected(array $data): void
+    {
+        if (! empty($data['vehicule_id']) || ! empty($data['client_id'])) {
+            return;
+        }
+
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'vehicule_id' => 'Veuillez sélectionner un véhicule ou un client.',
+            'client_id' => 'Veuillez sélectionner un véhicule ou un client.',
+        ]);
+    }
+
+    private function buildLignesDataAndTotal(array $lignes): array
+    {
+        $lignesData = [];
+        $totalCommande = 0;
+
+        foreach ($lignes as $ligne) {
+            $produit = Produit::findOrFail($ligne['produit_id']);
+            $qte = (int) $ligne['qte'];
+            $prixVente = (float) $ligne['prix_vente'];
+            $totalLigne = $qte * $prixVente;
+
+            $lignesData[] = [
+                'produit_id' => $produit->id,
+                'qte' => $qte,
+                'prix_usine_snapshot' => (float) $produit->prix_usine,
+                'prix_vente_snapshot' => $prixVente,
+                'total_ligne' => $totalLigne,
+            ];
+
+            $totalCommande += $totalLigne;
+        }
+
+        return [$lignesData, $totalCommande];
     }
 }

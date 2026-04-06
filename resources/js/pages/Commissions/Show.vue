@@ -937,10 +937,13 @@ function isVersementDisabled(part: CommissionPart): boolean {
             </div>
 
             <div>
-                <Label class="mb-1.5 block text-xs font-medium"
+                <Label
+                    for="frais-deduction"
+                    class="mb-1.5 block text-xs font-medium"
                     >Frais à déduire</Label
                 >
                 <InputNumber
+                    input-id="frais-deduction"
                     v-model="fraisForms[fraisDialogPart.id].frais"
                     :min="0"
                     :max="fraisDialogPart.montant_brut"
@@ -958,10 +961,14 @@ function isVersementDisabled(part: CommissionPart): boolean {
                 class="space-y-3"
             >
                 <div>
-                    <Label class="mb-1.5 block text-xs font-medium">
+                    <Label
+                        for="frais-type"
+                        class="mb-1.5 block text-xs font-medium"
+                    >
                         Type de frais <span class="text-destructive">*</span>
                     </Label>
                     <Dropdown
+                        input-id="frais-type"
                         v-model="fraisForms[fraisDialogPart.id].type_frais"
                         :options="typesFraisOptions"
                         option-label="label"
@@ -976,7 +983,10 @@ function isVersementDisabled(part: CommissionPart): boolean {
                         fraisForms[fraisDialogPart.id]?.type_frais === 'autre'
                     "
                 >
-                    <Label class="mb-1.5 block text-xs font-medium">
+                    <Label
+                        for="frais-commentaire"
+                        class="mb-1.5 block text-xs font-medium"
+                    >
                         Commentaire <span class="text-destructive">*</span>
                         <span class="ml-1 font-normal text-muted-foreground">
                             ({{
@@ -988,6 +998,7 @@ function isVersementDisabled(part: CommissionPart): boolean {
                         </span>
                     </Label>
                     <InputText
+                        id="frais-commentaire"
                         v-model="
                             fraisForms[fraisDialogPart.id].commentaire_frais
                         "
@@ -1168,8 +1179,13 @@ function isVersementDisabled(part: CommissionPart): boolean {
 
         <div class="space-y-4 pt-2 pb-1">
             <div>
-                <Label class="mb-1.5 block text-xs font-medium">Montant</Label>
+                <Label
+                    for="versement-montant"
+                    class="mb-1.5 block text-xs font-medium"
+                    >Montant</Label
+                >
                 <InputNumber
+                    input-id="versement-montant"
                     v-model="versementForm.montant"
                     :min="0"
                     :max="dialogPart?.montant_restant ?? undefined"
@@ -1182,10 +1198,13 @@ function isVersementDisabled(part: CommissionPart): boolean {
                 />
             </div>
             <div>
-                <Label class="mb-1.5 block text-xs font-medium"
+                <Label
+                    for="versement-mode-paiement"
+                    class="mb-1.5 block text-xs font-medium"
                     >Mode de paiement</Label
                 >
                 <Dropdown
+                    input-id="versement-mode-paiement"
                     v-model="versementForm.mode_paiement"
                     :options="modes_paiement"
                     option-label="label"
@@ -1194,10 +1213,13 @@ function isVersementDisabled(part: CommissionPart): boolean {
                 />
             </div>
             <div>
-                <Label class="mb-1.5 block text-xs font-medium"
+                <Label
+                    for="versement-note"
+                    class="mb-1.5 block text-xs font-medium"
                     >Note (optionnel)</Label
                 >
                 <InputText
+                    id="versement-note"
                     v-model="versementForm.note as string"
                     class="w-full"
                     placeholder="Remarque…"

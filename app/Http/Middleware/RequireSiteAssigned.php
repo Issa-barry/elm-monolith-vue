@@ -17,25 +17,13 @@ class RequireSiteAssigned
     {
         $user = $request->user();
 
-        // Pas encore authentifié : laisser passer
-        if (! $user) {
+        // Laisser passer si non authentifié, super admin, ou déjà affecté à un site.
+        if (! $user || $user->hasRole('super_admin') || $user->sites()->exists()) {
             return $next($request);
         }
 
-        // Super admin : pas de restriction de site
-        if ($user->hasRole('super_admin')) {
-            return $next($request);
-        }
-
-        // Vérifie si l'utilisateur a au moins 1 site affecté
-        $hasSite = $user->sites()->exists();
-
-        if (! $hasSite) {
-            return Inertia::render('Errors/SiteRequired', [
-                'user_name' => $user->name,
-            ])->toResponse($request)->setStatusCode(403);
-        }
-
-        return $next($request);
+        return Inertia::render('Errors/SiteRequired', [
+            'user_name' => $user->name,
+        ])->toResponse($request)->setStatusCode(403);
     }
 }

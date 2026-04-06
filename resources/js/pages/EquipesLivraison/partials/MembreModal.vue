@@ -124,10 +124,14 @@ function handleConfirm() {
             <!-- Prénom + Nom -->
             <div class="grid grid-cols-2 gap-3">
                 <div>
-                    <Label class="mb-1 block text-xs font-medium">
+                    <Label
+                        for="membre-prenom"
+                        class="mb-1 block text-xs font-medium"
+                    >
                         Prénom <span class="text-destructive">*</span>
                     </Label>
                     <InputText
+                        id="membre-prenom"
                         v-model="form.prenom"
                         class="w-full"
                         :class="{ 'p-invalid': errors.prenom }"
@@ -143,10 +147,14 @@ function handleConfirm() {
                     </p>
                 </div>
                 <div>
-                    <Label class="mb-1 block text-xs font-medium">
+                    <Label
+                        for="membre-nom"
+                        class="mb-1 block text-xs font-medium"
+                    >
                         Nom <span class="text-destructive">*</span>
                     </Label>
                     <InputText
+                        id="membre-nom"
                         v-model="form.nom"
                         class="w-full"
                         :class="{ 'p-invalid': errors.nom }"
@@ -161,10 +169,14 @@ function handleConfirm() {
 
             <!-- Téléphone -->
             <div>
-                <Label class="mb-1 block text-xs font-medium">
+                <Label
+                    for="membre-telephone"
+                    class="mb-1 block text-xs font-medium"
+                >
                     Téléphone <span class="text-destructive">*</span>
                 </Label>
                 <InputText
+                    id="membre-telephone"
                     v-model="form.telephone"
                     class="w-full"
                     :class="{ 'p-invalid': errors.telephone }"
@@ -182,9 +194,14 @@ function handleConfirm() {
             <!-- Rôle + Taux -->
             <div class="grid grid-cols-2 gap-3">
                 <div>
-                    <Label class="mb-1 block text-xs font-medium">Rôle</Label>
+                    <Label
+                        for="membre-role"
+                        class="mb-1 block text-xs font-medium"
+                        >Rôle</Label
+                    >
                     <Dropdown
                         v-model="form.role"
+                        input-id="membre-role"
                         :options="roles"
                         option-label="label"
                         option-value="value"
@@ -192,11 +209,15 @@ function handleConfirm() {
                     />
                 </div>
                 <div>
-                    <Label class="mb-1 block text-xs font-medium">
+                    <Label
+                        for="membre-taux"
+                        class="mb-1 block text-xs font-medium"
+                    >
                         Taux (%) <span class="text-destructive">*</span>
                     </Label>
                     <InputNumber
                         v-model="form.taux_commission"
+                        input-id="membre-taux"
                         :min="0"
                         :max="maxTauxSafe"
                         :max-fraction-digits="2"

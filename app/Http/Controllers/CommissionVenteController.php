@@ -12,7 +12,9 @@ use Inertia\Response;
 
 class CommissionVenteController extends Controller
 {
-    // ── Index : liste des parts par onglet ───────────────────────────────────
+    private const DATE_DISPLAY_FORMAT = 'd/m/Y';
+
+    // â”€â”€ Index : liste des parts par onglet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     public function index(Request $request): Response
     {
@@ -21,7 +23,7 @@ class CommissionVenteController extends Controller
         $orgId = auth()->user()->organization_id;
         $tab = $request->input('tab', 'livreurs'); // livreurs | proprietaires
 
-        // Période par défaut selon l'onglet
+        // PÃ©riode par dÃ©faut selon l'onglet
         $periodeDefault = $tab === 'proprietaires' ? 'month' : 'week';
         $periode = $request->input('periode', $periodeDefault);
 
@@ -70,7 +72,7 @@ class CommissionVenteController extends Controller
         ]);
     }
 
-    // ── Détail ───────────────────────────────────────────────────────────────
+    // â”€â”€ DÃ©tail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     public function show(CommissionVente $commission_vente): Response
     {
@@ -79,7 +81,7 @@ class CommissionVenteController extends Controller
         abort_unless(
             $commission_vente->organization_id === auth()->user()->organization_id,
             403,
-            'Accès refusé.'
+            'AccÃ¨s refusÃ©.'
         );
 
         $commission_vente->load([
@@ -97,7 +99,7 @@ class CommissionVenteController extends Controller
         ]);
     }
 
-    // ── Mapping part (pour l'index) ───────────────────────────────────────────
+    // â”€â”€ Mapping part (pour l'index) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private function mapPart(CommissionPart $p): array
     {
@@ -124,11 +126,11 @@ class CommissionVenteController extends Controller
             'montant_restant' => (float) $p->montant_restant,
             'statut' => $p->statut?->value,
             'statut_label' => $p->statut_label,
-            'created_at' => $commission->created_at?->format('d/m/Y'),
+            'created_at' => $commission->created_at?->format(self::DATE_DISPLAY_FORMAT),
         ];
     }
 
-    // ── Mapping commission (pour le détail) ───────────────────────────────────
+    // â”€â”€ Mapping commission (pour le dÃ©tail) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private function mapCommission(CommissionVente $c, bool $withParts = false): array
     {
@@ -151,7 +153,7 @@ class CommissionVenteController extends Controller
             'statut_label' => $c->statut_label,
             'is_versee' => $c->isVersee(),
             'is_annulee' => $c->isAnnulee(),
-            'created_at' => $c->created_at?->format('d/m/Y'),
+            'created_at' => $c->created_at?->format(self::DATE_DISPLAY_FORMAT),
             'nb_parts' => $c->relationLoaded('parts') ? $c->parts->count() : null,
         ];
 
@@ -180,7 +182,7 @@ class CommissionVenteController extends Controller
                     ->values()
                     ->map(fn ($v) => [
                         'id' => $v->id,
-                        'date_versement' => $v->date_versement?->format('d/m/Y'),
+                        'date_versement' => $v->date_versement?->format(self::DATE_DISPLAY_FORMAT),
                         'enregistre_le' => $v->created_at?->format('d/m/Y H:i'),
                         'mode_paiement' => $v->mode_paiement instanceof ModePaiement
                             ? $v->mode_paiement->label()

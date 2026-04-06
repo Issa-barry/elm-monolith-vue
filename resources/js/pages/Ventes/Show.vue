@@ -707,10 +707,14 @@ const progressPercent = computed(() => {
                     >
                         <!-- Montant -->
                         <div>
-                            <Label class="mb-1.5 block text-xs">
+                            <Label
+                                for="encaissement-montant"
+                                class="mb-1.5 block text-xs"
+                            >
                                 Montant <span class="text-destructive">*</span>
                             </Label>
                             <InputNumber
+                                input-id="encaissement-montant"
                                 :model-value="encaissementForm.montant"
                                 @update:model-value="
                                     encaissementForm.montant = $event
@@ -739,12 +743,16 @@ const progressPercent = computed(() => {
 
                         <!-- Mode paiement -->
                         <div>
-                            <Label class="mb-1.5 block text-xs">
+                            <Label
+                                for="encaissement-mode-paiement"
+                                class="mb-1.5 block text-xs"
+                            >
                                 Mode de paiement
                                 <span class="text-destructive">*</span>
                             </Label>
                             <Select
                                 v-model="encaissementForm.mode_paiement"
+                                input-id="encaissement-mode-paiement"
                                 :options="modes_paiement"
                                 option-label="label"
                                 option-value="value"
@@ -764,8 +772,13 @@ const progressPercent = computed(() => {
 
                         <!-- Note -->
                         <div>
-                            <Label class="mb-1.5 block text-xs">Note</Label>
+                            <Label
+                                for="encaissement-note"
+                                class="mb-1.5 block text-xs"
+                                >Note</Label
+                            >
                             <InputText
+                                id="encaissement-note"
                                 v-model="encaissementForm.note as string"
                                 class="w-full"
                                 placeholder="Optionnel..."
@@ -820,11 +833,12 @@ const progressPercent = computed(() => {
                     facture associée.
                 </p>
                 <div>
-                    <Label class="mb-1.5 block text-sm">
+                    <Label for="annulation-motif" class="mb-1.5 block text-sm">
                         Motif d'annulation
                         <span class="text-destructive">*</span>
                     </Label>
                     <Textarea
+                        id="annulation-motif"
                         v-model="annulerForm.motif_annulation"
                         rows="4"
                         class="w-full"

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -26,7 +26,7 @@ const props = defineProps<{ equipe: EquipeData }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Équipes', href: '/equipes-livraison' },
+    { title: 'Ã‰quipes', href: '/equipes-livraison' },
     { title: props.equipe.nom, href: '#' },
 ];
 
@@ -50,7 +50,9 @@ function submit() {
 </script>
 
 <template>
-    <Head :title="`Équipe ${equipe.nom}`" />
+    <Head>
+        <title>Équipe {{ equipe.nom }}</title>
+    </Head>
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
             <div class="hidden sm:block">
@@ -58,7 +60,7 @@ function submit() {
                     href="/equipes-livraison"
                     class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
                 >
-                    <ArrowLeft class="h-4 w-4" /> Équipes
+                    <ArrowLeft class="h-4 w-4" /> Ã‰quipes
                 </Link>
                 <h1 class="text-2xl font-semibold tracking-tight">
                     {{ equipe.nom }}

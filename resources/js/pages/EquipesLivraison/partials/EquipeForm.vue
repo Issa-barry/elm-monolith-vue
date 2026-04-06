@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -23,7 +23,7 @@ const emit = defineEmits<{ submit: [] }>();
 
 const confirm = useConfirm();
 
-// ── Modal état ────────────────────────────────────────────────────────────────
+// â”€â”€ Modal Ã©tat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const showModal = ref(false);
 const editingIndex = ref<number | null>(null); // null = nouveau membre
@@ -42,7 +42,7 @@ function openEditMembre(index: number) {
     showModal.value = true;
 }
 
-// ── Computed ──────────────────────────────────────────────────────────────────
+// â”€â”€ Computed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const sommeTaux = computed(() =>
     props.form.membres.reduce((s, m) => s + (m.taux_commission || 0), 0),
@@ -59,19 +59,19 @@ const principalWarning = computed(() => {
         (m) => m.role === 'principal',
     ).length;
     if (count === 0)
-        return "L'équipe doit avoir exactement un livreur principal.";
+        return "L'Ã©quipe doit avoir exactement un livreur principal.";
     if (count > 1)
-        return "L'équipe ne peut avoir qu'un seul livreur principal.";
+        return "L'Ã©quipe ne peut avoir qu'un seul livreur principal.";
     return null;
 });
 
 const tauxWarning = computed(() => {
     if (props.form.membres.some((m) => Number(m.taux_commission) < 0)) {
-        return 'Le taux de commission ne peut pas être négatif.';
+        return 'Le taux de commission ne peut pas Ãªtre nÃ©gatif.';
     }
 
     if (sommeTaux.value > 100) {
-        return "La somme des taux de l'équipe ne doit pas dépasser 100 %.";
+        return "La somme des taux de l'Ã©quipe ne doit pas dÃ©passer 100 %.";
     }
 
     return null;
@@ -91,7 +91,7 @@ const maxTauxDisponible = computed(() => {
     return Math.max(0, Number((100 - totalSansMembreEdite).toFixed(2)));
 });
 
-// ── Gestion des membres ───────────────────────────────────────────────────────
+// â”€â”€ Gestion des membres â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function onMembreConfirm(data: MembreFormData) {
     const newIsPrincipal = data.role === 'principal';
@@ -100,16 +100,16 @@ function onMembreConfirm(data: MembreFormData) {
     );
 
     if (newIsPrincipal && existingPrincipalIdx >= 0) {
-        // Conflit : un principal existe déjà
+        // Conflit : un principal existe dÃ©jÃ
         const existing = props.form.membres[existingPrincipalIdx];
         confirm.require({
-            message: `Remplacer « ${existing.prenom} ${existing.nom} » comme principal par « ${data.prenom} ${data.nom} » ?`,
+            message: `Remplacer Â« ${existing.prenom} ${existing.nom} Â» comme principal par Â« ${data.prenom} ${data.nom} Â» ?`,
             header: 'Remplacer le principal ?',
             icon: 'pi pi-exclamation-triangle',
             rejectLabel: 'Annuler',
             acceptLabel: 'Remplacer',
             accept: () => {
-                // Rétrograder l'ancien principal en assistant
+                // RÃ©trograder l'ancien principal en assistant
                 // eslint-disable-next-line vue/no-mutating-props
                 props.form.membres[existingPrincipalIdx].role = 'assistant';
                 applyMembreData(data);
@@ -121,18 +121,18 @@ function onMembreConfirm(data: MembreFormData) {
 }
 
 function applyMembreData(data: MembreFormData) {
-    if (editingIndex.value !== null) {
-        // Mise à jour
-        Object.assign(props.form.membres[editingIndex.value], data);
-    } else {
+    if (editingIndex.value === null) {
         // Ajout
         // eslint-disable-next-line vue/no-mutating-props
         props.form.membres.push({
             ...data,
             ordre: props.form.membres.length,
         });
+    } else {
+        // Mise a jour
+        Object.assign(props.form.membres[editingIndex.value], data);
     }
-    // Rafraîchir les ordres
+    // Rafraichir les ordres
     props.form.membres.forEach((m, i) => (m.ordre = i));
 }
 
@@ -142,7 +142,7 @@ function removeMembre(index: number) {
     props.form.membres.forEach((m, i) => (m.ordre = i));
 }
 
-// ── Affichage ─────────────────────────────────────────────────────────────────
+// â”€â”€ Affichage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function initiales(prenom: string, nom: string): string {
     const p = prenom.trim()[0] ?? '';
@@ -155,7 +155,7 @@ function setIsActive(val: boolean | string) {
     props.form.is_active = val === true;
 }
 
-// ── Submit ────────────────────────────────────────────────────────────────────
+// â”€â”€ Submit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function handleSubmit() {
     if (principalWarning.value || tauxWarning.value) return;
@@ -175,7 +175,8 @@ function handleSubmit() {
             <div class="grid gap-4 sm:grid-cols-2">
                 <div class="sm:col-span-2">
                     <Label for="nom" class="mb-1.5 block">
-                        Nom de l'équipe <span class="text-destructive">*</span>
+                        Nom de l'Ã©quipe
+                        <span class="text-destructive">*</span>
                     </Label>
                     <!-- eslint-disable vue/no-mutating-props -->
                     <input
@@ -184,7 +185,7 @@ function handleSubmit() {
                         type="text"
                         class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         :class="{ 'border-destructive': form.errors?.nom }"
-                        placeholder="Ex: Équipe Centre-ville"
+                        placeholder="Ex: Ã‰quipe Centre-ville"
                     />
                     <!-- eslint-enable vue/no-mutating-props -->
                     <p
@@ -213,7 +214,7 @@ function handleSubmit() {
                                 >Actif</Label
                             >
                             <p class="text-xs text-muted-foreground">
-                                Décochez pour désactiver l'équipe.
+                                DÃ©cochez pour dÃ©sactiver l'Ã©quipe.
                             </p>
                         </div>
                     </div>
@@ -223,7 +224,7 @@ function handleSubmit() {
 
         <!-- Membres -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <!-- En-tête section -->
+            <!-- En-tÃªte section -->
             <div class="mb-4 flex items-start justify-between gap-4">
                 <div>
                     <h3
@@ -232,7 +233,7 @@ function handleSubmit() {
                         Membres
                     </h3>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        Σ taux équipe :
+                        Î£ taux Ã©quipe :
                         <span
                             class="font-semibold"
                             :class="
@@ -253,7 +254,7 @@ function handleSubmit() {
                             >
                                 {{ 100 - sommeTaux }}%
                             </span>
-                            pour le propriétaire)</span
+                            pour le propriÃ©taire)</span
                         >
                     </p>
                 </div>
@@ -287,7 +288,7 @@ function handleSubmit() {
                 {{ form.errors.membres }}
             </p>
 
-            <!-- État vide -->
+            <!-- Ã‰tat vide -->
             <div
                 v-if="form.membres.length === 0"
                 class="rounded-lg border border-dashed py-10 text-center"
@@ -312,7 +313,7 @@ function handleSubmit() {
                     :key="index"
                     class="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-muted/30"
                 >
-                    <!-- Zone gauche : avatar + nom + téléphone -->
+                    <!-- Zone gauche : avatar + nom + tÃ©lÃ©phone -->
                     <div class="flex min-w-0 flex-1 items-center gap-3">
                         <div
                             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
@@ -336,7 +337,7 @@ function handleSubmit() {
                         </div>
                     </div>
 
-                    <!-- Zone milieu : rôle centré -->
+                    <!-- Zone milieu : rÃ´le centrÃ© -->
                     <div class="w-28 shrink-0 text-center">
                         <span
                             class="inline-block rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
@@ -391,7 +392,7 @@ function handleSubmit() {
                     form.processing || !!principalWarning || !!tauxWarning
                 "
             >
-                {{ form.processing ? 'Enregistrement…' : 'Enregistrer' }}
+                {{ form.processing ? 'Enregistrementâ€¦' : 'Enregistrer' }}
             </Button>
         </div>
     </form>

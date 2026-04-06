@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -11,7 +11,7 @@ import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import { computed, onMounted, ref } from 'vue';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface ProduitOption {
     id: number;
     nom: string;
@@ -54,7 +54,7 @@ interface CommandeExistante {
     lignes: { produit_id: number; qte: number; prix_vente: number }[];
 }
 
-// ── Props ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Props â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const props = defineProps<{
     commande: CommandeExistante;
     produits: ProduitOption[];
@@ -70,7 +70,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Modifier', href: '#' },
 ];
 
-// ── Form ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const form = useForm({
     vehicule_id: props.commande.vehicule_id as number | null,
     client_id: props.commande.client_id as number | null,
@@ -82,7 +82,7 @@ const form = useForm({
     })) as LigneForm[],
 });
 
-// ── AutoComplete : Véhicule ───────────────────────────────────────────────────
+// â”€â”€ AutoComplete : VÃ©hicule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const vehiculeSelected = ref<VehiculeOption | null>(
     props.vehicules.find((v) => v.id === props.commande.vehicule_id) ?? null,
 );
@@ -110,10 +110,10 @@ function onVehiculeClear() {
 }
 
 function vehiculeLabel(v: VehiculeOption): string {
-    return `${v.nom_vehicule} — ${v.immatriculation}`;
+    return `${v.nom_vehicule} â€” ${v.immatriculation}`;
 }
 
-// ── AutoComplete : Client ─────────────────────────────────────────────────────
+// â”€â”€ AutoComplete : Client â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const clientSelected = ref<ClientOption | null>(
     props.clients.find((c) => c.id === props.commande.client_id) ?? null,
 );
@@ -144,7 +144,7 @@ function clientLabel(c: ClientOption): string {
     return [c.prenom, c.nom].filter(Boolean).join(' ');
 }
 
-// ── Dropdown : Produit ────────────────────────────────────────────────────────
+// â”€â”€ Dropdown : Produit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const produitOptions = computed(() =>
     props.produits.map((p) => ({
         value: p.id,
@@ -152,12 +152,12 @@ const produitOptions = computed(() =>
     })),
 );
 
-// ── Formatage ─────────────────────────────────────────────────────────────────
+// â”€â”€ Formatage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
 
-// ── Gestion des lignes ────────────────────────────────────────────────────────
+// â”€â”€ Gestion des lignes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function onProduitChange(index: number, produitId: number | null) {
     if (produitId === null) {
         form.lignes[index].produit_id = null;
@@ -207,12 +207,12 @@ function removeLigne(index: number) {
     }
 }
 
-// ── Total général ─────────────────────────────────────────────────────────────
+// â”€â”€ Total gÃ©nÃ©ral â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const totalGeneral = computed(() =>
     form.lignes.reduce((sum, l) => sum + l.total, 0),
 );
 
-// ── Reset au montage (évite la persistance SPA entre navigations) ─────────────
+// â”€â”€ Reset au montage (Ã©vite la persistance SPA entre navigations) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 onMounted(() => {
     // Ajouter une ligne vide si la commande n'avait aucune ligne
     if (form.lignes.length === 0) {
@@ -220,7 +220,7 @@ onMounted(() => {
     }
 });
 
-// ── Validation locale ────────────────────────────────────────────────────────
+// â”€â”€ Validation locale â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const canSubmit = computed(
     () =>
         (form.vehicule_id !== null || form.client_id !== null) &&
@@ -228,14 +228,16 @@ const canSubmit = computed(
         !form.processing,
 );
 
-// ── Soumission ────────────────────────────────────────────────────────────────
+// â”€â”€ Soumission â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function submit() {
     form.put(`/ventes/${props.commande.id}`);
 }
 </script>
 
 <template>
-    <Head :title="`Modifier ${commande.reference}`" />
+    <Head>
+        <title>Modifier {{ commande.reference }}</title>
+    </Head>
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- Mobile sticky header -->
@@ -267,20 +269,20 @@ function submit() {
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
                     Modifiez cette commande en brouillon. Les changements sont
-                    enregistrés immédiatement.
+                    enregistrÃ©s immÃ©diatement.
                 </p>
             </div>
 
             <form id="vente-form" class="space-y-6" @submit.prevent="submit">
-                <!-- En-tête commande -->
+                <!-- En-tÃªte commande -->
                 <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
                     <h2
                         class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                     >
-                        Informations générales
+                        Informations gÃ©nÃ©rales
                     </h2>
 
-                    <!-- Site rattaché (lecture seule) -->
+                    <!-- Site rattachÃ© (lecture seule) -->
                     <div
                         class="mb-4 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2.5"
                     >
@@ -293,11 +295,16 @@ function submit() {
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-2">
-                        <!-- Véhicule -->
+                        <!-- VÃ©hicule -->
                         <div>
-                            <Label class="mb-1.5 block text-sm">Véhicule</Label>
+                            <Label
+                                for="vente-edit-vehicule"
+                                class="mb-1.5 block text-sm"
+                                >VÃ©hicule</Label
+                            >
                             <AutoComplete
                                 v-model="vehiculeSelected"
+                                input-id="vente-edit-vehicule"
                                 :suggestions="vehiculeSuggests"
                                 :option-label="vehiculeLabel"
                                 @complete="searchVehicule"
@@ -305,7 +312,7 @@ function submit() {
                                     onVehiculeSelect(vehiculeSelected)
                                 "
                                 @clear="onVehiculeClear"
-                                placeholder="Nom, immatriculation, livreur…"
+                                placeholder="Nom, immatriculation, livreurâ€¦"
                                 class="w-full"
                                 input-class="w-full"
                                 :class="{
@@ -327,7 +334,7 @@ function submit() {
                                             }}</span>
                                             <span
                                                 v-if="option.livreur_nom"
-                                                class="before:mr-2 before:content-['·']"
+                                                class="before:mr-2 before:content-['Â·']"
                                             >
                                                 {{ option.livreur_nom }}
                                             </span>
@@ -336,7 +343,7 @@ function submit() {
                                 </template>
                                 <template #empty>
                                     <span class="text-sm text-muted-foreground"
-                                        >Aucun véhicule trouvé.</span
+                                        >Aucun vÃ©hicule trouvÃ©.</span
                                     >
                                 </template>
                             </AutoComplete>
@@ -350,15 +357,20 @@ function submit() {
 
                         <!-- Client -->
                         <div>
-                            <Label class="mb-1.5 block text-sm">Client</Label>
+                            <Label
+                                for="vente-edit-client"
+                                class="mb-1.5 block text-sm"
+                                >Client</Label
+                            >
                             <AutoComplete
                                 v-model="clientSelected"
+                                input-id="vente-edit-client"
                                 :suggestions="clientSuggests"
                                 :option-label="clientLabel"
                                 @complete="searchClient"
                                 @item-select="onClientSelect(clientSelected)"
                                 @clear="onClientClear"
-                                placeholder="Nom, prénom, téléphone…"
+                                placeholder="Nom, prÃ©nom, tÃ©lÃ©phoneâ€¦"
                                 class="w-full"
                                 input-class="w-full"
                                 :class="{ 'p-invalid': form.errors.client_id }"
@@ -388,7 +400,7 @@ function submit() {
                                 </template>
                                 <template #empty>
                                     <span class="text-sm text-muted-foreground"
-                                        >Aucun client trouvé.</span
+                                        >Aucun client trouvÃ©.</span
                                     >
                                 </template>
                             </AutoComplete>
@@ -405,7 +417,7 @@ function submit() {
                         v-if="!form.vehicule_id && !form.client_id"
                         class="mt-3 text-xs text-amber-600 dark:text-amber-400"
                     >
-                        Sélectionnez au moins un véhicule ou un client.
+                        SÃ©lectionnez au moins un vÃ©hicule ou un client.
                     </p>
                 </div>
 
@@ -424,7 +436,7 @@ function submit() {
                         {{ form.errors.lignes }}
                     </p>
 
-                    <!-- ── Tableau desktop ── -->
+                    <!-- â”€â”€ Tableau desktop â”€â”€ -->
                     <div
                         class="hidden overflow-hidden rounded-lg border sm:block"
                     >
@@ -440,7 +452,7 @@ function submit() {
                                         class="px-4 py-2.5 text-center font-medium text-muted-foreground"
                                         style="width: 110px"
                                     >
-                                        Qté
+                                        QtÃ©
                                     </th>
                                     <th
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
@@ -530,7 +542,7 @@ function submit() {
                                         {{
                                             ligne.total > 0
                                                 ? formatGNF(ligne.total)
-                                                : '—'
+                                                : 'â€”'
                                         }}
                                     </td>
                                     <td class="px-4 py-3 text-center">
@@ -550,7 +562,7 @@ function submit() {
                         </table>
                     </div>
 
-                    <!-- ── Cards mobile ── -->
+                    <!-- â”€â”€ Cards mobile â”€â”€ -->
                     <div class="space-y-3 sm:hidden">
                         <div
                             v-for="(ligne, index) in form.lignes"
@@ -580,7 +592,7 @@ function submit() {
                                     <p
                                         class="mb-1 text-[11px] font-medium text-muted-foreground"
                                     >
-                                        Quantité
+                                        QuantitÃ©
                                     </p>
                                     <InputNumber
                                         :model-value="ligne.qte"
@@ -627,7 +639,7 @@ function submit() {
                                         {{
                                             ligne.total > 0
                                                 ? formatGNF(ligne.total)
-                                                : '—'
+                                                : 'â€”'
                                         }}
                                     </p>
                                 </div>
@@ -680,7 +692,7 @@ function submit() {
                     <Button type="submit" :disabled="!canSubmit">
                         {{
                             form.processing
-                                ? 'Enregistrement…'
+                                ? 'Enregistrementâ€¦'
                                 : 'Enregistrer les modifications'
                         }}
                     </Button>
@@ -696,7 +708,7 @@ function submit() {
                 <Save class="mr-2 h-4 w-4" />
                 {{
                     form.processing
-                        ? 'Enregistrement…'
+                        ? 'Enregistrementâ€¦'
                         : 'Enregistrer les modifications'
                 }}
             </Button>

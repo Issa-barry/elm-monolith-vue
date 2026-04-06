@@ -45,7 +45,7 @@ class AuthenticationTest extends TestCase
 
     public function test_login_normalizes_phone_with_dashes(): void
     {
-        $user = User::factory()->withoutTwoFactor()->create([
+        User::factory()->withoutTwoFactor()->create([
             'telephone' => '+224622176056',
         ]);
 

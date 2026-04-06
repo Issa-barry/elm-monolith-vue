@@ -85,9 +85,9 @@ const typeOptions = computed(() => {
 });
 
 const desktopTypeFiltered = computed(() =>
-    selectedType.value !== ALL_TYPES
-        ? props.sites.filter((s) => s.type === selectedType.value)
-        : props.sites,
+    selectedType.value === ALL_TYPES
+        ? props.sites
+        : props.sites.filter((s) => s.type === selectedType.value),
 );
 
 const mobileFiltered = computed(() => {

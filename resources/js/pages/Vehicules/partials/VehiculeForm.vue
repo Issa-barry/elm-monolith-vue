@@ -216,10 +216,11 @@ const totalTaux = computed(() => {
                 </div>
 
                 <div>
-                    <Label class="mb-1.5 block"
+                    <Label for="type_vehicule" class="mb-1.5 block"
                         >Type <span class="text-destructive">*</span></Label
                     >
                     <Dropdown
+                        input-id="type_vehicule"
                         :model-value="form.type_vehicule"
                         @update:model-value="onTypeChange($event)"
                         :options="types"
@@ -278,11 +279,12 @@ const totalTaux = computed(() => {
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
-                    <Label class="mb-1.5 block"
+                    <Label for="proprietaire_id" class="mb-1.5 block"
                         >Propriétaire
                         <span class="text-destructive">*</span></Label
                     >
                     <Dropdown
+                        input-id="proprietaire_id"
                         :model-value="form.proprietaire_id"
                         @update:model-value="
                             $emit('update:form', {
@@ -306,8 +308,11 @@ const totalTaux = computed(() => {
                 </div>
 
                 <div>
-                    <Label class="mb-1.5 block">Équipe de livraison</Label>
+                    <Label for="equipe_livraison_id" class="mb-1.5 block"
+                        >Équipe de livraison</Label
+                    >
                     <Dropdown
+                        input-id="equipe_livraison_id"
                         :model-value="form.equipe_livraison_id"
                         @update:model-value="onEquipeChange($event)"
                         :options="equipes"
