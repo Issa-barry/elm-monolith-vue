@@ -33,9 +33,10 @@ interface ClientOption {
     telephone: string | null;
 }
 
-interface SiteOption {
+interface UserSite {
     id: number;
     nom: string;
+    label: string;
 }
 
 interface LigneForm {
@@ -50,7 +51,7 @@ const props = defineProps<{
     produits: ProduitOption[];
     vehicules: VehiculeOption[];
     clients: ClientOption[];
-    sites: SiteOption[];
+    user_site: UserSite;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -61,7 +62,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Form ──────────────────────────────────────────────────────────────────────
 const form = useForm({
-    site_id: null as number | null,
     vehicule_id: null as number | null,
     client_id: null as number | null,
     lignes: [
@@ -87,10 +87,6 @@ function searchVehicule(event: { query: string }) {
 
 function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
-    if (v) {
-        form.client_id = null;
-        clientSelected.value = null;
-    }
 }
 
 function onVehiculeClear() {
@@ -120,10 +116,6 @@ function searchClient(event: { query: string }) {
 
 function onClientSelect(c: ClientOption | null) {
     form.client_id = c?.id ?? null;
-    if (c) {
-        form.vehicule_id = null;
-        vehiculeSelected.value = null;
-    }
 }
 
 function onClientClear() {
@@ -135,11 +127,7 @@ function clientLabel(c: ClientOption): string {
     return [c.prenom, c.nom].filter(Boolean).join(' ');
 }
 
-// ── Dropdown : Site & Produit ─────────────────────────────────────────────────
-const siteOptions = computed(() =>
-    props.sites.map((s) => ({ value: s.id, label: s.nom })),
-);
-
+// ── Dropdown : Produit ────────────────────────────────────────────────────────
 const produitOptions = computed(() =>
     props.produits.map((p) => ({
         value: p.id,
@@ -225,7 +213,6 @@ onMounted(() => {
 // ── Validation locale ────────────────────────────────────────────────────────
 const canSubmit = computed(
     () =>
-        form.site_id !== null &&
         (form.vehicule_id !== null || form.client_id !== null) &&
         totalGeneral.value > 0 &&
         !form.processing,
@@ -279,49 +266,23 @@ function submit() {
                     >
                         Informations générales
                     </h2>
+                    <!-- Site rattaché (lecture seule) -->
                     <div
-                        class="grid gap-4"
-                        :class="
-                            form.vehicule_id || form.client_id
-                                ? 'sm:grid-cols-2'
-                                : 'sm:grid-cols-3'
-                        "
+                        class="mb-4 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2.5"
                     >
-                        <!-- Site -->
-                        <div>
-                            <Label class="mb-1.5 block text-sm"
-                                >Site
-                                <span class="text-destructive">*</span></Label
-                            >
-                            <Dropdown
-                                v-model="form.site_id"
-                                :options="siteOptions"
-                                option-label="label"
-                                option-value="value"
-                                placeholder="— Sélectionner —"
-                                show-clear
-                                filter
-                                class="w-full"
-                                :class="{ 'p-invalid': form.errors.site_id }"
-                            />
-                            <p
-                                v-if="form.errors.site_id"
-                                class="mt-1 text-xs text-destructive"
-                            >
-                                {{ form.errors.site_id }}
-                            </p>
-                        </div>
+                        <span class="text-xs text-muted-foreground"
+                            >Site :</span
+                        >
+                        <span class="text-sm font-medium">{{
+                            user_site.label
+                        }}</span>
+                    </div>
 
+                    <div class="grid gap-4 sm:grid-cols-2">
                         <!-- Véhicule -->
-                        <div v-if="!form.client_id">
+                        <div>
                             <Label class="mb-1.5 block text-sm">
                                 Véhicule
-                                <span
-                                    v-if="!form.client_id"
-                                    class="text-destructive"
-                                >
-                                    *</span
-                                >
                             </Label>
                             <AutoComplete
                                 v-model="vehiculeSelected"
@@ -375,16 +336,8 @@ function submit() {
                         </div>
 
                         <!-- Client -->
-                        <div v-if="!form.vehicule_id">
-                            <Label class="mb-1.5 block text-sm">
-                                Client
-                                <span
-                                    v-if="!form.vehicule_id"
-                                    class="text-destructive"
-                                >
-                                    *</span
-                                >
-                            </Label>
+                        <div>
+                            <Label class="mb-1.5 block text-sm"> Client </Label>
                             <AutoComplete
                                 v-model="clientSelected"
                                 :suggestions="clientSuggests"

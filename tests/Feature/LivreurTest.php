@@ -9,6 +9,10 @@ use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
+/**
+ * Les livreurs sont gérés depuis les Équipes de livraison (API modale JSON).
+ * Le LivreurController expose : index (Inertia), store (JSON 201), toggle (JSON), destroy (JSON).
+ */
 class LivreurTest extends TestCase
 {
     use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
@@ -42,41 +46,21 @@ class LivreurTest extends TestCase
             ->assertStatus(403);
     }
 
-    // ── create ────────────────────────────────────────────────────────────────
+    // ── store (JSON API) ──────────────────────────────────────────────────────
 
-    public function test_create_returns_200_for_authorized_user(): void
+    public function test_store_creates_livreur_and_returns_json(): void
     {
-        $this->actingAs($this->user)
-            ->get(route('livreurs.create'))
-            ->assertStatus(200);
-    }
-
-    public function test_create_returns_403_without_permission(): void
-    {
-        $user = $this->makeAdminUser();
-
-        $this->actingAs($user)
-            ->get(route('livreurs.create'))
-            ->assertStatus(403);
-    }
-
-    // ── store ─────────────────────────────────────────────────────────────────
-
-    public function test_store_creates_livreur_and_redirects(): void
-    {
-        $this->actingAs($this->user)
-            ->post(route('livreurs.store'), [
+        $response = $this->actingAs($this->user)
+            ->postJson(route('livreurs.store'), [
                 'nom' => 'Diallo',
                 'prenom' => 'Mamadou',
-                'telephone' => '622000001',
-                'code_pays' => 'GN',
-                'ville' => 'Conakry',
-                'is_active' => true,
-            ])
-            ->assertRedirect(route('livreurs.index'));
+                'telephone' => '+224622000001',
+            ]);
+
+        $response->assertStatus(201)
+            ->assertJsonStructure(['id', 'nom', 'prenom', 'telephone', 'is_active']);
 
         $this->assertDatabaseHas('livreurs', [
-            'nom' => 'DIALLO',
             'organization_id' => $this->org->id,
         ]);
     }
@@ -84,85 +68,65 @@ class LivreurTest extends TestCase
     public function test_store_fails_with_empty_data(): void
     {
         $this->actingAs($this->user)
-            ->post(route('livreurs.store'), [])
-            ->assertSessionHasErrors(['nom', 'prenom', 'telephone', 'code_pays', 'ville']);
+            ->postJson(route('livreurs.store'), [])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['nom', 'prenom', 'telephone']);
     }
 
-    public function test_store_fails_with_invalid_code_pays(): void
+    public function test_store_fails_with_duplicate_telephone(): void
     {
+        Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622000002',
+        ]);
+
         $this->actingAs($this->user)
-            ->post(route('livreurs.store'), [
-                'nom' => 'Diallo',
-                'prenom' => 'Mamadou',
-                'telephone' => '622000001',
-                'code_pays' => 'XX',
-                'ville' => 'Conakry',
+            ->postJson(route('livreurs.store'), [
+                'nom' => 'Barry',
+                'prenom' => 'Alpha',
+                'telephone' => '+224622000002',
             ])
-            ->assertSessionHasErrors('code_pays');
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['telephone']);
     }
 
-    // ── edit ──────────────────────────────────────────────────────────────────
+    // ── toggle ────────────────────────────────────────────────────────────────
 
-    public function test_edit_returns_200_for_authorized_user(): void
+    public function test_toggle_changes_active_status(): void
     {
-        $livreur = Livreur::factory()->create(['organization_id' => $this->org->id]);
+        $livreur = Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'is_active' => true,
+        ]);
 
         $this->actingAs($this->user)
-            ->get(route('livreurs.edit', $livreur))
-            ->assertStatus(200);
+            ->patchJson(route('livreurs.toggle', $livreur))
+            ->assertStatus(200)
+            ->assertJson(['is_active' => false]);
+
+        $this->assertFalse($livreur->fresh()->is_active);
     }
 
-    public function test_edit_returns_403_for_other_organization(): void
+    public function test_toggle_returns_403_for_other_organization(): void
     {
         $otherOrg = Organization::factory()->create();
         $livreur = Livreur::factory()->create(['organization_id' => $otherOrg->id]);
 
         $this->actingAs($this->user)
-            ->get(route('livreurs.edit', $livreur))
+            ->patchJson(route('livreurs.toggle', $livreur))
             ->assertStatus(403);
-    }
-
-    // ── update ────────────────────────────────────────────────────────────────
-
-    public function test_update_modifies_livreur_and_redirects(): void
-    {
-        $livreur = Livreur::factory()->create(['organization_id' => $this->org->id]);
-
-        $this->actingAs($this->user)
-            ->put(route('livreurs.update', $livreur), [
-                'nom' => 'Barry',
-                'prenom' => 'Fatoumata',
-                'telephone' => '622000002',
-                'code_pays' => 'GN',
-                'ville' => 'Kindia',
-                'is_active' => true,
-            ])
-            ->assertRedirect(route('livreurs.edit', $livreur));
-
-        $this->assertDatabaseHas('livreurs', [
-            'id' => $livreur->id,
-            'nom' => 'BARRY',
-        ]);
-    }
-
-    public function test_update_fails_with_missing_required_fields(): void
-    {
-        $livreur = Livreur::factory()->create(['organization_id' => $this->org->id]);
-
-        $this->actingAs($this->user)
-            ->put(route('livreurs.update', $livreur), [])
-            ->assertSessionHasErrors(['nom', 'prenom', 'telephone', 'code_pays', 'ville']);
     }
 
     // ── destroy ───────────────────────────────────────────────────────────────
 
-    public function test_destroy_deletes_livreur_and_redirects(): void
+    public function test_destroy_supprime_livreur_sans_historique(): void
     {
         $livreur = Livreur::factory()->create(['organization_id' => $this->org->id]);
 
         $this->actingAs($this->user)
-            ->delete(route('livreurs.destroy', $livreur))
-            ->assertRedirect(route('livreurs.index'));
+            ->deleteJson(route('livreurs.destroy', $livreur))
+            ->assertStatus(200)
+            ->assertJson(['action' => 'deleted']);
 
         $this->assertSoftDeleted('livreurs', ['id' => $livreur->id]);
     }
@@ -173,7 +137,7 @@ class LivreurTest extends TestCase
         $livreur = Livreur::factory()->create(['organization_id' => $otherOrg->id]);
 
         $this->actingAs($this->user)
-            ->delete(route('livreurs.destroy', $livreur))
+            ->deleteJson(route('livreurs.destroy', $livreur))
             ->assertStatus(403);
     }
 }

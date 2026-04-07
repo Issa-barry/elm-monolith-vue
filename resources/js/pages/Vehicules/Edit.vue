@@ -10,6 +10,11 @@ interface Option {
     value: number | string;
     label: string;
 }
+interface EquipeOption {
+    value: number;
+    label: string;
+    somme_taux: number;
+}
 interface TypeOption {
     value: string;
     label: string;
@@ -23,9 +28,8 @@ interface VehiculeData {
     type_vehicule: string | null;
     capacite_packs: number | null;
     proprietaire_id: number | null;
-    livreur_principal_id: number | null;
+    equipe_livraison_id: number | null;
     pris_en_charge_par_usine: boolean;
-    taux_commission_livreur: number | null;
     taux_commission_proprietaire: number | null;
     photo_url: string | null;
     is_active: boolean;
@@ -34,7 +38,7 @@ interface VehiculeData {
 const props = defineProps<{
     vehicule: VehiculeData;
     proprietaires: Option[];
-    livreurs: Option[];
+    equipes: EquipeOption[];
     types: TypeOption[];
 }>();
 
@@ -51,9 +55,8 @@ const form = useForm({
     type_vehicule: props.vehicule.type_vehicule,
     capacite_packs: props.vehicule.capacite_packs,
     proprietaire_id: props.vehicule.proprietaire_id,
-    livreur_principal_id: props.vehicule.livreur_principal_id,
+    equipe_livraison_id: props.vehicule.equipe_livraison_id,
     pris_en_charge_par_usine: props.vehicule.pris_en_charge_par_usine,
-    taux_commission_livreur: props.vehicule.taux_commission_livreur,
     taux_commission_proprietaire: props.vehicule.taux_commission_proprietaire,
     photo: null as File | null,
     is_active: props.vehicule.is_active,
@@ -90,8 +93,8 @@ function submit() {
             </div>
         </div>
 
-        <div class="mx-auto max-w-3xl pb-6 sm:p-6">
-            <div class="mx-auto hidden max-w-3xl px-6 pt-6 pb-0 sm:block">
+        <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
+            <div class="hidden sm:block">
                 <div class="mb-8">
                     <h1 class="text-2xl font-semibold tracking-tight">
                         Modifier le véhicule
@@ -109,7 +112,7 @@ function submit() {
                 :errors="form.errors"
                 :processing="form.processing"
                 :proprietaires="proprietaires"
-                :livreurs="livreurs"
+                :equipes="equipes"
                 :types="types"
                 :photo-url="vehicule.photo_url"
                 @submit="submit"

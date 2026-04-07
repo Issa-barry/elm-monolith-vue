@@ -4,11 +4,10 @@ namespace Tests\Feature;
 
 use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
-use App\Models\CommissionVente;
 use App\Models\FactureVente;
-use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Proprietaire;
+use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -27,6 +26,14 @@ class EncaissementVenteTest extends TestCase
         $user->assignRole('admin_entreprise');
         $user->givePermissionTo('ventes.update');
 
+        $site = Site::create([
+            'organization_id' => $org->id,
+            'nom' => 'Site Test',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
         return $user;
     }
 
@@ -34,12 +41,9 @@ class EncaissementVenteTest extends TestCase
     {
         $org = Organization::factory()->create();
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
-        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
-            'livreur_principal_id' => $livreur->id,
-            'taux_commission_livreur' => 60,
             'taux_commission_proprietaire' => 40,
         ]);
         $commande = CommandeVente::factory()->create([
@@ -75,9 +79,9 @@ class EncaissementVenteTest extends TestCase
         $this->assertEquals(StatutFactureVente::PARTIEL, $facture->fresh()->statut_facture);
     }
 
-    public function test_encaissement_complet_genere_une_commission(): void
+    public function test_encaissement_complet_change_statut_facture_en_payee(): void
     {
-        ['facture' => $facture, 'commande' => $commande, 'user' => $user] = $this->creerContexte();
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
 
         $this->actingAs($user)->post(
             route('encaissements.store', $facture),
@@ -89,31 +93,9 @@ class EncaissementVenteTest extends TestCase
         );
 
         $this->assertEquals(StatutFactureVente::PAYEE, $facture->fresh()->statut_facture);
-        $this->assertEquals(1, CommissionVente::where('commande_vente_id', $commande->id)->count());
     }
 
-    public function test_commission_a_les_bons_montants_apres_encaissement(): void
-    {
-        ['facture' => $facture, 'commande' => $commande, 'user' => $user] = $this->creerContexte();
-
-        $this->actingAs($user)->post(
-            route('encaissements.store', $facture),
-            [
-                'montant' => 5000,
-                'date_encaissement' => now()->toDateString(),
-                'mode_paiement' => 'especes',
-            ]
-        );
-
-        $commission = CommissionVente::where('commande_vente_id', $commande->id)->firstOrFail();
-
-        // 60% de 5000 = 3000, 40% de 5000 = 2000
-        $this->assertEquals(3000.0, (float) $commission->montant_part_livreur);
-        $this->assertEquals(2000.0, (float) $commission->montant_part_proprietaire);
-        $this->assertEquals(5000.0, (float) $commission->montant_commission);
-    }
-
-    public function test_encaissement_partiel_ne_genere_pas_commission(): void
+    public function test_encaissement_partiel_ne_change_pas_statut_en_payee(): void
     {
         ['facture' => $facture, 'commande' => $commande, 'user' => $user] = $this->creerContexte();
 
@@ -126,7 +108,7 @@ class EncaissementVenteTest extends TestCase
             ]
         );
 
-        $this->assertEquals(0, CommissionVente::where('commande_vente_id', $commande->id)->count());
+        $this->assertEquals(StatutFactureVente::PARTIEL, $facture->fresh()->statut_facture);
     }
 
     public function test_encaissement_depasse_restant_est_refuse(): void

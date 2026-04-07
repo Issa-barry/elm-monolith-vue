@@ -22,155 +22,138 @@ class VersementCommissionTest extends TestCase
         $user->assignRole('admin_entreprise');
         $user->givePermissionTo('ventes.update');
 
+        // Site requis par RequireSiteAssigned
+        $site = \App\Models\Site::create([
+            'organization_id' => $org->id,
+            'nom' => 'Site Test',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
         return $user;
     }
 
-    private function commissionPourOrg(Organization $org): CommissionVente
+    /**
+     * Crée une CommissionVente avec une part livreur (3 000) et une part propriétaire (2 000).
+     */
+    private function makeCommissionAvecParts(Organization $org): array
     {
-        return CommissionVente::factory()->create([
+        $commission = CommissionVente::factory()->create([
             'organization_id' => $org->id,
-            'montant_commission' => 5000,
-            'montant_part_livreur' => 3000,
-            'montant_part_proprietaire' => 2000,
+            'montant_commission_totale' => 5000,
             'montant_verse' => 0,
-            'montant_verse_livreur' => 0,
-            'montant_verse_proprietaire' => 0,
             'statut' => StatutCommission::EN_ATTENTE,
         ]);
+
+        $partLivreur = $commission->parts()->create([
+            'type_beneficiaire' => 'livreur',
+            'beneficiaire_nom' => 'Diallo Mamadou',
+            'taux_commission' => 60,
+            'montant_brut' => 3000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 3000,
+            'montant_verse' => 0,
+            'statut' => StatutCommission::EN_ATTENTE,
+        ]);
+
+        $partProp = $commission->parts()->create([
+            'type_beneficiaire' => 'proprietaire',
+            'beneficiaire_nom' => 'Camara Ibrahim',
+            'taux_commission' => 40,
+            'montant_brut' => 2000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 2000,
+            'montant_verse' => 0,
+            'statut' => StatutCommission::EN_ATTENTE,
+        ]);
+
+        return compact('commission', 'partLivreur', 'partProp');
     }
 
     // ── Store ──────────────────────────────────────────────────────────────────
 
-    public function test_versement_livreur_seul_est_enregistre(): void
+    public function test_versement_sur_part_livreur_est_enregistre(): void
     {
         $org = Organization::factory()->create();
         $user = $this->utilisateur($org);
-        $commission = $this->commissionPourOrg($org);
+        ['commission' => $commission, 'partLivreur' => $part] = $this->makeCommissionAvecParts($org);
 
         $response = $this->actingAs($user)->post(
-            route('commissions.versements.store', $commission),
+            route('commissions.parts.versements.store', [$commission, $part]),
             [
-                'montant_livreur' => 3000,
-                'montant_proprietaire' => 0,
+                'montant' => 3000,
                 'date_versement' => now()->toDateString(),
                 'mode_paiement' => 'especes',
             ]
         );
 
         $response->assertRedirect();
+
         $this->assertDatabaseHas('versements_commissions', [
-            'commission_vente_id' => $commission->id,
+            'commission_part_id' => $part->id,
             'montant' => 3000,
-            'beneficiaire' => 'livreur',
         ]);
-        $this->assertEquals(3000.0, (float) $commission->fresh()->montant_verse_livreur);
-        $this->assertEquals(0.0, (float) $commission->fresh()->montant_verse_proprietaire);
-    }
 
-    public function test_versement_proprietaire_seul_est_enregistre(): void
-    {
-        $org = Organization::factory()->create();
-        $user = $this->utilisateur($org);
-        $commission = $this->commissionPourOrg($org);
-
-        $this->actingAs($user)->post(
-            route('commissions.versements.store', $commission),
-            [
-                'montant_livreur' => 0,
-                'montant_proprietaire' => 2000,
-                'date_versement' => now()->toDateString(),
-                'mode_paiement' => 'virement',
-            ]
-        );
-
-        $this->assertDatabaseHas('versements_commissions', [
-            'commission_vente_id' => $commission->id,
-            'montant' => 2000,
-            'beneficiaire' => 'proprietaire',
-        ]);
-        $this->assertEquals(0.0, (float) $commission->fresh()->montant_verse_livreur);
-        $this->assertEquals(2000.0, (float) $commission->fresh()->montant_verse_proprietaire);
-    }
-
-    public function test_versement_les_deux_cree_deux_enregistrements(): void
-    {
-        $org = Organization::factory()->create();
-        $user = $this->utilisateur($org);
-        $commission = $this->commissionPourOrg($org);
-
-        $this->actingAs($user)->post(
-            route('commissions.versements.store', $commission),
-            [
-                'montant_livreur' => 3000,
-                'montant_proprietaire' => 2000,
-                'date_versement' => now()->toDateString(),
-                'mode_paiement' => 'especes',
-            ]
-        );
-
-        $this->assertDatabaseCount('versements_commissions', 2);
-
-        $fresh = $commission->fresh();
-        $this->assertEquals(StatutCommission::VERSEE, $fresh->statut);
-        $this->assertEquals(5000.0, (float) $fresh->montant_verse);
+        $this->assertEquals(3000.0, (float) $part->fresh()->montant_verse);
+        $this->assertEquals(StatutCommission::VERSEE, $part->fresh()->statut);
     }
 
     public function test_versement_partiel_met_statut_partielle(): void
     {
         $org = Organization::factory()->create();
         $user = $this->utilisateur($org);
-        $commission = $this->commissionPourOrg($org);
+        ['commission' => $commission, 'partLivreur' => $part] = $this->makeCommissionAvecParts($org);
 
         $this->actingAs($user)->post(
-            route('commissions.versements.store', $commission),
+            route('commissions.parts.versements.store', [$commission, $part]),
             [
-                'montant_livreur' => 1500,
-                'montant_proprietaire' => 0,
+                'montant' => 1500,
                 'date_versement' => now()->toDateString(),
                 'mode_paiement' => 'especes',
             ]
         );
 
+        $this->assertEquals(StatutCommission::PARTIELLE, $part->fresh()->statut);
         $this->assertEquals(StatutCommission::PARTIELLE, $commission->fresh()->statut);
+    }
+
+    public function test_versement_deux_parts_soldes_met_commission_versee(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->utilisateur($org);
+        ['commission' => $commission, 'partLivreur' => $partL, 'partProp' => $partP] = $this->makeCommissionAvecParts($org);
+
+        $this->actingAs($user)->post(
+            route('commissions.parts.versements.store', [$commission, $partL]),
+            ['montant' => 3000, 'date_versement' => now()->toDateString(), 'mode_paiement' => 'especes']
+        );
+        $this->actingAs($user)->post(
+            route('commissions.parts.versements.store', [$commission, $partP]),
+            ['montant' => 2000, 'date_versement' => now()->toDateString(), 'mode_paiement' => 'virement']
+        );
+
+        $this->assertDatabaseCount('versements_commissions', 2);
+        $this->assertEquals(StatutCommission::VERSEE, $commission->fresh()->statut);
+        $this->assertEquals(5000.0, (float) $commission->fresh()->montant_verse);
     }
 
     public function test_versement_rejete_si_montant_depasse_restant(): void
     {
         $org = Organization::factory()->create();
         $user = $this->utilisateur($org);
-        $commission = $this->commissionPourOrg($org);
+        ['commission' => $commission, 'partLivreur' => $part] = $this->makeCommissionAvecParts($org);
 
         $response = $this->actingAs($user)->post(
-            route('commissions.versements.store', $commission),
+            route('commissions.parts.versements.store', [$commission, $part]),
             [
-                'montant_livreur' => 9999, // dépasse 3000
-                'montant_proprietaire' => 0,
+                'montant' => 9999, // dépasse 3000
                 'date_versement' => now()->toDateString(),
                 'mode_paiement' => 'especes',
             ]
         );
 
-        $response->assertSessionHasErrors('montant_livreur');
-        $this->assertDatabaseCount('versements_commissions', 0);
-    }
-
-    public function test_versement_rejete_si_les_deux_montants_sont_zero(): void
-    {
-        $org = Organization::factory()->create();
-        $user = $this->utilisateur($org);
-        $commission = $this->commissionPourOrg($org);
-
-        $response = $this->actingAs($user)->post(
-            route('commissions.versements.store', $commission),
-            [
-                'montant_livreur' => 0,
-                'montant_proprietaire' => 0,
-                'date_versement' => now()->toDateString(),
-                'mode_paiement' => 'especes',
-            ]
-        );
-
-        $response->assertSessionHasErrors();
+        $response->assertSessionHasErrors('montant');
         $this->assertDatabaseCount('versements_commissions', 0);
     }
 
@@ -178,14 +161,32 @@ class VersementCommissionTest extends TestCase
     {
         $org = Organization::factory()->create();
         $user = $this->utilisateur($org);
-        $commission = $this->commissionPourOrg($org);
+        ['commission' => $commission, 'partLivreur' => $part] = $this->makeCommissionAvecParts($org);
         $commission->update(['statut' => StatutCommission::ANNULEE]);
 
         $response = $this->actingAs($user)->post(
-            route('commissions.versements.store', $commission),
+            route('commissions.parts.versements.store', [$commission, $part]),
             [
-                'montant_livreur' => 1000,
-                'montant_proprietaire' => 0,
+                'montant' => 1000,
+                'date_versement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
+            ]
+        );
+
+        $response->assertStatus(422);
+    }
+
+    public function test_versement_refuse_si_part_deja_versee(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->utilisateur($org);
+        ['commission' => $commission, 'partLivreur' => $part] = $this->makeCommissionAvecParts($org);
+        $part->update(['statut' => StatutCommission::VERSEE, 'montant_verse' => 3000]);
+
+        $response = $this->actingAs($user)->post(
+            route('commissions.parts.versements.store', [$commission, $part]),
+            [
+                'montant' => 100,
                 'date_versement' => now()->toDateString(),
                 'mode_paiement' => 'especes',
             ]
@@ -197,16 +198,15 @@ class VersementCommissionTest extends TestCase
     public function test_versement_refuse_si_autre_organisation(): void
     {
         $autreOrg = Organization::factory()->create();
-        $commission = $this->commissionPourOrg($autreOrg);
+        ['commission' => $commission, 'partLivreur' => $part] = $this->makeCommissionAvecParts($autreOrg);
 
         $monOrg = Organization::factory()->create();
         $user = $this->utilisateur($monOrg);
 
         $response = $this->actingAs($user)->post(
-            route('commissions.versements.store', $commission),
+            route('commissions.parts.versements.store', [$commission, $part]),
             [
-                'montant_livreur' => 1000,
-                'montant_proprietaire' => 0,
+                'montant' => 1000,
                 'date_versement' => now()->toDateString(),
                 'mode_paiement' => 'especes',
             ]
@@ -217,26 +217,26 @@ class VersementCommissionTest extends TestCase
 
     // ── Destroy ────────────────────────────────────────────────────────────────
 
-    public function test_versement_supprime_recalcule_statut(): void
+    public function test_versement_supprime_recalcule_statut_part(): void
     {
         $org = Organization::factory()->create();
         $user = $this->utilisateur($org);
-        $commission = $this->commissionPourOrg($org);
+        ['commission' => $commission, 'partLivreur' => $part] = $this->makeCommissionAvecParts($org);
 
-        $versement = $commission->versements()->create([
+        $versement = $part->versements()->create([
             'montant' => 3000,
-            'beneficiaire' => 'livreur',
             'date_versement' => now()->toDateString(),
             'mode_paiement' => 'especes',
         ]);
-        $commission->recalculStatut();
+        $part->recalculStatut();
+
+        $this->assertEquals(StatutCommission::VERSEE, $part->fresh()->statut);
 
         $this->actingAs($user)->delete(
             route('commissions.versements.destroy', $versement)
         );
 
-        $fresh = $commission->fresh();
-        $this->assertEquals(0.0, (float) $fresh->montant_verse_livreur);
-        $this->assertEquals(StatutCommission::EN_ATTENTE, $fresh->statut);
+        $this->assertEquals(StatutCommission::EN_ATTENTE, $part->fresh()->statut);
+        $this->assertEquals(0.0, (float) $part->fresh()->montant_verse);
     }
 }

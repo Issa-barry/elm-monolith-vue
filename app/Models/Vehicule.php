@@ -21,11 +21,9 @@ class Vehicule extends Model
         'type_vehicule',
         'capacite_packs',
         'proprietaire_id',
-        'livreur_principal_id',
-        'pris_en_charge_par_usine',
-        'taux_commission_livreur',
+        'equipe_livraison_id',
         'taux_commission_proprietaire',
-        'commission_active',
+        'pris_en_charge_par_usine',
         'photo_path',
         'is_active',
     ];
@@ -35,10 +33,8 @@ class Vehicule extends Model
         return [
             'is_active' => 'boolean',
             'pris_en_charge_par_usine' => 'boolean',
-            'commission_active' => 'boolean',
             'type_vehicule' => TypeVehicule::class,
             'capacite_packs' => 'integer',
-            'taux_commission_livreur' => 'decimal:2',
             'taux_commission_proprietaire' => 'decimal:2',
         ];
     }
@@ -47,11 +43,7 @@ class Vehicule extends Model
 
     public function getPhotoUrlAttribute(): ?string
     {
-        if (empty($this->photo_path)) {
-            return null;
-        }
-
-        return '/storage/'.$this->photo_path;
+        return $this->photo_path ? '/storage/'.$this->photo_path : null;
     }
 
     public function getTypeLabelAttribute(): string
@@ -60,6 +52,8 @@ class Vehicule extends Model
             ? $this->type_vehicule->label()
             : '';
     }
+
+    // ── Relations ─────────────────────────────────────────────────────────────
 
     public function organization(): BelongsTo
     {
@@ -71,8 +65,23 @@ class Vehicule extends Model
         return $this->belongsTo(Proprietaire::class);
     }
 
-    public function livreurPrincipal(): BelongsTo
+    public function equipe(): BelongsTo
     {
-        return $this->belongsTo(Livreur::class, 'livreur_principal_id');
+        return $this->belongsTo(EquipeLivraison::class, 'equipe_livraison_id');
+    }
+
+    // ── Métier ────────────────────────────────────────────────────────────────
+
+    /**
+     * Somme taux propriétaire + taux membres équipe.
+     * Doit être égale à 100 pour que les commissions soient générées.
+     */
+    public function sommeTauxTotale(): float
+    {
+        if (! $this->equipe) {
+            return (float) $this->taux_commission_proprietaire;
+        }
+
+        return (float) $this->taux_commission_proprietaire + $this->equipe->sommeTaux();
     }
 }

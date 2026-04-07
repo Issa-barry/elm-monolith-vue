@@ -24,7 +24,7 @@ class FactureVenteController extends Controller
             'commande.vehicule',
             'commande.client',
             'commande.site',
-            'encaissements',
+            'encaissements.creator',
         ])
             ->where('organization_id', $orgId)
             ->whereNotNull('reference')
@@ -61,6 +61,21 @@ class FactureVenteController extends Controller
                 'is_annulee' => $f->isAnnulee(),
                 'is_payee' => $f->isPayee(),
                 'created_at' => $f->created_at?->format('d/m/Y'),
+                'encaissements' => $f->encaissements
+                    ->sortByDesc(fn ($e) => $e->created_at?->timestamp ?? 0)
+                    ->values()
+                    ->map(fn ($e) => [
+                        'id' => $e->id,
+                        'montant' => (float) $e->montant,
+                        'date_encaissement' => $e->date_encaissement?->format('d/m/Y'),
+                        'enregistre_le' => $e->created_at?->format('d/m/Y H:i'),
+                        'mode_paiement' => $e->mode_paiement instanceof \App\Enums\ModePaiement
+                            ? $e->mode_paiement->label()
+                            : (string) $e->mode_paiement,
+                        'note' => $e->note,
+                        'created_by' => $e->creator?->name,
+                    ])
+                    ->all(),
             ]);
 
         // Totaux pour les cartes de synthèse

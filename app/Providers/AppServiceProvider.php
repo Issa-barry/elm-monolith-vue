@@ -29,11 +29,11 @@ class AppServiceProvider extends ServiceProvider
                 ->symbols();    // caractère spécial
         });
 
-        // ── Feature flags Pennant – modules métier ────────────────────────────
-        // Scope : Organization. Valeur par défaut : true (tous actifs).
-        // Persistance : driver database (table features).
+        // Feature flags Pennant - modules metier.
+        // Scope: Organization. Valeur par defaut pilotee par ModuleFeature::defaultState().
+        // Persistance: driver database (table features).
         foreach (ModuleFeature::ALL as $module) {
-            Feature::define($module, fn (Organization $org) => true);
+            Feature::define($module, fn (Organization $org) => ModuleFeature::defaultState($module));
         }
     }
 }

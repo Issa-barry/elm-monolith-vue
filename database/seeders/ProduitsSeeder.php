@@ -24,20 +24,20 @@ class ProduitsSeeder extends Seeder
                 'qte_stock' => 500,
             ],
             [
-                'nom' => 'Pack de 30',
-                'type' => ProduitType::FABRICABLE->value,
-                'statut' => ProduitStatut::ACTIF->value,
-                'prix_usine' => 4500,
-                'prix_vente' => 5000,
-                'qte_stock' => 200,
-            ],
-            [
                 'nom' => 'Pack de 6 bouteilles',
                 'type' => ProduitType::FABRICABLE->value,
                 'statut' => ProduitStatut::ACTIF->value,
+                'prix_usine' => 4100,
+                'prix_vente' => 5000,
+                'qte_stock' => 10000,
+            ],
+            [
+                'nom' => 'Pack de 8 bouteilles',
+                'type' => ProduitType::FABRICABLE->value,
+                'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 4500,
                 'prix_vente' => 5000,
-                'qte_stock' => 150,
+                'qte_stock' => 10000,
             ],
         ];
 

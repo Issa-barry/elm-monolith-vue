@@ -63,6 +63,7 @@ watch(selectedCountryCode, (code) => {
     globalThis.localStorage?.setItem(STORAGE_KEY, code);
 });
 const phoneDigits = ref('');
+const phoneTouched = ref(false);
 const showPassword = ref(false);
 
 const selectedPays = computed(
@@ -74,6 +75,22 @@ const fullPhone = computed(() => {
     if (!phoneDigits.value) return '';
     // Strip leading 0 for international format (visible dans l'input, supprimé techniquement)
     return `${selectedPays.value.prefix}${phoneDigits.value.replace(/^0/, '')}`;
+});
+
+// Le numéro est valide quand la partie locale (sans le 0 initial) atteint localLength
+const phoneIsValid = computed(() => {
+    const digits = phoneDigits.value.replace(/^0/, '');
+    return digits.length >= selectedPays.value.localLength;
+});
+
+// Message client uniquement après interaction avec le champ
+const phoneClientError = computed<string | null>(() => {
+    if (!phoneTouched.value) return null;
+    if (!phoneDigits.value) return 'Numéro de téléphone requis.';
+    if (!phoneIsValid.value) {
+        return `Numéro trop court (${selectedPays.value.localLength} chiffres attendus).`;
+    }
+    return null;
 });
 
 function flagUrl(code: string): string {
@@ -90,6 +107,10 @@ function handlePhoneInput(e: Event) {
     const digits = raw.slice(0, max);
     phoneDigits.value = digits;
     input.value = digits;
+}
+
+function handlePhoneBlur() {
+    phoneTouched.value = true;
 }
 
 function handlePhoneKeydown(e: KeyboardEvent) {
@@ -212,11 +233,13 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                                     :value="phoneDigits"
                                     @keydown="handlePhoneKeydown"
                                     @input="handlePhoneInput"
+                                    @blur="handlePhoneBlur"
                                     type="tel"
                                     :tabindex="2"
                                     autocomplete="tel-national"
                                     inputmode="numeric"
                                     autofocus
+                                    required
                                     :maxlength="
                                         phoneDigits.startsWith('0')
                                             ? selectedPays.localLength + 1
@@ -226,7 +249,9 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                                     class="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                                 />
                             </div>
-                            <InputError :message="errors.telephone" />
+                            <InputError
+                                :message="phoneClientError ?? errors.telephone"
+                            />
                         </div>
 
                         <!-- Mot de passe -->
@@ -287,7 +312,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                             type="submit"
                             class="h-10 w-full rounded-xl text-base font-semibold"
                             :tabindex="5"
-                            :disabled="processing"
+                            :disabled="processing || !phoneIsValid"
                             data-test="login-button"
                         >
                             <Spinner v-if="processing" />

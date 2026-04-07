@@ -17,7 +17,7 @@ class CommandeVenteFactory extends Factory
             'client_id' => null,
             'reference' => 'VNT-TEST-'.strtoupper(Str::random(8)),
             'total_commande' => fake()->numberBetween(5000, 100000),
-            'statut' => 'livree',
+            'statut' => 'brouillon',
         ];
     }
 }

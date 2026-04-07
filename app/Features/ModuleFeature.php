@@ -36,6 +36,21 @@ class ModuleFeature
         self::INSCRIPTION,
     ];
 
+    /**
+     * Modules desactives par defaut (si aucune valeur n'est encore persistée).
+     */
+    public const DEFAULT_DISABLED = [
+        self::ACHATS,
+        self::PACKINGS,
+        self::PRESTATAIRES,
+        self::INSCRIPTION,
+    ];
+
+    public static function defaultState(string $module): bool
+    {
+        return ! in_array($module, self::DEFAULT_DISABLED, true);
+    }
+
     // ── Libellés UI ───────────────────────────────────────────────────────────
 
     public static function labels(): array

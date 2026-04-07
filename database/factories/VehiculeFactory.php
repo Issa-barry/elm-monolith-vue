@@ -2,7 +2,6 @@
 
 namespace Database\Factories;
 
-use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Proprietaire;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -20,23 +19,16 @@ class VehiculeFactory extends Factory
             'type_vehicule' => 'camion',
             'capacite_packs' => 200,
             'proprietaire_id' => Proprietaire::factory()->create(['organization_id' => $org->id])->id,
-            'livreur_principal_id' => null,
-            'taux_commission_livreur' => 60.00,
+            'equipe_livraison_id' => null,
             'taux_commission_proprietaire' => 40.00,
-            'commission_active' => true,
+            'pris_en_charge_par_usine' => false,
             'is_active' => true,
         ];
-    }
-
-    public function avecLivreur(Livreur $livreur): static
-    {
-        return $this->state(fn () => ['livreur_principal_id' => $livreur->id]);
     }
 
     public function sansCommission(): static
     {
         return $this->state(fn () => [
-            'taux_commission_livreur' => 0,
             'taux_commission_proprietaire' => 0,
         ]);
     }

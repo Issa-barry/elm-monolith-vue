@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Enums\StatutCommission;
+use App\Models\CommissionPart;
 use App\Models\CommissionVente;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -11,155 +12,171 @@ class CommissionVenteTest extends TestCase
 {
     use RefreshDatabase;
 
-    // ── Accessors ─────────────────────────────────────────────────────────────
-
-    public function test_montant_restant_livreur_est_calcule_correctement(): void
+    private function makeCommission(array $overrides = []): CommissionVente
     {
-        $commission = CommissionVente::factory()->create([
-            'montant_part_livreur' => 3000,
-            'montant_verse_livreur' => 1000,
-        ]);
-
-        $this->assertEquals(2000.0, $commission->montant_restant_livreur);
+        return CommissionVente::factory()->create($overrides);
     }
 
-    public function test_montant_restant_proprietaire_est_calcule_correctement(): void
+    private function makePart(CommissionVente $commission, array $overrides = []): CommissionPart
     {
-        $commission = CommissionVente::factory()->create([
-            'montant_part_proprietaire' => 2000,
-            'montant_verse_proprietaire' => 2000,
-        ]);
-
-        $this->assertEquals(0.0, $commission->montant_restant_proprietaire);
+        return $commission->parts()->create(array_merge([
+            'type_beneficiaire' => 'livreur',
+            'beneficiaire_nom' => 'Test Livreur',
+            'taux_commission' => 100,
+            'montant_brut' => 5000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 5000,
+            'montant_verse' => 0,
+            'statut' => StatutCommission::EN_ATTENTE,
+        ], $overrides));
     }
 
-    public function test_montant_restant_ne_peut_pas_etre_negatif(): void
+    // ── Accessor: montant_restant (CommissionVente) ───────────────────────────
+
+    public function test_montant_restant_commission_est_somme_des_parts(): void
     {
-        $commission = CommissionVente::factory()->create([
-            'montant_part_livreur' => 1000,
-            'montant_verse_livreur' => 1500, // plus que la part
+        $commission = $this->makeCommission();
+
+        $this->makePart($commission, [
+            'type_beneficiaire' => 'livreur',
+            'taux_commission' => 60,
+            'montant_brut' => 3000,
+            'montant_net' => 3000,
+            'montant_verse' => 1000,
+            'statut' => StatutCommission::PARTIELLE,
+        ]);
+        $this->makePart($commission, [
+            'type_beneficiaire' => 'proprietaire',
+            'beneficiaire_nom' => 'Test Proprio',
+            'taux_commission' => 40,
+            'montant_brut' => 2000,
+            'montant_net' => 2000,
+            'montant_verse' => 2000,
+            'statut' => StatutCommission::VERSEE,
         ]);
 
-        $this->assertEquals(0.0, $commission->montant_restant_livreur);
+        // Livreur restant: 3000-1000=2000, proprietaire restant: 0 → total 2000
+        $this->assertEquals(2000.0, $commission->montant_restant);
     }
 
-    public function test_montant_restant_total_est_somme_des_deux_parts(): void
+    // ── Accessor: montant_restant (CommissionPart) ────────────────────────────
+
+    public function test_montant_restant_part_ne_peut_pas_etre_negatif(): void
     {
-        $commission = CommissionVente::factory()->create([
-            'montant_commission' => 5000,
+        $commission = $this->makeCommission();
+        $part = $this->makePart($commission, [
+            'montant_net' => 1000,
+            'montant_verse' => 1500, // sur-versé
+        ]);
+
+        $this->assertEquals(0.0, $part->montant_restant);
+    }
+
+    public function test_montant_restant_part_calcule_correctement(): void
+    {
+        $commission = $this->makeCommission();
+        $part = $this->makePart($commission, [
+            'montant_net' => 3000,
             'montant_verse' => 1000,
         ]);
 
-        $this->assertEquals(4000.0, $commission->montant_restant);
+        $this->assertEquals(2000.0, $part->montant_restant);
     }
 
-    // ── recalculStatut ────────────────────────────────────────────────────────
+    // ── recalculStatutGlobal ──────────────────────────────────────────────────
 
-    public function test_statut_passe_en_attente_si_aucun_versement(): void
+    public function test_statut_global_passe_en_attente_si_aucun_versement(): void
     {
-        $commission = CommissionVente::factory()->create([
-            'montant_commission' => 5000,
-            'montant_verse' => 0,
-            'statut' => StatutCommission::EN_ATTENTE,
-        ]);
+        $commission = $this->makeCommission(['statut' => StatutCommission::EN_ATTENTE]);
+        $this->makePart($commission, ['montant_verse' => 0]);
 
-        $commission->recalculStatut();
+        $commission->recalculStatutGlobal();
 
         $this->assertEquals(StatutCommission::EN_ATTENTE, $commission->fresh()->statut);
     }
 
-    public function test_statut_passe_partielle_si_versement_partiel(): void
+    public function test_statut_global_passe_partielle_si_versement_partiel(): void
     {
-        $commission = CommissionVente::factory()->create([
-            'montant_commission' => 5000,
-            'montant_part_livreur' => 3000,
-            'montant_part_proprietaire' => 2000,
-        ]);
+        $commission = $this->makeCommission();
+        $part = $this->makePart($commission, ['montant_net' => 5000, 'montant_verse' => 0]);
 
-        $commission->versements()->create([
-            'montant' => 1000,
-            'beneficiaire' => 'livreur',
+        $part->versements()->create([
+            'montant' => 2000,
             'date_versement' => now()->toDateString(),
             'mode_paiement' => 'especes',
         ]);
+        $part->recalculStatut();
 
-        $commission->recalculStatut();
-        $fresh = $commission->fresh();
-
-        $this->assertEquals(StatutCommission::PARTIELLE, $fresh->statut);
-        $this->assertEquals(1000.0, (float) $fresh->montant_verse_livreur);
-        $this->assertEquals(0.0, (float) $fresh->montant_verse_proprietaire);
-        $this->assertEquals(1000.0, (float) $fresh->montant_verse);
+        $this->assertEquals(StatutCommission::PARTIELLE, $commission->fresh()->statut);
+        $this->assertEquals(2000.0, (float) $commission->fresh()->montant_verse);
     }
 
-    public function test_statut_passe_versee_quand_tout_est_verse(): void
+    public function test_statut_global_passe_versee_quand_tout_est_verse(): void
     {
-        $commission = CommissionVente::factory()->create([
-            'montant_commission' => 5000,
-            'montant_part_livreur' => 3000,
-            'montant_part_proprietaire' => 2000,
+        $commission = $this->makeCommission();
+        $part = $this->makePart($commission, ['montant_net' => 5000, 'montant_verse' => 0]);
+
+        $part->versements()->create([
+            'montant' => 5000,
+            'date_versement' => now()->toDateString(),
+            'mode_paiement' => 'especes',
+        ]);
+        $part->recalculStatut();
+
+        $this->assertEquals(StatutCommission::VERSEE, $commission->fresh()->statut);
+        $this->assertEquals(5000.0, (float) $commission->fresh()->montant_verse);
+    }
+
+    public function test_statut_global_avec_deux_parts_partiellement_versees(): void
+    {
+        $commission = $this->makeCommission();
+
+        $partLivreur = $this->makePart($commission, [
+            'type_beneficiaire' => 'livreur',
+            'taux_commission' => 60,
+            'montant_net' => 3000,
+            'montant_verse' => 0,
+        ]);
+        $partProp = $this->makePart($commission, [
+            'type_beneficiaire' => 'proprietaire',
+            'beneficiaire_nom' => 'Test Proprio',
+            'taux_commission' => 40,
+            'montant_net' => 2000,
+            'montant_verse' => 0,
         ]);
 
-        $commission->versements()->createMany([
-            ['montant' => 3000, 'beneficiaire' => 'livreur',      'date_versement' => now()->toDateString(), 'mode_paiement' => 'especes'],
-            ['montant' => 2000, 'beneficiaire' => 'proprietaire', 'date_versement' => now()->toDateString(), 'mode_paiement' => 'especes'],
-        ]);
+        $partLivreur->versements()->create(['montant' => 1500, 'date_versement' => now()->toDateString(), 'mode_paiement' => 'especes']);
+        $partProp->versements()->create(['montant' => 800, 'date_versement' => now()->toDateString(), 'mode_paiement' => 'especes']);
 
-        $commission->recalculStatut();
+        $partLivreur->recalculStatut();
+        $partProp->recalculStatut();
+
         $fresh = $commission->fresh();
-
-        $this->assertEquals(StatutCommission::VERSEE, $fresh->statut);
-        $this->assertEquals(3000.0, (float) $fresh->montant_verse_livreur);
-        $this->assertEquals(2000.0, (float) $fresh->montant_verse_proprietaire);
-        $this->assertEquals(5000.0, (float) $fresh->montant_verse);
+        $this->assertEquals(StatutCommission::PARTIELLE, $fresh->statut);
+        $this->assertEquals(2300.0, (float) $fresh->montant_verse);
     }
 
     public function test_recalcul_ignore_commission_annulee(): void
     {
-        $commission = CommissionVente::factory()->create([
-            'statut' => StatutCommission::ANNULEE,
-        ]);
+        $commission = $this->makeCommission(['statut' => StatutCommission::ANNULEE]);
 
-        $result = $commission->recalculStatut();
+        $result = $commission->recalculStatutGlobal();
 
         $this->assertFalse($result);
         $this->assertEquals(StatutCommission::ANNULEE, $commission->fresh()->statut);
-    }
-
-    public function test_versements_par_beneficiaire_sont_comptes_separement(): void
-    {
-        $commission = CommissionVente::factory()->create([
-            'montant_commission' => 5000,
-            'montant_part_livreur' => 3000,
-            'montant_part_proprietaire' => 2000,
-        ]);
-
-        $commission->versements()->createMany([
-            ['montant' => 1500, 'beneficiaire' => 'livreur',      'date_versement' => now()->toDateString(), 'mode_paiement' => 'especes'],
-            ['montant' => 1500, 'beneficiaire' => 'livreur',      'date_versement' => now()->toDateString(), 'mode_paiement' => 'especes'],
-            ['montant' => 800,  'beneficiaire' => 'proprietaire', 'date_versement' => now()->toDateString(), 'mode_paiement' => 'especes'],
-        ]);
-
-        $commission->recalculStatut();
-        $fresh = $commission->fresh();
-
-        $this->assertEquals(3000.0, (float) $fresh->montant_verse_livreur);
-        $this->assertEquals(800.0, (float) $fresh->montant_verse_proprietaire);
-        $this->assertEquals(3800.0, (float) $fresh->montant_verse);
-        $this->assertEquals(StatutCommission::PARTIELLE, $fresh->statut);
     }
 
     // ── isVersee / isAnnulee ──────────────────────────────────────────────────
 
     public function test_is_versee_retourne_true_quand_statut_versee(): void
     {
-        $commission = CommissionVente::factory()->create(['statut' => StatutCommission::VERSEE]);
+        $commission = $this->makeCommission(['statut' => StatutCommission::VERSEE]);
         $this->assertTrue($commission->isVersee());
     }
 
     public function test_is_annulee_retourne_true_quand_statut_annulee(): void
     {
-        $commission = CommissionVente::factory()->create(['statut' => StatutCommission::ANNULEE]);
+        $commission = $this->makeCommission(['statut' => StatutCommission::ANNULEE]);
         $this->assertTrue($commission->isAnnulee());
     }
 }

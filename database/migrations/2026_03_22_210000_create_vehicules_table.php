@@ -18,10 +18,11 @@ return new class extends Migration
             $table->string('type_vehicule', 30);
             $table->integer('capacite_packs')->nullable();
             $table->foreignId('proprietaire_id')->constrained('proprietaires')->restrictOnDelete();
-            $table->foreignId('livreur_principal_id')->nullable()->constrained('livreurs')->nullOnDelete();
+            // Équipe de livraison (remplace livreur_principal_id + taux_commission_livreur)
+            $table->foreignId('equipe_livraison_id')->nullable()->constrained('equipes_livraison')->nullOnDelete();
+            // Taux propriétaire : sa part sur la commission totale
+            $table->decimal('taux_commission_proprietaire', 5, 2)->default(0);
             $table->boolean('pris_en_charge_par_usine')->default(false);
-            $table->decimal('taux_commission_livreur', 8, 2)->nullable();
-            $table->boolean('commission_active')->default(false);
             $table->string('photo_path')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();

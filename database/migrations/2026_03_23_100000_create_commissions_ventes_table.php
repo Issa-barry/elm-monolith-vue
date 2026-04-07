@@ -8,18 +8,16 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Entête commission : une par commande livrée
         Schema::create('commissions_ventes', function (Blueprint $table) {
             $table->id();
             $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignId('commande_vente_id')->constrained('commandes_ventes')->cascadeOnDelete();
             $table->foreignId('vehicule_id')->constrained('vehicules')->restrictOnDelete();
-            $table->foreignId('livreur_id')->nullable()->constrained('livreurs')->nullOnDelete();
-            $table->string('livreur_nom')->nullable();          // snapshot
-            $table->decimal('taux_commission', 5, 2);           // snapshot %
-            $table->decimal('montant_commande', 15, 2);         // snapshot
-            $table->decimal('montant_commission', 15, 2);       // calculé
-            $table->decimal('montant_verse', 15, 2)->default(0);
-            $table->string('statut')->default('en_attente');
+            $table->decimal('montant_commande', 15, 2);          // snapshot total commande
+            $table->decimal('montant_commission_totale', 15, 2); // prix_vente - prix_usine
+            $table->decimal('montant_verse', 15, 2)->default(0); // agrégat dénormalisé
+            $table->string('statut')->default('en_attente');      // en_attente|partielle|versee|annulee
             $table->timestamps();
             $table->softDeletes();
         });

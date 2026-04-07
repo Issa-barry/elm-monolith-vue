@@ -51,6 +51,9 @@ class UserControllerTest extends TestCase
         $user->assignRole('admin_entreprise');
         $user->givePermissionTo('users.read');
 
+        $site = $this->createSite($org);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
         return $user;
     }
 

@@ -11,19 +11,15 @@ return new class extends Migration
         Schema::create('livreurs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->string('nom');
             $table->string('prenom');
-            $table->string('email')->nullable()->unique();
-            $table->string('telephone', 20)->unique();
-            $table->text('adresse')->nullable();
-            $table->string('ville', 100);
-            $table->string('pays', 100);
-            $table->string('code_pays', 5);
-            $table->string('code_phone_pays', 10);
+            $table->string('telephone', 30);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
+
+            // Unicité du téléphone par organisation (pas globale multi-org)
+            $table->unique(['telephone', 'organization_id']);
         });
     }
 

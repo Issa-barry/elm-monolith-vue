@@ -4,6 +4,7 @@ namespace Tests\Feature\Authorization;
 
 use App\Models\Client;
 use App\Models\Organization;
+use App\Models\Site;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,6 +32,16 @@ class ClientAuthorizationTest extends TestCase
     {
         $user = User::factory()->create(['organization_id' => $orgId]);
         $user->assignRole($role);
+
+        if ($orgId) {
+            $site = Site::create([
+                'organization_id' => $orgId,
+                'nom' => 'Site Test',
+                'type' => 'depot',
+                'localisation' => 'Conakry',
+            ]);
+            $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+        }
 
         return $user;
     }
