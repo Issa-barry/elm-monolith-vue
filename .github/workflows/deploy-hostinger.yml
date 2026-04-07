@@ -154,7 +154,36 @@ jobs:
           "$PHP_BIN" artisan migrate --force
           "$PHP_BIN" artisan optimize:clear
           "$PHP_BIN" artisan optimize
-          "$PHP_BIN" artisan storage:link || true
+          STORAGE_SOURCE_PATH="$DEPLOY_PATH/storage/app/public"
+          STORAGE_LINK_PATH="$DEPLOY_PATH/public/storage"
+          mkdir -p "$STORAGE_SOURCE_PATH"
+
+          # Hostinger can disable PHP exec/symlink, so avoid relying only on `artisan storage:link`.
+          # Strategy:
+          # 1) prefer a real symlink (fast, canonical Laravel setup)
+          # 2) if symlink is not possible, mirror files into public/storage
+          if [ -L "$STORAGE_LINK_PATH" ]; then
+            echo "Storage link already exists: $STORAGE_LINK_PATH"
+          elif [ -d "$STORAGE_LINK_PATH" ]; then
+            echo "Storage path is a directory, sync files into it: $STORAGE_LINK_PATH"
+            if command -v rsync >/dev/null 2>&1; then
+              rsync -a --delete "$STORAGE_SOURCE_PATH"/ "$STORAGE_LINK_PATH"/
+            else
+              cp -a "$STORAGE_SOURCE_PATH"/. "$STORAGE_LINK_PATH"/
+            fi
+          elif [ -e "$STORAGE_LINK_PATH" ]; then
+            echo "Warning: $STORAGE_LINK_PATH exists and is not a directory/symlink. Skipping storage setup."
+          elif ln -s "$STORAGE_SOURCE_PATH" "$STORAGE_LINK_PATH" 2>/dev/null; then
+            echo "Created storage symlink: $STORAGE_LINK_PATH -> $STORAGE_SOURCE_PATH"
+          else
+            echo "Could not create symlink, fallback to directory sync."
+            mkdir -p "$STORAGE_LINK_PATH"
+            if command -v rsync >/dev/null 2>&1; then
+              rsync -a --delete "$STORAGE_SOURCE_PATH"/ "$STORAGE_LINK_PATH"/
+            else
+              cp -a "$STORAGE_SOURCE_PATH"/. "$STORAGE_LINK_PATH"/
+            fi
+          fi
           # Supprime les fichiers legacy qui ne doivent plus exister
           rm -f resources/views/welcome.blade.php
           "$PHP_BIN" artisan up

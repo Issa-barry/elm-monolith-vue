@@ -135,7 +135,6 @@ function handleConfirm() {
                         v-model="form.prenom"
                         class="w-full"
                         :class="{ 'p-invalid': errors.prenom }"
-                        placeholder="Ibrahima"
                         autofocus
                         @keyup.enter="handleConfirm"
                     />
@@ -158,7 +157,6 @@ function handleConfirm() {
                         v-model="form.nom"
                         class="w-full"
                         :class="{ 'p-invalid': errors.nom }"
-                        placeholder="CAMARA"
                         @keyup.enter="handleConfirm"
                     />
                     <p v-if="errors.nom" class="mt-1 text-xs text-destructive">
@@ -180,7 +178,6 @@ function handleConfirm() {
                     v-model="form.telephone"
                     class="w-full"
                     :class="{ 'p-invalid': errors.telephone }"
-                    placeholder="+224622000001"
                     @keyup.enter="handleConfirm"
                 />
                 <p

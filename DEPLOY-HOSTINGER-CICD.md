@@ -29,7 +29,7 @@ Sur chaque push sur `main` (ou lancement manuel):
    - `php artisan migrate --force`
    - `php artisan optimize:clear`
    - `php artisan optimize`
-   - `php artisan storage:link` (si non present)
+   - assure `public/storage` (symlink si possible, sinon copie miroir de `storage/app/public`)
 
 ## Secrets GitHub a configurer
 
@@ -48,7 +48,7 @@ Dans GitHub: `Settings` -> `Secrets and variables` -> `Actions` -> `New reposito
 3. Lancer une fois:
    ```bash
    php artisan key:generate
-   php artisan storage:link
+   ln -s "$PWD/storage/app/public" "$PWD/public/storage" || true
    ```
 4. Verifier que la base de donnees de production est correcte.
 
