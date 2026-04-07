@@ -28,6 +28,7 @@ import DataTable from 'primevue/datatable';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
@@ -60,9 +61,34 @@ const toast = useToast();
 
 const search = ref('');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
+const ALL_TYPES = '__all_types__';
+const selectedType = ref<string>(ALL_TYPES);
 watch(search, (val) => {
     filters.value.global.value = val;
 });
+
+const typeOptions = computed(() => {
+    const map = new Map<string, string>();
+
+    props.sites.forEach((s) => {
+        if (s.type) {
+            map.set(s.type, s.type_label);
+        }
+    });
+
+    return [
+        { label: 'Tous les types', value: ALL_TYPES },
+        ...Array.from(map.entries())
+            .map(([value, label]) => ({ value, label }))
+            .sort((a, b) => a.label.localeCompare(b.label, 'fr')),
+    ];
+});
+
+const desktopTypeFiltered = computed(() =>
+    selectedType.value === ALL_TYPES
+        ? props.sites
+        : props.sites.filter((s) => s.type === selectedType.value),
+);
 
 const mobileFiltered = computed(() => {
     const q = search.value.trim().toLowerCase();
@@ -295,16 +321,14 @@ function confirmDelete(s: Site) {
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="sites"
-                    :paginator="sites.length > 20"
+                    :value="desktopTypeFiltered"
+                    :paginator="desktopTypeFiltered.length > 20"
                     :rows="20"
                     :global-filter-fields="[
                         'nom',
                         'code',
                         'type_label',
                         'statut_label',
-                        'ville',
-                        'parent_nom',
                         'localisation',
                         'telephone',
                     ]"
@@ -334,9 +358,16 @@ function confirmDelete(s: Site) {
                                     class="w-full text-sm"
                                 />
                             </IconField>
+                            <Select
+                                v-model="selectedType"
+                                :options="typeOptions"
+                                option-label="label"
+                                option-value="value"
+                                class="w-44"
+                            />
                             <span class="text-xs text-muted-foreground"
-                                >{{ sites.length }} résultat{{
-                                    sites.length !== 1 ? 's' : ''
+                                >{{ desktopTypeFiltered.length }} résultat{{
+                                    desktopTypeFiltered.length !== 1 ? 's' : ''
                                 }}</span
                             >
                         </div>
@@ -388,52 +419,6 @@ function confirmDelete(s: Site) {
                         </template>
                     </Column>
 
-                    <!-- Statut -->
-                    <Column
-                        field="statut_label"
-                        header="Statut"
-                        sortable
-                        style="width: 120px"
-                    >
-                        <template #body="{ data }">
-                            <StatusDot
-                                :label="data.statut_label"
-                                :dot-class="
-                                    data.statut === 'active'
-                                        ? 'bg-emerald-500'
-                                        : 'bg-zinc-400 dark:bg-zinc-500'
-                                "
-                                class="text-muted-foreground"
-                            />
-                        </template>
-                    </Column>
-
-                    <!-- Parent -->
-                    <Column
-                        field="parent_nom"
-                        header="Parent"
-                        style="min-width: 160px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground">{{
-                                data.parent_nom ?? '—'
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Ville -->
-                    <Column
-                        field="ville"
-                        header="Ville"
-                        style="min-width: 120px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground">{{
-                                data.ville ?? '—'
-                            }}</span>
-                        </template>
-                    </Column>
-
                     <!-- Adresse -->
                     <Column
                         field="localisation"
@@ -458,6 +443,26 @@ function confirmDelete(s: Site) {
                                 class="whitespace-nowrap text-muted-foreground tabular-nums"
                                 >{{ formatPhoneDisplay(data.telephone) }}</span
                             >
+                        </template>
+                    </Column>
+
+                    <!-- Statut -->
+                    <Column
+                        field="statut_label"
+                        header="Statut"
+                        sortable
+                        style="width: 120px"
+                    >
+                        <template #body="{ data }">
+                            <StatusDot
+                                :label="data.statut_label"
+                                :dot-class="
+                                    data.statut === 'active'
+                                        ? 'bg-emerald-500'
+                                        : 'bg-zinc-400 dark:bg-zinc-500'
+                                "
+                                class="text-muted-foreground"
+                            />
                         </template>
                     </Column>
 

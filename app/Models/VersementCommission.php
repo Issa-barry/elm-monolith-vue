@@ -15,9 +15,8 @@ class VersementCommission extends Model
     protected $table = 'versements_commissions';
 
     protected $fillable = [
-        'commission_vente_id',
+        'commission_part_id',
         'montant',
-        'beneficiaire',
         'date_versement',
         'mode_paiement',
         'note',
@@ -37,13 +36,16 @@ class VersementCommission extends Model
     {
         static::creating(fn (VersementCommission $v) => $v->created_by = Auth::id());
 
-        static::created(fn (VersementCommission $v) => $v->commission->recalculStatut());
-        static::deleted(fn (VersementCommission $v) => $v->commission->recalculStatut());
+        // Après chaque création/suppression, recalculer la part puis la commission globale
+        static::created(fn (VersementCommission $v) => $v->part->recalculStatut());
+        static::deleted(fn (VersementCommission $v) => $v->part->recalculStatut());
     }
 
-    public function commission(): BelongsTo
+    // ── Relations ─────────────────────────────────────────────────────────────
+
+    public function part(): BelongsTo
     {
-        return $this->belongsTo(CommissionVente::class, 'commission_vente_id');
+        return $this->belongsTo(CommissionPart::class, 'commission_part_id');
     }
 
     public function creator(): BelongsTo

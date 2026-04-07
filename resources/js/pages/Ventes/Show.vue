@@ -5,11 +5,19 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Plus, Trash2, XCircle } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    CheckCircle,
+    Lock,
+    Pencil,
+    Plus,
+    Trash2,
+    XCircle,
+} from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
-import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
@@ -62,7 +70,14 @@ interface CommandeData {
     site_nom: string | null;
     motif_annulation: string | null;
     annulee_at: string | null;
+    validated_at: string | null;
+    is_brouillon: boolean;
+    is_en_cours: boolean;
+    is_cloturee: boolean;
     is_annulee: boolean;
+    can_modifier: boolean;
+    can_valider: boolean;
+    can_annuler: boolean;
     created_at: string;
     created_by: string | null;
     lignes: LigneCommande[];
@@ -93,11 +108,11 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Statut couleurs ───────────────────────────────────────────────────────────
 const statutCommandeColor: Record<string, string> = {
+    brouillon: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
     en_cours: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    livree: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300',
     cloturee:
         'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    annulee: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
+    annulee: 'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400',
 };
 
 const statutFactureColor: Record<string, string> = {
@@ -113,14 +128,31 @@ function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
 
-function formatDate(val: string | null): string {
-    if (!val) return '—';
-    return new Date(val).toLocaleDateString('fr-FR');
-}
-
 function formatDateTime(val: string | null): string {
     if (!val) return '—';
     return new Date(val).toLocaleString('fr-FR');
+}
+
+// ── Actions de transition ─────────────────────────────────────────────────────
+const actionProcessing = ref(false);
+
+function valider() {
+    if (actionProcessing.value) return;
+    actionProcessing.value = true;
+    router.patch(
+        `/ventes/${props.commande.id}/valider`,
+        {},
+        {
+            onSuccess: () =>
+                toast.add({
+                    severity: 'success',
+                    summary: 'Validée',
+                    detail: 'Commande validée, facture créée.',
+                    life: 3000,
+                }),
+            onFinish: () => (actionProcessing.value = false),
+        },
+    );
 }
 
 // ── Annulation commande ───────────────────────────────────────────────────────
@@ -232,13 +264,13 @@ const progressPercent = computed(() => {
                         {{ commande.reference }}
                     </h1>
                     <p class="text-[11px] text-muted-foreground">
-                        {{ commande.date }}
+                        {{ commande.created_at }}
                     </p>
                 </div>
             </div>
         </div>
 
-        <div class="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
+        <div class="mr-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
             <!-- En-tête commande ──────────────────────────────────────────────── -->
             <div class="hidden items-start justify-between gap-4 sm:flex">
                 <div class="flex items-start gap-4">
@@ -272,26 +304,52 @@ const progressPercent = computed(() => {
                     </div>
                 </div>
 
-                <template v-if="!commande.is_annulee && can('ventes.update')">
-                    <span
-                        v-if="facture && facture.montant_encaisse > 0"
-                        class="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
-                        title="Des encaissements ont déjà été enregistrés sur cette commande."
+                <!-- Boutons d'action selon statut -->
+                <div class="flex items-center gap-2">
+                    <!-- Modifier (brouillon) -->
+                    <Link
+                        v-if="commande.can_modifier"
+                        :href="`/ventes/${commande.id}/edit`"
                     >
-                        <XCircle class="h-4 w-4" />
-                        Annulation impossible (encaissée)
-                    </span>
+                        <Button variant="outline" size="sm">
+                            <Pencil class="mr-2 h-4 w-4" />
+                            Modifier
+                        </Button>
+                    </Link>
+
+                    <!-- Valider (brouillon) -->
                     <Button
-                        v-else
-                        variant="outline"
+                        v-if="commande.can_valider"
                         size="sm"
-                        class="border-amber-300 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
-                        @click="annulerDialogVisible = true"
+                        :disabled="actionProcessing"
+                        @click="valider"
                     >
-                        <XCircle class="mr-2 h-4 w-4" />
-                        Annuler la commande
+                        <CheckCircle class="mr-2 h-4 w-4" />
+                        Valider la commande
                     </Button>
-                </template>
+
+                    <!-- Annuler (validée, admin uniquement) -->
+                    <template v-if="commande.can_annuler">
+                        <span
+                            v-if="facture && facture.montant_encaisse > 0"
+                            class="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
+                            title="Des encaissements ont déjà été enregistrés sur cette commande."
+                        >
+                            <Lock class="h-3.5 w-3.5" />
+                            Annulation impossible (encaissée)
+                        </span>
+                        <Button
+                            v-else
+                            variant="outline"
+                            size="sm"
+                            class="border-amber-300 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
+                            @click="annulerDialogVisible = true"
+                        >
+                            <XCircle class="mr-2 h-4 w-4" />
+                            Annuler la commande
+                        </Button>
+                    </template>
+                </div>
             </div>
 
             <!-- Infos générales -->
@@ -330,13 +388,27 @@ const progressPercent = computed(() => {
                     </div>
                 </div>
 
+                <!-- Dates de transition -->
+                <div
+                    v-if="commande.validated_at"
+                    class="mt-4 flex flex-wrap gap-4 border-t pt-4 text-xs text-muted-foreground"
+                >
+                    <span
+                        >Validée le
+                        <strong>{{ commande.validated_at }}</strong></span
+                    >
+                    <span v-if="commande.created_by"
+                        >par <strong>{{ commande.created_by }}</strong></span
+                    >
+                </div>
+
                 <!-- Motif annulation -->
                 <div
                     v-if="commande.is_annulee && commande.motif_annulation"
-                    class="mt-4 rounded-lg bg-zinc-100 p-4 dark:bg-zinc-800"
+                    class="mt-4 rounded-lg bg-red-50 p-4 dark:bg-red-950/30"
                 >
                     <p
-                        class="mb-1 text-xs font-medium tracking-wider text-zinc-600 uppercase dark:text-zinc-400"
+                        class="mb-1 text-xs font-medium tracking-wider text-red-600 uppercase dark:text-red-400"
                     >
                         Motif d'annulation
                     </p>
@@ -423,9 +495,9 @@ const progressPercent = computed(() => {
                 </div>
             </div>
 
-            <!-- Section facture (masquée : accessible via Menu Factures) -->
+            <!-- Section facture (visible uniquement si facture existe) -->
             <div
-                v-if="false"
+                v-if="facture"
                 class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
             >
                 <!-- En-tête facture -->
@@ -573,12 +645,12 @@ const progressPercent = computed(() => {
                                 :key="e.id"
                                 class="hover:bg-muted/10"
                             >
-                                <td class="px-4 py-3 tabular-nums">
-                                    {{ formatDate(e.date_encaissement) }}
-                                </td>
                                 <td
-                                    class="px-4 py-3 font-medium text-emerald-600 tabular-nums dark:text-emerald-400"
+                                    class="px-4 py-3 text-muted-foreground tabular-nums"
                                 >
+                                    {{ e.date_encaissement }}
+                                </td>
+                                <td class="px-4 py-3 font-medium tabular-nums">
                                     {{ formatGNF(e.montant) }}
                                 </td>
                                 <td class="px-4 py-3 text-muted-foreground">
@@ -630,16 +702,19 @@ const progressPercent = computed(() => {
                         Ajouter un encaissement
                     </p>
                     <form
-                        class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+                        class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
                         @submit.prevent="submitEncaissement"
                     >
                         <!-- Montant -->
                         <div>
-                            <Label class="mb-1.5 block text-xs"
-                                >Montant
-                                <span class="text-destructive">*</span></Label
+                            <Label
+                                for="encaissement-montant"
+                                class="mb-1.5 block text-xs"
                             >
+                                Montant <span class="text-destructive">*</span>
+                            </Label>
                             <InputNumber
+                                input-id="encaissement-montant"
                                 :model-value="encaissementForm.montant"
                                 @update:model-value="
                                     encaissementForm.montant = $event
@@ -666,38 +741,18 @@ const progressPercent = computed(() => {
                             </p>
                         </div>
 
-                        <!-- Date -->
-                        <div>
-                            <Label class="mb-1.5 block text-xs"
-                                >Date
-                                <span class="text-destructive">*</span></Label
-                            >
-                            <InputText
-                                v-model="encaissementForm.date_encaissement"
-                                type="date"
-                                class="w-full"
-                                :class="{
-                                    'p-invalid':
-                                        encaissementForm.errors
-                                            .date_encaissement,
-                                }"
-                            />
-                            <p
-                                v-if="encaissementForm.errors.date_encaissement"
-                                class="mt-1 text-xs text-destructive"
-                            >
-                                {{ encaissementForm.errors.date_encaissement }}
-                            </p>
-                        </div>
-
                         <!-- Mode paiement -->
                         <div>
-                            <Label class="mb-1.5 block text-xs"
-                                >Mode de paiement
-                                <span class="text-destructive">*</span></Label
+                            <Label
+                                for="encaissement-mode-paiement"
+                                class="mb-1.5 block text-xs"
                             >
-                            <Dropdown
+                                Mode de paiement
+                                <span class="text-destructive">*</span>
+                            </Label>
+                            <Select
                                 v-model="encaissementForm.mode_paiement"
+                                input-id="encaissement-mode-paiement"
                                 :options="modes_paiement"
                                 option-label="label"
                                 option-value="value"
@@ -717,8 +772,13 @@ const progressPercent = computed(() => {
 
                         <!-- Note -->
                         <div>
-                            <Label class="mb-1.5 block text-xs">Note</Label>
+                            <Label
+                                for="encaissement-note"
+                                class="mb-1.5 block text-xs"
+                                >Note</Label
+                            >
                             <InputText
+                                id="encaissement-note"
                                 v-model="encaissementForm.note as string"
                                 class="w-full"
                                 placeholder="Optionnel..."
@@ -727,7 +787,7 @@ const progressPercent = computed(() => {
 
                         <!-- Bouton submit -->
                         <div
-                            class="flex justify-end sm:col-span-2 lg:col-span-4"
+                            class="flex justify-end sm:col-span-2 lg:col-span-3"
                         >
                             <Button
                                 type="submit"
@@ -744,6 +804,15 @@ const progressPercent = computed(() => {
                         </div>
                     </form>
                 </div>
+            </div>
+
+            <!-- Brouillon : message informatif -->
+            <div
+                v-else-if="commande.is_brouillon"
+                class="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground"
+            >
+                La facture sera créée automatiquement lors de la validation de
+                la commande.
             </div>
         </div>
 
@@ -764,11 +833,12 @@ const progressPercent = computed(() => {
                     facture associée.
                 </p>
                 <div>
-                    <Label class="mb-1.5 block text-sm">
+                    <Label for="annulation-motif" class="mb-1.5 block text-sm">
                         Motif d'annulation
                         <span class="text-destructive">*</span>
                     </Label>
                     <Textarea
+                        id="annulation-motif"
                         v-model="annulerForm.motif_annulation"
                         rows="4"
                         class="w-full"

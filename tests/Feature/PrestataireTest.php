@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Features\ModuleFeature;
 use App\Models\Organization;
 use App\Models\Prestataire;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -17,6 +19,7 @@ class PrestataireTest extends TestCase
     {
         parent::setUp();
         $this->initOrgAndUser(['prestataires.read', 'prestataires.create', 'prestataires.update', 'prestataires.delete']);
+        Feature::for($this->org)->activate(ModuleFeature::PRESTATAIRES);
     }
 
     private function makePrestataire(Organization $org, array $overrides = []): Prestataire

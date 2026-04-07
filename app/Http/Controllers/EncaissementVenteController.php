@@ -46,6 +46,9 @@ class EncaissementVenteController extends Controller
 
         $facture_vente->recalculStatut();
 
+        // Auto-clôture si facture payée et commissions soldées
+        $facture_vente->commande?->cloturerSiComplete();
+
         return redirect()->back()->with('success', 'Encaissement enregistré.');
     }
 

@@ -51,6 +51,12 @@ const goToProductsSection = () => {
     globalThis.location.href = '/#landing-section';
 };
 
+const goToPublicPage = (path: string) => {
+    closeProductMenus();
+    isMobileMenuOpen.value = false;
+    router.visit(path);
+};
+
 const onDocumentClick = (event: MouseEvent) => {
     const target = event.target as Node | null;
 
@@ -190,12 +196,17 @@ onBeforeUnmount(() => {
                         <li>
                             <a
                                 class="flex px-0 py-2 font-medium transition-colors duration-150 hover:text-primary lg:px-4"
-                                @click="
-                                    closeProductMenus();
-                                    router.visit('/contact');
-                                "
+                                @click="goToPublicPage('/contact')"
                             >
                                 <span>Contact</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a
+                                class="flex px-0 py-2 font-medium transition-colors duration-150 hover:text-primary lg:px-4"
+                                @click="goToPublicPage('/help')"
+                            >
+                                <span>Aide</span>
                             </a>
                         </li>
                     </ul>

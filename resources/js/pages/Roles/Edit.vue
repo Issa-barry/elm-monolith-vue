@@ -64,10 +64,12 @@ const resourceLabels: Record<string, string> = {
     livreurs: 'Livreurs',
     proprietaires: 'Propriétaires',
     vehicules: 'Véhicules',
+    'equipes-livraison': 'Équipes livraison',
     sites: 'Sites',
     produits: 'Produits',
     packings: 'Packings',
     ventes: 'Ventes',
+    achats: 'Achats',
     users: 'Utilisateurs',
     parametres: 'Paramètres',
 };

@@ -14,26 +14,42 @@ class ProprietairesSeeder extends Seeder
 
         $proprietaires = [
             [
-                'nom' => 'Barry',
+                'nom' => 'BARRY',
                 'prenom' => 'Mamadou',
-                'email' => 'mamadou.barry@example.com',
+                'email' => 'mamadou.barry@elm.gn',
                 'telephone' => '+224621000001',
                 'adresse' => 'Kaloum, Conakry',
                 'is_active' => true,
             ],
             [
-                'nom' => 'Diallo',
+                'nom' => 'DIALLO',
                 'prenom' => 'Fatoumata',
-                'email' => 'fatoumata.diallo@example.com',
+                'email' => 'fatoumata.diallo@elm.gn',
                 'telephone' => '+224621000002',
                 'adresse' => 'Ratoma, Conakry',
+                'is_active' => true,
+            ],
+            [
+                'nom' => 'TOUNKARA',
+                'prenom' => 'Issa',
+                'email' => 'issa.tounkara@elm.gn',
+                'telephone' => '+224621000003',
+                'adresse' => 'Matoto, Conakry',
+                'is_active' => true,
+            ],
+            [
+                'nom' => 'CONDÉ',
+                'prenom' => 'Saran',
+                'email' => 'saran.conde@elm.gn',
+                'telephone' => '+224621000004',
+                'adresse' => 'Dixinn, Conakry',
                 'is_active' => true,
             ],
         ];
 
         foreach ($proprietaires as $data) {
             Proprietaire::firstOrCreate(
-                ['email' => $data['email'], 'organization_id' => $org->id],
+                ['telephone' => $data['telephone'], 'organization_id' => $org->id],
                 [...$data, 'organization_id' => $org->id]
             );
         }

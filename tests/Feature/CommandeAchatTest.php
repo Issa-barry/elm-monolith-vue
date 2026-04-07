@@ -3,11 +3,13 @@
 namespace Tests\Feature;
 
 use App\Enums\StatutCommandeAchat;
+use App\Features\ModuleFeature;
 use App\Models\CommandeAchat;
 use App\Models\Organization;
 use App\Models\Prestataire;
 use App\Models\Produit;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -20,6 +22,8 @@ class CommandeAchatTest extends TestCase
     {
         parent::setUp();
         $this->initOrgAndUser(['achats.read', 'achats.create', 'achats.update', 'achats.delete']);
+        // Le module achats est désactivé par défaut — l'activer pour les tests
+        Feature::for($this->org)->activate(ModuleFeature::ACHATS);
     }
 
     private function makeContext(Organization $org): array

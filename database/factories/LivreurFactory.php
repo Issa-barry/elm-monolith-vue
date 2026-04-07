@@ -13,12 +13,7 @@ class LivreurFactory extends Factory
             'organization_id' => Organization::factory(),
             'nom' => fake()->lastName(),
             'prenom' => fake()->firstName(),
-            'email' => fake()->unique()->safeEmail(),
-            'telephone' => '+224'.fake()->numerify('#########'),
-            'ville' => fake()->city(),
-            'pays' => 'Guinée',
-            'code_pays' => 'GN',
-            'code_phone_pays' => '+224',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
             'is_active' => true,
         ];
     }

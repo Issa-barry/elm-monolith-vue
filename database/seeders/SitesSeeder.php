@@ -14,35 +14,68 @@ class SitesSeeder extends Seeder
     {
         $org = Organization::where('slug', 'elm')->firstOrFail();
 
-        // Créer le siège en premier (parent)
-        $siege = Site::firstOrCreate(
-            ['nom' => 'Matoto', 'organization_id' => $org->id],
-            [
-                'nom' => 'Matoto',
-                'type' => SiteType::SIEGE->value,
-                'statut' => SiteStatut::ACTIVE->value,
-                'ville' => 'Conakry',
-                'pays' => 'Guinée',
-                'localisation' => 'Matoto, Conakry',
-                'telephone' => '+224620000002',
-                'organization_id' => $org->id,
-            ]
-        );
+        $matoto = $this->upsertSite($org->id, [
+            'nom' => 'Matoto',
+            'type' => SiteType::SIEGE->value,
+            'localisation' => 'Matoto',
+        ]);
 
-        // Kouria rattaché au siège
-        Site::firstOrCreate(
-            ['nom' => 'Kouria', 'organization_id' => $org->id],
+        $sitesRattaches = [
             [
-                'nom' => 'Kouria',
+                'nom' => 'Lansanaya',
                 'type' => SiteType::USINE->value,
-                'statut' => SiteStatut::ACTIVE->value,
-                'ville' => 'Conakry',
-                'pays' => 'Guinée',
-                'localisation' => 'Kouria, Conakry',
-                'telephone' => '+224620000001',
-                'parent_id' => $siege->id,
-                'organization_id' => $org->id,
-            ]
-        );
+                'localisation' => 'Lansanaya Barrage',
+            ],
+            [
+                'nom' => 'Lambagny',
+                'type' => SiteType::AGENCE->value,
+                'localisation' => 'Lambagny carrefour canadien',
+            ],
+            [
+                'nom' => 'Dabompa',
+                'type' => SiteType::DEPOT->value,
+                'localisation' => 'Tamisso',
+            ],
+        ];
+
+        foreach ($sitesRattaches as $siteData) {
+            $this->upsertSite($org->id, $siteData, $matoto->id);
+        }
+    }
+
+    /**
+     * Create/update site and keep existing phone if already present.
+     */
+    private function upsertSite(int $organizationId, array $data, ?int $parentId = null): Site
+    {
+        $site = Site::firstOrNew([
+            'organization_id' => $organizationId,
+            'nom' => $data['nom'],
+        ]);
+
+        $site->fill([
+            'organization_id' => $organizationId,
+            'nom' => $data['nom'],
+            'type' => $data['type'],
+            'statut' => SiteStatut::ACTIVE->value,
+            'ville' => 'Conakry',
+            'pays' => 'Guinee',
+            'localisation' => $data['localisation'],
+            'quartier' => $data['nom'],
+            'parent_id' => $parentId,
+        ]);
+
+        if (! $site->exists || empty($site->telephone)) {
+            $site->telephone = $this->randomGnPhone();
+        }
+
+        $site->save();
+
+        return $site;
+    }
+
+    private function randomGnPhone(): string
+    {
+        return '+2246'.str_pad((string) random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
     }
 }

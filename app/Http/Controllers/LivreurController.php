@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CommissionPart;
 use App\Models\Livreur;
-use App\Traits\PhoneHandlerTrait;
-use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -12,43 +12,38 @@ use Inertia\Response;
 
 class LivreurController extends Controller
 {
-    use PhoneHandlerTrait;
-
+    /**
+     * Liste lecture seule — la gestion s'effectue depuis les Équipes de livraison.
+     */
     public function index(): Response
     {
         $this->authorize('viewAny', Livreur::class);
 
-        $livreurs = Livreur::where('organization_id', auth()->user()->organization_id)
+        $livreurs = Livreur::with('equipes')
+            ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom')
             ->get()
             ->map(fn (Livreur $l) => [
                 'id' => $l->id,
                 'nom' => $l->nom,
                 'prenom' => $l->prenom,
-                'nom_complet' => trim("{$l->prenom} {$l->nom}"),
-                'email' => $l->email,
+                'nom_complet' => $l->nom_complet,
                 'telephone' => $l->telephone,
-                'code_phone_pays' => $l->code_phone_pays,
-                'adresse' => $l->adresse,
-                'ville' => $l->ville,
-                'pays' => $l->pays,
-                'code_pays' => $l->code_pays,
                 'is_active' => $l->is_active,
+                'equipes' => $l->equipes->map(fn ($e) => [
+                    'id' => $e->id,
+                    'nom' => $e->nom,
+                    'role' => $e->pivot->role,
+                ])->values(),
             ]);
 
-        return Inertia::render('Livreurs/Index', [
-            'livreurs' => $livreurs,
-        ]);
+        return Inertia::render('Livreurs/Index', ['livreurs' => $livreurs]);
     }
 
-    public function create(): Response
-    {
-        $this->authorize('create', Livreur::class);
-
-        return Inertia::render('Livreurs/Create');
-    }
-
-    public function store(Request $request): RedirectResponse
+    /**
+     * Crée un livreur depuis la modal Équipe — retourne JSON.
+     */
+    public function store(Request $request): JsonResponse
     {
         $this->authorize('create', Livreur::class);
 
@@ -58,101 +53,65 @@ class LivreurController extends Controller
         $data = $request->validate([
             'nom' => 'required|string|max:255',
             'prenom' => 'required|string|max:255',
-            'email' => 'nullable|email:rfc,dns|max:255|unique:livreurs,email',
-            'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/', 'unique:livreurs,telephone'],
-            'code_pays' => ['required', Rule::in(array_keys(static::supportedPays()))],
-            'ville' => 'required|string|max:100',
-            'adresse' => 'nullable|string|max:500',
-            'is_active' => 'boolean',
-        ], $this->validationMessages());
-
-        $data = $this->resolveCountryData($data);
-        $this->validateLocalPhoneLength($data);
-
-        $data = $this->normalizePersonData($data);
-
-        Livreur::create([...$data, 'organization_id' => $orgId]);
-
-        return redirect()->route('livreurs.index')
-            ->with('success', 'Livreur créé avec succès.');
-    }
-
-    public function edit(Livreur $livreur): Response
-    {
-        $this->authorize('update', $livreur);
-
-        [$telephone, $codePhonePays, $codePays, $pays] = $this->splitPhone(
-            $livreur->telephone,
-            $livreur->code_phone_pays,
-            $livreur->code_pays,
-            $livreur->pays,
-        );
-
-        return Inertia::render('Livreurs/Edit', [
-            'livreur' => [
-                'id' => $livreur->id,
-                'nom' => $livreur->nom,
-                'prenom' => $livreur->prenom,
-                'email' => $livreur->email,
-                'telephone' => $telephone,
-                'adresse' => $livreur->adresse,
-                'ville' => $livreur->ville,
-                'pays' => $pays,
-                'code_pays' => $codePays,
-                'code_phone_pays' => $codePhonePays,
-                'is_active' => $livreur->is_active,
+            'telephone' => [
+                'required', 'string', 'max:30',
+                Rule::unique('livreurs', 'telephone')->where('organization_id', $orgId),
             ],
-        ]);
-    }
-
-    public function update(Request $request, Livreur $livreur): RedirectResponse
-    {
-        $this->authorize('update', $livreur);
-
-        $data = $request->validate([
-            'nom' => 'required|string|max:255',
-            'prenom' => 'required|string|max:255',
-            'email' => ['nullable', 'email:rfc,dns', 'max:255', Rule::unique('livreurs', 'email')->ignore($livreur->id)],
-            'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/', Rule::unique('livreurs', 'telephone')->ignore($livreur->id)],
-            'code_pays' => ['required', Rule::in(array_keys(static::supportedPays()))],
-            'ville' => 'required|string|max:100',
-            'adresse' => 'nullable|string|max:500',
-            'is_active' => 'boolean',
-        ], $this->validationMessages());
-
-        $data = $this->resolveCountryData($data);
-        $this->validateLocalPhoneLength($data);
-
-        $data = $this->normalizePersonData($data);
-
-        $livreur->update($data);
-
-        return redirect()->route('livreurs.edit', $livreur)
-            ->with('success', 'Livreur mis à jour avec succès.');
-    }
-
-    private function validationMessages(): array
-    {
-        return [
+        ], [
             'nom.required' => 'Le nom est obligatoire.',
             'prenom.required' => 'Le prénom est obligatoire.',
-            'email.email' => "L'adresse email est invalide.",
-            'email.unique' => 'Cet email est déjà utilisé.',
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
-            'telephone.regex' => 'Le numéro de téléphone est invalide.',
-            'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé.',
-            'code_pays.required' => 'Le pays est obligatoire.',
-            'code_pays.in' => 'Pays invalide.',
-            'ville.required' => 'La ville est obligatoire.',
-        ];
+            'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé dans votre organisation.',
+        ]);
+
+        $livreur = Livreur::create([...$data, 'organization_id' => $orgId, 'is_active' => true]);
+
+        return response()->json([
+            'id' => $livreur->id,
+            'value' => $livreur->id,
+            'label' => $livreur->nom_complet,
+            'nom' => $livreur->nom,
+            'prenom' => $livreur->prenom,
+            'telephone' => $livreur->telephone,
+            'is_active' => true,
+        ], 201);
     }
 
-    public function destroy(Livreur $livreur): RedirectResponse
+    /**
+     * Active / désactive un livreur depuis la fiche Équipe — retourne JSON.
+     */
+    public function toggle(Livreur $livreur): JsonResponse
+    {
+        $this->authorize('update', $livreur);
+
+        $livreur->update(['is_active' => ! $livreur->is_active]);
+
+        return response()->json(['is_active' => $livreur->is_active]);
+    }
+
+    /**
+     * Supprime un livreur :
+     *  - Suppression physique (soft) s'il n'a pas d'historique de commissions.
+     *  - Désactivation logique s'il est référencé dans des commission_parts.
+     */
+    public function destroy(Livreur $livreur): JsonResponse
     {
         $this->authorize('delete', $livreur);
+
+        $hasHistory = CommissionPart::where('livreur_id', $livreur->id)->exists();
+
+        if ($hasHistory) {
+            $livreur->update(['is_active' => false]);
+
+            return response()->json([
+                'action' => 'deactivated',
+                'message' => 'Ce livreur est référencé dans des commissions. Il a été désactivé plutôt que supprimé.',
+                'is_active' => false,
+            ]);
+        }
+
         $livreur->delete();
 
-        return redirect()->route('livreurs.index')
-            ->with('success', 'Livreur supprimé.');
+        return response()->json(['action' => 'deleted']);
     }
 }

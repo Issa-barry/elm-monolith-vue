@@ -886,20 +886,28 @@ class ModelTest extends TestCase
 
         $commission = \App\Models\CommissionVente::factory()->create([
             'organization_id' => $org->id,
-            'montant_commission' => 5000,
-            'montant_part_livreur' => 5000,
-            'montant_part_proprietaire' => 0,
+        ]);
+
+        $part = $commission->parts()->create([
+            'type_beneficiaire' => 'livreur',
+            'beneficiaire_nom' => 'Test Livreur',
+            'taux_commission' => 100,
+            'montant_brut' => 5000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 5000,
+            'montant_verse' => 0,
+            'statut' => \App\Enums\StatutCommission::EN_ATTENTE,
         ]);
 
         $vc = VersementCommission::create([
-            'commission_vente_id' => $commission->id,
+            'commission_part_id' => $part->id,
             'montant' => 1000,
-            'beneficiaire' => 'livreur',
             'date_versement' => now()->toDateString(),
             'mode_paiement' => 'especes',
         ]);
 
-        $this->assertInstanceOf(\App\Models\CommissionVente::class, $vc->commission);
+        $this->assertInstanceOf(\App\Models\CommissionPart::class, $vc->part);
+        $this->assertEquals($user->id, $vc->created_by);
     }
 
     // ── EncaissementVente ─────────────────────────────────────────────────────

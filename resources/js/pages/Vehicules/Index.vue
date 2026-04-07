@@ -31,6 +31,12 @@ import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
+interface EquipeMembre {
+    livreur_nom: string;
+    taux_commission: number;
+    role: string;
+}
+
 interface Vehicule {
     id: number;
     nom_vehicule: string;
@@ -42,9 +48,9 @@ interface Vehicule {
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     proprietaire_code_phone_pays: string | null;
-    livreur_nom: string | null;
-    livreur_telephone: string | null;
-    livreur_code_phone_pays: string | null;
+    equipe_nom: string | null;
+    livreur_principal_nom: string | null;
+    equipe_membres: EquipeMembre[];
     photo_url: string | null;
     is_active: boolean;
 }
@@ -70,7 +76,7 @@ const mobileFiltered = computed(() => {
             v.immatriculation.toLowerCase().includes(q) ||
             v.type_label.toLowerCase().includes(q) ||
             (v.proprietaire_nom ?? '').toLowerCase().includes(q) ||
-            (v.livreur_nom ?? '').toLowerCase().includes(q),
+            (v.equipe_nom ?? '').toLowerCase().includes(q),
     );
 });
 
@@ -286,7 +292,7 @@ function confirmDelete(v: Vehicule) {
                         'immatriculation',
                         'type_label',
                         'proprietaire_nom',
-                        'livreur_nom',
+                        'equipe_nom',
                     ]"
                     v-model:filters="filters"
                     data-key="id"
@@ -421,27 +427,22 @@ function confirmDelete(v: Vehicule) {
                         </template>
                     </Column>
 
-                    <!-- Livreur -->
+                    <!-- Équipe -->
                     <Column
-                        field="livreur_nom"
-                        header="Livreur"
+                        field="equipe_nom"
+                        header="Équipe"
                         style="min-width: 180px"
                     >
                         <template #body="{ data }">
                             <div class="leading-tight">
                                 <div class="text-muted-foreground">
-                                    {{ data.livreur_nom ?? '�' }}
+                                    {{ data.equipe_nom ?? '—' }}
                                 </div>
                                 <div
-                                    v-if="data.livreur_telephone"
-                                    class="mt-1 text-xs text-muted-foreground/80 tabular-nums"
+                                    v-if="data.livreur_principal_nom"
+                                    class="mt-0.5 text-xs text-muted-foreground/70"
                                 >
-                                    {{
-                                        formatPhoneDisplay(
-                                            data.livreur_telephone,
-                                            data.livreur_code_phone_pays,
-                                        )
-                                    }}
+                                    {{ data.livreur_principal_nom }}
                                 </div>
                             </div>
                         </template>

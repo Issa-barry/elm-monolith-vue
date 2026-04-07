@@ -30,7 +30,9 @@ class ClientSeeder extends Seeder
         ];
 
         foreach ($clients as $data) {
-            $user = User::firstOrCreate(
+            // updateOrCreate garantit que le mot de passe est toujours réinitialisé
+            // lors d'un re-seed, même si le compte existe déjà.
+            $user = User::updateOrCreate(
                 ['telephone' => $data['telephone']],
                 [
                     'prenom' => $data['prenom'],

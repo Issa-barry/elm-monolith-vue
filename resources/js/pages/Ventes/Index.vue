@@ -15,8 +15,10 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    CheckCircle,
     ChevronRight,
     MoreVertical,
+    Pencil,
     Plus,
     Search,
     ShoppingCart,
@@ -48,6 +50,11 @@ interface Commande {
     facture_montant_restant: number | null;
     created_at: string;
     is_annulee: boolean;
+    is_brouillon: boolean;
+    is_en_cours: boolean;
+    can_modifier: boolean;
+    can_valider: boolean;
+    can_annuler: boolean;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -70,10 +77,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Statut couleurs ───────────────────────────────────────────────────────────
 const statutCommandeColor: Record<string, string> = {
+    brouillon: 'bg-zinc-400 dark:bg-zinc-500',
     en_cours: 'bg-blue-500',
-    livree: 'bg-purple-500',
     cloturee: 'bg-emerald-500',
-    annulee: 'bg-zinc-400 dark:bg-zinc-500',
+    annulee: 'bg-red-400',
 };
 
 const statutFactureColor: Record<string, string> = {
@@ -100,6 +107,28 @@ const mobileFiltered = computed(() => {
             (c.client_nom && c.client_nom.toLowerCase().includes(q)),
     );
 });
+
+// ── Validation ────────────────────────────────────────────────────────────────
+const validationProcessing = ref(false);
+
+function valider(commande: Commande) {
+    if (validationProcessing.value) return;
+    validationProcessing.value = true;
+    router.patch(
+        `/ventes/${commande.id}/valider`,
+        {},
+        {
+            onSuccess: () =>
+                toast.add({
+                    severity: 'success',
+                    summary: 'Validée',
+                    detail: 'Commande validée, facture créée.',
+                    life: 3000,
+                }),
+            onFinish: () => (validationProcessing.value = false),
+        },
+    );
+}
 
 // ── Annulation ────────────────────────────────────────────────────────────────
 const annulerDialogVisible = ref(false);
@@ -394,6 +423,29 @@ function confirmDelete(c: Commande) {
                         </template>
                     </Column>
 
+                    <!-- Restant dû -->
+                    <Column
+                        field="facture_montant_restant"
+                        header="Restant dû"
+                        sortable
+                        style="width: 150px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                v-if="data.facture_montant_restant !== null"
+                                class="font-medium tabular-nums"
+                                :class="
+                                    data.facture_montant_restant > 0
+                                        ? 'text-amber-600 dark:text-amber-400'
+                                        : 'text-emerald-600 dark:text-emerald-400'
+                                "
+                            >
+                                {{ formatGNF(data.facture_montant_restant) }}
+                            </span>
+                            <span v-else class="text-muted-foreground">—</span>
+                        </template>
+                    </Column>
+
                     <!-- Statut commande -->
                     <Column
                         field="statut"
@@ -434,29 +486,6 @@ function confirmDelete(c: Commande) {
                         </template>
                     </Column>
 
-                    <!-- Restant dû -->
-                    <Column
-                        field="facture_montant_restant"
-                        header="Restant dû"
-                        sortable
-                        style="width: 150px"
-                    >
-                        <template #body="{ data }">
-                            <span
-                                v-if="data.facture_montant_restant !== null"
-                                class="font-medium tabular-nums"
-                                :class="
-                                    data.facture_montant_restant > 0
-                                        ? 'text-amber-600 dark:text-amber-400'
-                                        : 'text-emerald-600 dark:text-emerald-400'
-                                "
-                            >
-                                {{ formatGNF(data.facture_montant_restant) }}
-                            </span>
-                            <span v-else class="text-muted-foreground">—</span>
-                        </template>
-                    </Column>
-
                     <!-- Actions -->
                     <Column header="" style="width: 56px">
                         <template #body="{ data }">
@@ -485,10 +514,28 @@ function confirmDelete(c: Commande) {
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            v-if="
-                                                !data.is_annulee &&
-                                                can('ventes.update')
-                                            "
+                                            v-if="data.can_modifier"
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="`/ventes/${data.id}/edit`"
+                                                class="flex w-full cursor-pointer items-center gap-2"
+                                            >
+                                                <Pencil class="h-4 w-4" />
+                                                Modifier
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            v-if="data.can_valider"
+                                            class="cursor-pointer text-blue-600 focus:text-blue-600"
+                                            :disabled="validationProcessing"
+                                            @click="valider(data)"
+                                        >
+                                            <CheckCircle class="h-4 w-4" />
+                                            Valider
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            v-if="data.can_annuler"
                                             class="cursor-pointer text-amber-600 focus:text-amber-600"
                                             @click="openAnnulerDialog(data)"
                                         >

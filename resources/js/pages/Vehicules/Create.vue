@@ -10,6 +10,11 @@ interface Option {
     value: number | string;
     label: string;
 }
+interface EquipeOption {
+    value: number;
+    label: string;
+    somme_taux: number;
+}
 interface TypeOption {
     value: string;
     label: string;
@@ -18,7 +23,7 @@ interface TypeOption {
 
 defineProps<{
     proprietaires: Option[];
-    livreurs: Option[];
+    equipes: EquipeOption[];
     types: TypeOption[];
 }>();
 
@@ -34,9 +39,8 @@ const form = useForm({
     type_vehicule: null as string | null,
     capacite_packs: null as number | null,
     proprietaire_id: null as number | null,
-    livreur_principal_id: null as number | null,
+    equipe_livraison_id: null as number | null,
     pris_en_charge_par_usine: false,
-    taux_commission_livreur: null as number | null,
     taux_commission_proprietaire: null as number | null,
     photo: null as File | null,
     is_active: true,
@@ -70,8 +74,8 @@ function submit() {
             </div>
         </div>
 
-        <div class="mx-auto max-w-3xl pb-6 sm:p-6">
-            <div class="mx-auto hidden max-w-3xl px-6 pt-6 pb-0 sm:block">
+        <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
+            <div class="hidden sm:block">
                 <div class="mb-8">
                     <h1 class="text-2xl font-semibold tracking-tight">
                         Nouveau véhicule
@@ -87,8 +91,9 @@ function submit() {
                 :errors="form.errors"
                 :processing="form.processing"
                 :proprietaires="proprietaires"
-                :livreurs="livreurs"
+                :equipes="equipes"
                 :types="types"
+                :affectation-first="true"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

@@ -31,6 +31,8 @@ class CommandeVente extends Model
         'motif_annulation',
         'annulee_at',
         'annulee_par',
+        'validated_at',
+        'closed_at',
         'created_by',
         'updated_by',
     ];
@@ -43,6 +45,8 @@ class CommandeVente extends Model
             'total_commande' => 'decimal:2',
             'statut' => StatutCommandeVente::class,
             'annulee_at' => 'datetime',
+            'validated_at' => 'datetime',
+            'closed_at' => 'datetime',
         ];
     }
 
@@ -53,7 +57,7 @@ class CommandeVente extends Model
                 $c->reference = self::TEMP_PREFIX.Str::uuid();
             }
             if (empty($c->statut)) {
-                $c->statut = StatutCommandeVente::EN_COURS;
+                $c->statut = StatutCommandeVente::BROUILLON;
             }
             if (Auth::check()) {
                 $c->created_by = Auth::id();
@@ -110,6 +114,11 @@ class CommandeVente extends Model
         return $this->hasOne(FactureVente::class);
     }
 
+    public function commissions(): HasMany
+    {
+        return $this->hasMany(CommissionVente::class, 'commande_vente_id');
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -132,7 +141,22 @@ class CommandeVente extends Model
         return $this->statut instanceof StatutCommandeVente ? $this->statut->label() : '';
     }
 
-    // ── Méthodes métier ───────────────────────────────────────────────────────
+    // ── Méthodes d'état ───────────────────────────────────────────────────────
+
+    public function isBrouillon(): bool
+    {
+        return $this->statut === StatutCommandeVente::BROUILLON;
+    }
+
+    public function isEnCours(): bool
+    {
+        return $this->statut === StatutCommandeVente::EN_COURS;
+    }
+
+    public function isCloturee(): bool
+    {
+        return $this->statut === StatutCommandeVente::CLOTUREE;
+    }
 
     public function isAnnulee(): bool
     {
@@ -144,21 +168,37 @@ class CommandeVente extends Model
         return number_format((float) $this->total_commande, 0, ',', ' ').' GNF';
     }
 
+    // ── Auto-clôture sur paiement complet ─────────────────────────────────────
+
+    /**
+     * Clôture automatiquement la commande si :
+     *  - la facture est entièrement payée (isPayee)
+     *  - ET toutes les commissions associées sont entièrement versées (ou il n'y en a pas)
+     *
+     * N'agit que sur les commandes en statut EN_COURS.
+     */
     public function cloturerSiComplete(): bool
     {
-        if ($this->isAnnulee()) {
+        if (! $this->isEnCours()) {
             return false;
         }
+
         $facture = $this->facture ?? $this->load('facture')->facture;
-        if (! $facture) {
+        if (! $facture || ! $facture->isPayee()) {
             return false;
         }
-        if ($facture->isPayee()) {
-            $this->statut = StatutCommandeVente::CLOTUREE;
 
-            return $this->saveQuietly();
+        // Vérifie que toutes les commissions sont versées (ou absentes)
+        $commissions = $this->commissions()->get();
+        foreach ($commissions as $commission) {
+            if (! $commission->isVersee()) {
+                return false;
+            }
         }
 
-        return false;
+        $this->statut = StatutCommandeVente::CLOTUREE;
+        $this->closed_at = now();
+
+        return $this->saveQuietly();
     }
 }

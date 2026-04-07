@@ -154,8 +154,8 @@ class EnumsTest extends TestCase
 
     public function test_statut_commande_vente_labels(): void
     {
+        $this->assertSame('Brouillon', StatutCommandeVente::BROUILLON->label());
         $this->assertSame('En cours', StatutCommandeVente::EN_COURS->label());
-        $this->assertSame('Livrée', StatutCommandeVente::LIVREE->label());
         $this->assertSame('Clôturée', StatutCommandeVente::CLOTUREE->label());
         $this->assertSame('Annulée', StatutCommandeVente::ANNULEE->label());
     }

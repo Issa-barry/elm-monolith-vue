@@ -3,12 +3,15 @@
 namespace Tests\Feature;
 
 use App\Enums\PackingStatut;
+use App\Features\ModuleFeature;
 use App\Models\Organization;
 use App\Models\Packing;
 use App\Models\Prestataire;
+use App\Models\Site;
 use App\Models\User;
 use App\Models\Versement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -23,6 +26,16 @@ class VersementTest extends TestCase
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
         $user->givePermissionTo('packings.update');
+
+        $site = Site::create([
+            'organization_id' => $org->id,
+            'nom' => 'Site Test',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
+        Feature::for($org)->activate(ModuleFeature::PACKINGS);
 
         return $user;
     }

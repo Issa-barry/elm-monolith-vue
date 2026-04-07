@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Livreur;
+use App\Models\EquipeLivraison;
 use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
@@ -199,12 +199,16 @@ class VehiculeTest extends TestCase
             ->assertStatus(403);
     }
 
-    // ── livreur assignment ────────────────────────────────────────────────────
+    // ── equipe assignment ─────────────────────────────────────────────────────
 
-    public function test_store_can_assign_livreur_from_same_org(): void
+    public function test_store_can_assign_equipe_from_same_org(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $livreur = Livreur::factory()->create(['organization_id' => $this->org->id]);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Équipe Test',
+            'is_active' => true,
+        ]);
 
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
@@ -212,14 +216,15 @@ class VehiculeTest extends TestCase
                 'immatriculation' => 'MO-001-GN',
                 'type_vehicule' => 'moto',
                 'proprietaire_id' => $proprietaire->id,
-                'livreur_principal_id' => $livreur->id,
+                'equipe_livraison_id' => $equipe->id,
+                'taux_commission_proprietaire' => 100,
                 'is_active' => true,
                 'pris_en_charge_par_usine' => false,
             ])
             ->assertRedirect(route('vehicules.index'));
 
         $this->assertDatabaseHas('vehicules', [
-            'livreur_principal_id' => $livreur->id,
+            'equipe_livraison_id' => $equipe->id,
             'organization_id' => $this->org->id,
         ]);
     }

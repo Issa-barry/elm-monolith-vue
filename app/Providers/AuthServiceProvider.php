@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\Client;
 use App\Models\CommandeAchat;
 use App\Models\CommandeVente;
+use App\Models\EquipeLivraison;
 use App\Models\Livreur;
 use App\Models\Packing;
 use App\Models\Prestataire;
@@ -16,6 +17,7 @@ use App\Models\Vehicule;
 use App\Policies\ClientPolicy;
 use App\Policies\CommandeAchatPolicy;
 use App\Policies\CommandeVentePolicy;
+use App\Policies\EquipeLivraisonPolicy;
 use App\Policies\LivreurPolicy;
 use App\Policies\PackingPolicy;
 use App\Policies\PrestatairePolicy;
@@ -38,6 +40,7 @@ class AuthServiceProvider extends ServiceProvider
         Packing::class => PackingPolicy::class,
         User::class => UserPolicy::class,
         Vehicule::class => VehiculePolicy::class,
+        EquipeLivraison::class => EquipeLivraisonPolicy::class,
         Site::class => SitePolicy::class,
         CommandeVente::class => CommandeVentePolicy::class,
         CommandeAchat::class => CommandeAchatPolicy::class,

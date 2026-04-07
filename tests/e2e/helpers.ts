@@ -1,4 +1,4 @@
-﻿import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 export const E2E_EMAIL = process.env.E2E_EMAIL ?? 'superadmin@admin.com';
 export const E2E_PHONE = process.env.E2E_PHONE ?? '+33758855039';
@@ -30,6 +30,41 @@ const LOGIN_COUNTRIES: LoginCountryOption[] = [
 
 export function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function tryFixMojibake(value: string): string {
+    try {
+        return Buffer.from(value, 'latin1').toString('utf8');
+    } catch {
+        return value;
+    }
+}
+
+function matchesOptionText(
+    optionText: string,
+    expected: string | RegExp,
+): boolean {
+    const raw = optionText.trim();
+    const fixed = tryFixMojibake(raw).trim();
+
+    if (typeof expected === 'string') {
+        const query = expected.trim().toLowerCase();
+        return (
+            raw.toLowerCase().includes(query) ||
+            fixed.toLowerCase().includes(query)
+        );
+    }
+
+    const safeRegex = new RegExp(
+        expected.source,
+        expected.flags.replaceAll('g', ''),
+    );
+    return safeRegex.test(raw) || safeRegex.test(fixed);
+}
+function visibleComboboxOptions(page: Page): Locator {
+    return page.locator(
+        '[role="listbox"]:visible [role="option"], [role="option"]:visible',
+    );
 }
 
 export function randomDigits(length: number): string {
@@ -166,7 +201,7 @@ export async function login(page: Page): Promise<void> {
                 .innerText()
                 .catch(() => '');
             const isRateLimited =
-                /too many|trop de tentatives|veuillez patienter|please wait|seconds|secondes|r[ée]essayez|requests|429/i.test(
+                /too many|trop de tentatives|veuillez patienter|please wait|seconds|secondes|essayez|requests|429/i.test(
                     bodyText,
                 );
 
@@ -192,20 +227,101 @@ export async function selectOptionFromCombobox(
     combobox: Locator,
     optionName?: string | RegExp,
 ): Promise<void> {
-    await combobox.click({ timeout: 3000 });
+    await combobox.scrollIntoViewIfNeeded().catch(() => undefined);
 
-    const option = optionName
-        ? typeof optionName === 'string'
-            ? page
-                  .getByRole('option', {
-                      name: new RegExp(escapeRegExp(optionName), 'i'),
-                  })
-                  .first()
-            : page.getByRole('option', { name: optionName }).first()
-        : page.locator('[role="option"]:visible').first();
+    const visibleOptions = visibleComboboxOptions(page);
+    for (let attempt = 0; attempt < 3; attempt++) {
+        await combobox.click({ timeout: 3_000, force: true });
+        const hasVisibleOptions = await visibleOptions
+            .first()
+            .isVisible({ timeout: 5_000 })
+            .catch(() => false);
+        if (hasVisibleOptions) {
+            break;
+        }
 
-    await expect(option).toBeVisible();
-    await option.click({ timeout: 3000 });
+        await combobox.press('ArrowDown').catch(() => undefined);
+        const hasOptionsAfterKeyboard = await visibleOptions
+            .first()
+            .isVisible({ timeout: 3_000 })
+            .catch(() => false);
+        if (hasOptionsAfterKeyboard) {
+            break;
+        }
+
+        await page.keyboard.press('Escape').catch(() => undefined);
+        // Wait for any open overlay to fully close before the next attempt
+        await page
+            .locator('[role="listbox"]')
+            .first()
+            .waitFor({ state: 'hidden', timeout: 1_000 })
+            .catch(() => undefined);
+    }
+
+    await expect(visibleOptions.first()).toBeVisible({ timeout: 15_000 });
+
+    let option = visibleOptions.first();
+
+    if (optionName) {
+        const optionCount = await visibleOptions.count();
+        let selected: Locator | null = null;
+
+        for (let i = 0; i < optionCount; i++) {
+            const candidate = visibleOptions.nth(i);
+            const text = (await candidate.innerText().catch(() => '')).trim();
+            if (text && matchesOptionText(text, optionName)) {
+                selected = candidate;
+                break;
+            }
+        }
+
+        if (!selected) {
+            const preview = await visibleOptions
+                .allInnerTexts()
+                .then((items) => items.slice(0, 8).join(' | '))
+                .catch(() => 'no options');
+            throw new Error(
+                `Unable to find combobox option: ${String(optionName)}. Visible options: ${preview}`,
+            );
+        }
+
+        option = selected;
+    }
+
+    await expect(option).toBeVisible({ timeout: 15_000 });
+    await option.click({ timeout: 3_000 });
+    // Wait for the listbox to close before returning, so the next combobox
+    // interaction does not see stale options from this dropdown.
+    await page
+        .locator('[role="listbox"]')
+        .first()
+        .waitFor({ state: 'hidden', timeout: 2_000 })
+        .catch(() => undefined);
+}
+
+export async function ensureModuleEnabled(
+    page: Page,
+    moduleKey: string,
+): Promise<void> {
+    await page.goto('/settings/modules');
+    await expect(page).toHaveURL(/\/settings\/modules$/);
+
+    const row = page
+        .locator('div.divide-y > div', { hasText: moduleKey })
+        .first();
+
+    await expect(row).toBeVisible({ timeout: 15_000 });
+
+    const toggle = row.getByRole('switch').first();
+    await expect(toggle).toBeVisible({ timeout: 10_000 });
+
+    const current = await toggle.getAttribute('aria-checked');
+    if (current !== 'true') {
+        await toggle.click({ timeout: 5_000 });
+        await expect(toggle).toHaveAttribute('aria-checked', 'true', {
+            timeout: 15_000,
+        });
+    }
 }
 
 interface CreateUserParams {
@@ -232,10 +348,12 @@ export async function fillUserInfoAndAdvance(
     }: Omit<CreateUserParams, 'password'>,
 ): Promise<void> {
     const form = page.locator('#user-form');
+    const formComboboxes = form.getByRole('combobox');
+
     await selectOptionFromCombobox(
         page,
-        form.getByRole('combobox').first(),
-        /guinée$/i,
+        formComboboxes.first(),
+        /guin(?!.*bissau)/i,
     );
     await page.locator('#prenom').fill(prenom);
     await page.locator('#nom').fill(nom);
@@ -243,13 +361,28 @@ export async function fillUserInfoAndAdvance(
     if (email) {
         await page.locator('#email').fill(email);
     }
-    await selectOptionFromCombobox(
-        page,
-        form.getByRole('combobox').nth(1),
-        role,
-    );
-    await form.getByRole('combobox').nth(2).click();
-    await page.locator('[role="option"]:visible').first().click();
+
+    const roleComboboxByText = formComboboxes
+        .filter({
+            hasText: /choisir un role|role|manager|comptable|commercial|administrateur/i,
+        })
+        .first();
+    const roleCombobox =
+        (await roleComboboxByText.count()) > 0
+            ? roleComboboxByText
+            : formComboboxes.nth(1);
+
+    await selectOptionFromCombobox(page, roleCombobox, role);
+
+    const siteComboboxByText = formComboboxes
+        .filter({ hasText: /choisir un site|site/i })
+        .first();
+    if ((await siteComboboxByText.count()) > 0) {
+        await selectOptionFromCombobox(page, siteComboboxByText);
+    } else if ((await formComboboxes.count()) >= 3) {
+        await selectOptionFromCombobox(page, formComboboxes.nth(2));
+    }
+
     await form.locator('button[type="submit"]:visible').click();
     await expect(page.locator('#password')).toBeVisible();
 }
@@ -365,3 +498,4 @@ export async function cleanupRowsByPrefix(
         await searchInput.fill(prefix);
     }
 }
+
