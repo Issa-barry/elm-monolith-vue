@@ -2,7 +2,9 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Lock, Save, Upload, X } from 'lucide-vue-next';
+import { Link } from '@inertiajs/vue3';
+import { Lock, Plus, Save, Upload, X } from 'lucide-vue-next';
+import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
@@ -11,12 +13,14 @@ import { computed, ref, watch } from 'vue';
 interface Option {
     value: number | string;
     label: string;
+    telephone?: string | null;
 }
 
 interface EquipeOption {
     value: number;
     label: string;
     somme_taux: number;
+    livreur_principal?: { nom_complet: string; telephone: string } | null;
 }
 
 interface TypeOption {
@@ -98,6 +102,66 @@ const selectedType = computed(() =>
 const selectedEquipe = computed(() =>
     props.equipes.find((e) => e.value === props.form.equipe_livraison_id),
 );
+
+// ── AutoComplete : Propriétaire ───────────────────────────────────────────────
+const proprietaireSelected = ref<Option | null>(
+    props.proprietaires.find((p) => p.value === props.form.proprietaire_id) ??
+        null,
+);
+const proprietaireSuggests = ref<Option[]>([]);
+
+function searchProprietaire(event: { query: string }) {
+    const q = event.query.toLowerCase().trim();
+    proprietaireSuggests.value = q
+        ? props.proprietaires.filter(
+              (p) =>
+                  p.label.toLowerCase().includes(q) ||
+                  (p.telephone && p.telephone.includes(q)),
+          )
+        : [...props.proprietaires];
+}
+
+function onProprietaireSelect(p: Option | null) {
+    emit('update:form', {
+        ...props.form,
+        proprietaire_id: p ? (p.value as number) : null,
+    });
+}
+
+function onProprietaireClear() {
+    proprietaireSelected.value = null;
+    emit('update:form', { ...props.form, proprietaire_id: null });
+}
+
+// ── AutoComplete : Équipe ─────────────────────────────────────────────────────
+const equipeSelected = ref<EquipeOption | null>(
+    props.equipes.find((e) => e.value === props.form.equipe_livraison_id) ??
+        null,
+);
+const equipeSuggests = ref<EquipeOption[]>([]);
+
+function searchEquipe(event: { query: string }) {
+    const q = event.query.toLowerCase().trim();
+    equipeSuggests.value = q
+        ? props.equipes.filter((e) => {
+              if (e.label.toLowerCase().includes(q)) return true;
+              const lp = e.livreur_principal;
+              return lp
+                  ? lp.nom_complet.toLowerCase().includes(q) ||
+                        lp.telephone.includes(q)
+                  : false;
+          })
+        : [...props.equipes];
+}
+
+function onEquipeACSelect(e: EquipeOption | null) {
+    onEquipeChange(e?.value ?? null);
+}
+
+function onEquipeACClear() {
+    equipeSelected.value = null;
+    onEquipeChange(null);
+}
 
 const isAffectationFirst = computed(() => props.affectationFirst === true);
 
@@ -283,22 +347,52 @@ const totalTaux = computed(() => {
                         >Propriétaire
                         <span class="text-destructive">*</span></Label
                     >
-                    <Dropdown
+                    <AutoComplete
+                        v-model="proprietaireSelected"
                         input-id="proprietaire_id"
-                        :model-value="form.proprietaire_id"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                proprietaire_id: $event,
-                            })
-                        "
-                        :options="proprietaires"
+                        :suggestions="proprietaireSuggests"
                         option-label="label"
-                        option-value="value"
-                        placeholder="Sélectionner…"
+                        @complete="searchProprietaire"
+                        @item-select="
+                            onProprietaireSelect(proprietaireSelected)
+                        "
+                        @clear="onProprietaireClear"
+                        placeholder="Nom ou téléphone…"
                         class="w-full"
+                        input-class="w-full"
                         :class="{ 'p-invalid': errors.proprietaire_id }"
-                    />
+                        dropdown
+                        force-selection
+                    >
+                        <template #option="{ option }">
+                            <div class="py-0.5">
+                                <div class="leading-tight font-medium">
+                                    {{ option.label }}
+                                </div>
+                                <div
+                                    v-if="option.telephone"
+                                    class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                >
+                                    {{ option.telephone }}
+                                </div>
+                            </div>
+                        </template>
+                        <template #empty>
+                            <div
+                                class="flex items-center justify-between gap-2 px-1 py-0.5"
+                            >
+                                <span class="text-sm text-muted-foreground"
+                                    >Aucun résultat</span
+                                >
+                                <Link
+                                    href="/proprietaires/create"
+                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                                >
+                                    <Plus class="h-3 w-3" /> Créer
+                                </Link>
+                            </div>
+                        </template>
+                    </AutoComplete>
                     <p
                         v-if="errors.proprietaire_id"
                         class="mt-1 text-xs text-destructive"
@@ -311,17 +405,57 @@ const totalTaux = computed(() => {
                     <Label for="equipe_livraison_id" class="mb-1.5 block"
                         >Équipe de livraison</Label
                     >
-                    <Dropdown
+                    <AutoComplete
+                        v-model="equipeSelected"
                         input-id="equipe_livraison_id"
-                        :model-value="form.equipe_livraison_id"
-                        @update:model-value="onEquipeChange($event)"
-                        :options="equipes"
+                        :suggestions="equipeSuggests"
                         option-label="label"
-                        option-value="value"
-                        placeholder="Aucune"
-                        :show-clear="true"
+                        @complete="searchEquipe"
+                        @item-select="onEquipeACSelect(equipeSelected)"
+                        @clear="onEquipeACClear"
+                        placeholder="Équipe, livreur ou téléphone…"
                         class="w-full"
-                    />
+                        input-class="w-full"
+                        dropdown
+                        force-selection
+                    >
+                        <template #option="{ option }">
+                            <div class="py-0.5">
+                                <div class="leading-tight font-medium">
+                                    {{ option.label }}
+                                </div>
+                                <div
+                                    v-if="option.livreur_principal"
+                                    class="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground"
+                                >
+                                    <span>{{
+                                        option.livreur_principal.nom_complet
+                                    }}</span>
+                                    <span class="font-mono"
+                                        >·
+                                        {{
+                                            option.livreur_principal.telephone
+                                        }}</span
+                                    >
+                                </div>
+                            </div>
+                        </template>
+                        <template #empty>
+                            <div
+                                class="flex items-center justify-between gap-2 px-1 py-0.5"
+                            >
+                                <span class="text-sm text-muted-foreground"
+                                    >Aucun résultat</span
+                                >
+                                <Link
+                                    href="/equipes-livraison/create"
+                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                                >
+                                    <Plus class="h-3 w-3" /> Créer
+                                </Link>
+                            </div>
+                        </template>
+                    </AutoComplete>
                     <p
                         v-if="selectedEquipe"
                         class="mt-1 text-xs text-muted-foreground"

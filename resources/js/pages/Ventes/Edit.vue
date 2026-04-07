@@ -11,7 +11,7 @@ import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import { computed, onMounted, ref } from 'vue';
 
-// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface ProduitOption {
     id: number;
     nom: string;
@@ -54,7 +54,7 @@ interface CommandeExistante {
     lignes: { produit_id: number; qte: number; prix_vente: number }[];
 }
 
-// â”€â”€ Props â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
     commande: CommandeExistante;
     produits: ProduitOption[];
@@ -70,7 +70,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Modifier', href: '#' },
 ];
 
-// â”€â”€ Form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Form ──────────────────────────────────────────────────────────────────────
 const form = useForm({
     vehicule_id: props.commande.vehicule_id as number | null,
     client_id: props.commande.client_id as number | null,
@@ -82,7 +82,7 @@ const form = useForm({
     })) as LigneForm[],
 });
 
-// â”€â”€ AutoComplete : VÃ©hicule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── AutoComplete : Véhicule ───────────────────────────────────────────────────
 const vehiculeSelected = ref<VehiculeOption | null>(
     props.vehicules.find((v) => v.id === props.commande.vehicule_id) ?? null,
 );
@@ -110,10 +110,10 @@ function onVehiculeClear() {
 }
 
 function vehiculeLabel(v: VehiculeOption): string {
-    return `${v.nom_vehicule} â€” ${v.immatriculation}`;
+    return `${v.nom_vehicule} — ${v.immatriculation}`;
 }
 
-// â”€â”€ AutoComplete : Client â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── AutoComplete : Client ─────────────────────────────────────────────────────
 const clientSelected = ref<ClientOption | null>(
     props.clients.find((c) => c.id === props.commande.client_id) ?? null,
 );
@@ -144,7 +144,7 @@ function clientLabel(c: ClientOption): string {
     return [c.prenom, c.nom].filter(Boolean).join(' ');
 }
 
-// â”€â”€ Dropdown : Produit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Dropdown : Produit ────────────────────────────────────────────────────────
 const produitOptions = computed(() =>
     props.produits.map((p) => ({
         value: p.id,
@@ -152,12 +152,12 @@ const produitOptions = computed(() =>
     })),
 );
 
-// â”€â”€ Formatage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Formatage ─────────────────────────────────────────────────────────────────
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
 
-// â”€â”€ Gestion des lignes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Gestion des lignes ────────────────────────────────────────────────────────
 function onProduitChange(index: number, produitId: number | null) {
     if (produitId === null) {
         form.lignes[index].produit_id = null;
@@ -207,12 +207,12 @@ function removeLigne(index: number) {
     }
 }
 
-// â”€â”€ Total gÃ©nÃ©ral â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Total général ─────────────────────────────────────────────────────────────
 const totalGeneral = computed(() =>
     form.lignes.reduce((sum, l) => sum + l.total, 0),
 );
 
-// â”€â”€ Reset au montage (Ã©vite la persistance SPA entre navigations) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Reset au montage (évite la persistance SPA entre navigations) ─────────────
 onMounted(() => {
     // Ajouter une ligne vide si la commande n'avait aucune ligne
     if (form.lignes.length === 0) {
@@ -220,7 +220,7 @@ onMounted(() => {
     }
 });
 
-// â”€â”€ Validation locale â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Validation locale ────────────────────────────────────────────────────────
 const canSubmit = computed(
     () =>
         (form.vehicule_id !== null || form.client_id !== null) &&
@@ -228,7 +228,7 @@ const canSubmit = computed(
         !form.processing,
 );
 
-// â”€â”€ Soumission â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Soumission ────────────────────────────────────────────────────────────────
 function submit() {
     form.put(`/ventes/${props.commande.id}`);
 }
@@ -269,20 +269,20 @@ function submit() {
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
                     Modifiez cette commande en brouillon. Les changements sont
-                    enregistrÃ©s immÃ©diatement.
+                    enregistrés immédiatement.
                 </p>
             </div>
 
             <form id="vente-form" class="space-y-6" @submit.prevent="submit">
-                <!-- En-tÃªte commande -->
+                <!-- En-tête commande -->
                 <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
                     <h2
                         class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                     >
-                        Informations gÃ©nÃ©rales
+                        Informations générales
                     </h2>
 
-                    <!-- Site rattachÃ© (lecture seule) -->
+                    <!-- Site rattaché (lecture seule) -->
                     <div
                         class="mb-4 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2.5"
                     >
@@ -295,12 +295,12 @@ function submit() {
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-2">
-                        <!-- VÃ©hicule -->
+                        <!-- Véhicule -->
                         <div>
                             <Label
                                 for="vente-edit-vehicule"
                                 class="mb-1.5 block text-sm"
-                                >VÃ©hicule</Label
+                                >Véhicule</Label
                             >
                             <AutoComplete
                                 v-model="vehiculeSelected"
@@ -312,7 +312,7 @@ function submit() {
                                     onVehiculeSelect(vehiculeSelected)
                                 "
                                 @clear="onVehiculeClear"
-                                placeholder="Nom, immatriculation, livreurâ€¦"
+                                placeholder="Nom, immatriculation, livreur…"
                                 class="w-full"
                                 input-class="w-full"
                                 :class="{
@@ -334,7 +334,7 @@ function submit() {
                                             }}</span>
                                             <span
                                                 v-if="option.livreur_nom"
-                                                class="before:mr-2 before:content-['Â·']"
+                                                class="before:mr-2 before:content-['·']"
                                             >
                                                 {{ option.livreur_nom }}
                                             </span>
@@ -343,7 +343,7 @@ function submit() {
                                 </template>
                                 <template #empty>
                                     <span class="text-sm text-muted-foreground"
-                                        >Aucun vÃ©hicule trouvÃ©.</span
+                                        >Aucun véhicule trouvé.</span
                                     >
                                 </template>
                             </AutoComplete>
@@ -370,7 +370,7 @@ function submit() {
                                 @complete="searchClient"
                                 @item-select="onClientSelect(clientSelected)"
                                 @clear="onClientClear"
-                                placeholder="Nom, prÃ©nom, tÃ©lÃ©phoneâ€¦"
+                                placeholder="Nom, prénom, téléphone…"
                                 class="w-full"
                                 input-class="w-full"
                                 :class="{ 'p-invalid': form.errors.client_id }"
@@ -400,7 +400,7 @@ function submit() {
                                 </template>
                                 <template #empty>
                                     <span class="text-sm text-muted-foreground"
-                                        >Aucun client trouvÃ©.</span
+                                        >Aucun client trouvé.</span
                                     >
                                 </template>
                             </AutoComplete>
@@ -417,7 +417,7 @@ function submit() {
                         v-if="!form.vehicule_id && !form.client_id"
                         class="mt-3 text-xs text-amber-600 dark:text-amber-400"
                     >
-                        SÃ©lectionnez au moins un vÃ©hicule ou un client.
+                        Sélectionnez au moins un véhicule ou un client.
                     </p>
                 </div>
 
@@ -436,7 +436,7 @@ function submit() {
                         {{ form.errors.lignes }}
                     </p>
 
-                    <!-- â”€â”€ Tableau desktop â”€â”€ -->
+                    <!-- ── Tableau desktop ── -->
                     <div
                         class="hidden overflow-hidden rounded-lg border sm:block"
                     >
@@ -452,7 +452,7 @@ function submit() {
                                         class="px-4 py-2.5 text-center font-medium text-muted-foreground"
                                         style="width: 110px"
                                     >
-                                        QtÃ©
+                                        Qté
                                     </th>
                                     <th
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
@@ -542,7 +542,7 @@ function submit() {
                                         {{
                                             ligne.total > 0
                                                 ? formatGNF(ligne.total)
-                                                : 'â€”'
+                                                : '—'
                                         }}
                                     </td>
                                     <td class="px-4 py-3 text-center">
@@ -562,7 +562,7 @@ function submit() {
                         </table>
                     </div>
 
-                    <!-- â”€â”€ Cards mobile â”€â”€ -->
+                    <!-- ── Cards mobile ── -->
                     <div class="space-y-3 sm:hidden">
                         <div
                             v-for="(ligne, index) in form.lignes"
@@ -592,7 +592,7 @@ function submit() {
                                     <p
                                         class="mb-1 text-[11px] font-medium text-muted-foreground"
                                     >
-                                        QuantitÃ©
+                                        Quantité
                                     </p>
                                     <InputNumber
                                         :model-value="ligne.qte"
@@ -639,7 +639,7 @@ function submit() {
                                         {{
                                             ligne.total > 0
                                                 ? formatGNF(ligne.total)
-                                                : 'â€”'
+                                                : '—'
                                         }}
                                     </p>
                                 </div>
@@ -692,7 +692,7 @@ function submit() {
                     <Button type="submit" :disabled="!canSubmit">
                         {{
                             form.processing
-                                ? 'Enregistrementâ€¦'
+                                ? 'Enregistrement…'
                                 : 'Enregistrer les modifications'
                         }}
                     </Button>
@@ -708,7 +708,7 @@ function submit() {
                 <Save class="mr-2 h-4 w-4" />
                 {{
                     form.processing
-                        ? 'Enregistrementâ€¦'
+                        ? 'Enregistrement…'
                         : 'Enregistrer les modifications'
                 }}
             </Button>

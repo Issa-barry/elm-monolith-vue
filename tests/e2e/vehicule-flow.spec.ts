@@ -32,7 +32,7 @@ test('login + create vehicule + update status + verify list', async ({
 
     const comboboxes = page.locator('#vehicule-form').getByRole('combobox');
 
-    // Ordre DOM actuel: type, proprietaire, equipe
+    // Ordre DOM actuel: type (Dropdown), proprietaire (AutoComplete), equipe (AutoComplete)
     await selectOptionFromCombobox(page, comboboxes.nth(0));
     await selectOptionFromCombobox(page, comboboxes.nth(1));
 

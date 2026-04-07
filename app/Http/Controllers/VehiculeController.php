@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\TypeVehicule;
 use App\Models\EquipeLivraison;
+use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Services\CommissionCalculator;
@@ -195,13 +196,14 @@ class VehiculeController extends Controller
             ->map(fn (Proprietaire $p) => [
                 'value' => $p->id,
                 'label' => trim("{$p->prenom} {$p->nom}"),
+                'telephone' => $p->telephone,
             ])
             ->toArray();
     }
 
     private function equipesOptions(): array
     {
-        return EquipeLivraison::with('membres')
+        return EquipeLivraison::with(['membres', 'livreurs'])
             ->where('organization_id', auth()->user()->organization_id)
             ->where('is_active', true)
             ->orderBy('nom')
@@ -210,6 +212,9 @@ class VehiculeController extends Controller
                 'value' => $e->id,
                 'label' => $e->nom,
                 'somme_taux' => (float) $e->membres->sum('taux_commission'),
+                'livreur_principal' => ($lp = $e->livreurs->first(fn (Livreur $l) => $l->pivot->role === 'principal'))
+                    ? ['nom_complet' => trim("{$lp->prenom} {$lp->nom}"), 'telephone' => $lp->telephone]
+                    : null,
             ])
             ->toArray();
     }
