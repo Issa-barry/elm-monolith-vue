@@ -26,7 +26,7 @@ const props = defineProps<{ equipe: EquipeData }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Ã‰quipes', href: '/equipes-livraison' },
+    { title: 'Équipes', href: '/equipes-livraison' },
     { title: props.equipe.nom, href: '#' },
 ];
 
@@ -60,7 +60,7 @@ function submit() {
                     href="/equipes-livraison"
                     class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
                 >
-                    <ArrowLeft class="h-4 w-4" /> Ã‰quipes
+                    <ArrowLeft class="h-4 w-4" /> Équipes
                 </Link>
                 <h1 class="text-2xl font-semibold tracking-tight">
                     {{ equipe.nom }}

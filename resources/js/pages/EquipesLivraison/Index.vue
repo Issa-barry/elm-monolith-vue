@@ -121,8 +121,8 @@ function confirmDelete(equipe: Equipe) {
                     <InputIcon class="pi pi-search" />
                     <InputText
                         v-model="search"
-                        placeholder="Rechercher une équipe…"
                         class="w-full"
+                        placeholder="recherche"
                     />
                 </IconField>
                 <div class="flex gap-1.5">
