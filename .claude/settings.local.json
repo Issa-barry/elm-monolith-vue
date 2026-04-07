@@ -99,7 +99,8 @@
       "Bash(xargs file:*)",
       "Bash(xargs cat:*)",
       "Bash(node fix-encoding.js)",
-      "Bash(node fix-encoding.cjs)"
+      "Bash(node fix-encoding.cjs)",
+      "Bash(grep \"use App\\\\\\\\\\\\Models\\\\\\\\\\\\Livreur\" app/Http/Controllers/VehiculeController.php)"
     ]
   }
 }
