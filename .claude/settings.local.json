@@ -100,7 +100,9 @@
       "Bash(xargs cat:*)",
       "Bash(node fix-encoding.js)",
       "Bash(node fix-encoding.cjs)",
-      "Bash(grep \"use App\\\\\\\\\\\\Models\\\\\\\\\\\\Livreur\" app/Http/Controllers/VehiculeController.php)"
+      "Bash(grep \"use App\\\\\\\\\\\\Models\\\\\\\\\\\\Livreur\" app/Http/Controllers/VehiculeController.php)",
+      "Bash(php vendor/bin/phpunit tests/Feature/ProprietaireTest.php --no-coverage)",
+      "Bash(php vendor/bin/phpunit tests/Feature/ProprietaireTest.php --no-coverage --no-extensions)"
     ]
   }
 }
