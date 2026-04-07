@@ -105,7 +105,8 @@ const selectedEquipe = computed(() =>
 
 // ── AutoComplete : Propriétaire ───────────────────────────────────────────────
 const proprietaireSelected = ref<Option | null>(
-    props.proprietaires.find((p) => p.value === props.form.proprietaire_id) ?? null,
+    props.proprietaires.find((p) => p.value === props.form.proprietaire_id) ??
+        null,
 );
 const proprietaireSuggests = ref<Option[]>([]);
 
@@ -121,7 +122,10 @@ function searchProprietaire(event: { query: string }) {
 }
 
 function onProprietaireSelect(p: Option | null) {
-    emit('update:form', { ...props.form, proprietaire_id: p ? (p.value as number) : null });
+    emit('update:form', {
+        ...props.form,
+        proprietaire_id: p ? (p.value as number) : null,
+    });
 }
 
 function onProprietaireClear() {
@@ -131,7 +135,8 @@ function onProprietaireClear() {
 
 // ── AutoComplete : Équipe ─────────────────────────────────────────────────────
 const equipeSelected = ref<EquipeOption | null>(
-    props.equipes.find((e) => e.value === props.form.equipe_livraison_id) ?? null,
+    props.equipes.find((e) => e.value === props.form.equipe_livraison_id) ??
+        null,
 );
 const equipeSuggests = ref<EquipeOption[]>([]);
 
@@ -142,7 +147,8 @@ function searchEquipe(event: { query: string }) {
               if (e.label.toLowerCase().includes(q)) return true;
               const lp = e.livreur_principal;
               return lp
-                  ? lp.nom_complet.toLowerCase().includes(q) || lp.telephone.includes(q)
+                  ? lp.nom_complet.toLowerCase().includes(q) ||
+                        lp.telephone.includes(q)
                   : false;
           })
         : [...props.equipes];
@@ -347,7 +353,9 @@ const totalTaux = computed(() => {
                         :suggestions="proprietaireSuggests"
                         option-label="label"
                         @complete="searchProprietaire"
-                        @item-select="onProprietaireSelect(proprietaireSelected)"
+                        @item-select="
+                            onProprietaireSelect(proprietaireSelected)
+                        "
                         @clear="onProprietaireClear"
                         placeholder="Nom ou téléphone…"
                         class="w-full"
@@ -358,18 +366,27 @@ const totalTaux = computed(() => {
                     >
                         <template #option="{ option }">
                             <div class="py-0.5">
-                                <div class="font-medium leading-tight">{{ option.label }}</div>
-                                <div v-if="option.telephone" class="mt-0.5 text-xs text-muted-foreground font-mono">
+                                <div class="leading-tight font-medium">
+                                    {{ option.label }}
+                                </div>
+                                <div
+                                    v-if="option.telephone"
+                                    class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                >
                                     {{ option.telephone }}
                                 </div>
                             </div>
                         </template>
                         <template #empty>
-                            <div class="flex items-center justify-between gap-2 px-1 py-0.5">
-                                <span class="text-sm text-muted-foreground">Aucun résultat</span>
+                            <div
+                                class="flex items-center justify-between gap-2 px-1 py-0.5"
+                            >
+                                <span class="text-sm text-muted-foreground"
+                                    >Aucun résultat</span
+                                >
                                 <Link
                                     href="/proprietaires/create"
-                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
                                 >
                                     <Plus class="h-3 w-3" /> Créer
                                 </Link>
@@ -404,19 +421,35 @@ const totalTaux = computed(() => {
                     >
                         <template #option="{ option }">
                             <div class="py-0.5">
-                                <div class="font-medium leading-tight">{{ option.label }}</div>
-                                <div v-if="option.livreur_principal" class="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                                    <span>{{ option.livreur_principal.nom_complet }}</span>
-                                    <span class="font-mono">· {{ option.livreur_principal.telephone }}</span>
+                                <div class="leading-tight font-medium">
+                                    {{ option.label }}
+                                </div>
+                                <div
+                                    v-if="option.livreur_principal"
+                                    class="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground"
+                                >
+                                    <span>{{
+                                        option.livreur_principal.nom_complet
+                                    }}</span>
+                                    <span class="font-mono"
+                                        >·
+                                        {{
+                                            option.livreur_principal.telephone
+                                        }}</span
+                                    >
                                 </div>
                             </div>
                         </template>
                         <template #empty>
-                            <div class="flex items-center justify-between gap-2 px-1 py-0.5">
-                                <span class="text-sm text-muted-foreground">Aucun résultat</span>
+                            <div
+                                class="flex items-center justify-between gap-2 px-1 py-0.5"
+                            >
+                                <span class="text-sm text-muted-foreground"
+                                    >Aucun résultat</span
+                                >
                                 <Link
                                     href="/equipes-livraison/create"
-                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
                                 >
                                     <Plus class="h-3 w-3" /> Créer
                                 </Link>
