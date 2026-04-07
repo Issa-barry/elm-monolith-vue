@@ -194,8 +194,8 @@ class VehiculeController extends Controller
             ->orderBy('nom')
             ->get()
             ->map(fn (Proprietaire $p) => [
-                'value'     => $p->id,
-                'label'     => trim("{$p->prenom} {$p->nom}"),
+                'value' => $p->id,
+                'label' => trim("{$p->prenom} {$p->nom}"),
                 'telephone' => $p->telephone,
             ])
             ->toArray();
@@ -209,8 +209,8 @@ class VehiculeController extends Controller
             ->orderBy('nom')
             ->get()
             ->map(fn (EquipeLivraison $e) => [
-                'value'      => $e->id,
-                'label'      => $e->nom,
+                'value' => $e->id,
+                'label' => $e->nom,
                 'somme_taux' => (float) $e->membres->sum('taux_commission'),
                 'livreur_principal' => ($lp = $e->livreurs->first(fn (Livreur $l) => $l->pivot->role === 'principal'))
                     ? ['nom_complet' => trim("{$lp->prenom} {$lp->nom}"), 'telephone' => $lp->telephone]
