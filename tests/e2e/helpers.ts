@@ -290,6 +290,13 @@ export async function selectOptionFromCombobox(
 
     await expect(option).toBeVisible({ timeout: 15_000 });
     await option.click({ timeout: 3_000 });
+    // Wait for the listbox to close before returning, so the next combobox
+    // interaction does not see stale options from this dropdown.
+    await page
+        .locator('[role="listbox"]')
+        .first()
+        .waitFor({ state: 'hidden', timeout: 2_000 })
+        .catch(() => undefined);
 }
 
 export async function ensureModuleEnabled(
