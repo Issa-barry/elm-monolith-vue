@@ -18,7 +18,7 @@ const form = useForm({
     email: null as string | null,
     telephone: null as string | null,
     adresse: null as string | null,
-    ville: null as string | null,
+    ville: 'Conakry' as string | null,
     pays: 'Guinée' as string | null,
     code_pays: 'GN' as string | null,
     code_phone_pays: '+224' as string | null,
