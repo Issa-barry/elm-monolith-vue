@@ -2,7 +2,8 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Lock, Save, Upload, X } from 'lucide-vue-next';
+import { Link } from '@inertiajs/vue3';
+import { Lock, Plus, Save, Upload, X } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
@@ -296,9 +297,23 @@ const totalTaux = computed(() => {
                         option-label="label"
                         option-value="value"
                         placeholder="Sélectionner…"
+                        filter
+                        filter-placeholder="Rechercher…"
                         class="w-full"
                         :class="{ 'p-invalid': errors.proprietaire_id }"
-                    />
+                    >
+                        <template #emptyfilter>
+                            <div class="flex items-center justify-between gap-2 px-1 py-0.5">
+                                <span class="text-sm text-muted-foreground">Aucun résultat</span>
+                                <Link
+                                    href="/proprietaires/create"
+                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                                >
+                                    <Plus class="h-3 w-3" /> Créer
+                                </Link>
+                            </div>
+                        </template>
+                    </Dropdown>
                     <p
                         v-if="errors.proprietaire_id"
                         class="mt-1 text-xs text-destructive"
@@ -320,8 +335,22 @@ const totalTaux = computed(() => {
                         option-value="value"
                         placeholder="Aucune"
                         :show-clear="true"
+                        filter
+                        filter-placeholder="Rechercher…"
                         class="w-full"
-                    />
+                    >
+                        <template #emptyfilter>
+                            <div class="flex items-center justify-between gap-2 px-1 py-0.5">
+                                <span class="text-sm text-muted-foreground">Aucun résultat</span>
+                                <Link
+                                    href="/equipes-livraison/create"
+                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                                >
+                                    <Plus class="h-3 w-3" /> Créer
+                                </Link>
+                            </div>
+                        </template>
+                    </Dropdown>
                     <p
                         v-if="selectedEquipe"
                         class="mt-1 text-xs text-muted-foreground"
