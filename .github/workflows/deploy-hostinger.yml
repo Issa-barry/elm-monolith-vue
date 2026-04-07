@@ -1,7 +1,10 @@
 name: deploy-hostinger
 
 on:
-  push:
+  workflow_run:
+    workflows: ["auto-release"]
+    types:
+      - completed
     branches:
       - main
   workflow_dispatch:
@@ -15,10 +18,35 @@ jobs:
     name: Build and Deploy to Hostinger
     runs-on: ubuntu-latest
     environment: production
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --force --tags
+
+      - name: Write VERSION and RELEASED_AT from latest git tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          latest_tag="$(git tag --list | grep -E '^(v)?[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)"
+
+          if [ -n "$latest_tag" ]; then
+            version="${latest_tag#v}"
+            echo "$version" > VERSION
+            echo "VERSION → $version"
+          else
+            echo "Aucun tag semver trouvé, le fichier VERSION existant est conservé."
+          fi
+
+          echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > RELEASED_AT
+          echo "RELEASED_AT → $(cat RELEASED_AT)"
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2

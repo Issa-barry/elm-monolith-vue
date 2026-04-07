@@ -201,14 +201,14 @@ onBeforeUnmount(() => {
                                 <span>Contact</span>
                             </a>
                         </li>
-                        <li>
+                        <!-- <li>
                             <a
                                 class="flex px-0 py-2 font-medium transition-colors duration-150 hover:text-primary lg:px-4"
                                 @click="goToPublicPage('/help')"
                             >
                                 <span>Aide</span>
                             </a>
-                        </li>
+                        </li> -->
                     </ul>
 
                     <button
