@@ -39,7 +39,7 @@ class ParametreSeeder extends Seeder
         ],
         [
             'cle' => Parametre::CLE_TAUX_PROPRIETAIRE_DEFAUT,
-            'valeur' => '100',
+            'valeur' => '60',
             'type' => Parametre::TYPE_DECIMAL,
             'groupe' => Parametre::GROUPE_VEHICULES,
             'description' => 'Taux de commission attribué au propriétaire par défaut (%) lors de la création d\'un véhicule sans équipe',

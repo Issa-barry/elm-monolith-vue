@@ -271,12 +271,13 @@ class ParametreTest extends TestCase
         $this->assertSame(75.5, $taux);
     }
 
-    public function test_get_taux_proprietaire_defaut_returns_100_when_not_set(): void
+    public function test_get_taux_proprietaire_defaut_returns_60_when_not_set(): void
     {
         $org = Organization::factory()->create();
+        Parametre::clearCache($org->id);
 
         $taux = Parametre::getTauxProprietaireDefaut($org->id);
 
-        $this->assertSame(100.0, $taux);
+        $this->assertSame(60.0, $taux);
     }
 }

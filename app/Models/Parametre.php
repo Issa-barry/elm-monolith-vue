@@ -128,7 +128,7 @@ class Parametre extends Model
 
     public static function getTauxProprietaireDefaut(int $orgId): float
     {
-        return (float) self::get($orgId, self::CLE_TAUX_PROPRIETAIRE_DEFAUT, 100);
+        return (float) self::get($orgId, self::CLE_TAUX_PROPRIETAIRE_DEFAUT, 60);
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────
