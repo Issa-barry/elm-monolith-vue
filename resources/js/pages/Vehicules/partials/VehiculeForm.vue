@@ -51,6 +51,7 @@ const props = defineProps<{
     types: TypeOption[];
     photoUrl?: string | null;
     affectationFirst?: boolean;
+    tauxProprietaireDefaut?: number;
 }>();
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
@@ -176,10 +177,13 @@ watch(
     () => props.form.equipe_livraison_id,
     (equipeId) => {
         const equipe = props.equipes.find((e) => e.value === equipeId);
+        const taux = equipe
+            ? tauxRestantPourProprietaire.value
+            : (props.tauxProprietaireDefaut ?? 100);
         emit('update:form', {
             ...props.form,
             nom_vehicule: equipe ? equipe.label : props.form.nom_vehicule,
-            taux_commission_proprietaire: tauxRestantPourProprietaire.value,
+            taux_commission_proprietaire: taux,
         });
     },
 );

@@ -43,6 +43,7 @@ class ParametreController extends Controller
 
         $rules = match ($parametre->type) {
             Parametre::TYPE_INTEGER => ['valeur' => 'required|integer|min:0|max:9999999'],
+            Parametre::TYPE_DECIMAL => ['valeur' => 'required|numeric|min:0|max:100|decimal:0,2'],
             Parametre::TYPE_BOOLEAN => ['valeur' => 'required|boolean'],
             Parametre::TYPE_JSON => ['valeur' => 'required|json'],
             default => ['valeur' => 'required|string|max:1000'],

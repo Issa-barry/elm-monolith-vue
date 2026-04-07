@@ -21,10 +21,11 @@ interface TypeOption {
     capacite_defaut: number;
 }
 
-defineProps<{
+const props = defineProps<{
     proprietaires: Option[];
     equipes: EquipeOption[];
     types: TypeOption[];
+    tauxProprietaireDefaut: number;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -41,7 +42,7 @@ const form = useForm({
     proprietaire_id: null as number | null,
     equipe_livraison_id: null as number | null,
     pris_en_charge_par_usine: false,
-    taux_commission_proprietaire: null as number | null,
+    taux_commission_proprietaire: props.tauxProprietaireDefaut as number | null,
     photo: null as File | null,
     is_active: true,
 });
@@ -93,6 +94,7 @@ function submit() {
                 :proprietaires="proprietaires"
                 :equipes="equipes"
                 :types="types"
+                :taux-proprietaire-defaut="props.tauxProprietaireDefaut"
                 :affectation-first="true"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
