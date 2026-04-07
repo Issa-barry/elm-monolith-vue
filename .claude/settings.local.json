@@ -95,7 +95,11 @@
       "Bash(git -C c:/laragon/www/elm-monolithe show HEAD:tests/e2e/livreur-flow.spec.ts)",
       "Bash(python3 -c ':*)",
       "Bash(node -e ':*)",
-      "Bash(kill %1)"
+      "Bash(kill %1)",
+      "Bash(xargs file:*)",
+      "Bash(xargs cat:*)",
+      "Bash(node fix-encoding.js)",
+      "Bash(node fix-encoding.cjs)"
     ]
   }
 }
