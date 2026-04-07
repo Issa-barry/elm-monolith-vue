@@ -6,14 +6,7 @@ class AppVersion
 {
     public static function label(): string
     {
-        $label = sprintf('V: %s', self::baseVersion());
-        $releasedAt = self::releasedAt();
-
-        if ($releasedAt === null) {
-            return $label;
-        }
-
-        return sprintf('%s (release du %s)', $label, $releasedAt);
+        return self::baseVersion();
     }
 
     public static function current(): string

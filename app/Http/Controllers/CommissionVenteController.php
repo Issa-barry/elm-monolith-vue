@@ -14,7 +14,7 @@ class CommissionVenteController extends Controller
 {
     private const DATE_DISPLAY_FORMAT = 'd/m/Y';
 
-    // â”€â”€ Index : liste des parts par onglet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Index : liste des parts par onglet ───────────────────────────────────
 
     public function index(Request $request): Response
     {
@@ -23,7 +23,7 @@ class CommissionVenteController extends Controller
         $orgId = auth()->user()->organization_id;
         $tab = $request->input('tab', 'livreurs'); // livreurs | proprietaires
 
-        // PÃ©riode par dÃ©faut selon l'onglet
+        // Période par défaut selon l'onglet
         $periodeDefault = $tab === 'proprietaires' ? 'month' : 'week';
         $periode = $request->input('periode', $periodeDefault);
 
@@ -72,7 +72,7 @@ class CommissionVenteController extends Controller
         ]);
     }
 
-    // â”€â”€ DÃ©tail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Détail ───────────────────────────────────────────────────────────────
 
     public function show(CommissionVente $commission_vente): Response
     {
@@ -81,7 +81,7 @@ class CommissionVenteController extends Controller
         abort_unless(
             $commission_vente->organization_id === auth()->user()->organization_id,
             403,
-            'AccÃ¨s refusÃ©.'
+            'Accès refusé.'
         );
 
         $commission_vente->load([
@@ -99,7 +99,7 @@ class CommissionVenteController extends Controller
         ]);
     }
 
-    // â”€â”€ Mapping part (pour l'index) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Mapping part (pour l'index) ───────────────────────────────────────────
 
     private function mapPart(CommissionPart $p): array
     {
@@ -130,7 +130,7 @@ class CommissionVenteController extends Controller
         ];
     }
 
-    // â”€â”€ Mapping commission (pour le dÃ©tail) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Mapping commission (pour le détail) ───────────────────────────────────
 
     private function mapCommission(CommissionVente $c, bool $withParts = false): array
     {

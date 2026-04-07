@@ -249,6 +249,21 @@ export async function selectOptionFromCombobox(
             break;
         }
 
+        // Strategy 3: PrimeVue AutoComplete — the input won't open the panel by
+        // itself; click the adjacent dropdown button (following-sibling <button>).
+        await combobox
+            .locator('xpath=following-sibling::button')
+            .first()
+            .click({ timeout: 1_000, force: true })
+            .catch(() => undefined);
+        const hasOptionsAfterDropdownBtn = await visibleOptions
+            .first()
+            .isVisible({ timeout: 5_000 })
+            .catch(() => false);
+        if (hasOptionsAfterDropdownBtn) {
+            break;
+        }
+
         await page.keyboard.press('Escape').catch(() => undefined);
         // Wait for any open overlay to fully close before the next attempt
         await page
