@@ -42,8 +42,8 @@ const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'VÃ©hicules', href: '/vehicules' },
-    { title: 'Ã‰quipes de livraison', href: '/equipes-livraison' },
+    { title: 'Véhicules', href: '/vehicules' },
+    { title: 'Équipes de livraison', href: '/equipes-livraison' },
 ];
 
 const search = ref('');
@@ -61,7 +61,7 @@ const equipesFiltrees = computed(() => {
 
 function confirmDelete(equipe: Equipe) {
     confirm.require({
-        message: `Supprimer l'Ã©quipe Â« ${equipe.nom} Â» ?`,
+        message: `Supprimer l'équipe « ${equipe.nom} » ?`,
         header: 'Confirmer la suppression',
         icon: 'pi pi-exclamation-triangle',
         rejectLabel: 'Annuler',
@@ -72,13 +72,13 @@ function confirmDelete(equipe: Equipe) {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
-                        summary: 'Ã‰quipe supprimÃ©e',
+                        summary: 'Équipe supprimée',
                         life: 3000,
                     }),
                 onError: (errors: Record<string, string>) => {
                     const msg =
                         errors.equipe ??
-                        'Impossible de supprimer cette Ã©quipe.';
+                        'Impossible de supprimer cette équipe.';
                     toast.add({ severity: 'error', summary: msg, life: 5000 });
                 },
             });
@@ -94,14 +94,14 @@ function confirmDelete(equipe: Equipe) {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="space-y-6 p-4 sm:p-6">
-            <!-- En-tÃªte -->
+            <!-- En-tête -->
             <div class="flex items-center justify-between gap-4">
                 <div>
                     <h1 class="text-2xl font-semibold tracking-tight">
-                        Ã‰quipes de livraison
+                        Équipes de livraison
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        GÃ©rez les Ã©quipes et leurs taux de commission.
+                        Gérez les équipes et leurs taux de commission.
                     </p>
                 </div>
                 <Link
@@ -110,7 +110,7 @@ function confirmDelete(equipe: Equipe) {
                 >
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
-                        Nouvelle Ã©quipe
+                        Nouvelle équipe
                     </Button>
                 </Link>
             </div>
@@ -121,8 +121,8 @@ function confirmDelete(equipe: Equipe) {
                     <InputIcon class="pi pi-search" />
                     <InputText
                         v-model="search"
-                        placeholder="Rechercher une Ã©quipeâ€¦"
                         class="w-full"
+                        placeholder="recherche"
                     />
                 </IconField>
                 <div class="flex gap-1.5">
@@ -159,16 +159,11 @@ function confirmDelete(equipe: Equipe) {
                     <div
                         class="py-16 text-center text-sm text-muted-foreground"
                     >
-                        Aucune Ã©quipe trouvÃ©e.
+                        Aucune équipe trouvée.
                     </div>
                 </template>
 
-                <Column
-                    field="nom"
-                    header="Ã‰quipe"
-                    sortable
-                    style="width: 22%"
-                >
+                <Column field="nom" header="Équipe" sortable style="width: 22%">
                     <template #body="{ data }">
                         <div class="truncate font-medium" :title="data.nom">
                             {{ data.nom }}
@@ -200,7 +195,7 @@ function confirmDelete(equipe: Equipe) {
                             </div>
                         </template>
                         <span v-else class="text-xs text-destructive"
-                            >â€” aucun principal</span
+                            >— aucun principal</span
                         >
                     </template>
                 </Column>
@@ -223,7 +218,7 @@ function confirmDelete(equipe: Equipe) {
 
                 <Column
                     field="somme_taux"
-                    header="Î£ Taux Ã©quipe"
+                    header="Σ Taux équipe"
                     sortable
                     style="width: 11%"
                 >

@@ -7,8 +7,8 @@ import EquipeForm from './partials/EquipeForm.vue';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Ã‰quipes', href: '/equipes-livraison' },
-    { title: 'Nouvelle Ã©quipe', href: '#' },
+    { title: 'Équipes', href: '/equipes-livraison' },
+    { title: 'Nouvelle équipe', href: '#' },
 ];
 
 const form = useForm({
@@ -41,13 +41,13 @@ function submit() {
                     href="/equipes-livraison"
                     class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
                 >
-                    <ArrowLeft class="h-4 w-4" /> Ã‰quipes
+                    <ArrowLeft class="h-4 w-4" /> Équipes
                 </Link>
                 <h1 class="text-2xl font-semibold tracking-tight">
-                    Nouvelle Ã©quipe
+                    Nouvelle équipe
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    DÃ©finissez les membres et leurs taux.
+                    Définissez les membres et leurs taux.
                 </p>
             </div>
             <EquipeForm :form="form" @submit="submit" />

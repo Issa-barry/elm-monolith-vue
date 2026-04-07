@@ -47,7 +47,7 @@ php artisan migrate --force
 php artisan optimize:clear
 php artisan optimize
 
-php artisan storage:link 
+ln -s "$PWD/storage/app/public" "$PWD/public/storage" || true
 
 
 ## Stack technique
