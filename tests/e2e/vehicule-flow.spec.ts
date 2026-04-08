@@ -70,6 +70,12 @@ test('login + create vehicule + update status + verify list', async ({
         .first()
         .click();
 
+    await expect(page).toHaveURL(/\/vehicules\/\d+\/edit$/);
+    await expect(
+        page.getByText(/Véhicule mis à jour avec succès\./i).first(),
+    ).toBeVisible();
+
+    await page.goto('/vehicules');
     await expect(page).toHaveURL(/\/vehicules$/);
 
     const updatedSearchInput = getVisibleSearchInput(page);
@@ -84,3 +90,4 @@ test('login + create vehicule + update status + verify list', async ({
     await expect(updatedRow).toBeVisible();
     await expect(updatedRow).toContainText(/inactif/i);
 });
+

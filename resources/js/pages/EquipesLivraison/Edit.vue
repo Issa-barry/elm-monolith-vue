@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -19,10 +19,22 @@ interface EquipeData {
     id: number;
     nom: string;
     is_active: boolean;
+    proprietaire_id: number | null;
+    taux_commission_proprietaire: number | null;
     membres: MembreData[];
 }
 
-const props = defineProps<{ equipe: EquipeData }>();
+interface ProprietaireOption {
+    value: number;
+    label: string;
+    telephone?: string | null;
+}
+
+const props = defineProps<{
+    equipe: EquipeData;
+    proprietaires: ProprietaireOption[];
+    tauxProprietaireDefaut: number;
+}>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -33,6 +45,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: props.equipe.nom,
     is_active: Boolean(props.equipe.is_active),
+    proprietaire_id: props.equipe.proprietaire_id,
+    taux_commission_proprietaire: props.equipe.taux_commission_proprietaire ?? props.tauxProprietaireDefaut,
     membres: props.equipe.membres.map((m) => ({
         livreur_id: m.livreur_id,
         nom: m.nom,
@@ -69,7 +83,12 @@ function submit() {
                     Modifier les membres et taux.
                 </p>
             </div>
-            <EquipeForm :form="form" @submit="submit" />
+            <EquipeForm
+                :form="form"
+                :proprietaires="proprietaires"
+                :taux-proprietaire-defaut="tauxProprietaireDefaut"
+                @submit="submit"
+            />
         </div>
     </AppLayout>
 </template>

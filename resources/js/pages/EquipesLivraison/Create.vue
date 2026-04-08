@@ -1,9 +1,20 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft } from 'lucide-vue-next';
 import EquipeForm from './partials/EquipeForm.vue';
+
+interface ProprietaireOption {
+    value: number;
+    label: string;
+    telephone?: string | null;
+}
+
+const props = defineProps<{
+    proprietaires: ProprietaireOption[];
+    tauxProprietaireDefaut: number;
+}>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -14,6 +25,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: '',
     is_active: true,
+    proprietaire_id: null as number | null,
+    taux_commission_proprietaire: props.tauxProprietaireDefaut as number | null,
     membres: [] as {
         livreur_id: number | null;
         nom: string;
@@ -50,7 +63,12 @@ function submit() {
                     Définissez les membres et leurs taux.
                 </p>
             </div>
-            <EquipeForm :form="form" @submit="submit" />
+            <EquipeForm
+                :form="form"
+                :proprietaires="proprietaires"
+                :taux-proprietaire-defaut="tauxProprietaireDefaut"
+                @submit="submit"
+            />
         </div>
     </AppLayout>
 </template>

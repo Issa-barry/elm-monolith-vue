@@ -170,7 +170,7 @@ class VehiculeController extends Controller
         unset($data['photo']);
         $vehicule->update($data);
 
-        return redirect()->route('vehicules.index')
+        return redirect()->route('vehicules.edit', $vehicule)
             ->with('success', 'Véhicule mis à jour avec succès.');
     }
 

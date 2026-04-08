@@ -160,7 +160,7 @@ class VehiculeTest extends TestCase
                 'is_active' => true,
                 'pris_en_charge_par_usine' => false,
             ])
-            ->assertRedirect(route('vehicules.index'));
+            ->assertRedirect(route('vehicules.edit', $vehicule));
 
         $this->assertDatabaseHas('vehicules', [
             'id' => $vehicule->id,
@@ -206,8 +206,10 @@ class VehiculeTest extends TestCase
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $equipe = EquipeLivraison::create([
             'organization_id' => $this->org->id,
+            'proprietaire_id' => $proprietaire->id,
             'nom' => 'Équipe Test',
             'is_active' => true,
+            'taux_commission_proprietaire' => 60,
         ]);
 
         $this->actingAs($this->user)

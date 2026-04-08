@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
+use App\Models\Parametre;
+use App\Models\Proprietaire;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +20,7 @@ class EquipeLivraisonController extends Controller
     {
         $this->authorize('viewAny', EquipeLivraison::class);
 
-        $equipes = EquipeLivraison::with('membres.livreur')
+        $equipes = EquipeLivraison::with('membres.livreur', 'proprietaire')
             ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom')
             ->get()
@@ -33,7 +35,12 @@ class EquipeLivraisonController extends Controller
     {
         $this->authorize('create', EquipeLivraison::class);
 
-        return Inertia::render('EquipesLivraison/Create');
+        $orgId = auth()->user()->organization_id;
+
+        return Inertia::render('EquipesLivraison/Create', [
+            'proprietaires' => $this->proprietairesOptions($orgId),
+            'taux_proprietaire_defaut' => Parametre::getTauxProprietaireDefaut($orgId),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -46,6 +53,8 @@ class EquipeLivraisonController extends Controller
         $data = $request->validate([
             'nom' => 'required|string|max:100',
             'is_active' => 'boolean',
+            'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
+            'taux_commission_proprietaire' => 'required|numeric|min:0|max:100',
             'membres' => 'required|array|min:1',
             'membres.*.livreur_id' => 'nullable|integer',
             'membres.*.nom' => 'required|string|max:255',
@@ -63,8 +72,10 @@ class EquipeLivraisonController extends Controller
         DB::transaction(function () use ($data, $orgId) {
             $equipe = EquipeLivraison::create([
                 'organization_id' => $orgId,
+                'proprietaire_id' => $data['proprietaire_id'],
                 'nom' => $data['nom'],
                 'is_active' => $data['is_active'] ?? true,
+                'taux_commission_proprietaire' => $data['taux_commission_proprietaire'],
             ]);
 
             foreach ($data['membres'] as $index => $m) {
@@ -87,10 +98,13 @@ class EquipeLivraisonController extends Controller
     {
         $this->authorize('update', $equipes_livraison);
 
-        $equipes_livraison->load('membres.livreur');
+        $orgId = auth()->user()->organization_id;
+        $equipes_livraison->load('membres.livreur', 'proprietaire');
 
         return Inertia::render('EquipesLivraison/Edit', [
             'equipe' => $this->equipeData($equipes_livraison),
+            'proprietaires' => $this->proprietairesOptions($orgId),
+            'taux_proprietaire_defaut' => Parametre::getTauxProprietaireDefaut($orgId),
         ]);
     }
 
@@ -103,6 +117,8 @@ class EquipeLivraisonController extends Controller
         $data = $request->validate([
             'nom' => 'required|string|max:100',
             'is_active' => 'boolean',
+            'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
+            'taux_commission_proprietaire' => 'required|numeric|min:0|max:100',
             'membres' => 'required|array|min:1',
             'membres.*.livreur_id' => 'nullable|integer',
             'membres.*.nom' => 'required|string|max:255',
@@ -119,8 +135,10 @@ class EquipeLivraisonController extends Controller
 
         DB::transaction(function () use ($data, $orgId, $equipes_livraison) {
             $equipes_livraison->update([
+                'proprietaire_id' => $data['proprietaire_id'],
                 'nom' => $data['nom'],
                 'is_active' => $data['is_active'] ?? $equipes_livraison->is_active,
+                'taux_commission_proprietaire' => $data['taux_commission_proprietaire'],
             ]);
 
             // Sync membres : suppression + recréation
@@ -168,6 +186,8 @@ class EquipeLivraisonController extends Controller
             'id' => $e->id,
             'nom' => $e->nom,
             'is_active' => $e->is_active,
+            'proprietaire_id' => $e->proprietaire_id,
+            'taux_commission_proprietaire' => $e->taux_commission_proprietaire !== null ? (float) $e->taux_commission_proprietaire : null,
             'nb_membres' => $membres->count(),
             'nb_assistants' => $membres->where('role', 'assistant')->count(),
             'somme_taux' => (float) $membres->sum('taux_commission'),
@@ -183,6 +203,20 @@ class EquipeLivraisonController extends Controller
                 'ordre' => $m->ordre,
             ])->values()->all(),
         ];
+    }
+
+    private function proprietairesOptions(int $orgId): array
+    {
+        return Proprietaire::where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (Proprietaire $p) => [
+                'value' => $p->id,
+                'label' => trim("{$p->prenom} {$p->nom}"),
+                'telephone' => $p->telephone,
+            ])
+            ->toArray();
     }
 
     /**
@@ -248,6 +282,11 @@ class EquipeLivraisonController extends Controller
     {
         return [
             'nom.required' => "Le nom de l'équipe est obligatoire.",
+            'proprietaire_id.required' => 'Le propriétaire est obligatoire.',
+            'proprietaire_id.exists' => "Le propriétaire sélectionné est introuvable ou n'appartient pas à votre organisation.",
+            'taux_commission_proprietaire.required' => 'Le taux propriétaire est obligatoire.',
+            'taux_commission_proprietaire.min' => 'Le taux propriétaire ne peut pas être négatif.',
+            'taux_commission_proprietaire.max' => 'Le taux propriétaire ne peut pas dépasser 100 %.',
             'membres.required' => "L'équipe doit avoir au moins un membre.",
             'membres.min' => "L'équipe doit avoir au moins un membre.",
             'membres.*.nom.required' => 'Le nom du livreur est obligatoire.',
