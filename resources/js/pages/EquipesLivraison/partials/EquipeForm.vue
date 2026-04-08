@@ -215,7 +215,12 @@ function setIsActive(val: boolean | string) {
 // Submit
 
 function handleSubmit() {
-    if (proprietaireWarning.value || principalWarning.value || tauxWarning.value) return;
+    if (
+        proprietaireWarning.value ||
+        principalWarning.value ||
+        tauxWarning.value
+    )
+        return;
     emit('submit');
 }
 </script>
@@ -264,7 +269,9 @@ function handleSubmit() {
                         :suggestions="proprietaireSuggests"
                         option-label="label"
                         @complete="searchProprietaire"
-                        @item-select="onProprietaireSelect(proprietaireSelected)"
+                        @item-select="
+                            onProprietaireSelect(proprietaireSelected)
+                        "
                         @clear="onProprietaireClear"
                         placeholder="Nom ou téléphone…"
                         class="w-full"
@@ -287,13 +294,17 @@ function handleSubmit() {
                             </div>
                         </template>
                         <template #empty>
-                            <div class="px-1 py-0.5 text-sm text-muted-foreground">
+                            <div
+                                class="px-1 py-0.5 text-sm text-muted-foreground"
+                            >
                                 Aucun résultat
                             </div>
                         </template>
                     </AutoComplete>
                     <p
-                        v-if="proprietaireWarning && form.errors?.proprietaire_id"
+                        v-if="
+                            proprietaireWarning && form.errors?.proprietaire_id
+                        "
                         class="mt-1 text-xs text-destructive"
                     >
                         {{ form.errors.proprietaire_id }}
@@ -302,7 +313,10 @@ function handleSubmit() {
 
                 <!-- Taux propriétaire -->
                 <div>
-                    <Label for="taux_commission_proprietaire" class="mb-1.5 block">
+                    <Label
+                        for="taux_commission_proprietaire"
+                        class="mb-1.5 block"
+                    >
                         Taux propriétaire (%)
                         <span class="text-destructive">*</span>
                     </Label>
@@ -315,7 +329,10 @@ function handleSubmit() {
                         :max-fraction-digits="2"
                         suffix=" %"
                         class="w-full"
-                        :class="{ 'p-invalid': form.errors?.taux_commission_proprietaire }"
+                        :class="{
+                            'p-invalid':
+                                form.errors?.taux_commission_proprietaire,
+                        }"
                     />
                     <!-- eslint-enable vue/no-mutating-props -->
                     <p

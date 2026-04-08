@@ -104,7 +104,8 @@
       "Bash(php vendor/bin/phpunit tests/Feature/ProprietaireTest.php --no-coverage)",
       "Bash(php vendor/bin/phpunit tests/Feature/ProprietaireTest.php --no-coverage --no-extensions)",
       "Bash(find /c/laragon/www/elm-monolithe/app/Policies -name \"*.php\" -exec grep -l \"admin_entreprise\\\\|super_admin\" {} \\\\;)",
-      "Bash(vendor/bin/pint app/Http/Controllers/VehiculeController.php database/migrations/2026_04_07_200000_seed_taux_proprietaire_defaut_parametre.php)"
+      "Bash(vendor/bin/pint app/Http/Controllers/VehiculeController.php database/migrations/2026_04_07_200000_seed_taux_proprietaire_defaut_parametre.php)",
+      "Bash(node node_modules/.bin/prettier --write \"resources/js/pages/EquipesLivraison/Edit.vue\" \"resources/js/pages/EquipesLivraison/partials/EquipeForm.vue\")"
     ]
   }
 }

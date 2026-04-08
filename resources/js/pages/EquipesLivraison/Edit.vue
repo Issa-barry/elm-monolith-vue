@@ -46,7 +46,9 @@ const form = useForm({
     nom: props.equipe.nom,
     is_active: Boolean(props.equipe.is_active),
     proprietaire_id: props.equipe.proprietaire_id,
-    taux_commission_proprietaire: props.equipe.taux_commission_proprietaire ?? props.tauxProprietaireDefaut,
+    taux_commission_proprietaire:
+        props.equipe.taux_commission_proprietaire ??
+        props.tauxProprietaireDefaut,
     membres: props.equipe.membres.map((m) => ({
         livreur_id: m.livreur_id,
         nom: m.nom,
