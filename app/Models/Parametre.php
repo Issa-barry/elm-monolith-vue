@@ -22,6 +22,11 @@ class Parametre extends Model
 
     public const TYPE_JSON = 'json';
 
+    public const TYPE_DECIMAL = 'decimal';
+
+    // ── Groupes ───────────────────────────────────────────────────────────────
+    public const GROUPE_VEHICULES = 'vehicules';
+
     // ── Clés ──────────────────────────────────────────────────────────────────
     public const CLE_SEUIL_STOCK_FAIBLE = 'seuil_stock_faible';
 
@@ -30,6 +35,8 @@ class Parametre extends Model
     public const CLE_PRIX_ROULEAU_DEFAUT = 'prix_rouleau_defaut';
 
     public const CLE_PRODUIT_ROULEAU_ID = 'produit_rouleau_id';
+
+    public const CLE_TAUX_PROPRIETAIRE_DEFAUT = 'taux_proprietaire_defaut';
 
     protected $fillable = [
         'organization_id',
@@ -75,6 +82,7 @@ class Parametre extends Model
 
         return match ($type) {
             self::TYPE_INTEGER => (int) $valeur,
+            self::TYPE_DECIMAL => round((float) $valeur, 2),
             self::TYPE_BOOLEAN => in_array($valeur, ['1', 'true', 'yes'], true),
             self::TYPE_JSON => json_decode($valeur, true),
             default => $valeur,
@@ -88,6 +96,7 @@ class Parametre extends Model
             self::CLE_NOTIFICATIONS_STOCK_ACTIVES,
             self::CLE_PRIX_ROULEAU_DEFAUT,
             self::CLE_PRODUIT_ROULEAU_ID,
+            self::CLE_TAUX_PROPRIETAIRE_DEFAUT,
         ] as $cle) {
             Cache::forget(self::cacheKey($orgId, $cle));
         }
@@ -115,6 +124,11 @@ class Parametre extends Model
         $val = self::get($orgId, self::CLE_PRODUIT_ROULEAU_ID, null);
 
         return $val !== null ? (int) $val : null;
+    }
+
+    public static function getTauxProprietaireDefaut(int $orgId): float
+    {
+        return (float) self::get($orgId, self::CLE_TAUX_PROPRIETAIRE_DEFAUT, 60);
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────

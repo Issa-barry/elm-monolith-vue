@@ -40,6 +40,7 @@ const props = defineProps<{
     proprietaires: Option[];
     equipes: EquipeOption[];
     types: TypeOption[];
+    tauxProprietaireDefaut: number;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -115,6 +116,7 @@ function submit() {
                 :equipes="equipes"
                 :types="types"
                 :photo-url="vehicule.photo_url"
+                :taux-proprietaire-defaut="props.tauxProprietaireDefaut"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

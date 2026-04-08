@@ -1,7 +1,7 @@
 import 'primeicons/primeicons.css';
 import '../css/app.css';
 
-import { createInertiaApp } from '@inertiajs/vue3';
+import { createInertiaApp, router } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import PrimeVue from 'primevue/config';
 import ConfirmationService from 'primevue/confirmationservice';
@@ -16,6 +16,17 @@ import {
     getStoredPrimeVueTheme,
     resolvePrimeVueThemeFromEnv,
 } from './lib/primevue-theme';
+
+// Quand la session expire, Inertia suit la redirection vers /login avec la
+// même méthode HTTP (PUT/PATCH/DELETE) ce qui génère un 405. On force un
+// rechargement complet pour que l'utilisateur puisse se reconnecter.
+router.on('invalid', (event) => {
+    const status = (event.detail.response as Response).status;
+    if (status === 419 || status === 401) {
+        event.preventDefault();
+        window.location.reload();
+    }
+});
 
 const appName = import.meta.env.VITE_APP_NAME || 'Eau-la-maman';
 const initialPrimeVueTheme =
