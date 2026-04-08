@@ -1,27 +1,71 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { AlertTriangle, Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import AutoComplete from 'primevue/autocomplete';
+import InputNumber from 'primevue/inputnumber';
 import { useConfirm } from 'primevue/useconfirm';
 import { computed, ref } from 'vue';
 import MembreModal, { type MembreFormData } from './MembreModal.vue';
 
 type Membre = MembreFormData;
 
+interface ProprietaireOption {
+    value: number;
+    label: string;
+    telephone?: string | null;
+}
+
 interface FormData {
     nom: string;
     is_active: boolean;
+    proprietaire_id: number | null;
+    taux_commission_proprietaire: number | null;
     membres: Membre[];
     errors?: Record<string, string>;
     processing?: boolean;
 }
 
-const props = defineProps<{ form: FormData }>();
+const props = defineProps<{
+    form: FormData;
+    proprietaires: ProprietaireOption[];
+    tauxProprietaireDefaut: number;
+}>();
 const emit = defineEmits<{ submit: [] }>();
 
 const confirm = useConfirm();
+
+// ── AutoComplete : Propriétaire ───────────────────────────────────────────────
+
+const proprietaireSelected = ref<ProprietaireOption | null>(
+    props.proprietaires.find((p) => p.value === props.form.proprietaire_id) ??
+        null,
+);
+const proprietaireSuggests = ref<ProprietaireOption[]>([]);
+
+function searchProprietaire(event: { query: string }) {
+    const q = event.query.toLowerCase().trim();
+    proprietaireSuggests.value = q
+        ? props.proprietaires.filter(
+              (p) =>
+                  p.label.toLowerCase().includes(q) ||
+                  (p.telephone && p.telephone.includes(q)),
+          )
+        : [...props.proprietaires];
+}
+
+function onProprietaireSelect(p: ProprietaireOption | null) {
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.proprietaire_id = p ? p.value : null;
+}
+
+function onProprietaireClear() {
+    proprietaireSelected.value = null;
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.proprietaire_id = null;
+}
 
 // Modal état
 
@@ -54,12 +98,19 @@ const principalIndex = computed(() =>
 
 const hasPrincipal = computed(() => principalIndex.value >= 0);
 
+const proprietaireWarning = computed(() => {
+    if (!props.form.proprietaire_id) {
+        return 'Le propriétaire est obligatoire.';
+    }
+    return null;
+});
+
 const principalWarning = computed(() => {
     const count = props.form.membres.filter(
         (m) => m.role === 'principal',
     ).length;
     if (count === 0)
-        return 'L’équipe doit avoir un seul livreur principal mais plusieurs assistants.';
+        return "L'équipe doit avoir un seul livreur principal mais plusieurs assistants.";
     if (count > 1)
         return "L'équipe ne peut avoir qu'un seul livreur principal.";
     return null;
@@ -89,6 +140,12 @@ const maxTauxDisponible = computed(() => {
     );
 
     return Math.max(0, Number((100 - totalSansMembreEdite).toFixed(2)));
+});
+
+const totalTauxEquipe = computed(() => {
+    const membres = sommeTaux.value;
+    const prop = props.form.taux_commission_proprietaire ?? 0;
+    return Math.round((membres + prop) * 100) / 100;
 });
 
 // Gestion des membres
@@ -158,7 +215,12 @@ function setIsActive(val: boolean | string) {
 // Submit
 
 function handleSubmit() {
-    if (principalWarning.value || tauxWarning.value) return;
+    if (
+        proprietaireWarning.value ||
+        principalWarning.value ||
+        tauxWarning.value
+    )
+        return;
     emit('submit');
 }
 </script>
@@ -194,6 +256,105 @@ function handleSubmit() {
                         {{ form.errors.nom }}
                     </p>
                 </div>
+
+                <!-- Propriétaire -->
+                <div>
+                    <Label for="proprietaire_id" class="mb-1.5 block">
+                        Propriétaire
+                        <span class="text-destructive">*</span>
+                    </Label>
+                    <AutoComplete
+                        v-model="proprietaireSelected"
+                        input-id="proprietaire_id"
+                        :suggestions="proprietaireSuggests"
+                        option-label="label"
+                        @complete="searchProprietaire"
+                        @item-select="
+                            onProprietaireSelect(proprietaireSelected)
+                        "
+                        @clear="onProprietaireClear"
+                        placeholder="Nom ou téléphone…"
+                        class="w-full"
+                        input-class="w-full"
+                        :class="{ 'p-invalid': form.errors?.proprietaire_id }"
+                        dropdown
+                        force-selection
+                    >
+                        <template #option="{ option }">
+                            <div class="py-0.5">
+                                <div class="leading-tight font-medium">
+                                    {{ option.label }}
+                                </div>
+                                <div
+                                    v-if="option.telephone"
+                                    class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                >
+                                    {{ option.telephone }}
+                                </div>
+                            </div>
+                        </template>
+                        <template #empty>
+                            <div
+                                class="px-1 py-0.5 text-sm text-muted-foreground"
+                            >
+                                Aucun résultat
+                            </div>
+                        </template>
+                    </AutoComplete>
+                    <p
+                        v-if="
+                            proprietaireWarning && form.errors?.proprietaire_id
+                        "
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ form.errors.proprietaire_id }}
+                    </p>
+                </div>
+
+                <!-- Taux propriétaire -->
+                <div>
+                    <Label
+                        for="taux_commission_proprietaire"
+                        class="mb-1.5 block"
+                    >
+                        Taux propriétaire (%)
+                        <span class="text-destructive">*</span>
+                    </Label>
+                    <!-- eslint-disable vue/no-mutating-props -->
+                    <InputNumber
+                        id="taux_commission_proprietaire"
+                        v-model="form.taux_commission_proprietaire"
+                        :min="0"
+                        :max="100"
+                        :max-fraction-digits="2"
+                        suffix=" %"
+                        class="w-full"
+                        :class="{
+                            'p-invalid':
+                                form.errors?.taux_commission_proprietaire,
+                        }"
+                    />
+                    <!-- eslint-enable vue/no-mutating-props -->
+                    <p
+                        v-if="form.membres.length > 0"
+                        class="mt-1 text-xs"
+                        :class="
+                            Math.abs(totalTauxEquipe - 100) > 0.01
+                                ? 'text-amber-600'
+                                : 'text-emerald-600'
+                        "
+                    >
+                        Total équipe + propriétaire : {{ totalTauxEquipe }}%
+                        {{ Math.abs(totalTauxEquipe - 100) <= 0.01 ? '✓' : '' }}
+                    </p>
+                    <p
+                        v-if="form.errors?.taux_commission_proprietaire"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ form.errors.taux_commission_proprietaire }}
+                    </p>
+                </div>
+
                 <div class="sm:col-span-2">
                     <h4
                         class="mb-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
@@ -261,6 +422,15 @@ function handleSubmit() {
                     <Plus class="mr-1.5 h-3.5 w-3.5" />
                     Ajouter un membre
                 </Button>
+            </div>
+
+            <!-- Alerte propriétaire -->
+            <div
+                v-if="proprietaireWarning"
+                class="mb-4 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300"
+            >
+                <AlertTriangle class="h-3.5 w-3.5 shrink-0" />
+                {{ proprietaireWarning }}
             </div>
 
             <!-- Alerte principal -->
@@ -388,7 +558,10 @@ function handleSubmit() {
             <Button
                 type="submit"
                 :disabled="
-                    form.processing || !!principalWarning || !!tauxWarning
+                    form.processing ||
+                    !!proprietaireWarning ||
+                    !!principalWarning ||
+                    !!tauxWarning
                 "
             >
                 {{ form.processing ? 'Enregistrement…' : 'Enregistrer' }}
