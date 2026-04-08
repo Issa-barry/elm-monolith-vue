@@ -37,6 +37,13 @@ class ParametreSeeder extends Seeder
             'groupe' => Parametre::GROUPE_PACKING,
             'description' => 'Identifiant du produit utilisé comme rouleau dans les packings',
         ],
+        [
+            'cle' => Parametre::CLE_TAUX_PROPRIETAIRE_DEFAUT,
+            'valeur' => '60',
+            'type' => Parametre::TYPE_DECIMAL,
+            'groupe' => Parametre::GROUPE_VEHICULES,
+            'description' => 'Taux de commission attribué au propriétaire par défaut (%) lors de la création d\'un véhicule sans équipe',
+        ],
     ];
 
     public function run(): void

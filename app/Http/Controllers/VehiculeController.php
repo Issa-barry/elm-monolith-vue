@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\TypeVehicule;
 use App\Models\EquipeLivraison;
 use App\Models\Livreur;
+use App\Models\Parametre;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Services\CommissionCalculator;
@@ -77,6 +78,7 @@ class VehiculeController extends Controller
             'proprietaires' => $this->proprietairesOptions(),
             'equipes' => $this->equipesOptions(),
             'types' => TypeVehicule::options(),
+            'taux_proprietaire_defaut' => Parametre::getTauxProprietaireDefaut(auth()->user()->organization_id),
         ]);
     }
 
@@ -128,6 +130,7 @@ class VehiculeController extends Controller
             'proprietaires' => $this->proprietairesOptions(),
             'equipes' => $this->equipesOptions(),
             'types' => TypeVehicule::options(),
+            'taux_proprietaire_defaut' => Parametre::getTauxProprietaireDefaut(auth()->user()->organization_id),
         ]);
     }
 

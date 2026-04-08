@@ -4,7 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import ProprietaireForm from './partials/ProprietaireForm.vue';
 
 interface ProprietaireData {
@@ -48,6 +48,24 @@ const form = useForm({
     code_phone_pays: props.proprietaire.code_phone_pays,
     is_active: Boolean(props.proprietaire.is_active),
 });
+
+watch(
+    () => props.proprietaire,
+    (p) => {
+        form.defaults({
+            nom: p.nom,
+            prenom: p.prenom,
+            email: p.email,
+            telephone: p.telephone,
+            adresse: p.adresse,
+            ville: p.ville,
+            pays: p.pays,
+            code_pays: p.code_pays,
+            code_phone_pays: p.code_phone_pays,
+            is_active: Boolean(p.is_active),
+        }).reset();
+    },
+);
 
 function submit() {
     form.put(`/proprietaires/${props.proprietaire.id}`);

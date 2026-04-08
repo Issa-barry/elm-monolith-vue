@@ -102,7 +102,9 @@
       "Bash(node fix-encoding.cjs)",
       "Bash(grep \"use App\\\\\\\\\\\\Models\\\\\\\\\\\\Livreur\" app/Http/Controllers/VehiculeController.php)",
       "Bash(php vendor/bin/phpunit tests/Feature/ProprietaireTest.php --no-coverage)",
-      "Bash(php vendor/bin/phpunit tests/Feature/ProprietaireTest.php --no-coverage --no-extensions)"
+      "Bash(php vendor/bin/phpunit tests/Feature/ProprietaireTest.php --no-coverage --no-extensions)",
+      "Bash(find /c/laragon/www/elm-monolithe/app/Policies -name \"*.php\" -exec grep -l \"admin_entreprise\\\\|super_admin\" {} \\\\;)",
+      "Bash(vendor/bin/pint app/Http/Controllers/VehiculeController.php database/migrations/2026_04_07_200000_seed_taux_proprietaire_defaut_parametre.php)"
     ]
   }
 }

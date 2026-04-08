@@ -16,7 +16,7 @@ interface Parametre {
     cle: string;
     valeur: string | null;
     valeur_cast: string | number | boolean | null;
-    type: 'string' | 'integer' | 'boolean' | 'json';
+    type: 'string' | 'integer' | 'decimal' | 'boolean' | 'json';
     groupe: string;
     description: string | null;
 }
@@ -32,6 +32,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const groupeLabels: Record<string, string> = {
     general: 'Général',
     packing: 'Packing',
+    vehicules: 'Véhicules',
 };
 
 const cleLabels: Record<string, string> = {
@@ -39,6 +40,7 @@ const cleLabels: Record<string, string> = {
     notifications_stock_actives: 'Alertes de stock faible',
     prix_rouleau_defaut: 'Prix rouleau par défaut (GNF)',
     produit_rouleau_id: 'ID produit rouleau',
+    taux_proprietaire_defaut: 'Taux propriétaire par défaut (%)',
 };
 
 // ── Regroupement ──────────────────────────────────────────────────────────────
@@ -162,18 +164,32 @@ function toggleBoolean(p: Parametre) {
                                     </button>
                                 </template>
 
-                                <!-- Integer / string → input + bouton -->
+                                <!-- Integer / decimal / string → input + bouton -->
                                 <template v-else>
                                     <Input
                                         :id="`param-${p.id}`"
                                         v-model="getForm(p).valeur"
                                         :type="
-                                            p.type === 'integer'
+                                            p.type === 'integer' ||
+                                            p.type === 'decimal'
                                                 ? 'number'
                                                 : 'text'
                                         "
                                         :min="
-                                            p.type === 'integer' ? 0 : undefined
+                                            p.type === 'integer' ||
+                                            p.type === 'decimal'
+                                                ? 0
+                                                : undefined
+                                        "
+                                        :max="
+                                            p.type === 'decimal'
+                                                ? 100
+                                                : undefined
+                                        "
+                                        :step="
+                                            p.type === 'decimal'
+                                                ? '0.01'
+                                                : undefined
                                         "
                                         class="w-36 text-right"
                                         @keyup.enter="submit(p)"
