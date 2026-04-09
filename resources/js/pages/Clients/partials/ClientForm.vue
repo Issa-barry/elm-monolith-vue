@@ -25,7 +25,6 @@ interface FormData {
     code_pays: string | null;
     code_phone_pays: string | null;
     is_active: boolean;
-    is_blocked: boolean;
 }
 
 const props = defineProps<{
@@ -345,62 +344,28 @@ function onTelephoneInput(value: string | null | undefined) {
             >
                 Statut
             </h3>
-            <div class="space-y-4">
-                <div class="flex items-center gap-3">
-                    <Checkbox
-                        id="is_active"
-                        :model-value="Boolean(form.is_active)"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                is_active: $event === true,
-                            })
-                        "
-                    />
-                    <div>
-                        <Label
-                            for="is_active"
-                            class="cursor-pointer font-medium"
-                        >
-                            {{ form.is_active ? 'Actif' : 'Inactif' }}
-                        </Label>
-                        <p class="text-xs text-muted-foreground">
-                            {{
-                                form.is_active
-                                    ? 'Décochez pour désactiver ce client'
-                                    : 'Cochez pour activer ce client'
-                            }}
-                        </p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-3">
-                    <Checkbox
-                        id="is_blocked"
-                        :model-value="Boolean(form.is_blocked)"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                is_blocked: $event === true,
-                            })
-                        "
-                    />
-                    <div>
-                        <Label
-                            for="is_blocked"
-                            class="cursor-pointer font-medium"
-                        >
-                            {{
-                                form.is_blocked ? 'Bloqué' : 'Non bloqué'
-                            }}
-                        </Label>
-                        <p class="text-xs text-muted-foreground">
-                            {{
-                                form.is_blocked
-                                    ? 'Ce client est bloqué et ne peut pas être utilisé dans les opérations'
-                                    : 'Cochez pour bloquer ce client'
-                            }}
-                        </p>
-                    </div>
+            <div class="flex items-center gap-3">
+                <Checkbox
+                    id="is_active"
+                    :model-value="Boolean(form.is_active)"
+                    @update:model-value="
+                        $emit('update:form', {
+                            ...form,
+                            is_active: $event === true,
+                        })
+                    "
+                />
+                <div>
+                    <Label for="is_active" class="cursor-pointer font-medium">
+                        {{ form.is_active ? 'Actif' : 'Inactif' }}
+                    </Label>
+                    <p class="text-xs text-muted-foreground">
+                        {{
+                            form.is_active
+                                ? 'Décochez pour désactiver ce client'
+                                : 'Cochez pour activer ce client'
+                        }}
+                    </p>
                 </div>
             </div>
         </div>

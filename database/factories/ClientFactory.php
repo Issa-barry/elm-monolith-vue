@@ -28,7 +28,6 @@ class ClientFactory extends Factory
             'ville' => 'Conakry',
             'adresse' => null,
             'is_active' => true,
-            'is_blocked' => false,
         ];
     }
 }

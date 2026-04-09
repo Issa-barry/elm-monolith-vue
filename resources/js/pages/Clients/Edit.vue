@@ -19,7 +19,6 @@ interface ClientData {
     code_pays: string | null;
     code_phone_pays: string | null;
     is_active: boolean;
-    is_blocked: boolean;
 }
 
 const props = defineProps<{ client: ClientData }>();
@@ -48,7 +47,6 @@ const form = useForm({
     code_pays: props.client.code_pays,
     code_phone_pays: props.client.code_phone_pays,
     is_active: Boolean(props.client.is_active),
-    is_blocked: Boolean(props.client.is_blocked),
 });
 
 watch(
@@ -65,7 +63,6 @@ watch(
             code_pays: c.code_pays,
             code_phone_pays: c.code_phone_pays,
             is_active: Boolean(c.is_active),
-            is_blocked: Boolean(c.is_blocked),
         }).reset();
     },
 );

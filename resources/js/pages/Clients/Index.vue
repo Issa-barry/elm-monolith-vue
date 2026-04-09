@@ -16,7 +16,6 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
-    Ban,
     MoreVertical,
     Pencil,
     Plus,
@@ -57,7 +56,6 @@ interface Client {
     code_pays: string | null;
     adresse: string | null;
     is_active: boolean;
-    is_blocked: boolean;
 }
 
 const props = defineProps<{ clients: Client[] }>();
@@ -210,14 +208,8 @@ function confirmDelete(c: Client) {
 
                     <!-- Info -->
                     <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-1.5">
-                            <span class="truncate text-sm font-medium">{{
-                                c.nom_complet
-                            }}</span>
-                            <Ban
-                                v-if="c.is_blocked"
-                                class="h-3.5 w-3.5 shrink-0 text-destructive"
-                            />
+                        <div class="truncate text-sm font-medium">
+                            {{ c.nom_complet }}
                         </div>
                         <div
                             v-if="c.email"
@@ -452,15 +444,8 @@ function confirmDelete(c: Client) {
                                     {{ initials(data.nom_complet) }}
                                 </div>
                                 <div>
-                                    <div class="flex items-center gap-1.5">
-                                        <span class="font-medium">{{
-                                            data.nom_complet
-                                        }}</span>
-                                        <Ban
-                                            v-if="data.is_blocked"
-                                            class="h-3.5 w-3.5 text-destructive"
-                                            title="Client bloqué"
-                                        />
+                                    <div class="font-medium">
+                                        {{ data.nom_complet }}
                                     </div>
                                     <div
                                         v-if="data.email"
