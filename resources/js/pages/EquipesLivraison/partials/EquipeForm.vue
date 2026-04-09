@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { formatPhoneDisplay } from '@/lib/utils';
-import { AlertTriangle, Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import { AlertTriangle, Pencil, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import InputNumber from 'primevue/inputnumber';
 import { useConfirm } from 'primevue/useconfirm';
@@ -576,7 +576,9 @@ function handleSubmit() {
                     !!principalWarning ||
                     !!tauxWarning
                 "
+                class="gap-2"
             >
+                <Save class="h-4 w-4" />
                 {{ form.processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
         </div>
@@ -588,6 +590,7 @@ function handleSubmit() {
         :membre="membreEnEdition"
         :has-principal="hasPrincipal && editingIndex !== principalIndex"
         :max-taux="maxTauxDisponible"
+        :telephone-error="editingIndex !== null ? form.errors?.[`membres.${editingIndex}.telephone`] : null"
         @confirm="onMembreConfirm"
     />
 </template>

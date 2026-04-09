@@ -25,6 +25,7 @@ const props = defineProps<{
     membre?: MembreFormData | null;
     hasPrincipal?: boolean;
     maxTaux?: number;
+    telephoneError?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -40,6 +41,11 @@ const roles = [
 const isEdit = computed(() => !!props.membre);
 const title = computed(() =>
     isEdit.value ? 'Modifier le membre' : 'Nouveau membre',
+);
+const canSubmit = computed(() =>
+    form.prenom.trim().length > 0 &&
+    form.nom.trim().length > 0 &&
+    /^\d{9}$/.test(phoneLocal.value),
 );
 const maxTauxSafe = computed(() => {
     const raw = Number(props.maxTaux ?? 100);
@@ -257,10 +263,10 @@ function handleConfirm() {
                     />
                 </div>
                 <p
-                    v-if="errors.telephone"
+                    v-if="errors.telephone || telephoneError"
                     class="mt-1 text-xs text-destructive"
                 >
-                    {{ errors.telephone }}
+                    {{ errors.telephone || telephoneError }}
                 </p>
             </div>
 
@@ -324,7 +330,12 @@ function handleConfirm() {
                 >
                     Annuler
                 </Button>
-                <Button type="button" size="sm" @click="handleConfirm">
+                <Button
+                    type="button"
+                    size="sm"
+                    :disabled="!canSubmit"
+                    @click="handleConfirm"
+                >
                     {{ isEdit ? 'Enregistrer' : 'Ajouter' }}
                 </Button>
             </div>
