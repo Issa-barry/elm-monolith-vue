@@ -24,6 +24,7 @@ import {
     PackageCheck,
     ShoppingCart,
     UserCog,
+    UserRoundCheck,
     Users,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
@@ -78,6 +79,13 @@ const mainNavItems = computed((): NavItem[] => {
         items.push({ title: 'Achats', href: '/achats', icon: PackageCheck });
     if (canSee('packings.read', 'packings'))
         items.push({ title: 'Packings', href: '/packings', icon: Layers });
+    if (can('clients.read'))
+        items.push({
+            title: 'Clients',
+            href: '/clients',
+            icon: UserRoundCheck,
+        });
+
     if (canSee('prestataires.read', 'prestataires'))
         items.push({
             title: 'Prestataires',

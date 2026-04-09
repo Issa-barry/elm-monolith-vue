@@ -183,7 +183,10 @@ function confirmDelete(v: Vehicule) {
                     <div
                         class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30"
                         :class="v.photo_url ? 'cursor-zoom-in' : ''"
-                        @click="v.photo_url && openLightbox(v.photo_url, v.nom_vehicule)"
+                        @click="
+                            v.photo_url &&
+                            openLightbox(v.photo_url, v.nom_vehicule)
+                        "
                     >
                         <img
                             v-if="v.photo_url"
@@ -359,8 +362,16 @@ function confirmDelete(v: Vehicule) {
                             <div class="flex items-center gap-3">
                                 <div
                                     class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30"
-                                    :class="data.photo_url ? 'cursor-zoom-in' : ''"
-                                    @click="data.photo_url && openLightbox(data.photo_url, data.nom_vehicule)"
+                                    :class="
+                                        data.photo_url ? 'cursor-zoom-in' : ''
+                                    "
+                                    @click="
+                                        data.photo_url &&
+                                        openLightbox(
+                                            data.photo_url,
+                                            data.nom_vehicule,
+                                        )
+                                    "
                                 >
                                     <img
                                         v-if="data.photo_url"

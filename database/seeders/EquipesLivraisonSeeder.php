@@ -19,6 +19,7 @@ use Illuminate\Database\Seeder;
  * | Nen Dow       | Mamadou BARRY     | 60 %      | Ibrahima CAMARA   | 25 % | Sekou KOUYATE                   | 15 %   |
  * | Auto Dogomet  | Fatoumata DIALLO  | 60 %      | Mariama BAH       | 40 % | -                               | -      |
  * | Baba Ousou    | Mamadou BARRY     | 60 %      | Oumar CAMARA      | 20 % | Abdoulaye SYLLA, Kadiatou TOURE | 15%+5% |
+ * | Kaloum Express| Issa TOUNKARA     | 65 %      | Mamadou SOUMAH    | 25 % | Fatoumata KOUROUMA              | 10 %   | (sans véhicule — disponible pour tests)
  */
 class EquipesLivraisonSeeder extends Seeder
 {
@@ -59,6 +60,15 @@ class EquipesLivraisonSeeder extends Seeder
                     ['telephone' => '+224622000008', 'role' => 'principal', 'taux' => 20, 'ordre' => 0],
                     ['telephone' => '+224622000009', 'role' => 'assistant', 'taux' => 15, 'ordre' => 1],
                     ['telephone' => '+224622000010', 'role' => 'assistant', 'taux' => 5, 'ordre' => 2],
+                ],
+            ],
+            [
+                // Équipe sans véhicule — toujours disponible pour la création d'un véhicule
+                'nom' => 'Kaloum Express',
+                'proprietaire_tel' => '+224621000003', // Issa TOUNKARA
+                'membres' => [
+                    ['telephone' => '+224622000004', 'role' => 'principal', 'taux' => 25, 'ordre' => 0],
+                    ['telephone' => '+224622000005', 'role' => 'assistant', 'taux' => 10, 'ordre' => 1],
                 ],
             ],
         ];

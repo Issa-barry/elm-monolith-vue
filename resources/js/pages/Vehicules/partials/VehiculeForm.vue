@@ -119,7 +119,8 @@ const selectedProprietaireLabel = computed(() => {
 
 // ── AutoComplete : Équipe ────────────────────────────────────────────────────
 const equipeSelected = ref<EquipeOption | null>(
-    props.equipes.find((e) => e.value === props.form.equipe_livraison_id) ?? null,
+    props.equipes.find((e) => e.value === props.form.equipe_livraison_id) ??
+        null,
 );
 const equipeSuggests = ref<EquipeOption[]>([]);
 
@@ -137,7 +138,9 @@ function searchEquipe(event: { query: string }) {
         : [...props.equipes];
 }
 
-function onEquipeACSelect(payload: { value: EquipeOption } | EquipeOption | null) {
+function onEquipeACSelect(
+    payload: { value: EquipeOption } | EquipeOption | null,
+) {
     if (!payload) {
         onEquipeChange(null);
         return;
@@ -219,7 +222,8 @@ function handleSubmit() {
                                         option.livreur_principal.nom_complet
                                     }}</span>
                                     <span class="font-mono">
-                                        · {{ option.livreur_principal.telephone }}
+                                        ·
+                                        {{ option.livreur_principal.telephone }}
                                     </span>
                                 </div>
                             </div>
@@ -251,7 +255,9 @@ function handleSubmit() {
                         class="mt-1 text-xs text-muted-foreground"
                     >
                         Σ taux livreurs :
-                        <span class="font-semibold">{{ selectedEquipe.somme_taux }}%</span>
+                        <span class="font-semibold"
+                            >{{ selectedEquipe.somme_taux }}%</span
+                        >
                     </p>
                 </div>
 
@@ -440,7 +446,8 @@ function handleSubmit() {
                             Pris en charge par l'usine
                         </Label>
                         <p class="text-xs text-muted-foreground">
-                            Les frais du véhicule sont supportés par l'organisation
+                            Les frais du véhicule sont supportés par
+                            l'organisation
                         </p>
                     </div>
                 </div>
@@ -450,7 +457,9 @@ function handleSubmit() {
                     <div
                         class="flex h-10 cursor-not-allowed items-center rounded-md border border-input bg-muted/60 px-3 text-sm"
                     >
-                        <Lock class="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+                        <Lock
+                            class="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground/80"
+                        />
                         <span v-if="selectedEquipe" class="font-medium">
                             {{ tauxProprietaire }} %
                         </span>
@@ -483,7 +492,9 @@ function handleSubmit() {
                             alt="Aperçu"
                             class="h-full w-full object-cover"
                         />
-                        <span v-else class="text-3xl text-muted-foreground/40">🚗</span>
+                        <span v-else class="text-3xl text-muted-foreground/40"
+                            >🚗</span
+                        >
                     </div>
                 </div>
                 <div class="flex flex-col gap-3">

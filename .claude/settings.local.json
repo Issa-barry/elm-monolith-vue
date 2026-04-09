@@ -115,7 +115,8 @@
       "Read(//c/laragon/www/elm-monolithe/app/Http/Requests/**)",
       "Bash(php -r ':*)",
       "Bash(python3 -)",
-      "Bash(php -l tests/Feature/VehiculeTest.php)"
+      "Bash(php -l tests/Feature/VehiculeTest.php)",
+      "Bash(./vendor/bin/pint app/Models/Client.php app/Http/Controllers/ClientController.php app/Policies/ClientPolicy.php database/factories/ClientFactory.php database/migrations/2026_04_09_200000_add_country_and_blocked_to_clients_table.php database/migrations/2026_04_09_210000_add_indexes_to_clients_table.php tests/Feature/ClientTest.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\www\\elm-monolithe\\database\\seeders"

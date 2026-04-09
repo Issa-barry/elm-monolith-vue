@@ -131,7 +131,7 @@ class VehiculeController extends Controller
         return Inertia::render('Vehicules/Edit', [
             'vehicule' => $this->vehiculeData($vehicule),
             'proprietaires' => $this->proprietairesOptions(),
-            'equipes' => $this->equipesOptions(),
+            'equipes' => $this->equipesOptions($vehicule->id),
             'types' => TypeVehicule::options(),
             'tauxProprietaireDefaut' => Parametre::getTauxProprietaireDefaut(auth()->user()->organization_id),
         ]);
@@ -214,11 +214,22 @@ class VehiculeController extends Controller
             ->toArray();
     }
 
-    private function equipesOptions(): array
+    private function equipesOptions(?int $currentVehiculeId = null): array
     {
         return EquipeLivraison::with(['membres', 'livreurs', 'proprietaire'])
             ->where('organization_id', auth()->user()->organization_id)
             ->where('is_active', true)
+            ->where(function ($query) use ($currentVehiculeId) {
+                // Équipes sans véhicule actif (non soft-deleté)
+                $query->whereDoesntHave('vehicules', fn ($q) => $q->whereNull('deleted_at'));
+                // En édition : inclure aussi l'équipe du véhicule courant
+                if ($currentVehiculeId) {
+                    $query->orWhereHas('vehicules', fn ($q) => $q
+                        ->where('id', $currentVehiculeId)
+                        ->whereNull('deleted_at')
+                    );
+                }
+            })
             ->orderBy('nom')
             ->get()
             ->map(fn (EquipeLivraison $e) => [

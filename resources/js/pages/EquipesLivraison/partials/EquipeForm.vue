@@ -234,29 +234,26 @@ function handleSubmit() {
 
 <template>
     <form class="space-y-4 sm:space-y-6" @submit.prevent="handleSubmit">
-         <!-- Nom de l'équipe -->
-                <div class="sm:col-span-2">
-                    <Label for="nom" class="mb-1.5 block">
-                        Nom de l'équipe
-                        <span class="text-destructive">*</span>
-                    </Label>
-                    <!-- eslint-disable vue/no-mutating-props -->
-                    <input
-                        id="nom"
-                        v-model="form.nom"
-                        type="text"
-                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        :class="{ 'border-destructive': form.errors?.nom }"
-                    />
-                    <!-- eslint-enable vue/no-mutating-props -->
-                    <p
-                        v-if="form.errors?.nom"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ form.errors.nom }}
-                    </p>
-                </div>
-                
+        <!-- Nom de l'équipe -->
+        <div class="sm:col-span-2">
+            <Label for="nom" class="mb-1.5 block">
+                Nom de l'équipe
+                <span class="text-destructive">*</span>
+            </Label>
+            <!-- eslint-disable vue/no-mutating-props -->
+            <input
+                id="nom"
+                v-model="form.nom"
+                type="text"
+                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                :class="{ 'border-destructive': form.errors?.nom }"
+            />
+            <!-- eslint-enable vue/no-mutating-props -->
+            <p v-if="form.errors?.nom" class="mt-1 text-xs text-destructive">
+                {{ form.errors.nom }}
+            </p>
+        </div>
+
         <!-- Identification -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
@@ -511,7 +508,9 @@ function handleSubmit() {
                                 {{ formatPhoneDisplay(membre.telephone) }}
                             </div>
                             <p
-                                v-if="form.errors?.[`membres.${index}.telephone`]"
+                                v-if="
+                                    form.errors?.[`membres.${index}.telephone`]
+                                "
                                 class="text-xs text-destructive"
                             >
                                 {{ form.errors[`membres.${index}.telephone`] }}
@@ -590,7 +589,11 @@ function handleSubmit() {
         :membre="membreEnEdition"
         :has-principal="hasPrincipal && editingIndex !== principalIndex"
         :max-taux="maxTauxDisponible"
-        :telephone-error="editingIndex !== null ? form.errors?.[`membres.${editingIndex}.telephone`] : null"
+        :telephone-error="
+            editingIndex !== null
+                ? form.errors?.[`membres.${editingIndex}.telephone`]
+                : null
+        "
         @confirm="onMembreConfirm"
     />
 </template>

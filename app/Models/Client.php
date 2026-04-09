@@ -18,9 +18,27 @@ class Client extends Model
         'prenom',
         'email',
         'telephone',
+        'code_phone_pays',
+        'code_pays',
+        'pays',
+        'ville',
         'adresse',
         'is_active',
+        'is_blocked',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'is_active' => 'boolean',
+            'is_blocked' => 'boolean',
+        ];
+    }
+
+    public function getNomCompletAttribute(): string
+    {
+        return trim("{$this->prenom} {$this->nom}");
+    }
 
     public function organization(): BelongsTo
     {

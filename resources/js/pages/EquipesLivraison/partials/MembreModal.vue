@@ -42,10 +42,11 @@ const isEdit = computed(() => !!props.membre);
 const title = computed(() =>
     isEdit.value ? 'Modifier le membre' : 'Nouveau membre',
 );
-const canSubmit = computed(() =>
-    form.prenom.trim().length > 0 &&
-    form.nom.trim().length > 0 &&
-    /^\d{9}$/.test(phoneLocal.value),
+const canSubmit = computed(
+    () =>
+        form.prenom.trim().length > 0 &&
+        form.nom.trim().length > 0 &&
+        /^\d{9}$/.test(phoneLocal.value),
 );
 const maxTauxSafe = computed(() => {
     const raw = Number(props.maxTaux ?? 100);
