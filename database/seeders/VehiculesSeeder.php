@@ -30,49 +30,49 @@ class VehiculesSeeder extends Seeder
             ->where('organization_id', $org->id)
             ->firstOrFail();
 
-        $eqNenDow     = $equipe('Nen Dow');
+        $eqNenDow = $equipe('Nen Dow');
         $eqAutoDogomet = $equipe('Auto Dogomet');
-        $eqBabaOusou  = $equipe('Baba Ousou');
+        $eqBabaOusou = $equipe('Baba Ousou');
 
         $vehicules = [
             [
-                'nom_vehicule'               => 'Nen Dow',
-                'marque'                     => 'Mercedes',
-                'modele'                     => 'Actros',
-                'immatriculation'            => 'RC-001-GN',
-                'type_vehicule'              => TypeVehicule::CAMION->value,
-                'capacite_packs'             => 500,
-                'equipe_livraison_id'        => $eqNenDow->id,
-                'proprietaire_id'            => $eqNenDow->proprietaire_id,
+                'nom_vehicule' => 'Nen Dow',
+                'marque' => 'Mercedes',
+                'modele' => 'Actros',
+                'immatriculation' => 'RC-001-GN',
+                'type_vehicule' => TypeVehicule::CAMION->value,
+                'capacite_packs' => 500,
+                'equipe_livraison_id' => $eqNenDow->id,
+                'proprietaire_id' => $eqNenDow->proprietaire_id,
                 'taux_commission_proprietaire' => 100 - $eqNenDow->sommeTaux(),
-                'pris_en_charge_par_usine'   => false,
-                'is_active'                  => true,
+                'pris_en_charge_par_usine' => false,
+                'is_active' => true,
             ],
             [
-                'nom_vehicule'               => 'Kata Kata de Ali',
-                'marque'                     => 'Bajaj',
-                'modele'                     => 'RE',
-                'immatriculation'            => 'TC-001-GN',
-                'type_vehicule'              => TypeVehicule::TRICYCLE->value,
-                'capacite_packs'             => 80,
-                'equipe_livraison_id'        => $eqAutoDogomet->id,
-                'proprietaire_id'            => $eqAutoDogomet->proprietaire_id,
+                'nom_vehicule' => 'Kata Kata de Ali',
+                'marque' => 'Bajaj',
+                'modele' => 'RE',
+                'immatriculation' => 'TC-001-GN',
+                'type_vehicule' => TypeVehicule::TRICYCLE->value,
+                'capacite_packs' => 80,
+                'equipe_livraison_id' => $eqAutoDogomet->id,
+                'proprietaire_id' => $eqAutoDogomet->proprietaire_id,
                 'taux_commission_proprietaire' => 100 - $eqAutoDogomet->sommeTaux(),
-                'pris_en_charge_par_usine'   => false,
-                'is_active'                  => true,
+                'pris_en_charge_par_usine' => false,
+                'is_active' => true,
             ],
             [
-                'nom_vehicule'               => 'Baba Ousou',
-                'marque'                     => 'Toyota',
-                'modele'                     => 'HiAce',
-                'immatriculation'            => 'VN-001-GN',
-                'type_vehicule'              => TypeVehicule::CAMIONNETTE->value,
-                'capacite_packs'             => 150,
-                'equipe_livraison_id'        => $eqBabaOusou->id,
-                'proprietaire_id'            => $eqBabaOusou->proprietaire_id,
+                'nom_vehicule' => 'Baba Ousou',
+                'marque' => 'Toyota',
+                'modele' => 'HiAce',
+                'immatriculation' => 'VN-001-GN',
+                'type_vehicule' => TypeVehicule::CAMIONNETTE->value,
+                'capacite_packs' => 150,
+                'equipe_livraison_id' => $eqBabaOusou->id,
+                'proprietaire_id' => $eqBabaOusou->proprietaire_id,
                 'taux_commission_proprietaire' => 100 - $eqBabaOusou->sommeTaux(),
-                'pris_en_charge_par_usine'   => false,
-                'is_active'                  => true,
+                'pris_en_charge_par_usine' => false,
+                'is_active' => true,
             ],
         ];
 

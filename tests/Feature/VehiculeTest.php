@@ -251,4 +251,106 @@ class VehiculeTest extends TestCase
             'organization_id' => $this->org->id,
         ]);
     }
+    // ── unicité équipe ────────────────────────────────────────────────────────
+
+    public function test_store_fails_si_equipe_deja_affectee(): void
+    {
+        $equipe = $this->makeEquipe($this->org);
+
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'equipe_livraison_id' => $equipe->id,
+            'proprietaire_id' => $equipe->proprietaire_id,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Doublon',
+                'immatriculation' => 'RC-099-GN',
+                'type_vehicule' => 'camion',
+                'equipe_livraison_id' => $equipe->id,
+            ])
+            ->assertSessionHasErrors('equipe_livraison_id');
+    }
+
+    public function test_store_fails_si_immatriculation_deja_utilisee(): void
+    {
+        $equipe1 = $this->makeEquipe($this->org);
+        $equipe2 = $this->makeEquipe($this->org);
+
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'equipe_livraison_id' => $equipe1->id,
+            'proprietaire_id' => $equipe1->proprietaire_id,
+            'immatriculation' => 'RC-100-GN',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Doublon',
+                'immatriculation' => 'RC-100-GN',
+                'type_vehicule' => 'camion',
+                'equipe_livraison_id' => $equipe2->id,
+            ])
+            ->assertSessionHasErrors('immatriculation');
+    }
+
+    public function test_update_autorise_meme_equipe_et_meme_immatriculation(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+
+        $this->actingAs($this->user)
+            ->put(route('vehicules.update', $vehicule), [
+                'nom_vehicule' => $vehicule->nom_vehicule,
+                'immatriculation' => $vehicule->immatriculation,
+                'type_vehicule' => $vehicule->type_vehicule->value,
+                'equipe_livraison_id' => $vehicule->equipe_livraison_id,
+                'is_active' => true,
+                'pris_en_charge_par_usine' => false,
+            ])
+            ->assertRedirect(route('vehicules.edit', $vehicule));
+    }
+
+    public function test_update_fails_si_equipe_affectee_a_autre_vehicule(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+        $autreEquipe = $this->makeEquipe($this->org);
+
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'equipe_livraison_id' => $autreEquipe->id,
+            'proprietaire_id' => $autreEquipe->proprietaire_id,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('vehicules.update', $vehicule), [
+                'nom_vehicule' => $vehicule->nom_vehicule,
+                'immatriculation' => $vehicule->immatriculation,
+                'type_vehicule' => $vehicule->type_vehicule->value,
+                'equipe_livraison_id' => $autreEquipe->id,
+            ])
+            ->assertSessionHasErrors('equipe_livraison_id');
+    }
+
+    public function test_update_fails_si_immatriculation_utilisee_par_autre_vehicule(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+        $autreEquipe = $this->makeEquipe($this->org);
+
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'equipe_livraison_id' => $autreEquipe->id,
+            'proprietaire_id' => $autreEquipe->proprietaire_id,
+            'immatriculation' => 'RC-999-GN',
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('vehicules.update', $vehicule), [
+                'nom_vehicule' => $vehicule->nom_vehicule,
+                'immatriculation' => 'RC-999-GN',
+                'type_vehicule' => $vehicule->type_vehicule->value,
+                'equipe_livraison_id' => $vehicule->equipe_livraison_id,
+            ])
+            ->assertSessionHasErrors('immatriculation');
+    }
 }

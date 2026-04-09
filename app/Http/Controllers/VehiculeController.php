@@ -96,7 +96,11 @@ class VehiculeController extends Controller
             ],
             'type_vehicule' => ['required', Rule::in(TypeVehicule::allowedValues())],
             'capacite_packs' => 'nullable|integer|min:1|max:99999',
-            'equipe_livraison_id' => ['required', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
+            'equipe_livraison_id' => [
+                'required', 'integer',
+                Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId),
+                Rule::unique('vehicules', 'equipe_livraison_id')->whereNull('deleted_at'),
+            ],
             'taux_commission_proprietaire' => 'nullable|numeric|min:0|max:100',
             'pris_en_charge_par_usine' => 'boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
@@ -149,7 +153,11 @@ class VehiculeController extends Controller
             ],
             'type_vehicule' => ['required', Rule::in(TypeVehicule::allowedValues())],
             'capacite_packs' => 'nullable|integer|min:1|max:99999',
-            'equipe_livraison_id' => ['required', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
+            'equipe_livraison_id' => [
+                'required', 'integer',
+                Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId),
+                Rule::unique('vehicules', 'equipe_livraison_id')->whereNull('deleted_at')->ignore($vehicule->id),
+            ],
             'taux_commission_proprietaire' => 'nullable|numeric|min:0|max:100',
             'pris_en_charge_par_usine' => 'boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
@@ -181,6 +189,9 @@ class VehiculeController extends Controller
             Storage::disk('public')->delete($vehicule->photo_path);
         }
 
+        // Libérer l'équipe pour qu'elle puisse être réaffectée
+        $vehicule->equipe_livraison_id = null;
+        $vehicule->save();
         $vehicule->delete();
 
         return redirect()->route('vehicules.index')
@@ -284,7 +295,8 @@ class VehiculeController extends Controller
         return [
             'nom_vehicule.required' => 'Le nom du véhicule est obligatoire.',
             'immatriculation.required' => "L'immatriculation est obligatoire.",
-            'immatriculation.unique' => "Ce numéro d'immatriculation est déjà utilisé.",
+            'immatriculation.unique' => 'Ce matricule est déjà utilisé par un autre véhicule.',
+            'equipe_livraison_id.unique' => 'Cette équipe est déjà affectée à un autre véhicule.',
             'type_vehicule.required' => 'Le type de véhicule est obligatoire.',
             'type_vehicule.in' => 'Type de véhicule invalide.',
             'equipe_livraison_id.required' => "L'équipe de livraison est obligatoire.",

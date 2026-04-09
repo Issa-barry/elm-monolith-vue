@@ -111,7 +111,11 @@
       "Bash(tee /tmp/tests_out.txt)",
       "Bash(grep -n \"proprietaire_id\\\\|equipe_livraison_id\" database/migrations/*.php)",
       "Bash(php -l database/seeders/EquipesLivraisonSeeder.php)",
-      "Bash(php -l database/seeders/VehiculesSeeder.php)"
+      "Bash(php -l database/seeders/VehiculesSeeder.php)",
+      "Read(//c/laragon/www/elm-monolithe/app/Http/Requests/**)",
+      "Bash(php -r ':*)",
+      "Bash(python3 -)",
+      "Bash(php -l tests/Feature/VehiculeTest.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\www\\elm-monolithe\\database\\seeders"
