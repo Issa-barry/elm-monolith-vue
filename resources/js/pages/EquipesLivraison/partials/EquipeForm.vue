@@ -510,6 +510,12 @@ function handleSubmit() {
                             >
                                 {{ formatPhoneDisplay(membre.telephone) }}
                             </div>
+                            <p
+                                v-if="form.errors?.[`membres.${index}.telephone`]"
+                                class="text-xs text-destructive"
+                            >
+                                {{ form.errors[`membres.${index}.telephone`] }}
+                            </p>
                         </div>
                     </div>
 

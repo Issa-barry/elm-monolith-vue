@@ -238,6 +238,133 @@ class EquipeLivraisonTest extends TestCase
             ->assertSessionHasErrors('membres');
     }
 
+    public function test_store_fails_si_nom_deja_utilise_dans_meme_org(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        // Même nom, membre différent pour éviter conflit livreur
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Barry', 'prenom' => 'Ibrahima',
+                    'telephone' => '+224620000002', 'role' => 'principal',
+                    'taux_commission' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('nom');
+    }
+
+    public function test_store_autorise_meme_nom_apres_suppression_equipe(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
+
+        $this->actingAs($this->user)
+            ->delete(route('equipes-livraison.destroy', $equipe))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        // Le même nom doit être disponible après suppression (soft-delete)
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'telephone' => '+224620000002', 'role' => 'principal',
+                    'taux_commission' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertRedirect(route('equipes-livraison.index'));
+    }
+
+    public function test_store_fails_si_livreur_deja_dans_autre_equipe(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        // Même livreur (+224620000001) dans une autre équipe
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'nom' => 'Équipe Deux',
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'telephone' => '+224620000001',
+                    'role' => 'principal',
+                    'taux_commission' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('membres.0.telephone');
+    }
+
+    public function test_update_autorise_membres_deja_dans_meme_equipe(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
+
+        // Mettre à jour en conservant le même membre → doit réussir
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($proprietaire->id))
+            ->assertRedirect(route('equipes-livraison.edit', $equipe));
+    }
+
+    public function test_update_fails_si_livreur_deja_dans_autre_equipe(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        // Equipe 1 avec +224620000001
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        // Equipe 2 avec +224620000002
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'nom' => 'Équipe Deux',
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Barry', 'prenom' => 'Ibrahima',
+                    'telephone' => '+224620000002', 'role' => 'principal',
+                    'taux_commission' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        $equipe2 = EquipeLivraison::where('organization_id', $this->org->id)
+            ->where('nom', 'Équipe Deux')->first();
+
+        // Tenter d'affecter le livreur de l'équipe 1 à l'équipe 2
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe2), $this->validPayload($proprietaire->id, [
+                'nom' => 'Équipe Deux',
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'telephone' => '+224620000001',
+                    'role' => 'principal',
+                    'taux_commission' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('membres.0.telephone');
+    }
+
     // ── edit ──────────────────────────────────────────────────────────────────
 
     public function test_edit_returns_200_for_authorized_user(): void

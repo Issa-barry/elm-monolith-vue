@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -51,7 +52,7 @@ class EquipeLivraisonController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'nom' => 'required|string|max:100',
+            'nom' => ['required', 'string', 'max:100', Rule::unique('equipes_livraison', 'nom')->where('organization_id', $orgId)->whereNull('deleted_at')],
             'is_active' => 'boolean',
             'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
             'taux_commission_proprietaire' => 'required|numeric|min:0|max:100',
@@ -68,6 +69,7 @@ class EquipeLivraisonController extends Controller
         $this->validatePrincipal($data['membres']);
         $this->validateUniquePhones($data['membres']);
         $this->validateTotalTaux($data['membres'], (float) $data['taux_commission_proprietaire']);
+        $this->validateMembresExclusivite($data['membres'], $orgId);
 
         DB::transaction(function () use ($data, $orgId) {
             $equipe = EquipeLivraison::create([
@@ -115,7 +117,7 @@ class EquipeLivraisonController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $data = $request->validate([
-            'nom' => 'required|string|max:100',
+            'nom' => ['required', 'string', 'max:100', Rule::unique('equipes_livraison', 'nom')->where('organization_id', $orgId)->whereNull('deleted_at')->ignore($equipes_livraison->id)],
             'is_active' => 'boolean',
             'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
             'taux_commission_proprietaire' => 'required|numeric|min:0|max:100',
@@ -132,6 +134,7 @@ class EquipeLivraisonController extends Controller
         $this->validatePrincipal($data['membres']);
         $this->validateUniquePhones($data['membres']);
         $this->validateTotalTaux($data['membres'], (float) $data['taux_commission_proprietaire']);
+        $this->validateMembresExclusivite($data['membres'], $orgId, $equipes_livraison->id);
 
         DB::transaction(function () use ($data, $orgId, $equipes_livraison) {
             $equipes_livraison->update([
@@ -169,6 +172,7 @@ class EquipeLivraisonController extends Controller
                 ->withErrors(['equipe' => 'Cette équipe est assignée à un ou plusieurs véhicules actifs.']);
         }
 
+        $equipes_livraison->membres()->delete();
         $equipes_livraison->delete();
 
         return redirect()->route('equipes-livraison.index')
@@ -245,6 +249,39 @@ class EquipeLivraisonController extends Controller
         );
     }
 
+    /**
+     * Vérifie qu'aucun livreur (identifié par son téléphone) n'est déjà membre d'une autre équipe active.
+     */
+    private function validateMembresExclusivite(array $membres, int $orgId, ?int $equipeIdCourant = null): void
+    {
+        foreach ($membres as $index => $m) {
+            $livreur = Livreur::where('telephone', $m['telephone'])
+                ->where('organization_id', $orgId)
+                ->first();
+
+            if (! $livreur) {
+                continue; // Nouveau livreur, pas encore affecté
+            }
+
+            $query = EquipeLivreur::query()
+                ->where('livreur_id', $livreur->id)
+                ->whereHas('equipe', fn ($q) => $q
+                    ->where('organization_id', $orgId)
+                    ->whereNull('deleted_at')
+                );
+
+            if ($equipeIdCourant !== null) {
+                $query->where('equipe_id', '<>', $equipeIdCourant);
+            }
+
+            if ($query->exists()) {
+                throw ValidationException::withMessages([
+                    "membres.{$index}.telephone" => 'Ce livreur est déjà affecté à une autre équipe.',
+                ]);
+            }
+        }
+    }
+
     private function validatePrincipal(array $membres): void
     {
         $count = count(array_filter($membres, fn ($m) => ($m['role'] ?? '') === 'principal'));
@@ -287,6 +324,7 @@ class EquipeLivraisonController extends Controller
     {
         return [
             'nom.required' => "Le nom de l'équipe est obligatoire.",
+            'nom.unique' => 'Une équipe avec ce nom existe déjà dans votre organisation.',
             'proprietaire_id.required' => 'Le propriétaire est obligatoire.',
             'proprietaire_id.exists' => "Le propriétaire sélectionné est introuvable ou n'appartient pas à votre organisation.",
             'taux_commission_proprietaire.required' => 'Le taux propriétaire est obligatoire.',
