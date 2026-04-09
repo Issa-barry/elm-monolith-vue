@@ -31,7 +31,7 @@ return new class extends Migration
 
         Schema::table('proprietaires', function (Blueprint $table) {
             $table->index(['organization_id', 'telephone'], 'proprietaires_org_tel_idx');
-            $table->index(['organization_id', 'email'],     'proprietaires_org_email_idx');
+            $table->index(['organization_id', 'email'], 'proprietaires_org_email_idx');
         });
     }
 
