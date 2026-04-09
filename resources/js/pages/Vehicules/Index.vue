@@ -21,6 +21,7 @@ import {
     Plus,
     Search,
     Trash2,
+    X,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
@@ -29,7 +30,7 @@ import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 interface EquipeMembre {
     livreur_nom: string;
@@ -84,6 +85,23 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Véhicules', href: '/vehicules' },
 ];
+
+const lightboxUrl = ref<string | null>(null);
+const lightboxAlt = ref('');
+
+function openLightbox(url: string, alt: string) {
+    lightboxUrl.value = url;
+    lightboxAlt.value = alt;
+}
+function closeLightbox() {
+    lightboxUrl.value = null;
+}
+
+function onKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') closeLightbox();
+}
+onMounted(() => document.addEventListener('keydown', onKeydown));
+onUnmounted(() => document.removeEventListener('keydown', onKeydown));
 
 function confirmDelete(v: Vehicule) {
     confirm.require({
@@ -164,6 +182,8 @@ function confirmDelete(v: Vehicule) {
                     <!-- Photo or icon -->
                     <div
                         class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30"
+                        :class="v.photo_url ? 'cursor-zoom-in' : ''"
+                        @click="v.photo_url && openLightbox(v.photo_url, v.nom_vehicule)"
                     >
                         <img
                             v-if="v.photo_url"
@@ -339,6 +359,8 @@ function confirmDelete(v: Vehicule) {
                             <div class="flex items-center gap-3">
                                 <div
                                     class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30"
+                                    :class="data.photo_url ? 'cursor-zoom-in' : ''"
+                                    @click="data.photo_url && openLightbox(data.photo_url, data.nom_vehicule)"
                                 >
                                     <img
                                         v-if="data.photo_url"
@@ -539,5 +561,31 @@ function confirmDelete(v: Vehicule) {
                 </DataTable>
             </div>
         </div>
+        <!-- Lightbox -->
+        <Teleport to="body">
+            <div
+                v-if="lightboxUrl"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+                @click.self="closeLightbox"
+            >
+                <div class="relative max-h-full max-w-3xl">
+                    <button
+                        type="button"
+                        class="absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+                        @click="closeLightbox"
+                    >
+                        <X class="h-5 w-5" />
+                    </button>
+                    <img
+                        :src="lightboxUrl"
+                        :alt="lightboxAlt"
+                        class="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl"
+                    />
+                    <p class="mt-2 text-center text-sm text-white/70">
+                        {{ lightboxAlt }}
+                    </p>
+                </div>
+            </div>
+        </Teleport>
     </AppLayout>
 </template>
