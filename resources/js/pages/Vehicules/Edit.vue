@@ -14,6 +14,8 @@ interface Option {
 interface EquipeOption {
     value: number;
     label: string;
+    proprietaire_id: number | null;
+    proprietaire_label?: string | null;
     somme_taux: number;
 }
 interface TypeOption {
@@ -66,6 +68,16 @@ const form = useForm({
     taux_commission_proprietaire: props.vehicule.taux_commission_proprietaire,
     photo: null as File | null,
     is_active: props.vehicule.is_active,
+});
+
+const canSubmit = computed(() => {
+    return (
+        !form.processing &&
+        !!form.equipe_livraison_id &&
+        form.nom_vehicule.trim().length > 0 &&
+        form.immatriculation.trim().length > 0 &&
+        !!form.type_vehicule
+    );
 });
 
 function submit() {
@@ -129,7 +141,6 @@ function submit() {
                 :equipes="equipes"
                 :types="types"
                 :photo-url="vehicule.photo_url"
-                :taux-proprietaire-defaut="props.tauxProprietaireDefaut"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />
@@ -142,7 +153,7 @@ function submit() {
             <button
                 type="submit"
                 form="vehicule-form"
-                :disabled="form.processing"
+                :disabled="!canSubmit"
                 class="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-60"
             >
                 <Spinner v-if="form.processing" class="h-4 w-4" />

@@ -70,15 +70,15 @@ test('create equipe with proprietaire + override taux + verify list', async ({
     await page.goto('/equipes-livraison/create');
     await expect(page).toHaveURL(/\/equipes-livraison\/create$/);
 
-    // Nom de l'équipe
-    await page.locator('#nom').fill(nomEquipe);
-
-    // Propriétaire (AutoComplete) — obligatoire
+    // Propriétaire (AutoComplete) — obligatoire, en premier
     const formComboboxes = page.locator('form').getByRole('combobox');
     await selectOptionFromCombobox(page, formComboboxes.first());
 
-    // Override du taux propriétaire (InputNumber)
-    await page.locator('#taux_commission_proprietaire input').fill('45');
+    // Override du taux propriétaire : 55 % (+ membre 45 % = 100 %)
+    await page.locator('#taux_commission_proprietaire input').fill('55');
+
+    // Nom de l'équipe
+    await page.locator('#nom').fill(nomEquipe);
 
     // Ajouter un membre principal (obligatoire)
     await page.locator('button', { hasText: /ajouter un membre/i }).first().click();
@@ -86,12 +86,17 @@ test('create equipe with proprietaire + override taux + verify list', async ({
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
+    // Vérifier la présence du préfixe +224 dans la modale
+    await expect(dialog.locator('text=+224')).toBeVisible();
+
     await dialog.locator('#membre-prenom').fill('Mamadou');
     await dialog.locator('#membre-nom').fill('Diallo');
+
+    // Saisie locale uniquement (9 chiffres, sans le +224)
     await dialog.locator('#membre-telephone').fill('620111222');
 
-    // Taux membre dans la modale
-    await dialog.locator('#membre-taux').fill('30');
+    // Taux membre dans la modale : 45 % pour que total = 100 %
+    await dialog.locator('#membre-taux').fill('45');
 
     // Confirmer le membre
     await dialog.locator('button', { hasText: /ajouter/i }).click();
@@ -127,9 +132,9 @@ test('create equipe with proprietaire + override taux + verify list', async ({
 
     await expect(page).toHaveURL(/\/equipes-livraison\/\d+\/edit$/);
 
-    // Vérifier que le taux propriétaire = 45 est bien sauvegardé (suffixe " %" inclus)
+    // Vérifier que le taux propriétaire = 55 est bien sauvegardé
     const tauxEditInput = page.locator('#taux_commission_proprietaire input');
-    await expect(tauxEditInput).toHaveValue(/45/);
+    await expect(tauxEditInput).toHaveValue(/55/);
 });
 
 test('store equipe echoue sans proprietaire', async ({ page }) => {
@@ -144,4 +149,30 @@ test('store equipe echoue sans proprietaire', async ({ page }) => {
     // Le bouton Enregistrer doit rester désactivé tant que propriétaire est absent
     const submitBtn = page.locator('form button[type="submit"]:visible').first();
     await expect(submitBtn).toBeDisabled();
+});
+
+test('membre modal affiche prefixe +224 et rejette telephone invalide', async ({
+    page,
+}) => {
+    await login(page);
+
+    await page.goto('/equipes-livraison/create');
+    await expect(page).toHaveURL(/\/equipes-livraison\/create$/);
+
+    await page.locator('button', { hasText: /ajouter un membre/i }).first().click();
+
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+    // Le préfixe +224 est affiché et non éditable
+    await expect(dialog.locator('text=+224')).toBeVisible();
+
+    // Tentative de saisie de lettres : elles ne doivent pas apparaître
+    await dialog.locator('#membre-telephone').fill('abc');
+    const phoneValue = await dialog.locator('#membre-telephone').inputValue();
+    expect(phoneValue.replace(/\D/g, '')).toBe('');
+
+    // Fermer la modale
+    await dialog.locator('button', { hasText: /annuler/i }).click();
+    await expect(dialog).toBeHidden({ timeout: 5_000 });
 });

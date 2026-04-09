@@ -19,6 +19,8 @@ interface Option {
 interface EquipeOption {
     value: number;
     label: string;
+    proprietaire_id: number | null;
+    proprietaire_label?: string | null;
     somme_taux: number;
     livreur_principal?: { nom_complet: string; telephone: string } | null;
 }
@@ -50,8 +52,6 @@ const props = defineProps<{
     equipes: EquipeOption[];
     types: TypeOption[];
     photoUrl?: string | null;
-    affectationFirst?: boolean;
-    tauxProprietaireDefaut?: number;
 }>();
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
@@ -76,9 +76,12 @@ function onTypeChange(value: string) {
 }
 
 function onEquipeChange(value: number | null) {
+    const equipe = props.equipes.find((item) => item.value === value);
     emit('update:form', {
         ...props.form,
         equipe_livraison_id: value,
+        proprietaire_id: equipe?.proprietaire_id ?? null,
+        nom_vehicule: equipe ? equipe.label : props.form.nom_vehicule,
     });
 }
 
@@ -104,40 +107,19 @@ const selectedEquipe = computed(() =>
     props.equipes.find((e) => e.value === props.form.equipe_livraison_id),
 );
 
-// ── AutoComplete : Propriétaire ───────────────────────────────────────────────
-const proprietaireSelected = ref<Option | null>(
-    props.proprietaires.find((p) => p.value === props.form.proprietaire_id) ??
-        null,
-);
-const proprietaireSuggests = ref<Option[]>([]);
+const selectedProprietaireLabel = computed(() => {
+    if (selectedEquipe.value?.proprietaire_label) {
+        return selectedEquipe.value.proprietaire_label;
+    }
+    const proprietaire = props.proprietaires.find(
+        (p) => p.value === props.form.proprietaire_id,
+    );
+    return proprietaire?.label ?? '';
+});
 
-function searchProprietaire(event: { query: string }) {
-    const q = event.query.toLowerCase().trim();
-    proprietaireSuggests.value = q
-        ? props.proprietaires.filter(
-              (p) =>
-                  p.label.toLowerCase().includes(q) ||
-                  (p.telephone && p.telephone.includes(q)),
-          )
-        : [...props.proprietaires];
-}
-
-function onProprietaireSelect(p: Option | null) {
-    emit('update:form', {
-        ...props.form,
-        proprietaire_id: p ? (p.value as number) : null,
-    });
-}
-
-function onProprietaireClear() {
-    proprietaireSelected.value = null;
-    emit('update:form', { ...props.form, proprietaire_id: null });
-}
-
-// ── AutoComplete : Équipe ─────────────────────────────────────────────────────
+// ── AutoComplete : Équipe ────────────────────────────────────────────────────
 const equipeSelected = ref<EquipeOption | null>(
-    props.equipes.find((e) => e.value === props.form.equipe_livraison_id) ??
-        null,
+    props.equipes.find((e) => e.value === props.form.equipe_livraison_id) ?? null,
 );
 const equipeSuggests = ref<EquipeOption[]>([]);
 
@@ -155,8 +137,13 @@ function searchEquipe(event: { query: string }) {
         : [...props.equipes];
 }
 
-function onEquipeACSelect(e: EquipeOption | null) {
-    onEquipeChange(e?.value ?? null);
+function onEquipeACSelect(payload: { value: EquipeOption } | EquipeOption | null) {
+    if (!payload) {
+        onEquipeChange(null);
+        return;
+    }
+    const selected = 'label' in payload ? payload : payload.value;
+    onEquipeChange(selected?.value ?? null);
 }
 
 function onEquipeACClear() {
@@ -164,50 +151,142 @@ function onEquipeACClear() {
     onEquipeChange(null);
 }
 
-const isAffectationFirst = computed(() => props.affectationFirst === true);
-
-// Taux restant pour le propriétaire = 100 - somme_taux_équipe
-const tauxRestantPourProprietaire = computed(() => {
-    if (!selectedEquipe.value) return 100;
+// Taux propriétaire = 100 - somme taux membres équipe (lecture seule)
+const tauxProprietaire = computed(() => {
+    if (!selectedEquipe.value) return null;
     return Math.max(0, 100 - selectedEquipe.value.somme_taux);
 });
 
-// Quand l'équipe change, suggère automatiquement le taux propriétaire restant
-watch(
-    () => props.form.equipe_livraison_id,
-    (equipeId) => {
-        const equipe = props.equipes.find((e) => e.value === equipeId);
-        const taux = equipe
-            ? tauxRestantPourProprietaire.value
-            : (props.tauxProprietaireDefaut ?? 100);
-        emit('update:form', {
-            ...props.form,
-            nom_vehicule: equipe ? equipe.label : props.form.nom_vehicule,
-            taux_commission_proprietaire: taux,
-        });
-    },
+const canSubmit = computed(
+    () =>
+        !props.processing &&
+        !!props.form.equipe_livraison_id &&
+        props.form.nom_vehicule.trim().length > 0 &&
+        props.form.immatriculation.trim().length > 0 &&
+        !!props.form.type_vehicule,
 );
 
-const totalTaux = computed(() => {
-    const equipe = selectedEquipe.value?.somme_taux ?? 0;
-    const prop = props.form.taux_commission_proprietaire ?? 0;
-    return Math.round((equipe + prop) * 100) / 100;
-});
+function handleSubmit() {
+    if (!canSubmit.value) return;
+    emit('submit');
+}
 </script>
 
 <template>
     <form
         id="vehicule-form"
         class="flex flex-col gap-4 sm:gap-6"
-        @submit.prevent="emit('submit')"
+        @submit.prevent="handleSubmit"
     >
+        <!-- Affectation (toujours en premier) -->
+        <div class="order-1 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3
+                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+            >
+                Affectation
+            </h3>
+            <div class="grid gap-5 sm:grid-cols-2">
+                <div>
+                    <Label for="equipe_livraison_id" class="mb-1.5 block">
+                        Équipe de livraison
+                        <span class="text-destructive">*</span>
+                    </Label>
+                    <AutoComplete
+                        v-model="equipeSelected"
+                        input-id="equipe_livraison_id"
+                        :suggestions="equipeSuggests"
+                        option-label="label"
+                        @complete="searchEquipe"
+                        @item-select="onEquipeACSelect"
+                        @clear="onEquipeACClear"
+                        placeholder="Équipe, livreur ou téléphone…"
+                        class="w-full"
+                        input-class="w-full"
+                        :class="{ 'p-invalid': errors.equipe_livraison_id }"
+                        dropdown
+                        force-selection
+                    >
+                        <template #option="{ option }">
+                            <div class="py-0.5">
+                                <div class="leading-tight font-medium">
+                                    {{ option.label }}
+                                </div>
+                                <div
+                                    v-if="option.livreur_principal"
+                                    class="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground"
+                                >
+                                    <span>{{
+                                        option.livreur_principal.nom_complet
+                                    }}</span>
+                                    <span class="font-mono">
+                                        · {{ option.livreur_principal.telephone }}
+                                    </span>
+                                </div>
+                            </div>
+                        </template>
+                        <template #empty>
+                            <div
+                                class="flex items-center justify-between gap-2 px-1 py-0.5"
+                            >
+                                <span class="text-sm text-muted-foreground">
+                                    Aucun résultat
+                                </span>
+                                <Link
+                                    href="/equipes-livraison/create"
+                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                                >
+                                    <Plus class="h-3 w-3" /> Créer
+                                </Link>
+                            </div>
+                        </template>
+                    </AutoComplete>
+                    <p
+                        v-if="errors.equipe_livraison_id"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.equipe_livraison_id }}
+                    </p>
+                    <p
+                        v-if="selectedEquipe"
+                        class="mt-1 text-xs text-muted-foreground"
+                    >
+                        Σ taux livreurs :
+                        <span class="font-semibold">{{ selectedEquipe.somme_taux }}%</span>
+                    </p>
+                </div>
+
+                <div>
+                    <Label for="proprietaire_id" class="mb-1.5 block">
+                        Propriétaire
+                    </Label>
+                    <div class="relative">
+                        <InputText
+                            id="proprietaire_id"
+                            :model-value="selectedProprietaireLabel"
+                            readonly
+                            class="w-full cursor-not-allowed bg-muted/60 pr-10 text-muted-foreground"
+                            :class="{ 'p-invalid': errors.proprietaire_id }"
+                            placeholder="Sélectionnez une équipe"
+                        />
+                        <Lock
+                            class="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-muted-foreground/80"
+                        />
+                    </div>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Géré automatiquement depuis l'équipe.
+                    </p>
+                    <p
+                        v-if="errors.proprietaire_id"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.proprietaire_id }}
+                    </p>
+                </div>
+            </div>
+        </div>
+
         <!-- Identification -->
-        <div
-            :class="[
-                isAffectationFirst ? 'order-2' : 'order-1',
-                'rounded-xl border bg-card p-4 shadow-sm sm:p-6',
-            ]"
-        >
+        <div class="order-2 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
@@ -215,10 +294,10 @@ const totalTaux = computed(() => {
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
-                    <Label for="nom_vehicule" class="mb-1.5 block"
-                        >Nom du v&eacute;hicule
-                        <span class="text-destructive">*</span></Label
-                    >
+                    <Label for="nom_vehicule" class="mb-1.5 block">
+                        Nom du véhicule
+                        <span class="text-destructive">*</span>
+                    </Label>
                     <div class="relative">
                         <InputText
                             id="nom_vehicule"
@@ -247,7 +326,7 @@ const totalTaux = computed(() => {
                         v-if="selectedEquipe"
                         class="mt-1 text-xs text-muted-foreground"
                     >
-                        Nom de vehicule = Nom de l'equipe.
+                        Nom du véhicule = Nom de l'équipe.
                     </p>
                     <p
                         v-if="errors.nom_vehicule"
@@ -258,10 +337,10 @@ const totalTaux = computed(() => {
                 </div>
 
                 <div>
-                    <Label for="immatriculation" class="mb-1.5 block"
-                        >Immatriculation
-                        <span class="text-destructive">*</span></Label
-                    >
+                    <Label for="immatriculation" class="mb-1.5 block">
+                        Immatriculation
+                        <span class="text-destructive">*</span>
+                    </Label>
                     <InputText
                         id="immatriculation"
                         :model-value="form.immatriculation"
@@ -284,9 +363,9 @@ const totalTaux = computed(() => {
                 </div>
 
                 <div>
-                    <Label for="type_vehicule" class="mb-1.5 block"
-                        >Type <span class="text-destructive">*</span></Label
-                    >
+                    <Label for="type_vehicule" class="mb-1.5 block">
+                        Type <span class="text-destructive">*</span>
+                    </Label>
                     <Dropdown
                         input-id="type_vehicule"
                         :model-value="form.type_vehicule"
@@ -312,8 +391,9 @@ const totalTaux = computed(() => {
                         <span
                             v-if="selectedType"
                             class="ml-1 text-xs text-muted-foreground"
-                            >défaut : {{ selectedType.capacite_defaut }}</span
                         >
+                            défaut : {{ selectedType.capacite_defaut }}
+                        </span>
                     </Label>
                     <InputNumber
                         id="capacite_packs"
@@ -333,147 +413,7 @@ const totalTaux = computed(() => {
             </div>
         </div>
 
-        <!-- Affectation -->
-        <div
-            :class="[
-                isAffectationFirst ? 'order-1' : 'order-2',
-                'rounded-xl border bg-card p-4 shadow-sm sm:p-6',
-            ]"
-        >
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
-                Affectation
-            </h3>
-            <div class="grid gap-5 sm:grid-cols-2">
-                <div>
-                    <Label for="proprietaire_id" class="mb-1.5 block"
-                        >Propriétaire
-                        <span class="text-destructive">*</span></Label
-                    >
-                    <AutoComplete
-                        v-model="proprietaireSelected"
-                        input-id="proprietaire_id"
-                        :suggestions="proprietaireSuggests"
-                        option-label="label"
-                        @complete="searchProprietaire"
-                        @item-select="
-                            onProprietaireSelect(proprietaireSelected)
-                        "
-                        @clear="onProprietaireClear"
-                        placeholder="Nom ou téléphone…"
-                        class="w-full"
-                        input-class="w-full"
-                        :class="{ 'p-invalid': errors.proprietaire_id }"
-                        dropdown
-                        force-selection
-                    >
-                        <template #option="{ option }">
-                            <div class="py-0.5">
-                                <div class="leading-tight font-medium">
-                                    {{ option.label }}
-                                </div>
-                                <div
-                                    v-if="option.telephone"
-                                    class="mt-0.5 font-mono text-xs text-muted-foreground"
-                                >
-                                    {{ option.telephone }}
-                                </div>
-                            </div>
-                        </template>
-                        <template #empty>
-                            <div
-                                class="flex items-center justify-between gap-2 px-1 py-0.5"
-                            >
-                                <span class="text-sm text-muted-foreground"
-                                    >Aucun résultat</span
-                                >
-                                <Link
-                                    href="/proprietaires/create"
-                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-                                >
-                                    <Plus class="h-3 w-3" /> Créer
-                                </Link>
-                            </div>
-                        </template>
-                    </AutoComplete>
-                    <p
-                        v-if="errors.proprietaire_id"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ errors.proprietaire_id }}
-                    </p>
-                </div>
-
-                <div>
-                    <Label for="equipe_livraison_id" class="mb-1.5 block"
-                        >Équipe de livraison</Label
-                    >
-                    <AutoComplete
-                        v-model="equipeSelected"
-                        input-id="equipe_livraison_id"
-                        :suggestions="equipeSuggests"
-                        option-label="label"
-                        @complete="searchEquipe"
-                        @item-select="onEquipeACSelect(equipeSelected)"
-                        @clear="onEquipeACClear"
-                        placeholder="Équipe, livreur ou téléphone…"
-                        class="w-full"
-                        input-class="w-full"
-                        dropdown
-                        force-selection
-                    >
-                        <template #option="{ option }">
-                            <div class="py-0.5">
-                                <div class="leading-tight font-medium">
-                                    {{ option.label }}
-                                </div>
-                                <div
-                                    v-if="option.livreur_principal"
-                                    class="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground"
-                                >
-                                    <span>{{
-                                        option.livreur_principal.nom_complet
-                                    }}</span>
-                                    <span class="font-mono"
-                                        >·
-                                        {{
-                                            option.livreur_principal.telephone
-                                        }}</span
-                                    >
-                                </div>
-                            </div>
-                        </template>
-                        <template #empty>
-                            <div
-                                class="flex items-center justify-between gap-2 px-1 py-0.5"
-                            >
-                                <span class="text-sm text-muted-foreground"
-                                    >Aucun résultat</span
-                                >
-                                <Link
-                                    href="/equipes-livraison/create"
-                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-                                >
-                                    <Plus class="h-3 w-3" /> Créer
-                                </Link>
-                            </div>
-                        </template>
-                    </AutoComplete>
-                    <p
-                        v-if="selectedEquipe"
-                        class="mt-1 text-xs text-muted-foreground"
-                    >
-                        Σ taux équipe :
-                        <span class="font-semibold"
-                            >{{ selectedEquipe.somme_taux }}%</span
-                        >
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Commission -->
+        <!-- Commission & Charges -->
         <div class="order-3 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
@@ -496,55 +436,30 @@ const totalTaux = computed(() => {
                         <Label
                             for="pris_en_charge_par_usine"
                             class="cursor-pointer font-medium"
-                            >Pris en charge par l'usine</Label
                         >
+                            Pris en charge par l'usine
+                        </Label>
                         <p class="text-xs text-muted-foreground">
-                            Les frais du véhicule sont supportés par
-                            l'organisation
+                            Les frais du véhicule sont supportés par l'organisation
                         </p>
                     </div>
                 </div>
 
                 <div>
-                    <Label for="taux_proprietaire" class="mb-1.5 block">
-                        Taux propriétaire (%)
-                        <span
-                            v-if="selectedEquipe"
-                            class="ml-1 text-xs text-muted-foreground"
-                            >— suggéré :
-                            {{ tauxRestantPourProprietaire }}%</span
-                        >
-                    </Label>
-                    <InputNumber
-                        id="taux_proprietaire"
-                        :model-value="form.taux_commission_proprietaire"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                taux_commission_proprietaire: $event,
-                            })
-                        "
-                        :min="0"
-                        :max="100"
-                        :max-fraction-digits="2"
-                        suffix=" %"
-                        class="w-full"
-                    />
-                    <p
-                        v-if="selectedEquipe"
-                        class="mt-1 text-xs"
-                        :class="
-                            Math.abs(totalTaux - 100) > 0.01
-                                ? 'text-destructive'
-                                : 'text-emerald-600'
-                        "
+                    <Label class="mb-1.5 block">Taux propriétaire (%)</Label>
+                    <div
+                        class="flex h-10 cursor-not-allowed items-center rounded-md border border-input bg-muted/60 px-3 text-sm"
                     >
-                        Total : {{ totalTaux }}%
-                        {{
-                            Math.abs(totalTaux - 100) > 0.01
-                                ? '— doit être égal à 100 %'
-                                : '✓'
-                        }}
+                        <Lock class="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+                        <span v-if="selectedEquipe" class="font-medium">
+                            {{ tauxProprietaire }} %
+                        </span>
+                        <span v-else class="text-muted-foreground/60">
+                            — sélectionnez une équipe
+                        </span>
+                    </div>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Calculé automatiquement depuis l'équipe.
                     </p>
                 </div>
             </div>
@@ -568,9 +483,7 @@ const totalTaux = computed(() => {
                             alt="Aperçu"
                             class="h-full w-full object-cover"
                         />
-                        <span v-else class="text-3xl text-muted-foreground/40"
-                            >🚗</span
-                        >
+                        <span v-else class="text-3xl text-muted-foreground/40">🚗</span>
                     </div>
                 </div>
                 <div class="flex flex-col gap-3">
@@ -629,9 +542,9 @@ const totalTaux = computed(() => {
                     "
                 />
                 <div>
-                    <Label for="is_active" class="cursor-pointer font-medium"
-                        >Véhicule actif</Label
-                    >
+                    <Label for="is_active" class="cursor-pointer font-medium">
+                        Véhicule actif
+                    </Label>
                     <p class="text-xs text-muted-foreground">
                         Décochez pour retirer le véhicule de la flotte active
                     </p>
@@ -639,12 +552,12 @@ const totalTaux = computed(() => {
             </div>
         </div>
 
-        <!-- Pied -->
+        <!-- Pied de page -->
         <div class="order-6 hidden items-center justify-between sm:flex">
             <a href="/vehicules">
                 <Button type="button" variant="outline">Retour</Button>
             </a>
-            <Button type="submit" :disabled="processing">
+            <Button type="submit" :disabled="!canSubmit">
                 <Save class="mr-2 h-4 w-4" />
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>

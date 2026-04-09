@@ -8,15 +8,14 @@ use App\Models\Livreur;
 use App\Models\Parametre;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
-use App\Services\CommissionCalculator;
 use App\Services\ImageService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
-use InvalidArgumentException;
 
 class VehiculeController extends Controller
 {
@@ -78,7 +77,7 @@ class VehiculeController extends Controller
             'proprietaires' => $this->proprietairesOptions(),
             'equipes' => $this->equipesOptions(),
             'types' => TypeVehicule::options(),
-            'taux_proprietaire_defaut' => Parametre::getTauxProprietaireDefaut(auth()->user()->organization_id),
+            'tauxProprietaireDefaut' => Parametre::getTauxProprietaireDefaut(auth()->user()->organization_id),
         ]);
     }
 
@@ -97,8 +96,7 @@ class VehiculeController extends Controller
             ],
             'type_vehicule' => ['required', Rule::in(TypeVehicule::allowedValues())],
             'capacite_packs' => 'nullable|integer|min:1|max:99999',
-            'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
-            'equipe_livraison_id' => ['nullable', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
+            'equipe_livraison_id' => ['required', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
             'taux_commission_proprietaire' => 'nullable|numeric|min:0|max:100',
             'pris_en_charge_par_usine' => 'boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
@@ -106,7 +104,8 @@ class VehiculeController extends Controller
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
-        $this->validateTauxSiEquipeAssignee($data, $orgId);
+        $data['proprietaire_id'] = $this->resolveProprietaireIdFromEquipe((int) $data['equipe_livraison_id'], $orgId);
+        $this->applyTauxProprietaireFromEquipe($data, $orgId);
 
         if ($request->hasFile('photo')) {
             $data['photo_path'] = (new ImageService)->storeAsWebp($request->file('photo'), 'vehicules');
@@ -130,7 +129,7 @@ class VehiculeController extends Controller
             'proprietaires' => $this->proprietairesOptions(),
             'equipes' => $this->equipesOptions(),
             'types' => TypeVehicule::options(),
-            'taux_proprietaire_defaut' => Parametre::getTauxProprietaireDefaut(auth()->user()->organization_id),
+            'tauxProprietaireDefaut' => Parametre::getTauxProprietaireDefaut(auth()->user()->organization_id),
         ]);
     }
 
@@ -150,8 +149,7 @@ class VehiculeController extends Controller
             ],
             'type_vehicule' => ['required', Rule::in(TypeVehicule::allowedValues())],
             'capacite_packs' => 'nullable|integer|min:1|max:99999',
-            'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
-            'equipe_livraison_id' => ['nullable', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
+            'equipe_livraison_id' => ['required', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
             'taux_commission_proprietaire' => 'nullable|numeric|min:0|max:100',
             'pris_en_charge_par_usine' => 'boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
@@ -159,7 +157,8 @@ class VehiculeController extends Controller
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
-        $this->validateTauxSiEquipeAssignee($data, $orgId);
+        $data['proprietaire_id'] = $this->resolveProprietaireIdFromEquipe((int) $data['equipe_livraison_id'], $orgId);
+        $this->applyTauxProprietaireFromEquipe($data, $orgId);
 
         if ($request->hasFile('photo')) {
             $imageService = new ImageService;
@@ -206,7 +205,7 @@ class VehiculeController extends Controller
 
     private function equipesOptions(): array
     {
-        return EquipeLivraison::with(['membres', 'livreurs'])
+        return EquipeLivraison::with(['membres', 'livreurs', 'proprietaire'])
             ->where('organization_id', auth()->user()->organization_id)
             ->where('is_active', true)
             ->orderBy('nom')
@@ -214,6 +213,8 @@ class VehiculeController extends Controller
             ->map(fn (EquipeLivraison $e) => [
                 'value' => $e->id,
                 'label' => $e->nom,
+                'proprietaire_id' => $e->proprietaire_id,
+                'proprietaire_label' => $e->proprietaire ? trim($e->proprietaire->prenom.' '.$e->proprietaire->nom) : null,
                 'somme_taux' => (float) $e->membres->sum('taux_commission'),
                 'livreur_principal' => ($lp = $e->livreurs->first(fn (Livreur $l) => $l->pivot->role === 'principal'))
                     ? ['nom_complet' => trim("{$lp->prenom} {$lp->nom}"), 'telephone' => $lp->telephone]
@@ -222,10 +223,32 @@ class VehiculeController extends Controller
             ->toArray();
     }
 
+    private function resolveProprietaireIdFromEquipe(int $equipeId, int $orgId): int
+    {
+        $equipe = EquipeLivraison::query()
+            ->where('id', $equipeId)
+            ->where('organization_id', $orgId)
+            ->first();
+
+        if (! $equipe) {
+            throw ValidationException::withMessages([
+                'equipe_livraison_id' => "L'équipe sélectionnée est introuvable.",
+            ]);
+        }
+        if (! $equipe->proprietaire_id) {
+            throw ValidationException::withMessages([
+                'proprietaire_id' => "Le propriétaire de l'équipe sélectionnée est introuvable.",
+            ]);
+        }
+
+        return (int) $equipe->proprietaire_id;
+    }
+
     /**
-     * Si une équipe est assignée, vérifie que taux_proprietaire + somme_membres = 100.
+     * Toujours recalculer le taux propriétaire depuis l'équipe (100 - somme membres).
+     * On ignore toute valeur soumise par le formulaire.
      */
-    private function validateTauxSiEquipeAssignee(array $data, int $orgId): void
+    private function applyTauxProprietaireFromEquipe(array &$data, int $orgId): void
     {
         if (empty($data['equipe_livraison_id'])) {
             return;
@@ -240,13 +263,8 @@ class VehiculeController extends Controller
             return;
         }
 
-        $tauxProp = (float) ($data['taux_commission_proprietaire'] ?? 0);
-
-        try {
-            CommissionCalculator::validateTauxTotal($equipe, $tauxProp);
-        } catch (InvalidArgumentException $e) {
-            abort(422, $e->getMessage());
-        }
+        $sommeMembres = (float) $equipe->membres->sum('taux_commission');
+        $data['taux_commission_proprietaire'] = round(max(0, 100 - $sommeMembres), 2);
     }
 
     private function normalizeStrings(array $data): array
@@ -269,8 +287,7 @@ class VehiculeController extends Controller
             'immatriculation.unique' => "Ce numéro d'immatriculation est déjà utilisé.",
             'type_vehicule.required' => 'Le type de véhicule est obligatoire.',
             'type_vehicule.in' => 'Type de véhicule invalide.',
-            'proprietaire_id.required' => 'Le propriétaire est obligatoire.',
-            'proprietaire_id.exists' => 'Le propriétaire sélectionné est introuvable.',
+            'equipe_livraison_id.required' => "L'équipe de livraison est obligatoire.",
             'equipe_livraison_id.exists' => "L'équipe sélectionnée est introuvable.",
             'photo.image' => 'Le fichier doit être une image.',
             'photo.mimes' => 'La photo doit être au format jpg, jpeg, png ou webp.',

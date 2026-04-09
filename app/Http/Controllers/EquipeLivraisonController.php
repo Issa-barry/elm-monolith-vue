@@ -39,7 +39,7 @@ class EquipeLivraisonController extends Controller
 
         return Inertia::render('EquipesLivraison/Create', [
             'proprietaires' => $this->proprietairesOptions($orgId),
-            'taux_proprietaire_defaut' => Parametre::getTauxProprietaireDefaut($orgId),
+            'tauxProprietaireDefaut' => Parametre::getTauxProprietaireDefaut($orgId),
         ]);
     }
 
@@ -59,7 +59,7 @@ class EquipeLivraisonController extends Controller
             'membres.*.livreur_id' => 'nullable|integer',
             'membres.*.nom' => 'required|string|max:255',
             'membres.*.prenom' => 'required|string|max:255',
-            'membres.*.telephone' => 'required|string|max:30',
+            'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
             'membres.*.role' => ['required', Rule::in(['principal', 'assistant'])],
             'membres.*.taux_commission' => 'required|numeric|min:0|max:100',
             'membres.*.ordre' => 'nullable|integer|min:0',
@@ -67,7 +67,7 @@ class EquipeLivraisonController extends Controller
 
         $this->validatePrincipal($data['membres']);
         $this->validateUniquePhones($data['membres']);
-        $this->validateTotalTaux($data['membres']);
+        $this->validateTotalTaux($data['membres'], (float) $data['taux_commission_proprietaire']);
 
         DB::transaction(function () use ($data, $orgId) {
             $equipe = EquipeLivraison::create([
@@ -104,7 +104,7 @@ class EquipeLivraisonController extends Controller
         return Inertia::render('EquipesLivraison/Edit', [
             'equipe' => $this->equipeData($equipes_livraison),
             'proprietaires' => $this->proprietairesOptions($orgId),
-            'taux_proprietaire_defaut' => Parametre::getTauxProprietaireDefaut($orgId),
+            'tauxProprietaireDefaut' => Parametre::getTauxProprietaireDefaut($orgId),
         ]);
     }
 
@@ -123,7 +123,7 @@ class EquipeLivraisonController extends Controller
             'membres.*.livreur_id' => 'nullable|integer',
             'membres.*.nom' => 'required|string|max:255',
             'membres.*.prenom' => 'required|string|max:255',
-            'membres.*.telephone' => 'required|string|max:30',
+            'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
             'membres.*.role' => ['required', Rule::in(['principal', 'assistant'])],
             'membres.*.taux_commission' => 'required|numeric|min:0|max:100',
             'membres.*.ordre' => 'nullable|integer|min:0',
@@ -131,7 +131,7 @@ class EquipeLivraisonController extends Controller
 
         $this->validatePrincipal($data['membres']);
         $this->validateUniquePhones($data['membres']);
-        $this->validateTotalTaux($data['membres']);
+        $this->validateTotalTaux($data['membres'], (float) $data['taux_commission_proprietaire']);
 
         DB::transaction(function () use ($data, $orgId, $equipes_livraison) {
             $equipes_livraison->update([
@@ -265,16 +265,21 @@ class EquipeLivraisonController extends Controller
         }
     }
 
-    private function validateTotalTaux(array $membres): void
+    private function validateTotalTaux(array $membres, float $tauxProprietaire): void
     {
-        $total = array_reduce(
+        $totalMembres = array_reduce(
             $membres,
             fn (float $sum, array $membre): float => $sum + (float) ($membre['taux_commission'] ?? 0),
             0.0
         );
 
-        if ($total > 100.000001) {
-            abort(422, "La somme des taux de l'équipe ne peut pas dépasser 100 %.");
+        $total = $totalMembres + $tauxProprietaire;
+
+        if (abs($total - 100.0) > 0.01) {
+            abort(422, sprintf(
+                'La répartition doit totaliser exactement 100 %% (livreurs + propriétaire). Actuellement : %.2f %%.',
+                $total
+            ));
         }
     }
 
@@ -292,6 +297,7 @@ class EquipeLivraisonController extends Controller
             'membres.*.nom.required' => 'Le nom du livreur est obligatoire.',
             'membres.*.prenom.required' => 'Le prénom du livreur est obligatoire.',
             'membres.*.telephone.required' => 'Le téléphone du livreur est obligatoire.',
+            'membres.*.telephone.regex' => 'Le téléphone doit être au format guinéen (+224 suivi de 9 chiffres).',
             'membres.*.role.required' => 'Le rôle est obligatoire.',
             'membres.*.role.in' => 'Le rôle doit être principal ou assistant.',
             'membres.*.taux_commission.required' => 'Le taux est obligatoire.',
