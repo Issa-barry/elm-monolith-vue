@@ -108,7 +108,13 @@
       "Bash(node node_modules/.bin/prettier --write \"resources/js/pages/EquipesLivraison/Edit.vue\" \"resources/js/pages/EquipesLivraison/partials/EquipeForm.vue\")",
       "Bash(node -e \" const { createSSRApp } = require\\('vue'\\); const app = createSSRApp\\({ props: { tauxProprietaireDefaut: Number } }\\); \")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8080)",
-      "Bash(tee /tmp/tests_out.txt)"
+      "Bash(tee /tmp/tests_out.txt)",
+      "Bash(grep -n \"proprietaire_id\\\\|equipe_livraison_id\" database/migrations/*.php)",
+      "Bash(php -l database/seeders/EquipesLivraisonSeeder.php)",
+      "Bash(php -l database/seeders/VehiculesSeeder.php)"
+    ],
+    "additionalDirectories": [
+      "C:\\laragon\\www\\elm-monolithe\\database\\seeders"
     ]
   }
 }
