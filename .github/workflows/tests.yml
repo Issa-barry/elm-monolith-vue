@@ -63,7 +63,7 @@ jobs:
   e2e:
     name: E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -89,11 +89,12 @@ jobs:
           cache: 'npm'
 
       - name: Cache Playwright browsers
+        id: playwright-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
-          restore-keys: playwright-chromium-
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-chromium-${{ runner.os }}-
 
       - name: Install Node dependencies
         run: npm ci
@@ -101,8 +102,15 @@ jobs:
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
-      - name: Install Playwright browser
+      # Cache miss → télécharge le binaire ET installe les dépendances système (apt)
+      - name: Install Playwright browser + system deps (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+
+      # Cache hit → binaire déjà restauré, on installe seulement les paquets système (rapide)
+      - name: Install Playwright system deps only (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
       - name: Prepare Laravel environment
         run: |
