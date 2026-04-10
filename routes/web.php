@@ -145,6 +145,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     // ── Module : Cashback clients ─────────────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::CASHBACK)->group(function () {
         Route::get('cashback', [CashbackController::class, 'index'])->name('cashback.index');
+        Route::patch('cashback/{cashbackTransaction}/valider', [CashbackController::class, 'valider'])->name('cashback.valider');
         Route::patch('cashback/{cashbackTransaction}/verser', [CashbackController::class, 'verser'])->name('cashback.verser');
     });
 });
