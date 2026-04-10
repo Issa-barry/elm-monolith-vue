@@ -63,15 +63,19 @@ const mainNavItems = computed((): NavItem[] => {
     ];
 
     if (canSee('ventes.read', 'ventes')) {
+        const ventesSubItems = [
+            { title: 'Commandes', href: '/ventes' },
+            { title: 'Factures', href: '/factures' },
+            { title: 'Commissions', href: '/commissions' },
+        ];
+        if (moduleActive('cashback')) {
+            ventesSubItems.push({ title: 'Cashback', href: '/cashback' });
+        }
         items.push({
             title: 'Ventes',
             href: '/ventes',
             icon: ShoppingCart,
-            items: [
-                { title: 'Commandes', href: '/ventes' },
-                { title: 'Factures', href: '/factures' },
-                { title: 'Commissions', href: '/commissions' },
-            ],
+            items: ventesSubItems,
         });
     }
 

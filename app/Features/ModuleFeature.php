@@ -24,6 +24,8 @@ class ModuleFeature
 
     public const INSCRIPTION = 'module.inscription';
 
+    public const CASHBACK = 'module.cashback';
+
     public const ALL = [
         self::VENTES,
         self::ACHATS,
@@ -34,6 +36,7 @@ class ModuleFeature
         self::SITES,
         self::UTILISATEURS,
         self::INSCRIPTION,
+        self::CASHBACK,
     ];
 
     /**
@@ -65,6 +68,7 @@ class ModuleFeature
             self::SITES => 'Sites',
             self::UTILISATEURS => 'Utilisateurs',
             self::INSCRIPTION => 'Inscription',
+            self::CASHBACK => 'Cashback clients',
         ];
     }
 }
