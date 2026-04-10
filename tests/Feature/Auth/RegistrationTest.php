@@ -3,8 +3,10 @@
 namespace Tests\Feature\Auth;
 
 use App\Features\ModuleFeature;
+use App\Models\Client;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\OtpService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
 use Tests\TestCase;
@@ -12,6 +14,33 @@ use Tests\TestCase;
 class RegistrationTest extends TestCase
 {
     use RefreshDatabase;
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+
+    /**
+     * Retourne un clone du test runner avec un OTP pré-vérifié en session.
+     * Utilisé pour bypasser l'étape OTP dans les tests de soumission finale.
+     */
+    private function withVerifiedOtp(string $phone): static
+    {
+        return $this->withSession([
+            'register_otp' => [
+                $phone => ['code' => '12345', 'verified' => true, 'generated_at' => time()],
+            ],
+        ]);
+    }
+
+    /**
+     * Crée une organisation et active explicitement le module inscription.
+     * Nécessaire car INSCRIPTION est désactivé par défaut pour les nouvelles orgs.
+     */
+    private function createOrgWithInscription(): Organization
+    {
+        $org = Organization::factory()->create();
+        Feature::for($org)->activate(ModuleFeature::INSCRIPTION);
+
+        return $org;
+    }
 
     // ─── Affichage ────────────────────────────────────────────────────────────
 
@@ -52,9 +81,10 @@ class RegistrationTest extends TestCase
     {
         $user = User::factory()->create();
 
+        // Un utilisateur sans rôle est redirigé vers 'home'
         $this->actingAs($user)
             ->get(route('register'))
-            ->assertRedirect(route('dashboard'));
+            ->assertRedirect(route('home'));
     }
 
     public function test_registration_submission_returns_403_when_inscription_is_disabled(): void
@@ -82,7 +112,7 @@ class RegistrationTest extends TestCase
             'nom' => 'User',
             'email' => 'test@example.com',
             'password' => 'Password@123',
-        ])->assertRedirect(route('dashboard', absolute: false));
+        ])->assertRedirect(route('client.dashboard', absolute: false));
 
         $this->assertAuthenticated();
 
@@ -97,15 +127,16 @@ class RegistrationTest extends TestCase
 
     public function test_registration_with_valid_guinee_phone(): void
     {
-        $this->post(route('register.store'), [
-            'prenom' => 'Mamadou',
-            'nom' => 'Diallo',
-            'email' => 'mamadou@example.com',
-            'telephone' => '+224620000000',
-            'telephone_country' => 'GN',
-            'telephone_local' => '620000000',
-            'password' => 'Password@123',
-        ])->assertRedirect(route('dashboard', absolute: false));
+        $this->withVerifiedOtp('+224620000000')
+            ->post(route('register.store'), [
+                'prenom' => 'Mamadou',
+                'nom' => 'Diallo',
+                'email' => 'mamadou@example.com',
+                'telephone' => '+224620000000',
+                'telephone_country' => 'GN',
+                'telephone_local' => '620000000',
+                'password' => 'Password@123',
+            ])->assertRedirect(route('client.dashboard', absolute: false));
 
         $this->assertDatabaseHas('users', [
             'email' => 'mamadou@example.com',
@@ -115,15 +146,16 @@ class RegistrationTest extends TestCase
 
     public function test_registration_with_valid_senegal_phone(): void
     {
-        $this->post(route('register.store'), [
-            'prenom' => 'Fatou',
-            'nom' => 'Diop',
-            'email' => 'fatou@example.com',
-            'telephone' => '+221701234567',
-            'telephone_country' => 'SN',
-            'telephone_local' => '701234567',
-            'password' => 'Password@123',
-        ])->assertRedirect(route('dashboard', absolute: false));
+        $this->withVerifiedOtp('+221701234567')
+            ->post(route('register.store'), [
+                'prenom' => 'Fatou',
+                'nom' => 'Diop',
+                'email' => 'fatou@example.com',
+                'telephone' => '+221701234567',
+                'telephone_country' => 'SN',
+                'telephone_local' => '701234567',
+                'password' => 'Password@123',
+            ])->assertRedirect(route('client.dashboard', absolute: false));
 
         $this->assertDatabaseHas('users', [
             'telephone' => '+221701234567',
@@ -132,19 +164,124 @@ class RegistrationTest extends TestCase
 
     public function test_registration_with_valid_france_phone(): void
     {
-        $this->post(route('register.store'), [
-            'prenom' => 'Jean',
-            'nom' => 'Dupont',
-            'email' => 'jean@example.com',
-            'telephone' => '+33612345678',
-            'telephone_country' => 'FR',
-            'telephone_local' => '612345678',
-            'password' => 'Password@123',
-        ])->assertRedirect(route('dashboard', absolute: false));
+        $this->withVerifiedOtp('+33612345678')
+            ->post(route('register.store'), [
+                'prenom' => 'Jean',
+                'nom' => 'Dupont',
+                'email' => 'jean@example.com',
+                'telephone' => '+33612345678',
+                'telephone_country' => 'FR',
+                'telephone_local' => '612345678',
+                'password' => 'Password@123',
+            ])->assertRedirect(route('client.dashboard', absolute: false));
 
         $this->assertDatabaseHas('users', [
             'telephone' => '+33612345678',
         ]);
+    }
+
+    // ─── OTP – protection côté backend ────────────────────────────────────────
+
+    public function test_registration_with_phone_fails_without_verified_otp(): void
+    {
+        $this->post(route('register.store'), [
+            'prenom' => 'Test',
+            'nom' => 'User',
+            'telephone' => '+224620000001',
+            'telephone_country' => 'GN',
+            'telephone_local' => '620000001',
+            'password' => 'Password@123',
+        ])->assertSessionHasErrors('telephone');
+
+        $this->assertGuest();
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_registration_with_unverified_otp_in_session_is_rejected(): void
+    {
+        // OTP généré mais pas encore vérifié
+        app(OtpService::class)->generate('+224620000002');
+
+        $this->post(route('register.store'), [
+            'prenom' => 'Test',
+            'nom' => 'User',
+            'telephone' => '+224620000002',
+            'telephone_country' => 'GN',
+            'telephone_local' => '620000002',
+            'password' => 'Password@123',
+        ])->assertSessionHasErrors('telephone');
+
+        $this->assertGuest();
+    }
+
+    // ─── Liaison client existant ──────────────────────────────────────────────
+
+    public function test_registration_links_existing_client_with_same_phone(): void
+    {
+        $org = $this->createOrgWithInscription();
+        $client = Client::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000003',
+            'user_id' => null,
+        ]);
+
+        $this->withVerifiedOtp('+224620000003')
+            ->post(route('register.store'), [
+                'prenom' => 'Test',
+                'nom' => 'User',
+                'telephone' => '+224620000003',
+                'telephone_country' => 'GN',
+                'telephone_local' => '620000003',
+                'password' => 'Password@123',
+            ]);
+
+        $user = User::where('telephone', '+224620000003')->first();
+        $this->assertNotNull($user);
+        $this->assertEquals($user->id, $client->fresh()->user_id);
+    }
+
+    public function test_registration_does_not_link_client_that_already_has_user(): void
+    {
+        $org = $this->createOrgWithInscription();
+        $existingUser = User::factory()->create(['telephone' => null]);
+        $client = Client::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000004',
+            'user_id' => $existingUser->id,
+        ]);
+
+        $this->withVerifiedOtp('+224620000004')
+            ->post(route('register.store'), [
+                'prenom' => 'Test',
+                'nom' => 'User',
+                'telephone' => '+224620000004',
+                'telephone_country' => 'GN',
+                'telephone_local' => '620000004',
+                'password' => 'Password@123',
+            ]);
+
+        // Le client existant ne doit pas être modifié
+        $this->assertEquals($existingUser->id, $client->fresh()->user_id);
+    }
+
+    // ─── Unicité téléphone dans users ─────────────────────────────────────────
+
+    public function test_registration_fails_when_phone_already_in_users(): void
+    {
+        User::factory()->create(['telephone' => '+224620000005']);
+
+        $this->withVerifiedOtp('+224620000005')
+            ->post(route('register.store'), [
+                'prenom' => 'Test',
+                'nom' => 'User',
+                'telephone' => '+224620000005',
+                'telephone_country' => 'GN',
+                'telephone_local' => '620000005',
+                'password' => 'Password@123',
+            ])->assertSessionHasErrors('telephone');
+
+        $this->assertGuest();
+        $this->assertDatabaseCount('users', 1);
     }
 
     // ─── Validation – champs obligatoires ─────────────────────────────────────
@@ -199,7 +336,7 @@ class RegistrationTest extends TestCase
             'prenom' => 'Test',
             'nom' => 'User',
             'password' => 'Password@123',
-        ])->assertRedirect(route('dashboard', absolute: false));
+        ])->assertRedirect(route('client.dashboard', absolute: false));
 
         $this->assertAuthenticated();
         $this->assertDatabaseHas('users', ['prenom' => 'Test', 'nom' => 'USER', 'email' => null]);
@@ -279,7 +416,7 @@ class RegistrationTest extends TestCase
             'nom' => 'User',
             'email' => 'test@example.com',
             'password' => 'Password@123',
-        ])->assertRedirect(route('dashboard', absolute: false));
+        ])->assertRedirect(route('client.dashboard', absolute: false));
 
         $this->assertAuthenticated();
     }

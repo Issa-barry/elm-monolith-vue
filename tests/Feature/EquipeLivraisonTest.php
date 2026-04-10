@@ -31,13 +31,13 @@ class EquipeLivraisonTest extends TestCase
             'nom' => 'Équipe Test',
             'is_active' => true,
             'proprietaire_id' => $proprietaireId,
-            'taux_commission_proprietaire' => 60,
+            'taux_commission_proprietaire' => 70,
             'membres' => [
                 [
                     'livreur_id' => null,
                     'nom' => 'Diallo',
                     'prenom' => 'Mamadou',
-                    'telephone' => '620000001',
+                    'telephone' => '+224620000001',
                     'role' => 'principal',
                     'taux_commission' => 30,
                     'ordre' => 0,
@@ -92,8 +92,55 @@ class EquipeLivraisonTest extends TestCase
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
             'nom' => 'Équipe Test',
-            'taux_commission_proprietaire' => 60,
+            'taux_commission_proprietaire' => 70,
         ]);
+    }
+
+    public function test_store_persiste_telephone_normalise_e164(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        $this->assertDatabaseHas('livreurs', [
+            'telephone' => '+224620000001',
+            'organization_id' => $this->org->id,
+        ]);
+    }
+
+    public function test_store_echoue_si_telephone_contient_lettres(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'telephone' => '+224abc123456', 'role' => 'principal',
+                    'taux_commission' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('membres.0.telephone');
+    }
+
+    public function test_store_echoue_si_telephone_longueur_incorrecte(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        // 8 chiffres locaux au lieu de 9
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'telephone' => '+22462012345', 'role' => 'principal',
+                    'taux_commission' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('membres.0.telephone');
     }
 
     public function test_store_echoue_si_proprietaire_id_absent(): void
@@ -123,6 +170,12 @@ class EquipeLivraisonTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
                 'taux_commission_proprietaire' => 75.50,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'telephone' => '+224620000001', 'role' => 'principal',
+                    'taux_commission' => 24.50, 'ordre' => 0,
+                ]],
             ]))
             ->assertRedirect(route('equipes-livraison.index'));
 
@@ -156,6 +209,24 @@ class EquipeLivraisonTest extends TestCase
             ->assertSessionHasErrors('taux_commission_proprietaire');
     }
 
+    public function test_store_echoue_si_total_taux_different_de_100(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        // propriétaire 60 + livreur 30 = 90 % → doit échouer
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'taux_commission_proprietaire' => 60,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'telephone' => '+224620000001', 'role' => 'principal',
+                    'taux_commission' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertStatus(422);
+    }
+
     public function test_store_echoue_sans_membre(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
@@ -165,6 +236,133 @@ class EquipeLivraisonTest extends TestCase
                 'membres' => [],
             ]))
             ->assertSessionHasErrors('membres');
+    }
+
+    public function test_store_fails_si_nom_deja_utilise_dans_meme_org(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        // Même nom, membre différent pour éviter conflit livreur
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Barry', 'prenom' => 'Ibrahima',
+                    'telephone' => '+224620000002', 'role' => 'principal',
+                    'taux_commission' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('nom');
+    }
+
+    public function test_store_autorise_meme_nom_apres_suppression_equipe(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
+
+        $this->actingAs($this->user)
+            ->delete(route('equipes-livraison.destroy', $equipe))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        // Le même nom doit être disponible après suppression (soft-delete)
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'telephone' => '+224620000002', 'role' => 'principal',
+                    'taux_commission' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertRedirect(route('equipes-livraison.index'));
+    }
+
+    public function test_store_fails_si_livreur_deja_dans_autre_equipe(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        // Même livreur (+224620000001) dans une autre équipe
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'nom' => 'Équipe Deux',
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'telephone' => '+224620000001',
+                    'role' => 'principal',
+                    'taux_commission' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('membres.0.telephone');
+    }
+
+    public function test_update_autorise_membres_deja_dans_meme_equipe(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
+
+        // Mettre à jour en conservant le même membre → doit réussir
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($proprietaire->id))
+            ->assertRedirect(route('equipes-livraison.edit', $equipe));
+    }
+
+    public function test_update_fails_si_livreur_deja_dans_autre_equipe(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        // Equipe 1 avec +224620000001
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        // Equipe 2 avec +224620000002
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'nom' => 'Équipe Deux',
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Barry', 'prenom' => 'Ibrahima',
+                    'telephone' => '+224620000002', 'role' => 'principal',
+                    'taux_commission' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        $equipe2 = EquipeLivraison::where('organization_id', $this->org->id)
+            ->where('nom', 'Équipe Deux')->first();
+
+        // Tenter d'affecter le livreur de l'équipe 1 à l'équipe 2
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe2), $this->validPayload($proprietaire->id, [
+                'nom' => 'Équipe Deux',
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'telephone' => '+224620000001',
+                    'role' => 'principal',
+                    'taux_commission' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('membres.0.telephone');
     }
 
     // ── edit ──────────────────────────────────────────────────────────────────
@@ -209,6 +407,12 @@ class EquipeLivraisonTest extends TestCase
             ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($nouveauProprietaire->id, [
                 'nom' => 'Équipe Modifiée',
                 'taux_commission_proprietaire' => 55,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'telephone' => '+224620000001', 'role' => 'principal',
+                    'taux_commission' => 45, 'ordre' => 0,
+                ]],
             ]))
             ->assertRedirect(route('equipes-livraison.edit', $equipe));
 

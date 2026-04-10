@@ -18,7 +18,8 @@ class ProprietairesSeeder extends Seeder
                 'prenom' => 'Mamadou',
                 'email' => 'mamadou.barry@elm.gn',
                 'telephone' => '+224621000001',
-                'adresse' => 'Kaloum, Conakry',
+                'adresse' => 'Kaloum',
+                'ville' => 'Conakry',
                 'is_active' => true,
             ],
             [
@@ -26,7 +27,8 @@ class ProprietairesSeeder extends Seeder
                 'prenom' => 'Fatoumata',
                 'email' => 'fatoumata.diallo@elm.gn',
                 'telephone' => '+224621000002',
-                'adresse' => 'Ratoma, Conakry',
+                'adresse' => 'Ratoma',
+                'ville' => 'Conakry',
                 'is_active' => true,
             ],
             [
@@ -34,7 +36,8 @@ class ProprietairesSeeder extends Seeder
                 'prenom' => 'Issa',
                 'email' => 'issa.tounkara@elm.gn',
                 'telephone' => '+224621000003',
-                'adresse' => 'Matoto, Conakry',
+                'adresse' => 'Matoto',
+                'ville' => 'Conakry',
                 'is_active' => true,
             ],
             [
@@ -42,7 +45,8 @@ class ProprietairesSeeder extends Seeder
                 'prenom' => 'Saran',
                 'email' => 'saran.conde@elm.gn',
                 'telephone' => '+224621000004',
-                'adresse' => 'Dixinn, Conakry',
+                'adresse' => 'Dixinn',
+                'ville' => 'Conakry',
                 'is_active' => true,
             ],
         ];

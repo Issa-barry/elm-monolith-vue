@@ -5,7 +5,7 @@ import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import { computed, reactive, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 
 export interface MembreFormData {
     livreur_id: number | null;
@@ -17,11 +17,15 @@ export interface MembreFormData {
     ordre: number;
 }
 
+const GUINEA_PREFIX = '+224';
+const GUINEA_LOCAL_LENGTH = 9;
+
 const props = defineProps<{
     visible: boolean;
     membre?: MembreFormData | null;
     hasPrincipal?: boolean;
     maxTaux?: number;
+    telephoneError?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -37,6 +41,12 @@ const roles = [
 const isEdit = computed(() => !!props.membre);
 const title = computed(() =>
     isEdit.value ? 'Modifier le membre' : 'Nouveau membre',
+);
+const canSubmit = computed(
+    () =>
+        form.prenom.trim().length > 0 &&
+        form.nom.trim().length > 0 &&
+        /^\d{9}$/.test(phoneLocal.value),
 );
 const maxTauxSafe = computed(() => {
     const raw = Number(props.maxTaux ?? 100);
@@ -54,7 +64,18 @@ const form = reactive<MembreFormData>({
     ordre: 0,
 });
 
+// Local 9-digit input (E.164 prefix is fixed and not editable)
+const phoneLocal = ref('');
+
 const errors = reactive<Partial<Record<keyof MembreFormData, string>>>({});
+
+function extractLocalDigits(phone: string): string {
+    if (phone.startsWith(GUINEA_PREFIX)) {
+        return phone.slice(GUINEA_PREFIX.length);
+    }
+    // Strip all non-digits and take last 9 if only digits provided
+    return phone.replace(/\D/g, '').slice(-GUINEA_LOCAL_LENGTH);
+}
 
 watch(
     () => props.visible,
@@ -66,6 +87,7 @@ watch(
 
         if (props.membre) {
             Object.assign(form, props.membre);
+            phoneLocal.value = extractLocalDigits(props.membre.telephone);
         } else {
             Object.assign(form, {
                 livreur_id: null,
@@ -76,9 +98,39 @@ watch(
                 taux_commission: 0,
                 ordre: 0,
             });
+            phoneLocal.value = '';
         }
     },
 );
+
+function handlePhoneKeydown(e: KeyboardEvent) {
+    const pass = [
+        'Backspace',
+        'Delete',
+        'Tab',
+        'Escape',
+        'Enter',
+        'ArrowLeft',
+        'ArrowRight',
+        'ArrowUp',
+        'ArrowDown',
+        'Home',
+        'End',
+    ];
+    if (pass.includes(e.key)) return;
+    if (
+        (e.ctrlKey || e.metaKey) &&
+        ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())
+    )
+        return;
+    if (!/^\d$/.test(e.key)) e.preventDefault();
+}
+
+function onPhoneInput(e: Event) {
+    const raw = (e.target as HTMLInputElement).value.replace(/\D/g, '');
+    phoneLocal.value = raw.slice(0, GUINEA_LOCAL_LENGTH);
+    (e.target as HTMLInputElement).value = phoneLocal.value;
+}
 
 function validate(): boolean {
     (Object.keys(errors) as (keyof MembreFormData)[]).forEach(
@@ -87,8 +139,13 @@ function validate(): boolean {
 
     if (!form.prenom.trim()) errors.prenom = 'Le prénom est obligatoire.';
     if (!form.nom.trim()) errors.nom = 'Le nom est obligatoire.';
-    if (!form.telephone.trim())
+
+    if (!phoneLocal.value.trim()) {
         errors.telephone = 'Le téléphone est obligatoire.';
+    } else if (!/^\d{9}$/.test(phoneLocal.value)) {
+        errors.telephone = `Le téléphone doit comporter exactement ${GUINEA_LOCAL_LENGTH} chiffres.`;
+    }
+
     const taux = Number(form.taux_commission);
     if (!Number.isFinite(taux)) {
         errors.taux_commission = 'Le taux est obligatoire.';
@@ -103,7 +160,10 @@ function validate(): boolean {
 
 function handleConfirm() {
     if (!validate()) return;
-    emit('confirm', { ...form });
+    emit('confirm', {
+        ...form,
+        telephone: `${GUINEA_PREFIX}${phoneLocal.value}`,
+    });
     emit('update:visible', false);
 }
 </script>
@@ -173,18 +233,41 @@ function handleConfirm() {
                 >
                     Téléphone <span class="text-destructive">*</span>
                 </Label>
-                <InputText
-                    id="membre-telephone"
-                    v-model="form.telephone"
-                    class="w-full"
-                    :class="{ 'p-invalid': errors.telephone }"
-                    @keyup.enter="handleConfirm"
-                />
+                <div
+                    class="flex h-10 overflow-hidden rounded-md border"
+                    :class="
+                        errors.telephone ? 'border-destructive' : 'border-input'
+                    "
+                >
+                    <span
+                        class="flex items-center gap-1.5 border-r bg-muted px-3 text-sm text-muted-foreground select-none"
+                    >
+                        <img
+                            src="https://flagcdn.com/20x15/gn.png"
+                            width="20"
+                            height="15"
+                            alt="Guinée"
+                        />
+                        +224
+                    </span>
+                    <input
+                        id="membre-telephone"
+                        type="tel"
+                        inputmode="numeric"
+                        :maxlength="9"
+                        :value="phoneLocal"
+                        placeholder="9 chiffres"
+                        class="flex-1 bg-background px-3 text-sm outline-none placeholder:text-muted-foreground"
+                        @input="onPhoneInput"
+                        @keydown="handlePhoneKeydown"
+                        @keyup.enter="handleConfirm"
+                    />
+                </div>
                 <p
-                    v-if="errors.telephone"
+                    v-if="errors.telephone || telephoneError"
                     class="mt-1 text-xs text-destructive"
                 >
-                    {{ errors.telephone }}
+                    {{ errors.telephone || telephoneError }}
                 </p>
             </div>
 
@@ -248,7 +331,12 @@ function handleConfirm() {
                 >
                     Annuler
                 </Button>
-                <Button type="button" size="sm" @click="handleConfirm">
+                <Button
+                    type="button"
+                    size="sm"
+                    :disabled="!canSubmit"
+                    @click="handleConfirm"
+                >
                     {{ isEdit ? 'Enregistrer' : 'Ajouter' }}
                 </Button>
             </div>

@@ -4,69 +4,34 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
-import { computed } from 'vue';
-import VehiculeForm from './partials/VehiculeForm.vue';
-
-interface Option {
-    value: number | string;
-    label: string;
-}
-interface EquipeOption {
-    value: number;
-    label: string;
-    proprietaire_id: number | null;
-    proprietaire_label?: string | null;
-    somme_taux: number;
-}
-interface TypeOption {
-    value: string;
-    label: string;
-    capacite_defaut: number;
-}
-
-const props = defineProps<{
-    proprietaires: Option[];
-    equipes: EquipeOption[];
-    types: TypeOption[];
-    tauxProprietaireDefaut: number;
-}>();
+import ClientForm from './partials/ClientForm.vue';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Véhicules', href: '/vehicules' },
-    { title: 'Nouveau véhicule', href: '#' },
+    { title: 'Clients', href: '/clients' },
+    { title: 'Nouveau client', href: '#' },
 ];
 
 const form = useForm({
-    nom_vehicule: '',
-    immatriculation: '',
-    type_vehicule: null as string | null,
-    capacite_packs: null as number | null,
-    proprietaire_id: null as number | null,
-    equipe_livraison_id: null as number | null,
-    pris_en_charge_par_usine: false,
-    taux_commission_proprietaire: props.tauxProprietaireDefaut as number | null,
-    photo: null as File | null,
+    nom: '',
+    prenom: '',
+    email: null as string | null,
+    telephone: null as string | null,
+    adresse: null as string | null,
+    ville: 'Conakry' as string | null,
+    pays: 'Guinée' as string | null,
+    code_pays: 'GN' as string | null,
+    code_phone_pays: '+224' as string | null,
     is_active: true,
 });
 
-const canSubmit = computed(() => {
-    return (
-        !form.processing &&
-        !!form.equipe_livraison_id &&
-        form.nom_vehicule.trim().length > 0 &&
-        form.immatriculation.trim().length > 0 &&
-        !!form.type_vehicule
-    );
-});
-
 function submit() {
-    form.post('/vehicules');
+    form.post('/clients');
 }
 </script>
 
 <template>
-    <Head title="Nouveau véhicule" />
+    <Head title="Nouveau client" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- Header mobile -->
@@ -75,38 +40,35 @@ function submit() {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/vehicules"
+                    href="/clients"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
                 <div class="text-center">
                     <h1 class="text-[17px] leading-tight font-semibold">
-                        Nouveau véhicule
+                        Nouveau client
                     </h1>
                 </div>
             </div>
         </div>
 
-        <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
-            <div class="hidden sm:block">
+        <div class="mx-auto max-w-2xl pb-6 sm:p-6">
+            <div class="mx-auto hidden max-w-2xl px-6 pt-6 pb-0 sm:block">
                 <div class="mb-8">
                     <h1 class="text-2xl font-semibold tracking-tight">
-                        Nouveau véhicule
+                        Nouveau client
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Ajoutez un véhicule à votre flotte.
+                        Ajoutez un client à votre organisation.
                     </p>
                 </div>
             </div>
 
-            <VehiculeForm
+            <ClientForm
                 :form="form"
                 :errors="form.errors"
                 :processing="form.processing"
-                :proprietaires="proprietaires"
-                :equipes="equipes"
-                :types="types"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />
@@ -118,13 +80,13 @@ function submit() {
         >
             <button
                 type="submit"
-                form="vehicule-form"
-                :disabled="!canSubmit"
+                form="client-form"
+                :disabled="form.processing"
                 class="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-60"
             >
                 <Spinner v-if="form.processing" class="h-4 w-4" />
                 <Save v-else class="h-4 w-4" />
-                {{ form.processing ? 'Enregistrement…' : 'Créer le véhicule' }}
+                {{ form.processing ? 'Enregistrement…' : 'Créer le client' }}
             </button>
         </div>
     </AppLayout>

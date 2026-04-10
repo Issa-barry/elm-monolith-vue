@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { formatPhoneDisplay } from '@/lib/utils';
-import { AlertTriangle, Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import { AlertTriangle, Pencil, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import InputNumber from 'primevue/inputnumber';
 import { useConfirm } from 'primevue/useconfirm';
@@ -121,14 +121,18 @@ const tauxWarning = computed(() => {
         return 'Le taux de commission ne peut pas être négatif.';
     }
 
-    if (sommeTaux.value > 100) {
-        return "La somme des taux de l'équipe ne doit pas dépasser 100 %.";
+    if (
+        props.form.membres.length > 0 &&
+        Math.abs(totalTauxEquipe.value - 100) > 0.01
+    ) {
+        return `La répartition doit totaliser 100 % (livreurs + propriétaire). Actuellement : ${totalTauxEquipe.value} %.`;
     }
 
     return null;
 });
 
 const maxTauxDisponible = computed(() => {
+    const tauxProp = props.form.taux_commission_proprietaire ?? 0;
     const totalSansMembreEdite = props.form.membres.reduce(
         (sum, membre, index) => {
             if (editingIndex.value !== null && index === editingIndex.value)
@@ -139,7 +143,10 @@ const maxTauxDisponible = computed(() => {
         0,
     );
 
-    return Math.max(0, Number((100 - totalSansMembreEdite).toFixed(2)));
+    return Math.max(
+        0,
+        Number((100 - tauxProp - totalSansMembreEdite).toFixed(2)),
+    );
 });
 
 const totalTauxEquipe = computed(() => {
@@ -227,6 +234,26 @@ function handleSubmit() {
 
 <template>
     <form class="space-y-4 sm:space-y-6" @submit.prevent="handleSubmit">
+        <!-- Nom de l'équipe -->
+        <div class="sm:col-span-2">
+            <Label for="nom" class="mb-1.5 block">
+                Nom de l'équipe
+                <span class="text-destructive">*</span>
+            </Label>
+            <!-- eslint-disable vue/no-mutating-props -->
+            <input
+                id="nom"
+                v-model="form.nom"
+                type="text"
+                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                :class="{ 'border-destructive': form.errors?.nom }"
+            />
+            <!-- eslint-enable vue/no-mutating-props -->
+            <p v-if="form.errors?.nom" class="mt-1 text-xs text-destructive">
+                {{ form.errors.nom }}
+            </p>
+        </div>
+
         <!-- Identification -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
@@ -235,28 +262,6 @@ function handleSubmit() {
                 Identification
             </h3>
             <div class="grid gap-4 sm:grid-cols-2">
-                <div class="sm:col-span-2">
-                    <Label for="nom" class="mb-1.5 block">
-                        Nom de l'équipe
-                        <span class="text-destructive">*</span>
-                    </Label>
-                    <!-- eslint-disable vue/no-mutating-props -->
-                    <input
-                        id="nom"
-                        v-model="form.nom"
-                        type="text"
-                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        :class="{ 'border-destructive': form.errors?.nom }"
-                    />
-                    <!-- eslint-enable vue/no-mutating-props -->
-                    <p
-                        v-if="form.errors?.nom"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ form.errors.nom }}
-                    </p>
-                </div>
-
                 <!-- Propriétaire -->
                 <div>
                     <Label for="proprietaire_id" class="mb-1.5 block">
@@ -393,29 +398,28 @@ function handleSubmit() {
                         Membres
                     </h3>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        Σ taux équipe :
+                        Σ taux livreurs :
                         <span
                             class="font-semibold"
                             :class="
-                                sommeTaux > 100
+                                totalTauxEquipe > 100
                                     ? 'text-destructive'
                                     : 'text-foreground'
                             "
                             >{{ sommeTaux }}%</span
                         >
-                        <span class="ml-1"
-                            >(reste
+                        <span class="ml-1">
+                            (
                             <span
                                 :class="
-                                    100 - sommeTaux < 0
+                                    maxTauxDisponible <= 0
                                         ? 'font-semibold text-destructive'
                                         : ''
                                 "
+                                >{{ maxTauxDisponible }}%</span
                             >
-                                {{ 100 - sommeTaux }}%
-                            </span>
-                            pour le propriétaire)</span
-                        >
+                            disponible)
+                        </span>
                     </p>
                 </div>
                 <Button type="button" size="sm" @click="openNewMembre">
@@ -503,6 +507,14 @@ function handleSubmit() {
                             >
                                 {{ formatPhoneDisplay(membre.telephone) }}
                             </div>
+                            <p
+                                v-if="
+                                    form.errors?.[`membres.${index}.telephone`]
+                                "
+                                class="text-xs text-destructive"
+                            >
+                                {{ form.errors[`membres.${index}.telephone`] }}
+                            </p>
                         </div>
                     </div>
 
@@ -563,7 +575,9 @@ function handleSubmit() {
                     !!principalWarning ||
                     !!tauxWarning
                 "
+                class="gap-2"
             >
+                <Save class="h-4 w-4" />
                 {{ form.processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
         </div>
@@ -575,6 +589,11 @@ function handleSubmit() {
         :membre="membreEnEdition"
         :has-principal="hasPrincipal && editingIndex !== principalIndex"
         :max-taux="maxTauxDisponible"
+        :telephone-error="
+            editingIndex !== null
+                ? form.errors?.[`membres.${editingIndex}.telephone`]
+                : null
+        "
         @confirm="onMembreConfirm"
     />
 </template>

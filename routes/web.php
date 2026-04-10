@@ -25,6 +25,14 @@ use App\Services\ModuleService;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
+// ── Inscription multi-étapes (lookup téléphone + vérification OTP) ─────────────
+Route::middleware('guest')->group(function () {
+    Route::post('/register/lookup', \App\Http\Controllers\Auth\RegisterLookupController::class)
+        ->name('register.lookup');
+    Route::post('/register/otp/verify', \App\Http\Controllers\Auth\RegisterOtpController::class)
+        ->name('register.otp.verify');
+});
+
 Route::get('/', function () {
     return Inertia::render('Welcome', [
         'canRegister' => ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
