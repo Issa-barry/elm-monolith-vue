@@ -2,8 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Features\ModuleFeature;
+use App\Models\CashbackSolde;
 use App\Models\Client;
+use App\Models\Organization;
 use App\Traits\PhoneHandlerTrait;
+use Laravel\Pennant\Feature;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -121,6 +125,30 @@ class ClientController extends Controller
             $client->pays,
         );
 
+        // Widget cashback (affiché uniquement si le module est actif)
+        $cashbackSolde = null;
+        $org = auth()->user()->organization_id
+            ? Organization::find(auth()->user()->organization_id)
+            : null;
+
+        if ($org && Feature::for($org)->active(ModuleFeature::CASHBACK)) {
+            $solde = CashbackSolde::where('organization_id', $client->organization_id)
+                ->where('client_id', $client->id)
+                ->first();
+
+            $cashbackSolde = $solde ? [
+                'cumul_achats' => $solde->cumul_achats,
+                'cashback_en_attente' => $solde->cashback_en_attente,
+                'total_cashback_gagne' => $solde->total_cashback_gagne,
+                'total_cashback_verse' => $solde->total_cashback_verse,
+            ] : [
+                'cumul_achats' => 0,
+                'cashback_en_attente' => 0,
+                'total_cashback_gagne' => 0,
+                'total_cashback_verse' => 0,
+            ];
+        }
+
         return Inertia::render('Clients/Edit', [
             'client' => [
                 'id' => $client->id,
@@ -135,6 +163,7 @@ class ClientController extends Controller
                 'code_phone_pays' => $codePhonePays,
                 'is_active' => $client->is_active,
             ],
+            'cashback_solde' => $cashbackSolde,
         ]);
     }
 

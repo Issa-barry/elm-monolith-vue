@@ -33,6 +33,7 @@ const groupeLabels: Record<string, string> = {
     general: 'Général',
     packing: 'Packing',
     vehicules: 'Véhicules',
+    cashback: 'Cashback clients',
 };
 
 const cleLabels: Record<string, string> = {
@@ -41,6 +42,8 @@ const cleLabels: Record<string, string> = {
     prix_rouleau_defaut: 'Prix rouleau par défaut (GNF)',
     produit_rouleau_id: 'ID produit rouleau',
     taux_proprietaire_defaut: 'Taux propriétaire par défaut (%)',
+    cashback_seuil_achat: "Seuil d'achat pour cashback (GNF)",
+    cashback_montant_gain: 'Montant du cashback versé (GNF)',
 };
 
 // ── Regroupement ──────────────────────────────────────────────────────────────

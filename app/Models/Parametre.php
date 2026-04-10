@@ -27,6 +27,8 @@ class Parametre extends Model
     // ── Groupes ───────────────────────────────────────────────────────────────
     public const GROUPE_VEHICULES = 'vehicules';
 
+    public const GROUPE_CASHBACK = 'cashback';
+
     // ── Clés ──────────────────────────────────────────────────────────────────
     public const CLE_SEUIL_STOCK_FAIBLE = 'seuil_stock_faible';
 
@@ -37,6 +39,10 @@ class Parametre extends Model
     public const CLE_PRODUIT_ROULEAU_ID = 'produit_rouleau_id';
 
     public const CLE_TAUX_PROPRIETAIRE_DEFAUT = 'taux_proprietaire_defaut';
+
+    public const CLE_CASHBACK_SEUIL_ACHAT = 'cashback_seuil_achat';
+
+    public const CLE_CASHBACK_MONTANT_GAIN = 'cashback_montant_gain';
 
     protected $fillable = [
         'organization_id',
@@ -97,6 +103,8 @@ class Parametre extends Model
             self::CLE_PRIX_ROULEAU_DEFAUT,
             self::CLE_PRODUIT_ROULEAU_ID,
             self::CLE_TAUX_PROPRIETAIRE_DEFAUT,
+            self::CLE_CASHBACK_SEUIL_ACHAT,
+            self::CLE_CASHBACK_MONTANT_GAIN,
         ] as $cle) {
             Cache::forget(self::cacheKey($orgId, $cle));
         }
@@ -129,6 +137,16 @@ class Parametre extends Model
     public static function getTauxProprietaireDefaut(int $orgId): float
     {
         return (float) self::get($orgId, self::CLE_TAUX_PROPRIETAIRE_DEFAUT, 60);
+    }
+
+    public static function getCashbackSeuilAchat(int $orgId): int
+    {
+        return (int) self::get($orgId, self::CLE_CASHBACK_SEUIL_ACHAT, 500000);
+    }
+
+    public static function getCashbackMontantGain(int $orgId): int
+    {
+        return (int) self::get($orgId, self::CLE_CASHBACK_MONTANT_GAIN, 25000);
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────

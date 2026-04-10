@@ -44,6 +44,20 @@ class ParametreSeeder extends Seeder
             'groupe' => Parametre::GROUPE_VEHICULES,
             'description' => 'Taux de commission attribué au propriétaire par défaut (%) lors de la création d\'un véhicule sans équipe',
         ],
+        [
+            'cle' => Parametre::CLE_CASHBACK_SEUIL_ACHAT,
+            'valeur' => '500000',
+            'type' => Parametre::TYPE_INTEGER,
+            'groupe' => Parametre::GROUPE_CASHBACK,
+            'description' => 'Montant total d\'achats (GNF) qu\'un client doit atteindre pour déclencher un cashback',
+        ],
+        [
+            'cle' => Parametre::CLE_CASHBACK_MONTANT_GAIN,
+            'valeur' => '25000',
+            'type' => Parametre::TYPE_INTEGER,
+            'groupe' => Parametre::GROUPE_CASHBACK,
+            'description' => 'Montant du cashback versé en cash au client lors du franchissement du seuil (GNF)',
+        ],
     ];
 
     public function run(): void

@@ -1,6 +1,7 @@
 <?php
 
 use App\Features\ModuleFeature;
+use App\Http\Controllers\CashbackController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
@@ -139,6 +140,12 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::resource('users', UserController::class)->except(['show']);
         Route::put('users/{user}/password', [UserController::class, 'updatePassword'])->name('users.update-password');
         Route::resource('roles', RoleController::class)->only(['index', 'edit', 'update']);
+    });
+
+    // ── Module : Cashback clients ─────────────────────────────────────────────
+    Route::middleware('module:'.ModuleFeature::CASHBACK)->group(function () {
+        Route::get('cashback', [CashbackController::class, 'index'])->name('cashback.index');
+        Route::patch('cashback/{cashbackTransaction}/verser', [CashbackController::class, 'verser'])->name('cashback.verser');
     });
 });
 

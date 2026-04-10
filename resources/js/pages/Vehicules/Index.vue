@@ -130,7 +130,7 @@ function confirmDelete(v: Vehicule) {
     <Head title="Véhicules" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-        <!-- ── Mobile (< sm) ──────────────────────────────────────────────── -->
+        <!-- Mobile (< sm) -->
         <div class="flex flex-col sm:hidden">
             <!-- Sticky header -->
             <div
@@ -282,7 +282,7 @@ function confirmDelete(v: Vehicule) {
             </div>
         </div>
 
-        <!-- ── Desktop (≥ sm) ─────────────────────────────────────────────── -->
+        <!-- Desktop (>= sm) -->
         <div class="hidden flex-col gap-6 p-6 sm:flex">
             <!-- En-tête -->
             <div class="flex items-center justify-between">
@@ -351,48 +351,52 @@ function confirmDelete(v: Vehicule) {
                         </div>
                     </template>
 
+                    <!-- Photo -->
+                    <Column header="Photo" style="width: 72px">
+                        <template #body="{ data }">
+                            <div
+                                class="h-10 w-10 overflow-hidden rounded-lg border bg-muted"
+                                :class="data.photo_url ? 'cursor-zoom-in' : ''"
+                                @click="
+                                    data.photo_url &&
+                                    openLightbox(
+                                        data.photo_url,
+                                        data.nom_vehicule,
+                                    )
+                                "
+                            >
+                                <img
+                                    v-if="data.photo_url"
+                                    :src="data.photo_url"
+                                    :alt="data.nom_vehicule"
+                                    class="h-full w-full object-cover"
+                                />
+                                <div
+                                    v-else
+                                    class="flex h-full w-full items-center justify-center"
+                                >
+                                    <Car class="h-5 w-5 text-muted-foreground/40" />
+                                </div>
+                            </div>
+                        </template>
+                    </Column>
+
                     <!-- Véhicule -->
                     <Column
                         field="nom_vehicule"
                         header="Véhicule"
                         sortable
-                        style="min-width: 320px"
+                        style="min-width: 260px"
                     >
                         <template #body="{ data }">
-                            <div class="flex items-center gap-3">
-                                <div
-                                    class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30"
-                                    :class="
-                                        data.photo_url ? 'cursor-zoom-in' : ''
-                                    "
-                                    @click="
-                                        data.photo_url &&
-                                        openLightbox(
-                                            data.photo_url,
-                                            data.nom_vehicule,
-                                        )
-                                    "
-                                >
-                                    <img
-                                        v-if="data.photo_url"
-                                        :src="data.photo_url"
-                                        :alt="data.nom_vehicule"
-                                        class="h-full w-full object-cover"
-                                    />
-                                    <Car
-                                        v-else
-                                        class="h-5 w-5 text-muted-foreground"
-                                    />
+                            <div class="leading-tight">
+                                <div class="font-medium">
+                                    {{ data.nom_vehicule }}
                                 </div>
-                                <div>
-                                    <div class="font-medium">
-                                        {{ data.nom_vehicule }}
-                                    </div>
-                                    <div
-                                        class="font-mono text-xs text-muted-foreground"
-                                    >
-                                        {{ data.immatriculation }}
-                                    </div>
+                                <div
+                                    class="font-mono text-xs text-muted-foreground"
+                                >
+                                    {{ data.immatriculation }}
                                 </div>
                             </div>
                         </template>
@@ -443,7 +447,7 @@ function confirmDelete(v: Vehicule) {
                         <template #body="{ data }">
                             <div class="leading-tight">
                                 <div class="text-muted-foreground">
-                                    {{ data.proprietaire_nom ?? '�' }}
+                                    {{ data.proprietaire_nom ?? '—' }}
                                 </div>
                                 <div
                                     v-if="data.proprietaire_telephone"
