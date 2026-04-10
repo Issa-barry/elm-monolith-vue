@@ -3,7 +3,13 @@ import { Spinner } from '@/components/ui/spinner';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { ArrowLeft, CheckCircle, Gift, Save, TrendingUp } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    CheckCircle,
+    Gift,
+    Save,
+    TrendingUp,
+} from 'lucide-vue-next';
 import { computed, watch } from 'vue';
 import ClientForm from './partials/ClientForm.vue';
 
@@ -201,7 +207,9 @@ function formatMontant(v: number): string {
                         formatMontant(cashback_solde.cashback_en_attente)
                     }}</strong>
                     à verser.
-                    <a href="/cashback" class="ml-1 underline hover:no-underline"
+                    <a
+                        href="/cashback"
+                        class="ml-1 underline hover:no-underline"
                         >Gérer →</a
                     >
                 </div>

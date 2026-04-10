@@ -375,7 +375,9 @@ function confirmDelete(v: Vehicule) {
                                     v-else
                                     class="flex h-full w-full items-center justify-center"
                                 >
-                                    <Car class="h-5 w-5 text-muted-foreground/40" />
+                                    <Car
+                                        class="h-5 w-5 text-muted-foreground/40"
+                                    />
                                 </div>
                             </div>
                         </template>
