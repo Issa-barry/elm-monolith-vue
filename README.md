@@ -8,7 +8,7 @@ php artisan migrate:fresh --seed
 php artisan optimize:clear
 php artisan optimize
  
-
+VF
 
 # Sur ton PC
 npm run build
