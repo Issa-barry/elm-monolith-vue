@@ -12,6 +12,8 @@ import { Form, Head } from '@inertiajs/vue3';
 import Select from 'primevue/select';
 import { computed, ref } from 'vue';
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 interface CountryOption {
     label: string;
     code: string;
@@ -19,12 +21,16 @@ interface CountryOption {
     localLength: number;
 }
 
+type Step = 'phone' | 'otp' | 'form';
+
+// ── Données pays ──────────────────────────────────────────────────────────────
+
 const PAYS: CountryOption[] = [
     { label: 'Guinée', code: 'GN', prefix: '+224', localLength: 9 },
     { label: 'Guinée-Bissau', code: 'GW', prefix: '+245', localLength: 7 },
     { label: 'Sénégal', code: 'SN', prefix: '+221', localLength: 9 },
     { label: 'Mali', code: 'ML', prefix: '+223', localLength: 8 },
-    { label: "Côte d\'Ivoire", code: 'CI', prefix: '+225', localLength: 10 },
+    { label: "Côte d'Ivoire", code: 'CI', prefix: '+225', localLength: 10 },
     { label: 'Liberia', code: 'LR', prefix: '+231', localLength: 8 },
     { label: 'Sierra Leone', code: 'SL', prefix: '+232', localLength: 8 },
     { label: 'France', code: 'FR', prefix: '+33', localLength: 9 },
@@ -38,17 +44,23 @@ const PAYS: CountryOption[] = [
     { label: 'Inde', code: 'IN', prefix: '+91', localLength: 10 },
 ];
 
+// ── État du téléphone ─────────────────────────────────────────────────────────
+
 const selectedCountryCode = ref(PAYS[0].code);
 const phoneDigits = ref('');
 
 const selectedPays = computed(
-    () =>
-        PAYS.find((pays) => pays.code === selectedCountryCode.value) ?? PAYS[0],
+    () => PAYS.find((p) => p.code === selectedCountryCode.value) ?? PAYS[0],
 );
 
 const fullPhone = computed(() => {
     if (!phoneDigits.value) return '';
     return `${selectedPays.value.prefix}${phoneDigits.value.replace(/^0/, '')}`;
+});
+
+const isPhoneValid = computed(() => {
+    const digits = phoneDigits.value.replace(/^0/, '');
+    return digits.length === selectedPays.value.localLength;
 });
 
 function flagUrl(code: string): string {
@@ -88,6 +100,120 @@ function handlePhoneInput(e: Event) {
     phoneDigits.value = digits;
     input.value = digits;
 }
+
+// ── État multi-étapes ─────────────────────────────────────────────────────────
+
+const step = ref<Step>('phone');
+const loading = ref(false);
+
+// Étape 1 – lookup
+const lookupError = ref('');
+
+// Étape 2 – OTP
+const otpCode = ref('');
+const otpError = ref('');
+
+// Étape 3 – formulaire (préremplissage éventuel)
+const formPrenom = ref('');
+const formNom = ref('');
+
+// ── Appels API intermédiaires ─────────────────────────────────────────────────
+
+function getCsrfToken(): string {
+    // Laravel définit le cookie XSRF-TOKEN (URL-encodé)
+    return decodeURIComponent(
+        document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
+    );
+}
+
+async function apiFetch<T>(
+    url: string,
+    body: Record<string, string>,
+): Promise<T> {
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-XSRF-TOKEN': getCsrfToken(),
+        },
+        body: JSON.stringify(body),
+    });
+
+    const json = await response.json();
+
+    if (!response.ok) {
+        const msg =
+            json?.errors?.telephone?.[0] ??
+            json?.errors?.code?.[0] ??
+            json?.error ??
+            json?.message ??
+            'Une erreur est survenue.';
+        throw new Error(msg);
+    }
+
+    return json as T;
+}
+
+// ── Étape 1 : vérifier le téléphone ──────────────────────────────────────────
+
+async function submitPhoneLookup() {
+    if (!isPhoneValid.value) return;
+    loading.value = true;
+    lookupError.value = '';
+
+    try {
+        const data = await apiFetch<{
+            status: string;
+            prefill?: { prenom: string; nom: string };
+        }>('/register/lookup', { telephone: fullPhone.value });
+
+        if (data.status === 'user_exists') {
+            lookupError.value =
+                'Ce numéro est déjà associé à un compte. Veuillez vous connecter ou réinitialiser votre mot de passe.';
+            return;
+        }
+
+        // Préremplir si trouvé dans la base
+        if (data.prefill) {
+            formPrenom.value = data.prefill.prenom;
+            formNom.value = data.prefill.nom;
+        }
+
+        step.value = 'otp';
+    } catch (e: unknown) {
+        lookupError.value =
+            e instanceof Error ? e.message : 'Une erreur est survenue.';
+    } finally {
+        loading.value = false;
+    }
+}
+
+// ── Étape 2 : vérifier l'OTP ─────────────────────────────────────────────────
+
+async function submitOtp() {
+    loading.value = true;
+    otpError.value = '';
+
+    try {
+        await apiFetch('/register/otp/verify', {
+            telephone: fullPhone.value,
+            code: otpCode.value,
+        });
+
+        step.value = 'form';
+    } catch (e: unknown) {
+        otpError.value = e instanceof Error ? e.message : 'Code incorrect.';
+    } finally {
+        loading.value = false;
+    }
+}
+
+function backToPhone() {
+    step.value = 'phone';
+    otpCode.value = '';
+    otpError.value = '';
+}
 </script>
 
 <template>
@@ -97,63 +223,14 @@ function handlePhoneInput(e: Event) {
     >
         <Head title="Inscription" />
 
-        <Form
-            v-bind="store.form()"
-            :reset-on-success="['password', 'password_confirmation']"
-            v-slot="{ errors, processing }"
-            class="flex flex-col gap-6"
-        >
-            <div class="grid gap-6">
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div class="grid gap-2">
-                        <Label for="prenom"
-                            >Prénom
-                            <span class="text-destructive">*</span></Label
-                        >
-                        <Input
-                            id="prenom"
-                            type="text"
-                            required
-                            autofocus
-                            :tabindex="1"
-                            autocomplete="given-name"
-                            name="prenom"
-                            minlength="2"
-                            placeholder="Prénom"
-                        />
-                        <InputError :message="errors.prenom" />
-                    </div>
-                    <div class="grid gap-2">
-                        <Label for="nom"
-                            >Nom <span class="text-destructive">*</span></Label
-                        >
-                        <Input
-                            id="nom"
-                            type="text"
-                            required
-                            :tabindex="2"
-                            autocomplete="family-name"
-                            name="nom"
-                            minlength="2"
-                            placeholder="Nom"
-                        />
-                        <InputError :message="errors.nom" />
-                    </div>
-                </div>
-
+        <div class="flex flex-col gap-6">
+            <!-- ── Étape 1 : Saisie du téléphone ─────────────────────────── -->
+            <div v-if="step === 'phone'" class="grid gap-6">
                 <div class="grid gap-2">
-                    <Label>Téléphone</Label>
-                    <input type="hidden" name="telephone" :value="fullPhone" />
-                    <input
-                        type="hidden"
-                        name="telephone_country"
-                        :value="selectedPays.code"
-                    />
-                    <input
-                        type="hidden"
-                        name="telephone_local"
-                        :value="phoneDigits"
-                    />
+                    <Label
+                        >Téléphone
+                        <span class="text-destructive">*</span></Label
+                    >
 
                     <div class="flex gap-2">
                         <Select
@@ -161,7 +238,7 @@ function handlePhoneInput(e: Event) {
                             :options="PAYS"
                             option-label="label"
                             option-value="code"
-                            :tabindex="3"
+                            :tabindex="1"
                             class="shrink-0"
                             :pt="{
                                 root: { class: 'h-10' },
@@ -192,8 +269,9 @@ function handlePhoneInput(e: Event) {
                                     <span>{{ option.label }}</span>
                                     <span
                                         class="ml-auto text-xs text-muted-foreground"
-                                        >{{ option.prefix }}</span
                                     >
+                                        {{ option.prefix }}
+                                    </span>
                                 </div>
                             </template>
                         </Select>
@@ -203,7 +281,7 @@ function handlePhoneInput(e: Event) {
                             @keydown="handlePhoneKeydown"
                             @input="handlePhoneInput"
                             type="tel"
-                            :tabindex="4"
+                            :tabindex="2"
                             autocomplete="tel-national"
                             inputmode="numeric"
                             pattern="[0-9]*"
@@ -216,52 +294,184 @@ function handlePhoneInput(e: Event) {
                             class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm"
                         />
                     </div>
+
                     <p class="text-xs text-muted-foreground">
                         Saisissez uniquement les chiffres, sans indicatif.
                     </p>
-                    <InputError
-                        :message="errors.telephone || errors.telephone_local"
-                    />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="password"
-                        >Mot de passe
-                        <span class="text-destructive">*</span></Label
-                    >
-                    <Input
-                        id="password"
-                        type="password"
-                        required
-                        :tabindex="5"
-                        autocomplete="new-password"
-                        name="password"
-                        placeholder="Mot de passe"
-                    />
-                    <InputError :message="errors.password" />
+                    <InputError :message="lookupError" />
                 </div>
 
                 <Button
-                    type="submit"
+                    type="button"
                     class="mt-2 w-full"
-                    tabindex="7"
-                    :disabled="processing"
-                    data-test="register-user-button"
+                    :tabindex="3"
+                    :disabled="loading || !isPhoneValid"
+                    @click="submitPhoneLookup"
+                    data-test="register-phone-button"
                 >
-                    <Spinner v-if="processing" />
-                    Créer un compte
+                    <Spinner v-if="loading" />
+                    Continuer
                 </Button>
+
+                <div class="text-center text-sm text-muted-foreground">
+                    Déjà un compte ?
+                    <TextLink
+                        :href="login()"
+                        class="underline underline-offset-4"
+                        :tabindex="4"
+                    >
+                        Se connecter
+                    </TextLink>
+                </div>
             </div>
 
-            <div class="text-center text-sm text-muted-foreground">
-                Déjà un compte ?
-                <TextLink
-                    :href="login()"
-                    class="underline underline-offset-4"
-                    :tabindex="8"
-                    >Se connecter</TextLink
+            <!-- ── Étape 2 : Vérification OTP ────────────────────────────── -->
+            <div v-else-if="step === 'otp'" class="grid gap-6">
+                <p class="text-sm text-muted-foreground">
+                    Un code de vérification a été envoyé au
+                    <span class="font-medium text-foreground">{{
+                        fullPhone
+                    }}</span
+                    >. Saisissez-le ci-dessous pour continuer.
+                </p>
+
+                <div class="grid gap-2">
+                    <Label for="otp">Code de vérification</Label>
+                    <Input
+                        id="otp"
+                        v-model="otpCode"
+                        type="text"
+                        inputmode="numeric"
+                        pattern="[0-9]*"
+                        maxlength="5"
+                        :tabindex="1"
+                        autocomplete="one-time-code"
+                        placeholder="12345"
+                    />
+                    <InputError :message="otpError" />
+                </div>
+
+                <Button
+                    type="button"
+                    class="w-full"
+                    :tabindex="2"
+                    :disabled="loading || otpCode.length !== 5"
+                    @click="submitOtp"
+                    data-test="register-otp-button"
                 >
+                    <Spinner v-if="loading" />
+                    Vérifier
+                </Button>
+
+                <button
+                    type="button"
+                    class="text-center text-sm text-muted-foreground underline underline-offset-4"
+                    :tabindex="3"
+                    @click="backToPhone"
+                >
+                    Modifier le numéro
+                </button>
             </div>
-        </Form>
+
+            <!-- ── Étape 3 : Finalisation du compte ──────────────────────── -->
+            <Form
+                v-else
+                v-bind="store.form()"
+                :reset-on-success="['password']"
+                v-slot="{ errors, processing }"
+                class="flex flex-col gap-6"
+            >
+                <!-- Champs téléphone (cachés, requis par Fortify) -->
+                <input type="hidden" name="telephone" :value="fullPhone" />
+                <input
+                    type="hidden"
+                    name="telephone_country"
+                    :value="selectedPays.code"
+                />
+                <input
+                    type="hidden"
+                    name="telephone_local"
+                    :value="phoneDigits"
+                />
+
+                <div class="grid gap-6">
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div class="grid gap-2">
+                            <Label for="prenom">
+                                Prénom <span class="text-destructive">*</span>
+                            </Label>
+                            <Input
+                                id="prenom"
+                                v-model="formPrenom"
+                                type="text"
+                                required
+                                autofocus
+                                :tabindex="1"
+                                autocomplete="given-name"
+                                name="prenom"
+                                minlength="2"
+                                placeholder="Prénom"
+                            />
+                            <InputError :message="errors.prenom" />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="nom">
+                                Nom <span class="text-destructive">*</span>
+                            </Label>
+                            <Input
+                                id="nom"
+                                v-model="formNom"
+                                type="text"
+                                required
+                                :tabindex="2"
+                                autocomplete="family-name"
+                                name="nom"
+                                minlength="2"
+                                placeholder="Nom"
+                            />
+                            <InputError :message="errors.nom" />
+                        </div>
+                    </div>
+
+                    <div class="grid gap-2">
+                        <Label for="password">
+                            Mot de passe <span class="text-destructive">*</span>
+                        </Label>
+                        <Input
+                            id="password"
+                            type="password"
+                            required
+                            :tabindex="3"
+                            autocomplete="new-password"
+                            name="password"
+                            placeholder="Mot de passe"
+                        />
+                        <InputError :message="errors.password" />
+                    </div>
+
+                    <Button
+                        type="submit"
+                        class="mt-2 w-full"
+                        :tabindex="4"
+                        :disabled="processing"
+                        data-test="register-user-button"
+                    >
+                        <Spinner v-if="processing" />
+                        Créer un compte
+                    </Button>
+                </div>
+
+                <div class="text-center text-sm text-muted-foreground">
+                    Déjà un compte ?
+                    <TextLink
+                        :href="login()"
+                        class="underline underline-offset-4"
+                        :tabindex="5"
+                    >
+                        Se connecter
+                    </TextLink>
+                </div>
+            </Form>
+        </div>
     </AuthBase>
 </template>
