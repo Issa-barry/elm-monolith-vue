@@ -35,7 +35,12 @@ const PAYS: CountryOption[] = [
     { label: 'Sierra Leone', code: 'SL', prefix: '+232', localLength: 8 },
     { label: 'France', code: 'FR', prefix: '+33', localLength: 9 },
     { label: 'Chine', code: 'CN', prefix: '+86', localLength: 11 },
-    { label: 'Émirats arabes unis', code: 'AE', prefix: '+971', localLength: 9 },
+    {
+        label: 'Émirats arabes unis',
+        code: 'AE',
+        prefix: '+971',
+        localLength: 9,
+    },
     { label: 'Inde', code: 'IN', prefix: '+91', localLength: 10 },
 ];
 
@@ -77,7 +82,11 @@ function handlePhoneKeydown(e: KeyboardEvent) {
         'End',
     ];
     if (pass.includes(e.key)) return;
-    if ((e.ctrlKey || e.metaKey) && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())) return;
+    if (
+        (e.ctrlKey || e.metaKey) &&
+        ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())
+    )
+        return;
     if (!/^\d$/.test(e.key)) e.preventDefault();
 }
 
@@ -147,7 +156,10 @@ function getCsrfToken(): string {
     );
 }
 
-async function apiFetch<T>(url: string, body: Record<string, string>): Promise<T> {
+async function apiFetch<T>(
+    url: string,
+    body: Record<string, string>,
+): Promise<T> {
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -204,7 +216,8 @@ async function submitPhoneLookup() {
 
         step.value = 'otp';
     } catch (e: unknown) {
-        lookupError.value = e instanceof Error ? e.message : 'Une erreur est survenue.';
+        lookupError.value =
+            e instanceof Error ? e.message : 'Une erreur est survenue.';
     } finally {
         loading.value = false;
     }
@@ -248,7 +261,10 @@ function backToPhone() {
             <!-- ── Étape 1 : Téléphone ────────────────────────────────────── -->
             <div v-if="step === 'phone'" class="grid gap-6">
                 <div class="grid gap-2">
-                    <Label>Téléphone <span class="text-destructive">*</span></Label>
+                    <Label
+                        >Téléphone
+                        <span class="text-destructive">*</span></Label
+                    >
 
                     <div class="flex gap-2">
                         <Select
@@ -264,7 +280,10 @@ function backToPhone() {
                             }"
                         >
                             <template #value="{ value }">
-                                <div v-if="value" class="flex items-center gap-2">
+                                <div
+                                    v-if="value"
+                                    class="flex items-center gap-2"
+                                >
                                     <img
                                         :src="flagUrl(value)"
                                         class="h-4 w-auto rounded-sm shadow-sm"
@@ -282,9 +301,10 @@ function backToPhone() {
                                         class="h-4 w-auto rounded-sm shadow-sm"
                                     />
                                     <span>{{ option.label }}</span>
-                                    <span class="ml-auto text-xs text-muted-foreground">{{
-                                        option.prefix
-                                    }}</span>
+                                    <span
+                                        class="ml-auto text-xs text-muted-foreground"
+                                        >{{ option.prefix }}</span
+                                    >
                                 </div>
                             </template>
                         </Select>
@@ -328,7 +348,11 @@ function backToPhone() {
 
                 <div class="text-center text-sm text-muted-foreground">
                     Déjà un compte ?
-                    <TextLink :href="login()" class="underline underline-offset-4" :tabindex="4">
+                    <TextLink
+                        :href="login()"
+                        class="underline underline-offset-4"
+                        :tabindex="4"
+                    >
                         Se connecter
                     </TextLink>
                 </div>
@@ -338,8 +362,10 @@ function backToPhone() {
             <div v-else-if="step === 'otp'" class="grid gap-6">
                 <p class="text-sm text-muted-foreground">
                     Un code de vérification a été envoyé au
-                    <span class="font-medium text-foreground">{{ fullPhone }}</span>.
-                    Saisissez-le ci-dessous.
+                    <span class="font-medium text-foreground">{{
+                        fullPhone
+                    }}</span
+                    >. Saisissez-le ci-dessous.
                 </p>
 
                 <div class="grid gap-2">
@@ -416,7 +442,7 @@ function backToPhone() {
                             />
                             <Lock
                                 v-if="isPrefilled"
-                                class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                                class="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                             />
                         </div>
                     </div>
@@ -444,7 +470,7 @@ function backToPhone() {
                             />
                             <Lock
                                 v-if="isPrefilled"
-                                class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                                class="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                             />
                         </div>
                     </div>
@@ -454,7 +480,10 @@ function backToPhone() {
                     type="button"
                     class="mt-2 w-full"
                     :tabindex="3"
-                    :disabled="formPrenom.trim().length < 2 || formNom.trim().length < 2"
+                    :disabled="
+                        formPrenom.trim().length < 2 ||
+                        formNom.trim().length < 2
+                    "
                     @click="step = 'password'"
                     data-test="register-identity-button"
                 >
@@ -465,7 +494,9 @@ function backToPhone() {
             <!-- ── Étape 4 : Mot de passe + création ─────────────────────── -->
             <div v-else-if="step === 'password'" class="grid gap-6">
                 <!-- Récapitulatif -->
-                <div class="rounded-md border border-border bg-muted/50 px-4 py-3 text-sm">
+                <div
+                    class="rounded-md border border-border bg-muted/50 px-4 py-3 text-sm"
+                >
                     <p class="text-muted-foreground">Compte pour</p>
                     <p class="mt-0.5 font-medium text-foreground">
                         {{ formPrenom }} {{ formNom.toUpperCase() }}
@@ -491,7 +522,9 @@ function backToPhone() {
                     <p class="text-xs text-muted-foreground">
                         8 caractères minimum, majuscule, minuscule et symbole.
                     </p>
-                    <InputError :message="form.errors.password ?? form.errors.telephone" />
+                    <InputError
+                        :message="form.errors.password ?? form.errors.telephone"
+                    />
                 </div>
 
                 <Button
@@ -508,7 +541,11 @@ function backToPhone() {
 
                 <div class="text-center text-sm text-muted-foreground">
                     Déjà un compte ?
-                    <TextLink :href="login()" class="underline underline-offset-4" :tabindex="3">
+                    <TextLink
+                        :href="login()"
+                        class="underline underline-offset-4"
+                        :tabindex="3"
+                    >
                         Se connecter
                     </TextLink>
                 </div>

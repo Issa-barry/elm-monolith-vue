@@ -86,11 +86,7 @@ function submit() {
             >
                 <Spinner v-if="form.processing" class="h-4 w-4" />
                 <Save v-else class="h-4 w-4" />
-                {{
-                    form.processing
-                        ? 'Enregistrement…'
-                        : 'Créer le client'
-                }}
+                {{ form.processing ? 'Enregistrement…' : 'Créer le client' }}
             </button>
         </div>
     </AppLayout>

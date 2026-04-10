@@ -492,10 +492,7 @@ function confirmDelete(c: Client) {
                                 />
                                 <span class="text-muted-foreground">
                                     {{
-                                        formatLocation(
-                                            data.adresse,
-                                            data.ville,
-                                        )
+                                        formatLocation(data.adresse, data.ville)
                                     }}
                                 </span>
                             </div>
