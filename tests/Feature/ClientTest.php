@@ -66,8 +66,8 @@ class ClientTest extends TestCase
     {
         $response = $this->actingAs($this->user)
             ->post(route('clients.store'), [
-                'nom'       => 'Diallo',
-                'prenom'    => 'Aissatou',
+                'nom' => 'Diallo',
+                'prenom' => 'Aissatou',
                 'telephone' => '622000001',
                 'code_pays' => 'GN',
                 'is_active' => true,
@@ -80,7 +80,7 @@ class ClientTest extends TestCase
         $response->assertRedirect(route('clients.edit', $client));
 
         $this->assertDatabaseHas('clients', [
-            'nom'             => 'DIALLO',
+            'nom' => 'DIALLO',
             'organization_id' => $this->org->id,
         ]);
     }
@@ -89,8 +89,8 @@ class ClientTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('clients.store'), [
-                'nom'       => 'Flash',
-                'prenom'    => 'Test',
+                'nom' => 'Flash',
+                'prenom' => 'Test',
                 'telephone' => '622000099',
                 'code_pays' => 'GN',
             ])
@@ -108,8 +108,8 @@ class ClientTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('clients.store'), [
-                'nom'       => 'Diallo',
-                'prenom'    => 'Aissatou',
+                'nom' => 'Diallo',
+                'prenom' => 'Aissatou',
                 'telephone' => '622000001',
                 'code_pays' => 'XX',
             ])
@@ -122,7 +122,7 @@ class ClientTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('clients.store'), [
-                'nom'    => 'Test',
+                'nom' => 'Test',
                 'prenom' => 'Client',
             ])
             ->assertStatus(403);
@@ -134,17 +134,17 @@ class ClientTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('clients.store'), [
-                'nom'       => 'Barry',
-                'prenom'    => 'Ibrahima',
+                'nom' => 'Barry',
+                'prenom' => 'Ibrahima',
                 'telephone' => '622000011',
                 'code_pays' => 'GN',
-                'ville'     => '',
+                'ville' => '',
                 'is_active' => true,
             ]);
 
         $this->assertDatabaseHas('clients', [
-            'nom'             => 'BARRY',
-            'ville'           => 'Conakry',
+            'nom' => 'BARRY',
+            'ville' => 'Conakry',
             'organization_id' => $this->org->id,
         ]);
     }
@@ -153,16 +153,16 @@ class ClientTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('clients.store'), [
-                'nom'       => 'Camara',
-                'prenom'    => 'Fatoumata',
+                'nom' => 'Camara',
+                'prenom' => 'Fatoumata',
                 'telephone' => '622000012',
                 'code_pays' => 'GN',
-                'ville'     => 'Kindia',
+                'ville' => 'Kindia',
                 'is_active' => true,
             ]);
 
         $this->assertDatabaseHas('clients', [
-            'nom'   => 'CAMARA',
+            'nom' => 'CAMARA',
             'ville' => 'Kindia',
         ]);
     }
@@ -196,17 +196,17 @@ class ClientTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('clients.update', $client), [
-                'nom'       => 'Balde',
-                'prenom'    => 'Thierno',
+                'nom' => 'Balde',
+                'prenom' => 'Thierno',
                 'telephone' => '622000002',
                 'code_pays' => 'GN',
-                'ville'     => 'Kindia',
+                'ville' => 'Kindia',
                 'is_active' => true,
             ])
             ->assertRedirect(route('clients.edit', $client));
 
         $this->assertDatabaseHas('clients', [
-            'id'  => $client->id,
+            'id' => $client->id,
             'nom' => 'BALDE',
         ]);
     }
@@ -217,11 +217,11 @@ class ClientTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('clients.update', $client), [
-                'nom'       => 'Flash',
-                'prenom'    => 'Update',
+                'nom' => 'Flash',
+                'prenom' => 'Update',
                 'telephone' => '622000088',
                 'code_pays' => 'GN',
-                'ville'     => 'Conakry',
+                'ville' => 'Conakry',
                 'is_active' => true,
             ])
             ->assertSessionHas('success', 'Client mis à jour avec succès.');
@@ -243,7 +243,7 @@ class ClientTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('clients.update', $client), [
-                'nom'    => 'Barry',
+                'nom' => 'Barry',
                 'prenom' => 'Mariama',
             ])
             ->assertStatus(403);
@@ -255,16 +255,16 @@ class ClientTest extends TestCase
     {
         Client::factory()->create([
             'organization_id' => $this->org->id,
-            'telephone'       => '+224622000001',
+            'telephone' => '+224622000001',
         ]);
 
         $this->actingAs($this->user)
             ->post(route('clients.store'), [
-                'nom'       => 'Diallo',
-                'prenom'    => 'Mamadou',
+                'nom' => 'Diallo',
+                'prenom' => 'Mamadou',
                 'telephone' => '622000001', // même numéro, format local → canonique +224622000001
                 'code_pays' => 'GN',
-                'ville'     => 'Conakry',
+                'ville' => 'Conakry',
             ])
             ->assertSessionHasErrors('telephone');
     }
@@ -273,18 +273,18 @@ class ClientTest extends TestCase
     {
         Client::factory()->create([
             'organization_id' => $this->org->id,
-            'email'           => 'client@example.com',
-            'telephone'       => '+224622000001',
+            'email' => 'client@example.com',
+            'telephone' => '+224622000001',
         ]);
 
         $this->actingAs($this->user)
             ->post(route('clients.store'), [
-                'nom'       => 'Diallo',
-                'prenom'    => 'Mamadou',
+                'nom' => 'Diallo',
+                'prenom' => 'Mamadou',
                 'telephone' => '622000002',
                 'code_pays' => 'GN',
-                'ville'     => 'Conakry',
-                'email'     => 'client@example.com',
+                'ville' => 'Conakry',
+                'email' => 'client@example.com',
             ])
             ->assertSessionHasErrors('email');
     }
@@ -294,16 +294,16 @@ class ClientTest extends TestCase
         $otherOrg = Organization::factory()->create();
         Client::factory()->create([
             'organization_id' => $otherOrg->id,
-            'telephone'       => '+224622000001',
+            'telephone' => '+224622000001',
         ]);
 
         $this->actingAs($this->user)
             ->post(route('clients.store'), [
-                'nom'       => 'Barry',
-                'prenom'    => 'Kadiatou',
+                'nom' => 'Barry',
+                'prenom' => 'Kadiatou',
                 'telephone' => '622000001',
                 'code_pays' => 'GN',
-                'ville'     => 'Conakry',
+                'ville' => 'Conakry',
             ])
             ->assertRedirect(); // Redirige vers edit (création réussie)
     }
@@ -312,19 +312,19 @@ class ClientTest extends TestCase
     {
         $client = Client::factory()->create([
             'organization_id' => $this->org->id,
-            'telephone'       => '+224622000001',
+            'telephone' => '+224622000001',
             'code_phone_pays' => '+224',
-            'code_pays'       => 'GN',
-            'pays'            => 'Guinée',
+            'code_pays' => 'GN',
+            'pays' => 'Guinée',
         ]);
 
         $this->actingAs($this->user)
             ->put(route('clients.update', $client), [
-                'nom'       => 'Diallo',
-                'prenom'    => 'Mamadou',
+                'nom' => 'Diallo',
+                'prenom' => 'Mamadou',
                 'telephone' => '622000001', // son propre numéro → doit passer
                 'code_pays' => 'GN',
-                'ville'     => 'Conakry',
+                'ville' => 'Conakry',
                 'is_active' => true,
             ])
             ->assertRedirect(route('clients.edit', $client));
@@ -334,27 +334,27 @@ class ClientTest extends TestCase
     {
         Client::factory()->create([
             'organization_id' => $this->org->id,
-            'telephone'       => '+224622000002',
+            'telephone' => '+224622000002',
             'code_phone_pays' => '+224',
-            'code_pays'       => 'GN',
-            'pays'            => 'Guinée',
+            'code_pays' => 'GN',
+            'pays' => 'Guinée',
         ]);
 
         $client = Client::factory()->create([
             'organization_id' => $this->org->id,
-            'telephone'       => '+224622000001',
+            'telephone' => '+224622000001',
             'code_phone_pays' => '+224',
-            'code_pays'       => 'GN',
-            'pays'            => 'Guinée',
+            'code_pays' => 'GN',
+            'pays' => 'Guinée',
         ]);
 
         $this->actingAs($this->user)
             ->put(route('clients.update', $client), [
-                'nom'       => 'Diallo',
-                'prenom'    => 'Mamadou',
+                'nom' => 'Diallo',
+                'prenom' => 'Mamadou',
                 'telephone' => '622000002',
                 'code_pays' => 'GN',
-                'ville'     => 'Conakry',
+                'ville' => 'Conakry',
                 'is_active' => true,
             ])
             ->assertSessionHasErrors('telephone');
@@ -364,23 +364,23 @@ class ClientTest extends TestCase
     {
         Client::factory()->create([
             'organization_id' => $this->org->id,
-            'email'           => 'taken@example.com',
-            'telephone'       => '+224622000002',
+            'email' => 'taken@example.com',
+            'telephone' => '+224622000002',
         ]);
 
         $client = Client::factory()->create([
             'organization_id' => $this->org->id,
-            'telephone'       => '+224622000001',
+            'telephone' => '+224622000001',
         ]);
 
         $this->actingAs($this->user)
             ->put(route('clients.update', $client), [
-                'nom'       => 'Diallo',
-                'prenom'    => 'Mamadou',
+                'nom' => 'Diallo',
+                'prenom' => 'Mamadou',
                 'telephone' => '622000001',
                 'code_pays' => 'GN',
-                'ville'     => 'Conakry',
-                'email'     => 'taken@example.com',
+                'ville' => 'Conakry',
+                'email' => 'taken@example.com',
                 'is_active' => true,
             ])
             ->assertSessionHasErrors('email');
@@ -392,15 +392,15 @@ class ClientTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('clients.store'), [
-                'nom'       => 'Toure',
-                'prenom'    => 'Alpha',
+                'nom' => 'Toure',
+                'prenom' => 'Alpha',
                 'telephone' => '622000020',
                 'code_pays' => 'GN',
                 'is_active' => false,
             ]);
 
         $this->assertDatabaseHas('clients', [
-            'nom'       => 'TOURE',
+            'nom' => 'TOURE',
             'is_active' => false,
         ]);
     }
@@ -409,22 +409,22 @@ class ClientTest extends TestCase
     {
         $client = Client::factory()->create([
             'organization_id' => $this->org->id,
-            'is_active'       => true,
+            'is_active' => true,
         ]);
 
         $this->actingAs($this->user)
             ->put(route('clients.update', $client), [
-                'nom'       => $client->nom,
-                'prenom'    => $client->prenom,
+                'nom' => $client->nom,
+                'prenom' => $client->prenom,
                 'telephone' => '622000003',
                 'code_pays' => 'GN',
-                'ville'     => 'Conakry',
+                'ville' => 'Conakry',
                 'is_active' => false,
             ])
             ->assertRedirect(route('clients.edit', $client));
 
         $this->assertDatabaseHas('clients', [
-            'id'        => $client->id,
+            'id' => $client->id,
             'is_active' => false,
         ]);
     }
@@ -490,22 +490,22 @@ class ClientTest extends TestCase
     {
         $client = Client::factory()->create([
             'organization_id' => $this->org->id,
-            'telephone'       => '+224622000001',
+            'telephone' => '+224622000001',
         ]);
         $client->delete();
 
         $this->actingAs($this->user)
             ->post(route('clients.store'), [
-                'nom'       => 'Sylla',
-                'prenom'    => 'Mariama',
+                'nom' => 'Sylla',
+                'prenom' => 'Mariama',
                 'telephone' => '622000001',
                 'code_pays' => 'GN',
-                'ville'     => 'Conakry',
+                'ville' => 'Conakry',
             ])
             ->assertRedirect(); // redirige vers edit du nouveau client
 
         $this->assertDatabaseHas('clients', [
-            'nom'        => 'SYLLA',
+            'nom' => 'SYLLA',
             'deleted_at' => null,
         ]);
     }

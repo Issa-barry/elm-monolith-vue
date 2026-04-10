@@ -23,18 +23,18 @@ class ClientController extends Controller
             ->orderBy('nom')
             ->get()
             ->map(fn (Client $c) => [
-                'id'              => $c->id,
-                'nom'             => $c->nom,
-                'prenom'          => $c->prenom,
-                'nom_complet'     => $c->nom_complet,
-                'email'           => $c->email,
-                'telephone'       => $c->telephone,
+                'id' => $c->id,
+                'nom' => $c->nom,
+                'prenom' => $c->prenom,
+                'nom_complet' => $c->nom_complet,
+                'email' => $c->email,
+                'telephone' => $c->telephone,
                 'code_phone_pays' => $c->code_phone_pays,
-                'ville'           => $c->ville,
-                'pays'            => $c->pays,
-                'code_pays'       => $c->code_pays,
-                'adresse'         => $c->adresse,
-                'is_active'       => $c->is_active,
+                'ville' => $c->ville,
+                'pays' => $c->pays,
+                'code_pays' => $c->code_pays,
+                'adresse' => $c->adresse,
+                'is_active' => $c->is_active,
             ]);
 
         return Inertia::render('Clients/Index', [
@@ -57,13 +57,13 @@ class ClientController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'nom'       => 'required|string|max:255',
-            'prenom'    => 'required|string|max:255',
-            'email'     => 'nullable|email:rfc,dns|max:255',
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'email' => 'nullable|email:rfc,dns|max:255',
             'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
             'code_pays' => ['required', Rule::in(array_keys(static::supportedPays()))],
-            'ville'     => 'nullable|string|max:100',
-            'adresse'   => 'nullable|string|max:500',
+            'ville' => 'nullable|string|max:100',
+            'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
         ], $this->validationMessages());
 
@@ -98,13 +98,13 @@ class ClientController extends Controller
 
         return Inertia::render('Clients/Show', [
             'client' => [
-                'id'        => $client->id,
-                'nom'       => $client->nom,
-                'prenom'    => $client->prenom,
-                'email'     => $client->email,
+                'id' => $client->id,
+                'nom' => $client->nom,
+                'prenom' => $client->prenom,
+                'email' => $client->email,
                 'telephone' => $client->telephone,
-                'adresse'   => $client->adresse,
-                'ville'     => $client->ville,
+                'adresse' => $client->adresse,
+                'ville' => $client->ville,
                 'is_active' => $client->is_active,
             ],
         ]);
@@ -123,17 +123,17 @@ class ClientController extends Controller
 
         return Inertia::render('Clients/Edit', [
             'client' => [
-                'id'              => $client->id,
-                'nom'             => $client->nom,
-                'prenom'          => $client->prenom,
-                'email'           => $client->email,
-                'telephone'       => $telephone,
-                'adresse'         => $client->adresse,
-                'ville'           => $client->ville,
-                'pays'            => $pays,
-                'code_pays'       => $codePays,
+                'id' => $client->id,
+                'nom' => $client->nom,
+                'prenom' => $client->prenom,
+                'email' => $client->email,
+                'telephone' => $telephone,
+                'adresse' => $client->adresse,
+                'ville' => $client->ville,
+                'pays' => $pays,
+                'code_pays' => $codePays,
                 'code_phone_pays' => $codePhonePays,
-                'is_active'       => $client->is_active,
+                'is_active' => $client->is_active,
             ],
         ]);
     }
@@ -143,13 +143,13 @@ class ClientController extends Controller
         $this->authorize('update', $client);
 
         $data = $request->validate([
-            'nom'       => 'required|string|max:255',
-            'prenom'    => 'required|string|max:255',
-            'email'     => 'nullable|email:rfc,dns|max:255',
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'email' => 'nullable|email:rfc,dns|max:255',
             'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
             'code_pays' => ['required', Rule::in(array_keys(static::supportedPays()))],
-            'ville'     => 'nullable|string|max:100',
-            'adresse'   => 'nullable|string|max:500',
+            'ville' => 'nullable|string|max:100',
+            'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
         ], $this->validationMessages());
 
@@ -220,13 +220,13 @@ class ClientController extends Controller
     private function validationMessages(): array
     {
         return [
-            'nom.required'       => 'Le nom est obligatoire.',
-            'prenom.required'    => 'Le prénom est obligatoire.',
-            'email.email'        => "L'adresse email est invalide.",
+            'nom.required' => 'Le nom est obligatoire.',
+            'prenom.required' => 'Le prénom est obligatoire.',
+            'email.email' => "L'adresse email est invalide.",
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
-            'telephone.regex'    => 'Le numéro de téléphone est invalide.',
+            'telephone.regex' => 'Le numéro de téléphone est invalide.',
             'code_pays.required' => 'Le pays est obligatoire.',
-            'code_pays.in'       => 'Pays invalide.',
+            'code_pays.in' => 'Pays invalide.',
         ];
     }
 }

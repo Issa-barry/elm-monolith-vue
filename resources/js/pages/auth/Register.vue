@@ -7,8 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import AuthBase from '@/layouts/AuthLayout.vue';
 import { login } from '@/routes';
-import { store } from '@/routes/register';
-import { Form, Head } from '@inertiajs/vue3';
+import { Head, useForm } from '@inertiajs/vue3';
+import { Lock } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed, ref } from 'vue';
 
@@ -21,7 +21,7 @@ interface CountryOption {
     localLength: number;
 }
 
-type Step = 'phone' | 'otp' | 'form';
+type Step = 'phone' | 'otp' | 'identity' | 'password';
 
 // ── Données pays ──────────────────────────────────────────────────────────────
 
@@ -35,16 +35,11 @@ const PAYS: CountryOption[] = [
     { label: 'Sierra Leone', code: 'SL', prefix: '+232', localLength: 8 },
     { label: 'France', code: 'FR', prefix: '+33', localLength: 9 },
     { label: 'Chine', code: 'CN', prefix: '+86', localLength: 11 },
-    {
-        label: 'Émirats arabes unis',
-        code: 'AE',
-        prefix: '+971',
-        localLength: 9,
-    },
+    { label: 'Émirats arabes unis', code: 'AE', prefix: '+971', localLength: 9 },
     { label: 'Inde', code: 'IN', prefix: '+91', localLength: 10 },
 ];
 
-// ── État du téléphone ─────────────────────────────────────────────────────────
+// ── État téléphone ────────────────────────────────────────────────────────────
 
 const selectedCountryCode = ref(PAYS[0].code);
 const phoneDigits = ref('');
@@ -82,11 +77,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
         'End',
     ];
     if (pass.includes(e.key)) return;
-    if (
-        (e.ctrlKey || e.metaKey) &&
-        ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())
-    )
-        return;
+    if ((e.ctrlKey || e.metaKey) && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())) return;
     if (!/^\d$/.test(e.key)) e.preventDefault();
 }
 
@@ -113,23 +104,50 @@ const lookupError = ref('');
 const otpCode = ref('');
 const otpError = ref('');
 
-// Étape 3 – formulaire (préremplissage éventuel)
+// Étape 3 – identité
 const formPrenom = ref('');
 const formNom = ref('');
+const isPrefilled = ref(false);
 
-// ── Appels API intermédiaires ─────────────────────────────────────────────────
+// Étape 4 – formulaire Inertia (useForm pour garder l'état local sur erreur)
+const form = useForm({
+    telephone: '',
+    telephone_country: '',
+    telephone_local: '',
+    prenom: '',
+    nom: '',
+    password: '',
+});
+
+function submitRegistration() {
+    form.telephone = fullPhone.value;
+    form.telephone_country = selectedPays.value.code;
+    form.telephone_local = phoneDigits.value;
+    form.prenom = formPrenom.value;
+    form.nom = formNom.value;
+
+    form.post('/register', {
+        // preserveState empêche le remontage du composant sur erreur de validation
+        // => step reste sur 'password' et les erreurs s'affichent en place
+        preserveState: true,
+        onError: () => {
+            // les erreurs sont dans form.errors, step reste 'password'
+        },
+        onSuccess: () => {
+            form.reset('password');
+        },
+    });
+}
+
+// ── Appels API ────────────────────────────────────────────────────────────────
 
 function getCsrfToken(): string {
-    // Laravel définit le cookie XSRF-TOKEN (URL-encodé)
     return decodeURIComponent(
         document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
     );
 }
 
-async function apiFetch<T>(
-    url: string,
-    body: Record<string, string>,
-): Promise<T> {
+async function apiFetch<T>(url: string, body: Record<string, string>): Promise<T> {
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -174,16 +192,19 @@ async function submitPhoneLookup() {
             return;
         }
 
-        // Préremplir si trouvé dans la base
         if (data.prefill) {
             formPrenom.value = data.prefill.prenom;
             formNom.value = data.prefill.nom;
+            isPrefilled.value = true;
+        } else {
+            formPrenom.value = '';
+            formNom.value = '';
+            isPrefilled.value = false;
         }
 
         step.value = 'otp';
     } catch (e: unknown) {
-        lookupError.value =
-            e instanceof Error ? e.message : 'Une erreur est survenue.';
+        lookupError.value = e instanceof Error ? e.message : 'Une erreur est survenue.';
     } finally {
         loading.value = false;
     }
@@ -201,7 +222,7 @@ async function submitOtp() {
             code: otpCode.value,
         });
 
-        step.value = 'form';
+        step.value = 'identity';
     } catch (e: unknown) {
         otpError.value = e instanceof Error ? e.message : 'Code incorrect.';
     } finally {
@@ -224,13 +245,10 @@ function backToPhone() {
         <Head title="Inscription" />
 
         <div class="flex flex-col gap-6">
-            <!-- ── Étape 1 : Saisie du téléphone ─────────────────────────── -->
+            <!-- ── Étape 1 : Téléphone ────────────────────────────────────── -->
             <div v-if="step === 'phone'" class="grid gap-6">
                 <div class="grid gap-2">
-                    <Label
-                        >Téléphone
-                        <span class="text-destructive">*</span></Label
-                    >
+                    <Label>Téléphone <span class="text-destructive">*</span></Label>
 
                     <div class="flex gap-2">
                         <Select
@@ -246,10 +264,7 @@ function backToPhone() {
                             }"
                         >
                             <template #value="{ value }">
-                                <div
-                                    v-if="value"
-                                    class="flex items-center gap-2"
-                                >
+                                <div v-if="value" class="flex items-center gap-2">
                                     <img
                                         :src="flagUrl(value)"
                                         class="h-4 w-auto rounded-sm shadow-sm"
@@ -267,11 +282,9 @@ function backToPhone() {
                                         class="h-4 w-auto rounded-sm shadow-sm"
                                     />
                                     <span>{{ option.label }}</span>
-                                    <span
-                                        class="ml-auto text-xs text-muted-foreground"
-                                    >
-                                        {{ option.prefix }}
-                                    </span>
+                                    <span class="ml-auto text-xs text-muted-foreground">{{
+                                        option.prefix
+                                    }}</span>
                                 </div>
                             </template>
                         </Select>
@@ -315,24 +328,18 @@ function backToPhone() {
 
                 <div class="text-center text-sm text-muted-foreground">
                     Déjà un compte ?
-                    <TextLink
-                        :href="login()"
-                        class="underline underline-offset-4"
-                        :tabindex="4"
-                    >
+                    <TextLink :href="login()" class="underline underline-offset-4" :tabindex="4">
                         Se connecter
                     </TextLink>
                 </div>
             </div>
 
-            <!-- ── Étape 2 : Vérification OTP ────────────────────────────── -->
+            <!-- ── Étape 2 : Code OTP ─────────────────────────────────────── -->
             <div v-else-if="step === 'otp'" class="grid gap-6">
                 <p class="text-sm text-muted-foreground">
                     Un code de vérification a été envoyé au
-                    <span class="font-medium text-foreground">{{
-                        fullPhone
-                    }}</span
-                    >. Saisissez-le ci-dessous pour continuer.
+                    <span class="font-medium text-foreground">{{ fullPhone }}</span>.
+                    Saisissez-le ci-dessous.
                 </p>
 
                 <div class="grid gap-2">
@@ -373,105 +380,139 @@ function backToPhone() {
                 </button>
             </div>
 
-            <!-- ── Étape 3 : Finalisation du compte ──────────────────────── -->
-            <Form
-                v-else
-                v-bind="store.form()"
-                :reset-on-success="['password']"
-                v-slot="{ errors, processing }"
-                class="flex flex-col gap-6"
-            >
-                <!-- Champs téléphone (cachés, requis par Fortify) -->
-                <input type="hidden" name="telephone" :value="fullPhone" />
-                <input
-                    type="hidden"
-                    name="telephone_country"
-                    :value="selectedPays.code"
-                />
-                <input
-                    type="hidden"
-                    name="telephone_local"
-                    :value="phoneDigits"
-                />
+            <!-- ── Étape 3 : Identité ─────────────────────────────────────── -->
+            <div v-else-if="step === 'identity'" class="grid gap-6">
+                <!-- Bandeau informatif si préremplissage -->
+                <div
+                    v-if="isPrefilled"
+                    class="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+                >
+                    <Lock class="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>Informations trouvées dans notre système.</span>
+                </div>
 
-                <div class="grid gap-6">
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div class="grid gap-2">
-                            <Label for="prenom">
-                                Prénom <span class="text-destructive">*</span>
-                            </Label>
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <!-- Prénom -->
+                    <div class="grid gap-2">
+                        <Label for="identity-prenom">
+                            Prénom <span class="text-destructive">*</span>
+                        </Label>
+                        <div class="relative">
                             <Input
-                                id="prenom"
+                                id="identity-prenom"
                                 v-model="formPrenom"
                                 type="text"
-                                required
+                                :readonly="isPrefilled"
                                 autofocus
-                                :tabindex="1"
+                                :tabindex="isPrefilled ? -1 : 1"
                                 autocomplete="given-name"
-                                name="prenom"
                                 minlength="2"
                                 placeholder="Prénom"
+                                :class="
+                                    isPrefilled
+                                        ? 'cursor-not-allowed bg-muted pr-9 text-muted-foreground'
+                                        : ''
+                                "
                             />
-                            <InputError :message="errors.prenom" />
+                            <Lock
+                                v-if="isPrefilled"
+                                class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                            />
                         </div>
-                        <div class="grid gap-2">
-                            <Label for="nom">
-                                Nom <span class="text-destructive">*</span>
-                            </Label>
+                    </div>
+
+                    <!-- Nom -->
+                    <div class="grid gap-2">
+                        <Label for="identity-nom">
+                            Nom <span class="text-destructive">*</span>
+                        </Label>
+                        <div class="relative">
                             <Input
-                                id="nom"
+                                id="identity-nom"
                                 v-model="formNom"
                                 type="text"
-                                required
-                                :tabindex="2"
+                                :readonly="isPrefilled"
+                                :tabindex="isPrefilled ? -1 : 2"
                                 autocomplete="family-name"
-                                name="nom"
                                 minlength="2"
                                 placeholder="Nom"
+                                :class="
+                                    isPrefilled
+                                        ? 'cursor-not-allowed bg-muted pr-9 text-muted-foreground'
+                                        : ''
+                                "
                             />
-                            <InputError :message="errors.nom" />
+                            <Lock
+                                v-if="isPrefilled"
+                                class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                            />
                         </div>
                     </div>
-
-                    <div class="grid gap-2">
-                        <Label for="password">
-                            Mot de passe <span class="text-destructive">*</span>
-                        </Label>
-                        <Input
-                            id="password"
-                            type="password"
-                            required
-                            :tabindex="3"
-                            autocomplete="new-password"
-                            name="password"
-                            placeholder="Mot de passe"
-                        />
-                        <InputError :message="errors.password" />
-                    </div>
-
-                    <Button
-                        type="submit"
-                        class="mt-2 w-full"
-                        :tabindex="4"
-                        :disabled="processing"
-                        data-test="register-user-button"
-                    >
-                        <Spinner v-if="processing" />
-                        Créer un compte
-                    </Button>
                 </div>
+
+                <Button
+                    type="button"
+                    class="mt-2 w-full"
+                    :tabindex="3"
+                    :disabled="formPrenom.trim().length < 2 || formNom.trim().length < 2"
+                    @click="step = 'password'"
+                    data-test="register-identity-button"
+                >
+                    Continuer
+                </Button>
+            </div>
+
+            <!-- ── Étape 4 : Mot de passe + création ─────────────────────── -->
+            <div v-else-if="step === 'password'" class="grid gap-6">
+                <!-- Récapitulatif -->
+                <div class="rounded-md border border-border bg-muted/50 px-4 py-3 text-sm">
+                    <p class="text-muted-foreground">Compte pour</p>
+                    <p class="mt-0.5 font-medium text-foreground">
+                        {{ formPrenom }} {{ formNom.toUpperCase() }}
+                        &middot;
+                        <span class="font-mono">{{ fullPhone }}</span>
+                    </p>
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="password">
+                        Mot de passe <span class="text-destructive">*</span>
+                    </Label>
+                    <Input
+                        id="password"
+                        v-model="form.password"
+                        type="password"
+                        required
+                        autofocus
+                        :tabindex="1"
+                        autocomplete="new-password"
+                        placeholder="Mot de passe"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        8 caractères minimum, majuscule, minuscule et symbole.
+                    </p>
+                    <InputError :message="form.errors.password ?? form.errors.telephone" />
+                </div>
+
+                <Button
+                    type="button"
+                    class="mt-2 w-full"
+                    :tabindex="2"
+                    :disabled="form.processing"
+                    @click="submitRegistration"
+                    data-test="register-user-button"
+                >
+                    <Spinner v-if="form.processing" />
+                    Créer mon compte
+                </Button>
 
                 <div class="text-center text-sm text-muted-foreground">
                     Déjà un compte ?
-                    <TextLink
-                        :href="login()"
-                        class="underline underline-offset-4"
-                        :tabindex="5"
-                    >
+                    <TextLink :href="login()" class="underline underline-offset-4" :tabindex="3">
                         Se connecter
                     </TextLink>
                 </div>
-            </Form>
+            </div>
         </div>
     </AuthBase>
 </template>
