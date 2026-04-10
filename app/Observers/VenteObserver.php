@@ -2,8 +2,6 @@
 
 namespace App\Observers;
 
-use App\Models\CommandeVente;
-
 class VenteObserver
 {
     // Le cashback est désormais déclenché au paiement complet de la facture

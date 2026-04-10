@@ -31,7 +31,7 @@ return new class extends Migration
         foreach ($stale as $row) {
             DB::table('cashback_transactions')->where('id', $row->id)->update([
                 'montant_verse' => $row->montant,
-                'updated_at'    => now(),
+                'updated_at' => now(),
             ]);
         }
     }

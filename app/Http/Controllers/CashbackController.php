@@ -41,7 +41,7 @@ class CashbackController extends Controller
             ->map(function (CashbackTransaction $t) {
                 // Source de vérité : on recalcule depuis la relation eager-loadée.
                 // Protège contre les données héritées (montant_verse=0 sur un statut 'verse').
-                $verseReel   = (int) $t->versements->sum('montant');
+                $verseReel = (int) $t->versements->sum('montant');
                 $restantReel = max(0, $t->montant - $verseReel);
 
                 return [

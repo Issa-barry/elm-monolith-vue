@@ -7,13 +7,13 @@ use App\Models\CashbackSolde;
 use App\Models\Client;
 use App\Models\Organization;
 use App\Traits\PhoneHandlerTrait;
-use Laravel\Pennant\Feature;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Laravel\Pennant\Feature;
 
 class ClientController extends Controller
 {
