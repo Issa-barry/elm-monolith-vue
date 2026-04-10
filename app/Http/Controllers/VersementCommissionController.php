@@ -8,6 +8,7 @@ use App\Models\CommissionVente;
 use App\Models\VersementCommission;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class VersementCommissionController extends Controller
@@ -23,7 +24,26 @@ class VersementCommissionController extends Controller
         abort_if($commission->isAnnulee(), 422, 'Cette commission est annulée.');
         abort_if($part->isVersee(), 422, 'Cette part est déjà entièrement versée.');
 
-        $restant = $part->montant_restant;
+        // ── Frais véhicule : déduction automatique au 1er versement ─────────────
+        $fraisAAppliquer = 0.0;
+        $totalFraisVehicule = 0.0;
+        $vehiculeAvecFrais = null;
+
+        if ($part->type_beneficiaire === 'proprietaire' && $part->versements()->doesntExist()) {
+            $vehicule = $commission->vehicule?->load('frais');
+            if ($vehicule) {
+                $totalFraisVehicule = (float) $vehicule->frais->sum('montant');
+                if ($totalFraisVehicule > 0) {
+                    $fraisAAppliquer = min($totalFraisVehicule, (float) $part->montant_brut);
+                    $vehiculeAvecFrais = $vehicule;
+                }
+            }
+        }
+
+        // Restant effectif après déduction anticipée des frais
+        $restant = $fraisAAppliquer > 0
+            ? max(0.0, (float) $part->montant_brut - $fraisAAppliquer - (float) $part->montant_verse)
+            : $part->montant_restant;
 
         $data = $request->validate([
             'montant' => ['required', 'numeric', 'min:0.01', "max:{$restant}"],
@@ -38,13 +58,39 @@ class VersementCommissionController extends Controller
             'mode_paiement.required' => 'Le mode de paiement est obligatoire.',
         ]);
 
-        $part->versements()->create($data);
+        DB::transaction(function () use ($part, $vehiculeAvecFrais, $fraisAAppliquer, $data, $commission) {
+            // 1. Appliquer les frais à la part (1 seule fois, premier versement)
+            if ($fraisAAppliquer > 0 && $vehiculeAvecFrais) {
+                $fraisList = $vehiculeAvecFrais->frais;
+                $types = $fraisList->pluck('type')->unique();
+                $typePrincipal = $types->count() === 1 ? $types->first() : 'autre';
+                $commentairePrincipal = ($typePrincipal === 'autre')
+                    ? ($fraisList->count() === 1 ? $fraisList->first()->commentaire : 'Frais véhicule')
+                    : null;
 
-        // Recalcul statut de la part puis de la commission
-        $part->recalculStatut();
+                $part->appliquerFrais($fraisAAppliquer, $typePrincipal, $commentairePrincipal);
 
-        // Auto-clôture commande si facture payée et commissions toutes versées
-        $commission->commande?->cloturerSiComplete();
+                // 2. Consommer les frais — supprimer tous, recréer un reliquat si nécessaire
+                $reliquat = max(0.0, round($totalFraisVehicule - $fraisAAppliquer, 2));
+                $vehiculeAvecFrais->frais()->delete();
+                if ($reliquat > 0) {
+                    $vehiculeAvecFrais->frais()->create([
+                        'montant' => $reliquat,
+                        'type' => $typePrincipal,
+                        'commentaire' => $typePrincipal === 'autre' ? 'Reliquat frais' : null,
+                    ]);
+                }
+            }
+
+            // 3. Enregistrer le versement
+            $part->versements()->create($data);
+
+            // 4. Recalcul statut part → commission
+            $part->recalculStatut();
+
+            // 5. Auto-clôture commande si facture payée et toutes commissions versées
+            $commission->commande?->cloturerSiComplete();
+        });
 
         return redirect()
             ->route('commissions.show', $commission)

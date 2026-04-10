@@ -14,6 +14,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
+    Download,
     Eye,
     MoreVertical,
     Package,
@@ -54,14 +55,32 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
 
 interface Produit {
     id: number;
+    organization_id: number;
     nom: string;
     code_interne: string | null;
+    code_fournisseur: string | null;
+    type: string | null;
+    type_label: string | null;
     image_url: string | null;
     is_critique: boolean;
-    statut: string;
-    statut_label: string;
+    statut: string | null;
+    statut_label: string | null;
+    prix_usine: number | null;
     prix_vente: number | null;
+    prix_achat: number | null;
+    cout: number | null;
     qte_stock: number | null;
+    seuil_alerte_stock: number | null;
+    description: string | null;
+    last_stockout_notified_at: string | null;
+    archived_at: string | null;
+    created_by: number | null;
+    updated_by: number | null;
+    deleted_by: number | null;
+    archived_by: number | null;
+    created_at: string | null;
+    updated_at: string | null;
+    deleted_at: string | null;
     in_stock: boolean;
     is_low_stock: boolean;
     has_stock: boolean;
@@ -96,10 +115,155 @@ watch(search, (val) => {
     filters.value.global.value = val;
 });
 
+const filteredProduits = computed(() => {
+    const query = search.value.trim().toLowerCase();
+    if (!query) return props.produits;
+
+    return props.produits.filter((p) =>
+        [p.nom, p.code_interne ?? ''].join(' ').toLowerCase().includes(query),
+    );
+});
+
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Produits', href: '/produits' },
 ];
+
+function escapeHtml(value: string): string {
+    return value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+function safeExcelText(value: string): string {
+    const cleaned = value.replace(/\r?\n/g, ' ').trim();
+    return /^[=+\-@]/.test(cleaned) ? `'${cleaned}` : cleaned;
+}
+
+function toExcelValue(value: unknown): string | number {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'boolean') return value ? 1 : 0;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : '';
+
+    return safeExcelText(String(value));
+}
+
+function toExcelCell(value: unknown): string {
+    const normalized = toExcelValue(value);
+
+    if (typeof normalized === 'number') {
+        return `<td>${normalized}</td>`;
+    }
+
+    return `<td>${escapeHtml(normalized)}</td>`;
+}
+
+function formatExportDate(d: Date): string {
+    const pad = (v: number) => String(v).padStart(2, '0');
+    return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
+function exportExcel(): void {
+    const rows = filteredProduits.value;
+
+    if (rows.length === 0) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Export impossible',
+            detail: 'Aucun résultat à exporter.',
+            life: 3000,
+        });
+
+        return;
+    }
+
+    const columns: Array<{
+        label: string;
+        value: (produit: Produit) => unknown;
+    }> = [
+        { label: 'id', value: (p) => p.id },
+        { label: 'organization_id', value: (p) => p.organization_id },
+        { label: 'nom', value: (p) => p.nom },
+        { label: 'code_interne', value: (p) => p.code_interne },
+        { label: 'code_fournisseur', value: (p) => p.code_fournisseur },
+        { label: 'type', value: (p) => p.type },
+        { label: 'statut', value: (p) => p.statut },
+        { label: 'prix_usine', value: (p) => p.prix_usine },
+        { label: 'prix_vente', value: (p) => p.prix_vente },
+        { label: 'prix_achat', value: (p) => p.prix_achat },
+        { label: 'cout', value: (p) => p.cout },
+        { label: 'qte_stock', value: (p) => p.qte_stock },
+        { label: 'seuil_alerte_stock', value: (p) => p.seuil_alerte_stock },
+        { label: 'description', value: (p) => p.description },
+        { label: 'image_url', value: (p) => p.image_url },
+        { label: 'is_critique', value: (p) => p.is_critique },
+        {
+            label: 'last_stockout_notified_at',
+            value: (p) => p.last_stockout_notified_at,
+        },
+        { label: 'archived_at', value: (p) => p.archived_at },
+        { label: 'created_by', value: (p) => p.created_by },
+        { label: 'updated_by', value: (p) => p.updated_by },
+        { label: 'deleted_by', value: (p) => p.deleted_by },
+        { label: 'archived_by', value: (p) => p.archived_by },
+        { label: 'created_at', value: (p) => p.created_at },
+        { label: 'updated_at', value: (p) => p.updated_at },
+        { label: 'deleted_at', value: (p) => p.deleted_at },
+    ];
+
+    const header = columns
+        .map((column) => `<th>${escapeHtml(column.label)}</th>`)
+        .join('');
+
+    const body = rows
+        .map((p) => {
+            const cells = columns.map((column) => toExcelCell(column.value(p)));
+
+            return `<tr>${cells.join('')}</tr>`;
+        })
+        .join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+</head>
+<body>
+    <table border="1">
+        <thead>
+            <tr>${header}</tr>
+        </thead>
+        <tbody>
+            ${body}
+        </tbody>
+    </table>
+</body>
+</html>`;
+
+    const blob = new Blob([`\uFEFF${html}`], {
+        type: 'application/vnd.ms-excel;charset=utf-8;',
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = `produits-${formatExportDate(new Date())}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast.add({
+        severity: 'success',
+        summary: 'Export lancé',
+        detail: `${rows.length} produit${rows.length > 1 ? 's' : ''} exporté${rows.length > 1 ? 's' : ''}.`,
+        life: 2500,
+    });
+}
 
 function confirmDelete(produit: Produit) {
     confirm.require({
@@ -224,6 +388,16 @@ function confirmDelete(produit: Produit) {
                                     props.produits.length !== 1 ? 's' : ''
                                 }}
                             </span>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                class="h-9"
+                                @click="exportExcel"
+                            >
+                                <Download class="mr-2 h-4 w-4" />
+                                Exporter Excel
+                            </Button>
                         </div>
                     </template>
 

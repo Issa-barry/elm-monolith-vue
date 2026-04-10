@@ -30,7 +30,7 @@ import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -73,6 +73,7 @@ interface CommissionItem {
     immatriculation: string | null;
     equipe_nom: string | null;
     proprietaire_nom: string | null;
+    vehicule_frais_total: number;
     montant_commande: number;
     montant_commission_totale: number;
     montant_verse: number;
@@ -137,6 +138,21 @@ const proprietaireParts = computed(() =>
 const activePartTab = ref<'livreurs' | 'proprietaires'>(
     livreurParts.value.length > 0 ? 'livreurs' : 'proprietaires',
 );
+
+// ── Agrégats par type (stats card + lignes total) ─────────────────────────────
+
+const partLivreurTotal = computed(() =>
+    livreurParts.value.reduce((s, p) => s + p.montant_net, 0),
+);
+const partProprietaireTotal = computed(() =>
+    proprietaireParts.value.reduce((s, p) => s + p.montant_net, 0),
+);
+
+const livreurTotals = computed(() => ({
+    montant: livreurParts.value.reduce((s, p) => s + p.montant_brut, 0),
+    verse: livreurParts.value.reduce((s, p) => s + p.montant_verse, 0),
+    restant: livreurParts.value.reduce((s, p) => s + p.montant_restant, 0),
+}));
 
 // ── Dialog versement (livreurs) ───────────────────────────────────────────────
 
@@ -205,111 +221,13 @@ function submitVersementDialog() {
     );
 }
 
-// ── Formulaires de versement par part (propriétaires — inline) ────────────────
-
-// ── Frais supplémentaires (part propriétaire uniquement) ─────────────────────
-
-const typesFraisOptions = [
-    { value: 'carburant', label: 'Carburant' },
-    { value: 'reparation', label: 'Réparation' },
-    { value: 'autre', label: 'Autre' },
-];
+// ── Labels frais (lecture seule dans le tableau propriétaire) ─────────────────
 
 const typesFraisLabels: Record<string, string> = {
     carburant: 'Carburant',
     reparation: 'Réparation',
     autre: 'Autre',
 };
-
-interface FraisForm {
-    frais: number;
-    type_frais: string;
-    commentaire_frais: string;
-    processing: boolean;
-}
-
-const fraisForms = reactive<Record<number, FraisForm>>({});
-
-function initFraisForms() {
-    for (const part of props.commission.parts) {
-        if (part.type_beneficiaire === 'proprietaire') {
-            fraisForms[part.id] = {
-                frais: part.frais_supplementaires,
-                type_frais: part.type_frais ?? '',
-                commentaire_frais: part.commentaire_frais ?? '',
-                processing: false,
-            };
-        }
-    }
-}
-
-initFraisForms();
-
-watch(
-    () => props.commission.parts,
-    () => initFraisForms(),
-    { deep: true },
-);
-
-function fraisNettePreview(part: CommissionPart): number {
-    const f = fraisForms[part.id];
-    return Math.max(0, part.montant_brut - (f?.frais ?? 0));
-}
-
-const fraisDialogVisible = ref(false);
-const fraisDialogPart = ref<CommissionPart | null>(null);
-
-function openFraisDialog(part: CommissionPart) {
-    fraisDialogPart.value = part;
-    fraisDialogVisible.value = true;
-}
-
-function closeFraisDialog() {
-    fraisDialogVisible.value = false;
-    fraisDialogPart.value = null;
-}
-
-function isFraisDisabled(): boolean {
-    return props.commission.is_annulee || !can('ventes.update');
-}
-
-function isFraisFormInvalid(part: CommissionPart): boolean {
-    const f = fraisForms[part.id];
-    if (!f || f.processing) return true;
-    if (f.frais > 0 && !f.type_frais) return true;
-    if (f.type_frais === 'autre' && !f.commentaire_frais?.trim()) return true;
-    return false;
-}
-
-function saveFrais(part: CommissionPart, onSuccess?: () => void) {
-    const f = fraisForms[part.id];
-    if (!f) return;
-    f.processing = true;
-    router.patch(
-        `/commissions/${props.commission.id}/parts/${part.id}/frais`,
-        {
-            frais_supplementaires: f.frais,
-            type_frais: f.frais > 0 ? f.type_frais || null : null,
-            commentaire_frais:
-                f.frais > 0 && f.type_frais === 'autre'
-                    ? f.commentaire_frais
-                    : null,
-        },
-        {
-            preserveScroll: true,
-            onSuccess: () => onSuccess?.(),
-            onFinish: () => {
-                f.processing = false;
-            },
-        },
-    );
-}
-
-function submitFraisDialog() {
-    const part = fraisDialogPart.value;
-    if (!part || isFraisFormInvalid(part)) return;
-    saveFrais(part, closeFraisDialog);
-}
 
 // ── Suppression versement ─────────────────────────────────────────────────────
 
@@ -406,24 +324,27 @@ function isVersementDisabled(part: CommissionPart): boolean {
                         </p>
                     </div>
                     <div class="text-right">
-                        <p class="text-xs text-muted-foreground">Versé</p>
                         <p
-                            class="text-lg font-semibold text-emerald-600 tabular-nums dark:text-emerald-400"
+                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                         >
-                            {{ formatGNF(commission.montant_verse) }}
+                            Part Livreur (Total)
+                        </p>
+                        <p
+                            class="mt-1 text-2xl font-bold text-foreground tabular-nums"
+                        >
+                            {{ formatGNF(partLivreurTotal) }}
                         </p>
                     </div>
-                    <div class="text-right">
-                        <p class="text-xs text-muted-foreground">Restant</p>
+                    <div v-if="proprietaireParts.length > 0" class="text-right">
                         <p
-                            class="text-lg font-semibold tabular-nums"
-                            :class="
-                                commission.montant_restant > 0
-                                    ? 'text-amber-600 dark:text-amber-400'
-                                    : 'text-muted-foreground'
-                            "
+                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                         >
-                            {{ formatGNF(commission.montant_restant) }}
+                            Part Propriétaire (Total)
+                        </p>
+                        <p
+                            class="mt-1 text-2xl font-bold text-foreground tabular-nums"
+                        >
+                            {{ formatGNF(partProprietaireTotal) }}
                         </p>
                     </div>
                 </div>
@@ -432,21 +353,16 @@ function isVersementDisabled(part: CommissionPart): boolean {
             <!-- ── Parts ──────────────────────────────────────────────────────── -->
             <div class="space-y-4">
                 <!-- Tab switcher -->
-                <div class="flex items-center justify-between">
-                    <h2
-                        class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                    >
-                        Parts de commission
-                    </h2>
+                <div class="flex justify-center">
                     <div
-                        class="flex gap-0.5 rounded-lg border bg-muted/30 p-0.5"
+                        class="inline-flex items-center gap-1 rounded-xl border bg-card p-1 shadow-sm"
                     >
                         <button
-                            class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors"
+                            class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
                             :class="
                                 activePartTab === 'livreurs'
-                                    ? 'bg-background text-foreground shadow-sm'
-                                    : 'text-muted-foreground hover:text-foreground'
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                             "
                             :disabled="livreurParts.length === 0"
                             @click="activePartTab = 'livreurs'"
@@ -454,17 +370,17 @@ function isVersementDisabled(part: CommissionPart): boolean {
                             <Truck class="h-3.5 w-3.5" />
                             Livreurs
                             <span
-                                class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary tabular-nums"
+                                class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
                             >
                                 {{ livreurParts.length }}
                             </span>
                         </button>
                         <button
-                            class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors"
+                            class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
                             :class="
                                 activePartTab === 'proprietaires'
-                                    ? 'bg-background text-foreground shadow-sm'
-                                    : 'text-muted-foreground hover:text-foreground'
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                             "
                             :disabled="proprietaireParts.length === 0"
                             @click="activePartTab = 'proprietaires'"
@@ -472,7 +388,7 @@ function isVersementDisabled(part: CommissionPart): boolean {
                             <User class="h-3.5 w-3.5" />
                             Propriétaire
                             <span
-                                class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary tabular-nums"
+                                class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
                             >
                                 {{ proprietaireParts.length }}
                             </span>
@@ -640,6 +556,39 @@ function isVersementDisabled(part: CommissionPart): boolean {
                                     </td>
                                 </tr>
                             </tbody>
+                            <tfoot>
+                                <tr
+                                    class="border-t-2 bg-muted/20 text-sm font-semibold"
+                                >
+                                    <td
+                                        class="px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase"
+                                        colspan="3"
+                                    >
+                                        Total
+                                    </td>
+                                    <td
+                                        class="px-4 py-2.5 text-right tabular-nums"
+                                    >
+                                        {{ formatGNF(livreurTotals.montant) }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-2.5 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
+                                    >
+                                        {{ formatGNF(livreurTotals.verse) }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-2.5 text-right tabular-nums"
+                                        :class="
+                                            livreurTotals.restant > 0
+                                                ? 'text-amber-600 dark:text-amber-400'
+                                                : 'text-muted-foreground'
+                                        "
+                                    >
+                                        {{ formatGNF(livreurTotals.restant) }}
+                                    </td>
+                                    <td colspan="2" />
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
@@ -734,6 +683,7 @@ function isVersementDisabled(part: CommissionPart): boolean {
                                     <td
                                         class="px-4 py-3 text-right tabular-nums"
                                     >
+                                        <!-- Frais déjà appliqués (après 1er versement) -->
                                         <div
                                             v-if="
                                                 part.frais_supplementaires > 0
@@ -760,6 +710,30 @@ function isVersementDisabled(part: CommissionPart): boolean {
                                                           ] ?? part.type_frais)
                                                         : 'Frais'
                                                 }}
+                                            </p>
+                                        </div>
+                                        <!-- Frais en attente du véhicule (avant 1er versement) -->
+                                        <div
+                                            v-else-if="
+                                                commission.vehicule_frais_total >
+                                                    0 && !part.is_versee
+                                            "
+                                            class="space-y-0.5"
+                                        >
+                                            <p
+                                                class="font-semibold text-amber-600"
+                                            >
+                                                −
+                                                {{
+                                                    formatGNF(
+                                                        commission.vehicule_frais_total,
+                                                    )
+                                                }}
+                                            </p>
+                                            <p
+                                                class="text-[11px] text-muted-foreground italic"
+                                            >
+                                                À déduire
                                             </p>
                                         </div>
                                         <span
@@ -831,17 +805,6 @@ function isVersementDisabled(part: CommissionPart): boolean {
                                                 <DropdownMenuItem
                                                     class="gap-2"
                                                     :disabled="
-                                                        isFraisDisabled()
-                                                    "
-                                                    @click="
-                                                        openFraisDialog(part)
-                                                    "
-                                                >
-                                                    Frais supplémentaires
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                    class="gap-2"
-                                                    :disabled="
                                                         isVersementDisabled(
                                                             part,
                                                         )
@@ -879,162 +842,7 @@ function isVersementDisabled(part: CommissionPart): boolean {
         </div>
     </AppLayout>
 
-    <!-- ── Dialog historique versements livreur ──────────────────────────── -->
-    <Dialog
-        :visible="fraisDialogVisible"
-        modal
-        :dismissable-mask="true"
-        :style="{ width: 'min(560px, 96vw)' }"
-        :pt="{ content: { style: 'overflow: visible' } }"
-        @update:visible="closeFraisDialog"
-    >
-        <template #header>
-            <div>
-                <p class="font-semibold">
-                    {{ fraisDialogPart?.beneficiaire_nom }}
-                </p>
-                <p class="mt-0.5 text-xs text-muted-foreground">
-                    Propriétaire · {{ fraisDialogPart?.taux_commission }}% ·
-                    Brut :
-                    {{
-                        fraisDialogPart
-                            ? formatGNF(fraisDialogPart.montant_brut)
-                            : ''
-                    }}
-                </p>
-            </div>
-        </template>
-
-        <div v-if="fraisDialogPart" class="space-y-4 pt-2 pb-1">
-            <div
-                class="grid grid-cols-3 gap-3 rounded-md border bg-muted/20 p-3 text-sm"
-            >
-                <div>
-                    <p class="text-xs text-muted-foreground">Part brute</p>
-                    <p class="mt-0.5 font-medium tabular-nums">
-                        {{ formatGNF(fraisDialogPart.montant_brut) }}
-                    </p>
-                </div>
-                <div>
-                    <p class="text-xs text-muted-foreground">Frais</p>
-                    <p
-                        class="mt-0.5 font-semibold text-destructive tabular-nums"
-                    >
-                        −
-                        {{
-                            formatGNF(
-                                fraisForms[fraisDialogPart.id]?.frais ?? 0,
-                            )
-                        }}
-                    </p>
-                </div>
-                <div>
-                    <p class="text-xs text-muted-foreground">Part nette</p>
-                    <p class="mt-0.5 font-semibold tabular-nums">
-                        {{ formatGNF(fraisNettePreview(fraisDialogPart)) }}
-                    </p>
-                </div>
-            </div>
-
-            <div>
-                <Label
-                    for="frais-deduction"
-                    class="mb-1.5 block text-xs font-medium"
-                    >Frais à déduire</Label
-                >
-                <InputNumber
-                    input-id="frais-deduction"
-                    v-model="fraisForms[fraisDialogPart.id].frais"
-                    :min="0"
-                    :max="fraisDialogPart.montant_brut"
-                    :use-grouping="true"
-                    locale="fr-FR"
-                    suffix=" GNF"
-                    class="w-full"
-                    input-class="w-full h-10 text-right font-semibold tabular-nums"
-                    autofocus
-                />
-            </div>
-
-            <div
-                v-if="fraisForms[fraisDialogPart.id]?.frais > 0"
-                class="space-y-3"
-            >
-                <div>
-                    <Label
-                        for="frais-type"
-                        class="mb-1.5 block text-xs font-medium"
-                    >
-                        Type de frais <span class="text-destructive">*</span>
-                    </Label>
-                    <Dropdown
-                        input-id="frais-type"
-                        v-model="fraisForms[fraisDialogPart.id].type_frais"
-                        :options="typesFraisOptions"
-                        option-label="label"
-                        option-value="value"
-                        placeholder="Sélectionner…"
-                        class="w-full"
-                    />
-                </div>
-
-                <div
-                    v-if="
-                        fraisForms[fraisDialogPart.id]?.type_frais === 'autre'
-                    "
-                >
-                    <Label
-                        for="frais-commentaire"
-                        class="mb-1.5 block text-xs font-medium"
-                    >
-                        Commentaire <span class="text-destructive">*</span>
-                        <span class="ml-1 font-normal text-muted-foreground">
-                            ({{
-                                (
-                                    fraisForms[fraisDialogPart.id]
-                                        ?.commentaire_frais ?? ''
-                                ).length
-                            }}/150)
-                        </span>
-                    </Label>
-                    <InputText
-                        id="frais-commentaire"
-                        v-model="
-                            fraisForms[fraisDialogPart.id].commentaire_frais
-                        "
-                        :maxlength="150"
-                        placeholder="Précisez le motif des frais…"
-                        class="w-full"
-                    />
-                </div>
-            </div>
-        </div>
-
-        <template #footer>
-            <div class="flex justify-end gap-2">
-                <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    @click="closeFraisDialog"
-                >
-                    Annuler
-                </Button>
-                <Button
-                    type="button"
-                    size="sm"
-                    class="gap-2"
-                    :disabled="
-                        !fraisDialogPart || isFraisFormInvalid(fraisDialogPart)
-                    "
-                    @click="submitFraisDialog"
-                >
-                    Appliquer
-                </Button>
-            </div>
-        </template>
-    </Dialog>
-
+    <!-- ── Dialog historique versements ──────────────────────────────────── -->
     <Dialog
         :visible="historyDialogVisible"
         modal

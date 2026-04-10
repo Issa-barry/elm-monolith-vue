@@ -13,6 +13,7 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -53,6 +54,7 @@ class CommandeVenteTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
+            'capacite_packs' => 2,
         ]);
 
         $client = Client::factory()->create(['organization_id' => $org->id]);
@@ -90,6 +92,20 @@ class CommandeVenteTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('ventes.create'))
             ->assertStatus(200);
+    }
+
+    public function test_create_exposes_vehicule_capacity_in_inertia_props(): void
+    {
+        ['vehicule' => $vehicule] = $this->makeContext($this->org);
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.create'))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Ventes/Create')
+                ->where('vehicules.0.id', $vehicule->id)
+                ->where('vehicules.0.capacite_packs', (int) $vehicule->capacite_packs)
+            );
     }
 
     // ── store ─────────────────────────────────────────────────────────────────
@@ -165,6 +181,58 @@ class CommandeVenteTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [])
             ->assertSessionHasErrors(['lignes']);
+    }
+
+    public function test_store_fails_when_total_quantite_differs_from_vehicule_capacity(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        $vehicule->update(['capacite_packs' => 5]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertSessionHasErrors('lignes');
+
+        $this->assertDatabaseMissing('commandes_ventes', [
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'total_commande' => 4000,
+        ]);
+    }
+
+    public function test_edit_exposes_vehicule_capacity_in_inertia_props(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule, 'client' => $client] = $this->makeContext($this->org);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
+            'client_id' => $client->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => 4000,
+        ]);
+
+        $commande->lignes()->create([
+            'produit_id' => $produit->id,
+            'qte' => 2,
+            'prix_usine_snapshot' => (float) $produit->prix_usine,
+            'prix_vente_snapshot' => (float) $produit->prix_vente,
+            'total_ligne' => 2 * (float) $produit->prix_vente,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.edit', $commande))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Ventes/Edit')
+                ->where('vehicules.0.id', $vehicule->id)
+                ->where('vehicules.0.capacite_packs', (int) $vehicule->capacite_packs)
+            );
     }
 
     // ── show ──────────────────────────────────────────────────────────────────
