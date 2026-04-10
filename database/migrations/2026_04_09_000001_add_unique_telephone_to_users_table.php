@@ -9,24 +9,26 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // Vérifie si l'index unique existe déjà (migration déjà appliquée partiellement)
-        $indexExists = collect(DB::select("SHOW INDEX FROM users WHERE Key_name = 'users_telephone_unique'"))->isNotEmpty();
+        // Vérification compatible SQLite + MySQL via Schema::getIndexes()
+        $alreadyIndexed = collect(Schema::getIndexes('users'))
+            ->contains('name', 'users_telephone_unique');
 
-        if ($indexExists) {
+        if ($alreadyIndexed) {
             return;
         }
 
-        // En production, des doublons NULL peuvent exister (telephone nullable).
-        // MySQL autorise plusieurs NULL dans un index UNIQUE → pas de problème.
-        // Pour les doublons non-NULL éventuels, on garde le compte le plus récent.
-        DB::statement("
-            DELETE u1
-            FROM users u1
-            INNER JOIN users u2
-                ON  u1.telephone IS NOT NULL
-                AND u1.telephone  = u2.telephone
-                AND u1.id         < u2.id
-        ");
+        // Supprime les doublons non-NULL avec le query builder Laravel (cross-database)
+        $duplicateIds = DB::table('users as u1')
+            ->join('users as u2', function ($join) {
+                $join->on('u1.telephone', '=', 'u2.telephone')
+                    ->on('u1.id', '<', 'u2.id');
+            })
+            ->whereNotNull('u1.telephone')
+            ->pluck('u1.id');
+
+        if ($duplicateIds->isNotEmpty()) {
+            DB::table('users')->whereIn('id', $duplicateIds)->delete();
+        }
 
         Schema::table('users', function (Blueprint $table) {
             $table->unique('telephone');
