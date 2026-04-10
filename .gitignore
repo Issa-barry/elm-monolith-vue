@@ -33,3 +33,6 @@ yarn-error.log
 /coverage/
 /coverage-report/
 .auth/
+
+# Claude Code local settings (jamais commités)
+/.claude/settings.local.json

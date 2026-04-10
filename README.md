@@ -2,6 +2,7 @@
 
 
 # magic 
+cd ~/domains/eau-la-maman.fr/public_html
 composer2 update
 php artisan migrate:fresh --seed
 php artisan optimize:clear
