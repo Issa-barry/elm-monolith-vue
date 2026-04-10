@@ -3,11 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ModePaiement;
+use App\Features\ModuleFeature;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
+use App\Models\Organization;
+use App\Services\CashbackService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Laravel\Pennant\Feature;
 
 class EncaissementVenteController extends Controller
 {
@@ -44,10 +48,23 @@ class EncaissementVenteController extends Controller
             'created_by' => auth()->id(),
         ]);
 
+        $etaitPayee = $facture_vente->isPayee();
         $facture_vente->recalculStatut();
+        $estPayeeMaintenent = $facture_vente->isPayee();
 
         // Auto-clôture si facture payée et commissions soldées
         $facture_vente->commande?->cloturerSiComplete();
+
+        // Cashback : déclenché uniquement quand la facture passe à l'état "payée"
+        if (! $etaitPayee && $estPayeeMaintenent) {
+            $commande = $facture_vente->commande;
+            if ($commande && $commande->client_id && $commande->organization_id) {
+                $org = Organization::find($commande->organization_id);
+                if ($org && Feature::for($org)->active(ModuleFeature::CASHBACK)) {
+                    app(CashbackService::class)->processVente($commande);
+                }
+            }
+        }
 
         return redirect()->back()->with('success', 'Encaissement enregistré.');
     }

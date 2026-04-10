@@ -47,7 +47,6 @@ class ModuleFeature
         self::PACKINGS,
         self::PRESTATAIRES,
         self::INSCRIPTION,
-        self::CASHBACK,
     ];
 
     public static function defaultState(string $module): bool
