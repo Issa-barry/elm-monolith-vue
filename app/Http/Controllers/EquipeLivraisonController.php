@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
+use App\Models\Parametre;
+use App\Models\Proprietaire;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -18,7 +21,7 @@ class EquipeLivraisonController extends Controller
     {
         $this->authorize('viewAny', EquipeLivraison::class);
 
-        $equipes = EquipeLivraison::with('membres.livreur')
+        $equipes = EquipeLivraison::with('membres.livreur', 'proprietaire')
             ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom')
             ->get()
@@ -33,7 +36,12 @@ class EquipeLivraisonController extends Controller
     {
         $this->authorize('create', EquipeLivraison::class);
 
-        return Inertia::render('EquipesLivraison/Create');
+        $orgId = auth()->user()->organization_id;
+
+        return Inertia::render('EquipesLivraison/Create', [
+            'proprietaires' => $this->proprietairesOptions($orgId),
+            'tauxProprietaireDefaut' => Parametre::getTauxProprietaireDefaut($orgId),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -44,13 +52,15 @@ class EquipeLivraisonController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'nom' => 'required|string|max:100',
+            'nom' => ['required', 'string', 'max:100', Rule::unique('equipes_livraison', 'nom')->where('organization_id', $orgId)->whereNull('deleted_at')],
             'is_active' => 'boolean',
+            'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
+            'taux_commission_proprietaire' => 'required|numeric|min:0|max:100',
             'membres' => 'required|array|min:1',
             'membres.*.livreur_id' => 'nullable|integer',
             'membres.*.nom' => 'required|string|max:255',
             'membres.*.prenom' => 'required|string|max:255',
-            'membres.*.telephone' => 'required|string|max:30',
+            'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
             'membres.*.role' => ['required', Rule::in(['principal', 'assistant'])],
             'membres.*.taux_commission' => 'required|numeric|min:0|max:100',
             'membres.*.ordre' => 'nullable|integer|min:0',
@@ -58,13 +68,16 @@ class EquipeLivraisonController extends Controller
 
         $this->validatePrincipal($data['membres']);
         $this->validateUniquePhones($data['membres']);
-        $this->validateTotalTaux($data['membres']);
+        $this->validateTotalTaux($data['membres'], (float) $data['taux_commission_proprietaire']);
+        $this->validateMembresExclusivite($data['membres'], $orgId);
 
         DB::transaction(function () use ($data, $orgId) {
             $equipe = EquipeLivraison::create([
                 'organization_id' => $orgId,
+                'proprietaire_id' => $data['proprietaire_id'],
                 'nom' => $data['nom'],
                 'is_active' => $data['is_active'] ?? true,
+                'taux_commission_proprietaire' => $data['taux_commission_proprietaire'],
             ]);
 
             foreach ($data['membres'] as $index => $m) {
@@ -87,10 +100,13 @@ class EquipeLivraisonController extends Controller
     {
         $this->authorize('update', $equipes_livraison);
 
-        $equipes_livraison->load('membres.livreur');
+        $orgId = auth()->user()->organization_id;
+        $equipes_livraison->load('membres.livreur', 'proprietaire');
 
         return Inertia::render('EquipesLivraison/Edit', [
             'equipe' => $this->equipeData($equipes_livraison),
+            'proprietaires' => $this->proprietairesOptions($orgId),
+            'tauxProprietaireDefaut' => Parametre::getTauxProprietaireDefaut($orgId),
         ]);
     }
 
@@ -101,13 +117,15 @@ class EquipeLivraisonController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $data = $request->validate([
-            'nom' => 'required|string|max:100',
+            'nom' => ['required', 'string', 'max:100', Rule::unique('equipes_livraison', 'nom')->where('organization_id', $orgId)->whereNull('deleted_at')->ignore($equipes_livraison->id)],
             'is_active' => 'boolean',
+            'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
+            'taux_commission_proprietaire' => 'required|numeric|min:0|max:100',
             'membres' => 'required|array|min:1',
             'membres.*.livreur_id' => 'nullable|integer',
             'membres.*.nom' => 'required|string|max:255',
             'membres.*.prenom' => 'required|string|max:255',
-            'membres.*.telephone' => 'required|string|max:30',
+            'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
             'membres.*.role' => ['required', Rule::in(['principal', 'assistant'])],
             'membres.*.taux_commission' => 'required|numeric|min:0|max:100',
             'membres.*.ordre' => 'nullable|integer|min:0',
@@ -115,12 +133,15 @@ class EquipeLivraisonController extends Controller
 
         $this->validatePrincipal($data['membres']);
         $this->validateUniquePhones($data['membres']);
-        $this->validateTotalTaux($data['membres']);
+        $this->validateTotalTaux($data['membres'], (float) $data['taux_commission_proprietaire']);
+        $this->validateMembresExclusivite($data['membres'], $orgId, $equipes_livraison->id);
 
         DB::transaction(function () use ($data, $orgId, $equipes_livraison) {
             $equipes_livraison->update([
+                'proprietaire_id' => $data['proprietaire_id'],
                 'nom' => $data['nom'],
                 'is_active' => $data['is_active'] ?? $equipes_livraison->is_active,
+                'taux_commission_proprietaire' => $data['taux_commission_proprietaire'],
             ]);
 
             // Sync membres : suppression + recréation
@@ -151,6 +172,7 @@ class EquipeLivraisonController extends Controller
                 ->withErrors(['equipe' => 'Cette équipe est assignée à un ou plusieurs véhicules actifs.']);
         }
 
+        $equipes_livraison->membres()->delete();
         $equipes_livraison->delete();
 
         return redirect()->route('equipes-livraison.index')
@@ -168,6 +190,8 @@ class EquipeLivraisonController extends Controller
             'id' => $e->id,
             'nom' => $e->nom,
             'is_active' => $e->is_active,
+            'proprietaire_id' => $e->proprietaire_id,
+            'taux_commission_proprietaire' => $e->taux_commission_proprietaire !== null ? (float) $e->taux_commission_proprietaire : null,
             'nb_membres' => $membres->count(),
             'nb_assistants' => $membres->where('role', 'assistant')->count(),
             'somme_taux' => (float) $membres->sum('taux_commission'),
@@ -183,6 +207,20 @@ class EquipeLivraisonController extends Controller
                 'ordre' => $m->ordre,
             ])->values()->all(),
         ];
+    }
+
+    private function proprietairesOptions(int $orgId): array
+    {
+        return Proprietaire::where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (Proprietaire $p) => [
+                'value' => $p->id,
+                'label' => trim("{$p->prenom} {$p->nom}"),
+                'telephone' => $p->telephone,
+            ])
+            ->toArray();
     }
 
     /**
@@ -211,6 +249,39 @@ class EquipeLivraisonController extends Controller
         );
     }
 
+    /**
+     * Vérifie qu'aucun livreur (identifié par son téléphone) n'est déjà membre d'une autre équipe active.
+     */
+    private function validateMembresExclusivite(array $membres, int $orgId, ?int $equipeIdCourant = null): void
+    {
+        foreach ($membres as $index => $m) {
+            $livreur = Livreur::where('telephone', $m['telephone'])
+                ->where('organization_id', $orgId)
+                ->first();
+
+            if (! $livreur) {
+                continue; // Nouveau livreur, pas encore affecté
+            }
+
+            $query = EquipeLivreur::query()
+                ->where('livreur_id', $livreur->id)
+                ->whereHas('equipe', fn ($q) => $q
+                    ->where('organization_id', $orgId)
+                    ->whereNull('deleted_at')
+                );
+
+            if ($equipeIdCourant !== null) {
+                $query->where('equipe_id', '<>', $equipeIdCourant);
+            }
+
+            if ($query->exists()) {
+                throw ValidationException::withMessages([
+                    "membres.{$index}.telephone" => 'Ce livreur est déjà affecté à une autre équipe.',
+                ]);
+            }
+        }
+    }
+
     private function validatePrincipal(array $membres): void
     {
         $count = count(array_filter($membres, fn ($m) => ($m['role'] ?? '') === 'principal'));
@@ -231,16 +302,21 @@ class EquipeLivraisonController extends Controller
         }
     }
 
-    private function validateTotalTaux(array $membres): void
+    private function validateTotalTaux(array $membres, float $tauxProprietaire): void
     {
-        $total = array_reduce(
+        $totalMembres = array_reduce(
             $membres,
             fn (float $sum, array $membre): float => $sum + (float) ($membre['taux_commission'] ?? 0),
             0.0
         );
 
-        if ($total > 100.000001) {
-            abort(422, "La somme des taux de l'équipe ne peut pas dépasser 100 %.");
+        $total = $totalMembres + $tauxProprietaire;
+
+        if (abs($total - 100.0) > 0.01) {
+            abort(422, sprintf(
+                'La répartition doit totaliser exactement 100 %% (livreurs + propriétaire). Actuellement : %.2f %%.',
+                $total
+            ));
         }
     }
 
@@ -248,11 +324,18 @@ class EquipeLivraisonController extends Controller
     {
         return [
             'nom.required' => "Le nom de l'équipe est obligatoire.",
+            'nom.unique' => 'Une équipe avec ce nom existe déjà dans votre organisation.',
+            'proprietaire_id.required' => 'Le propriétaire est obligatoire.',
+            'proprietaire_id.exists' => "Le propriétaire sélectionné est introuvable ou n'appartient pas à votre organisation.",
+            'taux_commission_proprietaire.required' => 'Le taux propriétaire est obligatoire.',
+            'taux_commission_proprietaire.min' => 'Le taux propriétaire ne peut pas être négatif.',
+            'taux_commission_proprietaire.max' => 'Le taux propriétaire ne peut pas dépasser 100 %.',
             'membres.required' => "L'équipe doit avoir au moins un membre.",
             'membres.min' => "L'équipe doit avoir au moins un membre.",
             'membres.*.nom.required' => 'Le nom du livreur est obligatoire.',
             'membres.*.prenom.required' => 'Le prénom du livreur est obligatoire.',
             'membres.*.telephone.required' => 'Le téléphone du livreur est obligatoire.',
+            'membres.*.telephone.regex' => 'Le téléphone doit être au format guinéen (+224 suivi de 9 chiffres).',
             'membres.*.role.required' => 'Le rôle est obligatoire.',
             'membres.*.role.in' => 'Le rôle doit être principal ou assistant.',
             'membres.*.taux_commission.required' => 'Le taux est obligatoire.',

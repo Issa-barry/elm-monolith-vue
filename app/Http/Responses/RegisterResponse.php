@@ -2,9 +2,10 @@
 
 namespace App\Http\Responses;
 
-use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
+use Illuminate\Http\JsonResponse;
+use Laravel\Fortify\Contracts\RegisterResponse as RegisterResponseContract;
 
-class LoginResponse implements LoginResponseContract
+class RegisterResponse implements RegisterResponseContract
 {
     public function toResponse($request)
     {
@@ -19,7 +20,7 @@ class LoginResponse implements LoginResponseContract
         }
 
         return $request->wantsJson()
-            ? response()->json(['two_factor' => false])
+            ? new JsonResponse('', 201)
             : redirect()->intended($redirectTo);
     }
 }

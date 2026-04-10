@@ -1,8 +1,9 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft } from 'lucide-vue-next';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { ArrowLeft, CheckCircle } from 'lucide-vue-next';
+import { computed } from 'vue';
 import EquipeForm from './partials/EquipeForm.vue';
 
 interface MembreData {
@@ -19,10 +20,27 @@ interface EquipeData {
     id: number;
     nom: string;
     is_active: boolean;
+    proprietaire_id: number | null;
+    taux_commission_proprietaire: number | null;
     membres: MembreData[];
 }
 
-const props = defineProps<{ equipe: EquipeData }>();
+interface ProprietaireOption {
+    value: number;
+    label: string;
+    telephone?: string | null;
+}
+
+const props = defineProps<{
+    equipe: EquipeData;
+    proprietaires: ProprietaireOption[];
+    tauxProprietaireDefaut: number;
+}>();
+
+const page = usePage();
+const flashSuccess = computed(
+    () => (page.props as any).flash?.success as string | undefined,
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -33,6 +51,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: props.equipe.nom,
     is_active: Boolean(props.equipe.is_active),
+    proprietaire_id: props.equipe.proprietaire_id,
+    taux_commission_proprietaire:
+        props.equipe.taux_commission_proprietaire ??
+        props.tauxProprietaireDefaut,
     membres: props.equipe.membres.map((m) => ({
         livreur_id: m.livreur_id,
         nom: m.nom,
@@ -69,7 +91,20 @@ function submit() {
                     Modifier les membres et taux.
                 </p>
             </div>
-            <EquipeForm :form="form" @submit="submit" />
+            <div
+                v-if="flashSuccess"
+                class="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+            >
+                <CheckCircle class="h-4 w-4 shrink-0" />
+                {{ flashSuccess }}
+            </div>
+
+            <EquipeForm
+                :form="form"
+                :proprietaires="proprietaires"
+                :taux-proprietaire-defaut="tauxProprietaireDefaut"
+                @submit="submit"
+            />
         </div>
     </AppLayout>
 </template>

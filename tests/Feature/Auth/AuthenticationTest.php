@@ -161,6 +161,33 @@ class AuthenticationTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_inactive_user_cannot_login(): void
+    {
+        $user = User::factory()->withoutTwoFactor()->create(['is_active' => false]);
+
+        $this->post(route('login.store'), [
+            'telephone' => $user->telephone,
+            'password' => 'password',
+        ])->assertSessionHasErrors('telephone');
+
+        $this->assertGuest();
+    }
+
+    public function test_inactive_user_login_error_message_is_in_french(): void
+    {
+        $user = User::factory()->withoutTwoFactor()->create(['is_active' => false]);
+
+        $this->post(route('login.store'), [
+            'telephone' => $user->telephone,
+            'password' => 'password',
+        ]);
+
+        $this->assertStringContainsString(
+            'désactivé',
+            session('errors')->first('telephone'),
+        );
+    }
+
     public function test_users_are_rate_limited(): void
     {
         $user = User::factory()->create();

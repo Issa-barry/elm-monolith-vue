@@ -115,6 +115,10 @@ test('edit proprietaire → update pays / ville / adresse → data persists on e
         .first()
         .click();
 
+    // waitForLoadState ensures the PUT response has arrived before checking the
+    // flash banner (toHaveURL alone is a no-op when the URL does not change).
+    await page.waitForLoadState('networkidle');
+
     // Doit rester sur la page d'édition (pas rediriger vers la liste)
     await expect(page).toHaveURL(/\/proprietaires\/\d+\/edit$/);
 

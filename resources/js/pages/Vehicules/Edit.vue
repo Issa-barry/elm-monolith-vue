@@ -2,8 +2,9 @@
 import { Spinner } from '@/components/ui/spinner';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Save } from 'lucide-vue-next';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
+import { computed } from 'vue';
 import VehiculeForm from './partials/VehiculeForm.vue';
 
 interface Option {
@@ -13,6 +14,8 @@ interface Option {
 interface EquipeOption {
     value: number;
     label: string;
+    proprietaire_id: number | null;
+    proprietaire_label?: string | null;
     somme_taux: number;
 }
 interface TypeOption {
@@ -42,6 +45,10 @@ const props = defineProps<{
     types: TypeOption[];
     tauxProprietaireDefaut: number;
 }>();
+const page = usePage();
+const flashSuccess = computed(
+    () => (page.props as { flash?: { success?: string } }).flash?.success,
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -61,6 +68,16 @@ const form = useForm({
     taux_commission_proprietaire: props.vehicule.taux_commission_proprietaire,
     photo: null as File | null,
     is_active: props.vehicule.is_active,
+});
+
+const canSubmit = computed(() => {
+    return (
+        !form.processing &&
+        !!form.equipe_livraison_id &&
+        form.nom_vehicule.trim().length > 0 &&
+        form.immatriculation.trim().length > 0 &&
+        !!form.type_vehicule
+    );
 });
 
 function submit() {
@@ -108,6 +125,14 @@ function submit() {
                 </div>
             </div>
 
+            <div
+                v-if="flashSuccess"
+                class="mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+            >
+                <CheckCircle class="h-4 w-4 shrink-0" />
+                {{ flashSuccess }}
+            </div>
+
             <VehiculeForm
                 :form="form"
                 :errors="form.errors"
@@ -116,7 +141,6 @@ function submit() {
                 :equipes="equipes"
                 :types="types"
                 :photo-url="vehicule.photo_url"
-                :taux-proprietaire-defaut="props.tauxProprietaireDefaut"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />
@@ -129,7 +153,7 @@ function submit() {
             <button
                 type="submit"
                 form="vehicule-form"
-                :disabled="form.processing"
+                :disabled="!canSubmit"
                 class="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-60"
             >
                 <Spinner v-if="form.processing" class="h-4 w-4" />

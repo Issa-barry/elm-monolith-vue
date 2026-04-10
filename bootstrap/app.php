@@ -6,6 +6,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -19,6 +20,20 @@ return Application::configure(basePath: dirname(__DIR__))
             'module' => \App\Http\Middleware\RequireModuleEnabled::class,
             'require.site' => \App\Http\Middleware\RequireSiteAssigned::class,
         ]);
+
+        $middleware->redirectUsersTo(function (Request $request): string {
+            $user = $request->user();
+
+            if ($user?->hasRole('client')) {
+                return route('client.dashboard');
+            }
+
+            if ($user?->hasAnyRole(['super_admin', 'admin_entreprise', 'manager', 'commerciale', 'comptable'])) {
+                return route('dashboard');
+            }
+
+            return route('home');
+        });
 
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 

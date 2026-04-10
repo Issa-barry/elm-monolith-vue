@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+﻿import { expect, test } from '@playwright/test';
 import {
     escapeRegExp,
     getVisibleSearchInput,
@@ -27,21 +27,26 @@ test('login + create vehicule + update status + verify list', async ({
     await page.goto('/vehicules/create');
     await expect(page).toHaveURL(/\/vehicules\/create$/);
 
+    const submitBtn = page
+        .locator('#vehicule-form button[type="submit"]:visible')
+        .first();
+    await expect(submitBtn).toBeDisabled();
+
     await page.locator('#nom_vehicule').fill(nomVehicule);
     await page.locator('#immatriculation').fill(immatriculation);
 
     const comboboxes = page.locator('#vehicule-form').getByRole('combobox');
 
-    // Ordre DOM actuel: type (Dropdown), proprietaire (AutoComplete), equipe (AutoComplete)
+    // Ordre DOM actuel: type (Dropdown), equipe (AutoComplete)
     await selectOptionFromCombobox(page, comboboxes.nth(0));
     await selectOptionFromCombobox(page, comboboxes.nth(1));
+    await expect(page.locator('#proprietaire_id')).toHaveAttribute(
+        'readonly',
+        '',
+    );
+    await expect(submitBtn).toBeEnabled();
 
-    await page.locator('#taux_proprietaire input').fill('100');
-
-    await page
-        .locator('#vehicule-form button[type="submit"]:visible')
-        .first()
-        .click();
+    await submitBtn.click();
 
     await expect(page).toHaveURL(/\/vehicules$/);
 
@@ -65,11 +70,17 @@ test('login + create vehicule + update status + verify list', async ({
 
     await page.locator('label[for="is_active"]').first().click();
 
-    await page
-        .locator('#vehicule-form button[type="submit"]:visible')
-        .first()
-        .click();
+    await submitBtn.click();
 
+    // waitForLoadState ensures the PUT response has arrived before checking the
+    // flash banner (toHaveURL alone is a no-op when the URL does not change).
+    await page.waitForLoadState('networkidle');
+    await expect(page).toHaveURL(/\/vehicules\/\d+\/edit$/);
+    await expect(
+        page.getByText(/Véhicule mis à jour avec succès./i).first(),
+    ).toBeVisible();
+
+    await page.goto('/vehicules');
     await expect(page).toHaveURL(/\/vehicules$/);
 
     const updatedSearchInput = getVisibleSearchInput(page);
@@ -84,3 +95,5 @@ test('login + create vehicule + update status + verify list', async ({
     await expect(updatedRow).toBeVisible();
     await expect(updatedRow).toContainText(/inactif/i);
 });
+
+

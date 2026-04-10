@@ -104,7 +104,24 @@
       "Bash(php vendor/bin/phpunit tests/Feature/ProprietaireTest.php --no-coverage)",
       "Bash(php vendor/bin/phpunit tests/Feature/ProprietaireTest.php --no-coverage --no-extensions)",
       "Bash(find /c/laragon/www/elm-monolithe/app/Policies -name \"*.php\" -exec grep -l \"admin_entreprise\\\\|super_admin\" {} \\\\;)",
-      "Bash(vendor/bin/pint app/Http/Controllers/VehiculeController.php database/migrations/2026_04_07_200000_seed_taux_proprietaire_defaut_parametre.php)"
+      "Bash(vendor/bin/pint app/Http/Controllers/VehiculeController.php database/migrations/2026_04_07_200000_seed_taux_proprietaire_defaut_parametre.php)",
+      "Bash(node node_modules/.bin/prettier --write \"resources/js/pages/EquipesLivraison/Edit.vue\" \"resources/js/pages/EquipesLivraison/partials/EquipeForm.vue\")",
+      "Bash(node -e \" const { createSSRApp } = require\\('vue'\\); const app = createSSRApp\\({ props: { tauxProprietaireDefaut: Number } }\\); \")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8080)",
+      "Bash(tee /tmp/tests_out.txt)",
+      "Bash(grep -n \"proprietaire_id\\\\|equipe_livraison_id\" database/migrations/*.php)",
+      "Bash(php -l database/seeders/EquipesLivraisonSeeder.php)",
+      "Bash(php -l database/seeders/VehiculesSeeder.php)",
+      "Read(//c/laragon/www/elm-monolithe/app/Http/Requests/**)",
+      "Bash(php -r ':*)",
+      "Bash(python3 -)",
+      "Bash(php -l tests/Feature/VehiculeTest.php)",
+      "Bash(./vendor/bin/pint app/Models/Client.php app/Http/Controllers/ClientController.php app/Policies/ClientPolicy.php database/factories/ClientFactory.php database/migrations/2026_04_09_200000_add_country_and_blocked_to_clients_table.php database/migrations/2026_04_09_210000_add_indexes_to_clients_table.php tests/Feature/ClientTest.php)",
+      "Bash(./vendor/bin/pint app/Actions/Fortify/CreateNewUser.php app/Http/Controllers/Auth/ app/Services/OtpService.php tests/Feature/Auth/RegisterLookupTest.php tests/Feature/Auth/RegisterOtpTest.php)",
+      "Bash(npx vue-tsc:*)"
+    ],
+    "additionalDirectories": [
+      "C:\\laragon\\www\\elm-monolithe\\database\\seeders"
     ]
   }
 }

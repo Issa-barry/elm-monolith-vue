@@ -154,6 +154,98 @@ class ProprietaireTest extends TestCase
             ->assertSessionHasErrors(['nom', 'prenom', 'telephone', 'code_pays', 'ville']);
     }
 
+    // ── unicité par organisation ──────────────────────────────────────────────
+
+    public function test_store_refuses_duplicate_telephone_in_same_org(): void
+    {
+        Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622000001',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('proprietaires.store'), [
+                'nom' => 'Diallo',
+                'prenom' => 'Mamadou',
+                'telephone' => '622000001', // même numéro, format local → canonique +224622000001
+                'code_pays' => 'GN',
+                'ville' => 'Conakry',
+            ])
+            ->assertSessionHasErrors('telephone');
+    }
+
+    public function test_store_refuses_duplicate_email_in_same_org(): void
+    {
+        Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'email' => 'test@example.com',
+            'telephone' => '+224622000001',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('proprietaires.store'), [
+                'nom' => 'Diallo',
+                'prenom' => 'Mamadou',
+                'telephone' => '622000002',
+                'code_pays' => 'GN',
+                'ville' => 'Conakry',
+                'email' => 'test@example.com', // même email
+            ])
+            ->assertSessionHasErrors('email');
+    }
+
+    public function test_update_allows_same_proprietaire_to_keep_telephone(): void
+    {
+        $proprietaire = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622000001',
+            'code_phone_pays' => '+224',
+            'code_pays' => 'GN',
+            'pays' => 'Guinée',
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('proprietaires.update', $proprietaire), [
+                'nom' => 'Diallo',
+                'prenom' => 'Mamadou',
+                'telephone' => '622000001', // son propre numéro → doit passer
+                'code_pays' => 'GN',
+                'ville' => 'Conakry',
+                'is_active' => true,
+            ])
+            ->assertRedirect(route('proprietaires.edit', $proprietaire));
+    }
+
+    public function test_update_refuses_telephone_conflict_with_other_proprietaire(): void
+    {
+        Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622000002',
+            'code_phone_pays' => '+224',
+            'code_pays' => 'GN',
+            'pays' => 'Guinée',
+        ]);
+
+        $proprietaire = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622000001',
+            'code_phone_pays' => '+224',
+            'code_pays' => 'GN',
+            'pays' => 'Guinée',
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('proprietaires.update', $proprietaire), [
+                'nom' => 'Diallo',
+                'prenom' => 'Mamadou',
+                'telephone' => '622000002', // numéro déjà pris par l'autre propriétaire
+                'code_pays' => 'GN',
+                'ville' => 'Conakry',
+                'is_active' => true,
+            ])
+            ->assertSessionHasErrors('telephone');
+    }
+
     // ── destroy ───────────────────────────────────────────────────────────────
 
     public function test_destroy_deletes_proprietaire_and_redirects(): void

@@ -17,14 +17,17 @@ class EquipeLivraison extends Model
 
     protected $fillable = [
         'organization_id',
+        'proprietaire_id',
         'nom',
         'is_active',
+        'taux_commission_proprietaire',
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'taux_commission_proprietaire' => 'decimal:2',
         ];
     }
 
@@ -33,6 +36,11 @@ class EquipeLivraison extends Model
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    public function proprietaire(): BelongsTo
+    {
+        return $this->belongsTo(Proprietaire::class);
     }
 
     /**
