@@ -6,6 +6,7 @@ use App\Enums\TypeVehicule;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Vehicule extends Model
@@ -23,9 +24,6 @@ class Vehicule extends Model
         'proprietaire_id',
         'equipe_livraison_id',
         'taux_commission_proprietaire',
-        'frais_proprietaire_montant',
-        'frais_proprietaire_type',
-        'frais_proprietaire_commentaire',
         'pris_en_charge_par_usine',
         'photo_path',
         'is_active',
@@ -39,7 +37,6 @@ class Vehicule extends Model
             'type_vehicule' => TypeVehicule::class,
             'capacite_packs' => 'integer',
             'taux_commission_proprietaire' => 'decimal:2',
-            'frais_proprietaire_montant' => 'decimal:2',
         ];
     }
 
@@ -72,6 +69,11 @@ class Vehicule extends Model
     public function equipe(): BelongsTo
     {
         return $this->belongsTo(EquipeLivraison::class, 'equipe_livraison_id');
+    }
+
+    public function frais(): HasMany
+    {
+        return $this->hasMany(VehiculeFrais::class);
     }
 
     // ── Métier ────────────────────────────────────────────────────────────────

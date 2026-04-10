@@ -5,13 +5,13 @@ import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     Car,
     CheckCircle,
     Pencil,
-    TriangleAlert,
+    Trash2,
 } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
@@ -22,6 +22,13 @@ interface EquipeMembre {
     livreur_nom: string | null;
     taux_commission: number;
     role: string;
+}
+
+interface Frais {
+    id: number;
+    montant: number;
+    type: string;
+    commentaire: string | null;
 }
 
 interface VehiculeData {
@@ -39,9 +46,8 @@ interface VehiculeData {
     livreur_principal_nom: string | null;
     equipe_membres: EquipeMembre[];
     taux_commission_proprietaire: number;
-    frais_proprietaire_montant: number;
-    frais_proprietaire_type: string | null;
-    frais_proprietaire_commentaire: string | null;
+    frais: Frais[];
+    frais_total: number;
     pris_en_charge_par_usine: boolean;
     photo_url: string | null;
     is_active: boolean;
@@ -67,23 +73,35 @@ const typesFraisOptions = [
     { value: 'autre', label: 'Autre' },
 ];
 
+const typesFraisColors: Record<string, string> = {
+    carburant: 'bg-blue-50 text-blue-700',
+    reparation: 'bg-orange-50 text-orange-700',
+    autre: 'bg-muted text-muted-foreground',
+};
+
 const typesFraisLabels: Record<string, string> = {
     carburant: 'Carburant',
     reparation: 'Réparation',
     autre: 'Autre',
 };
 
-const fraisForm = useForm({
-    frais_proprietaire_montant: props.vehicule.frais_proprietaire_montant,
-    frais_proprietaire_type: props.vehicule.frais_proprietaire_type,
-    frais_proprietaire_commentaire: props.vehicule.frais_proprietaire_commentaire,
+const addForm = useForm({
+    montant: null as number | null,
+    type: null as string | null,
+    commentaire: null as string | null,
 });
 
-function submitFrais() {
-    fraisForm.patch(`/vehicules/${props.vehicule.id}/frais`);
+function submitAdd() {
+    addForm.post(`/vehicules/${props.vehicule.id}/frais`, {
+        onSuccess: () => {
+            addForm.reset();
+        },
+    });
 }
 
-const hasFrais = computed(() => props.vehicule.frais_proprietaire_montant > 0);
+function deleteFrais(frais: Frais) {
+    router.delete(`/vehicules/${props.vehicule.id}/frais/${frais.id}`);
+}
 
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
@@ -303,209 +321,154 @@ function formatGNF(val: number): string {
 
             <!-- Frais propriétaire -->
             <div class="rounded-xl border bg-card p-4 sm:p-5">
-                <div class="mb-4 flex items-start justify-between">
+                <!-- Header -->
+                <div class="mb-4 flex items-center justify-between">
                     <div>
                         <h3
                             class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                         >
                             Frais propriétaire
                         </h3>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Déduits automatiquement de la part propriétaire lors
-                            du premier versement.
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            Déduits automatiquement lors du premier versement.
                         </p>
                     </div>
-                    <!-- Badge solde actuel -->
-                    <div
-                        v-if="hasFrais"
-                        class="flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700"
+                    <span
+                        v-if="vehicule.frais.length"
+                        class="rounded-lg bg-amber-50 px-3 py-1 text-sm font-semibold tabular-nums text-amber-700"
                     >
-                        <TriangleAlert class="h-3.5 w-3.5" />
-                        {{ formatGNF(vehicule.frais_proprietaire_montant) }}
-                        <span class="text-xs font-normal text-amber-600">
-                            ({{
-                                vehicule.frais_proprietaire_type
-                                    ? typesFraisLabels[vehicule.frais_proprietaire_type]
-                                    : '—'
-                            }})
-                        </span>
-                    </div>
+                        Total : {{ formatGNF(vehicule.frais_total) }}
+                    </span>
                 </div>
 
+                <!-- Liste des frais -->
+                <div class="mb-4 space-y-2">
+                    <div
+                        v-for="f in vehicule.frais"
+                        :key="f.id"
+                        class="flex items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2 text-sm"
+                    >
+                        <span
+                            class="tabular-nums font-semibold"
+                        >{{ formatGNF(f.montant) }}</span>
+                        <span
+                            :class="[
+                                'rounded-full px-2 py-0.5 text-[11px] font-medium',
+                                typesFraisColors[f.type] ?? 'bg-muted text-muted-foreground',
+                            ]"
+                        >{{ typesFraisLabels[f.type] ?? f.type }}</span>
+                        <span
+                            v-if="f.commentaire"
+                            class="flex-1 truncate text-xs text-muted-foreground"
+                        >{{ f.commentaire }}</span>
+                        <span v-else class="flex-1" />
+                        <button
+                            v-if="can('vehicules.update')"
+                            type="button"
+                            class="shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
+                            title="Supprimer"
+                            @click="deleteFrais(f)"
+                        >
+                            <Trash2 class="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+                    <p
+                        v-if="!vehicule.frais.length"
+                        class="text-xs text-muted-foreground italic"
+                    >
+                        Aucun frais enregistré.
+                    </p>
+                </div>
+
+                <!-- Formulaire d'ajout -->
                 <form
                     v-if="can('vehicules.update')"
-                    class="grid gap-4 sm:grid-cols-2"
-                    @submit.prevent="submitFrais"
+                    class="border-t pt-4"
+                    @submit.prevent="submitAdd"
                 >
-                    <!-- Montant -->
-                    <div>
-                        <Label for="frais_montant" class="mb-1.5 block">
-                            Montant des frais
-                        </Label>
-                        <InputNumber
-                            input-id="frais_montant"
-                            v-model="fraisForm.frais_proprietaire_montant"
-                            @update:model-value="
-                                (v) => {
-                                    fraisForm.frais_proprietaire_montant =
-                                        v ?? 0;
-                                    if ((v ?? 0) <= 0) {
-                                        fraisForm.frais_proprietaire_type =
-                                            null;
-                                        fraisForm.frais_proprietaire_commentaire =
-                                            null;
-                                    }
-                                }
-                            "
-                            :min="0"
-                            :use-grouping="true"
-                            locale="fr-FR"
-                            suffix=" GNF"
-                            class="w-full"
-                            input-class="w-full"
-                            :class="{
-                                'p-invalid':
-                                    fraisForm.errors
-                                        .frais_proprietaire_montant,
-                            }"
-                        />
-                        <p
-                            v-if="fraisForm.errors.frais_proprietaire_montant"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ fraisForm.errors.frais_proprietaire_montant }}
-                        </p>
-                    </div>
+                    <p class="mb-2 text-xs font-medium text-muted-foreground">
+                        Ajouter un frais
+                    </p>
+                    <div class="flex flex-wrap items-end gap-3">
+                        <!-- Montant -->
+                        <div class="min-w-[140px] flex-1">
+                            <Label for="add_montant" class="mb-1 block text-xs">
+                                Montant
+                            </Label>
+                            <InputNumber
+                                input-id="add_montant"
+                                v-model="addForm.montant"
+                                :min="0.01"
+                                :use-grouping="true"
+                                locale="fr-FR"
+                                suffix=" GNF"
+                                class="w-full"
+                                input-class="w-full h-9 text-sm"
+                                :class="{ 'p-invalid': addForm.errors.montant }"
+                                placeholder="0 GNF"
+                            />
+                            <p
+                                v-if="addForm.errors.montant"
+                                class="mt-1 text-xs text-destructive"
+                            >{{ addForm.errors.montant }}</p>
+                        </div>
 
-                    <!-- Type -->
-                    <div v-if="fraisForm.frais_proprietaire_montant > 0">
-                        <Label for="frais_type" class="mb-1.5 block">
-                            Type <span class="text-destructive">*</span>
-                        </Label>
-                        <Dropdown
-                            input-id="frais_type"
-                            v-model="fraisForm.frais_proprietaire_type"
-                            @update:model-value="
-                                (v) => {
-                                    fraisForm.frais_proprietaire_type = v;
-                                    if (v !== 'autre')
-                                        fraisForm.frais_proprietaire_commentaire =
-                                            null;
-                                }
-                            "
-                            :options="typesFraisOptions"
-                            option-label="label"
-                            option-value="value"
-                            placeholder="Sélectionner…"
-                            class="w-full"
-                            :class="{
-                                'p-invalid':
-                                    fraisForm.errors.frais_proprietaire_type,
-                            }"
-                        />
-                        <p
-                            v-if="fraisForm.errors.frais_proprietaire_type"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ fraisForm.errors.frais_proprietaire_type }}
-                        </p>
-                    </div>
+                        <!-- Type -->
+                        <div class="min-w-[140px] flex-1">
+                            <Label for="add_type" class="mb-1 block text-xs">
+                                Type <span class="text-destructive">*</span>
+                            </Label>
+                            <Dropdown
+                                input-id="add_type"
+                                v-model="addForm.type"
+                                @update:model-value="(v) => { addForm.type = v; if (v !== 'autre') addForm.commentaire = null; }"
+                                :options="typesFraisOptions"
+                                option-label="label"
+                                option-value="value"
+                                placeholder="Type…"
+                                class="w-full"
+                                :class="{ 'p-invalid': addForm.errors.type }"
+                            />
+                            <p
+                                v-if="addForm.errors.type"
+                                class="mt-1 text-xs text-destructive"
+                            >{{ addForm.errors.type }}</p>
+                        </div>
 
-                    <!-- Commentaire (type = autre) -->
-                    <div
-                        v-if="fraisForm.frais_proprietaire_type === 'autre'"
-                        class="sm:col-span-2"
-                    >
-                        <Label for="frais_commentaire" class="mb-1.5 block">
-                            Commentaire <span class="text-destructive">*</span>
-                            <span
-                                class="ml-1 font-normal text-muted-foreground"
-                            >
-                                ({{
-                                    (
-                                        fraisForm.frais_proprietaire_commentaire ??
-                                        ''
-                                    ).length
-                                }}/150)
-                            </span>
-                        </Label>
-                        <InputText
-                            id="frais_commentaire"
-                            v-model="fraisForm.frais_proprietaire_commentaire"
-                            :maxlength="150"
-                            placeholder="Précisez le motif des frais…"
-                            class="w-full"
-                            :class="{
-                                'p-invalid':
-                                    fraisForm.errors
-                                        .frais_proprietaire_commentaire,
-                            }"
-                        />
-                        <p
-                            v-if="
-                                fraisForm.errors.frais_proprietaire_commentaire
-                            "
-                            class="mt-1 text-xs text-destructive"
+                        <!-- Commentaire (type = autre) -->
+                        <div
+                            v-if="addForm.type === 'autre'"
+                            class="min-w-[160px] flex-[2]"
                         >
-                            {{
-                                fraisForm.errors.frais_proprietaire_commentaire
-                            }}
-                        </p>
-                    </div>
+                            <Label for="add_commentaire" class="mb-1 block text-xs">
+                                Commentaire <span class="text-destructive">*</span>
+                            </Label>
+                            <InputText
+                                id="add_commentaire"
+                                v-model="addForm.commentaire"
+                                :maxlength="150"
+                                placeholder="Motif…"
+                                class="w-full"
+                                input-class="h-9 text-sm"
+                                :class="{ 'p-invalid': addForm.errors.commentaire }"
+                            />
+                            <p
+                                v-if="addForm.errors.commentaire"
+                                class="mt-1 text-xs text-destructive"
+                            >{{ addForm.errors.commentaire }}</p>
+                        </div>
 
-                    <!-- Submit -->
-                    <div class="flex items-center gap-3 sm:col-span-2">
+                        <!-- Bouton -->
                         <Button
                             type="submit"
                             size="sm"
-                            :disabled="fraisForm.processing"
+                            class="h-9 shrink-0"
+                            :disabled="addForm.processing || !addForm.montant || !addForm.type"
                         >
-                            {{ fraisForm.processing ? 'Enregistrement…' : 'Enregistrer les frais' }}
-                        </Button>
-                        <Button
-                            v-if="hasFrais"
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            class="text-destructive hover:text-destructive"
-                            :disabled="fraisForm.processing"
-                            @click="
-                                () => {
-                                    fraisForm.frais_proprietaire_montant = 0;
-                                    fraisForm.frais_proprietaire_type = null;
-                                    fraisForm.frais_proprietaire_commentaire =
-                                        null;
-                                    submitFrais();
-                                }
-                            "
-                        >
-                            Effacer les frais
+                            {{ addForm.processing ? '…' : '+ Ajouter' }}
                         </Button>
                     </div>
                 </form>
-
-                <!-- Read-only pour les non-éditeurs -->
-                <div v-else class="text-sm text-muted-foreground">
-                    <template v-if="hasFrais">
-                        <span class="font-medium text-foreground">{{
-                            formatGNF(vehicule.frais_proprietaire_montant)
-                        }}</span>
-                        —
-                        {{
-                            vehicule.frais_proprietaire_type
-                                ? typesFraisLabels[
-                                      vehicule.frais_proprietaire_type
-                                  ]
-                                : '—'
-                        }}
-                        <span
-                            v-if="vehicule.frais_proprietaire_commentaire"
-                            class="ml-1 text-muted-foreground/70"
-                            >({{ vehicule.frais_proprietaire_commentaire }})</span
-                        >
-                    </template>
-                    <span v-else>Aucun frais enregistré.</span>
-                </div>
             </div>
         </div>
     </AppLayout>

@@ -24,18 +24,19 @@ class VersementCommissionController extends Controller
         abort_if($commission->isAnnulee(), 422, 'Cette commission est annulée.');
         abort_if($part->isVersee(), 422, 'Cette part est déjà entièrement versée.');
 
-        // ── Frais propriétaire : déduction automatique au 1er versement ────────
+        // ── Frais véhicule : déduction automatique au 1er versement ─────────────
         $fraisAAppliquer = 0.0;
+        $totalFraisVehicule = 0.0;
         $vehiculeAvecFrais = null;
 
         if ($part->type_beneficiaire === 'proprietaire' && $part->versements()->doesntExist()) {
-            $vehicule = $commission->vehicule;
-            if ($vehicule && (float) $vehicule->frais_proprietaire_montant > 0) {
-                $fraisAAppliquer = min(
-                    (float) $vehicule->frais_proprietaire_montant,
-                    (float) $part->montant_brut,
-                );
-                $vehiculeAvecFrais = $vehicule;
+            $vehicule = $commission->vehicule?->load('frais');
+            if ($vehicule) {
+                $totalFraisVehicule = (float) $vehicule->frais->sum('montant');
+                if ($totalFraisVehicule > 0) {
+                    $fraisAAppliquer = min($totalFraisVehicule, (float) $part->montant_brut);
+                    $vehiculeAvecFrais = $vehicule;
+                }
             }
         }
 
@@ -60,20 +61,25 @@ class VersementCommissionController extends Controller
         DB::transaction(function () use ($part, $vehiculeAvecFrais, $fraisAAppliquer, $data, $commission) {
             // 1. Appliquer les frais à la part (1 seule fois, premier versement)
             if ($fraisAAppliquer > 0 && $vehiculeAvecFrais) {
-                $part->appliquerFrais(
-                    $fraisAAppliquer,
-                    $vehiculeAvecFrais->frais_proprietaire_type,
-                    $vehiculeAvecFrais->frais_proprietaire_commentaire,
-                );
+                $fraisList = $vehiculeAvecFrais->frais;
+                $types = $fraisList->pluck('type')->unique();
+                $typePrincipal = $types->count() === 1 ? $types->first() : 'autre';
+                $commentairePrincipal = ($typePrincipal === 'autre')
+                    ? ($fraisList->count() === 1 ? $fraisList->first()->commentaire : 'Frais véhicule')
+                    : null;
 
-                // 2. Décrémenter le solde frais sur le véhicule
-                $reliquat = max(0.0, round((float) $vehiculeAvecFrais->frais_proprietaire_montant - $fraisAAppliquer, 2));
-                $vehiculeAvecFrais->frais_proprietaire_montant = $reliquat;
-                if ($reliquat <= 0) {
-                    $vehiculeAvecFrais->frais_proprietaire_type = null;
-                    $vehiculeAvecFrais->frais_proprietaire_commentaire = null;
+                $part->appliquerFrais($fraisAAppliquer, $typePrincipal, $commentairePrincipal);
+
+                // 2. Consommer les frais — supprimer tous, recréer un reliquat si nécessaire
+                $reliquat = max(0.0, round($totalFraisVehicule - $fraisAAppliquer, 2));
+                $vehiculeAvecFrais->frais()->delete();
+                if ($reliquat > 0) {
+                    $vehiculeAvecFrais->frais()->create([
+                        'montant' => $reliquat,
+                        'type' => $typePrincipal,
+                        'commentaire' => $typePrincipal === 'autre' ? 'Reliquat frais' : null,
+                    ]);
                 }
-                $vehiculeAvecFrais->saveQuietly();
             }
 
             // 3. Enregistrer le versement
