@@ -17,22 +17,22 @@ class ClientsInscriptionSeeder extends Seeder
 
         $clients = [
             [
-                'prenom'          => 'Kadiatou',
-                'nom'             => 'DIALLO',
-                'telephone'       => self::GN.'620111222',
+                'prenom' => 'Kadiatou',
+                'nom' => 'DIALLO',
+                'telephone' => self::GN.'620111222',
                 'code_phone_pays' => self::GN,
-                'code_pays'       => 'GN',
-                'pays'            => 'Guinée',
-                'ville'           => 'Conakry',
+                'code_pays' => 'GN',
+                'pays' => 'Guinée',
+                'ville' => 'Conakry',
             ],
             [
-                'prenom'          => 'Seydou',
-                'nom'             => 'KOUYATÉ',
-                'telephone'       => self::GN.'655333444',
+                'prenom' => 'Seydou',
+                'nom' => 'KOUYATÉ',
+                'telephone' => self::GN.'655333444',
                 'code_phone_pays' => self::GN,
-                'code_pays'       => 'GN',
-                'pays'            => 'Guinée',
-                'ville'           => 'Conakry',
+                'code_pays' => 'GN',
+                'pays' => 'Guinée',
+                'ville' => 'Conakry',
             ],
         ];
 
@@ -41,8 +41,8 @@ class ClientsInscriptionSeeder extends Seeder
                 ['telephone' => $data['telephone']],
                 array_merge($data, [
                     'organization_id' => $org->id,
-                    'user_id'         => null,   // pas encore de compte → éligibles à l'inscription
-                    'is_active'       => true,
+                    'user_id' => null,   // pas encore de compte → éligibles à l'inscription
+                    'is_active' => true,
                 ]),
             );
         }

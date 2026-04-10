@@ -70,10 +70,19 @@ test('create client → redirected to edit page with success message', async ({
     });
 
     // Bannière de succès sur la page edit
-    await expect(page.locator('text=créé avec succès')).toBeVisible();
+    // Timeout étendu : au premier run en CI le serveur PHP est froid et peut
+    // prendre plusieurs secondes supplémentaires pour répondre.
+    await expect(page.locator('text=créé avec succès')).toBeVisible({
+        timeout: 30_000,
+    });
 
-    // Les champs sont préremplis
-    await expect(page.locator('#prenom')).toHaveValue(prenom);
+    // Le backend applique ucTitle sur le prénom (MB_CASE_TITLE après mb_strtolower) :
+    // chaque lettre qui suit un non-lettre est mise en majuscule.
+    // Ex: "e2ecliflow576187" → "E2Ecliflow576187"
+    const expectedPrenom = prenom
+        .toLowerCase()
+        .replaceAll(/(^|[^a-z])([a-z])/g, (_, sep, char) => sep + char.toUpperCase());
+    await expect(page.locator('#prenom')).toHaveValue(expectedPrenom);
 });
 
 // ─── Pays = Guinée → ville = Conakry ─────────────────────────────────────────
