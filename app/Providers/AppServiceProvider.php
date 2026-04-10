@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Features\ModuleFeature;
+use App\Models\CommandeVente;
 use App\Models\Organization;
+use App\Observers\VenteObserver;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Pennant\Feature;
@@ -28,6 +30,9 @@ class AppServiceProvider extends ServiceProvider
                 ->mixedCase()   // maj + min
                 ->symbols();    // caractère spécial
         });
+
+        // Observers
+        CommandeVente::observe(VenteObserver::class);
 
         // Feature flags Pennant - modules metier.
         // Scope: Organization. Valeur par defaut pilotee par ModuleFeature::defaultState().

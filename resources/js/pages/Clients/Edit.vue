@@ -3,7 +3,13 @@ import { Spinner } from '@/components/ui/spinner';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    CheckCircle,
+    Gift,
+    Save,
+    TrendingUp,
+} from 'lucide-vue-next';
 import { computed, watch } from 'vue';
 import ClientForm from './partials/ClientForm.vue';
 
@@ -21,7 +27,18 @@ interface ClientData {
     is_active: boolean;
 }
 
-const props = defineProps<{ client: ClientData }>();
+interface CashbackSolde {
+    cumul_achats: number;
+    cashback_en_attente: number;
+    total_cashback_gagne: number;
+    total_cashback_verse: number;
+}
+
+const props = defineProps<{
+    client: ClientData;
+    cashback_solde: CashbackSolde | null;
+}>();
+
 const page = usePage();
 const flashSuccess = computed(
     () => (page.props as any).flash?.success as string | undefined,
@@ -70,6 +87,10 @@ watch(
 function submit() {
     form.put(`/clients/${props.client.id}`);
 }
+
+function formatMontant(v: number): string {
+    return new Intl.NumberFormat('fr-GN').format(v) + ' GNF';
+}
 </script>
 
 <template>
@@ -116,6 +137,82 @@ function submit() {
             >
                 <CheckCircle class="h-4 w-4 shrink-0" />
                 {{ flashSuccess }}
+            </div>
+
+            <!-- Widget cashback (affiché uniquement si le module est actif) -->
+            <div
+                v-if="cashback_solde !== null"
+                class="mx-6 mb-6 overflow-hidden rounded-xl border bg-card"
+            >
+                <div
+                    class="flex items-center gap-2 border-b bg-muted/30 px-4 py-2.5"
+                >
+                    <Gift class="h-4 w-4 text-primary" />
+                    <span class="text-sm font-semibold">Cashback</span>
+                </div>
+                <div class="grid grid-cols-2 divide-x sm:grid-cols-4">
+                    <div class="px-4 py-3 text-center">
+                        <p class="text-xs text-muted-foreground">
+                            Cumul achats
+                        </p>
+                        <p class="mt-0.5 text-sm font-semibold">
+                            {{ formatMontant(cashback_solde.cumul_achats) }}
+                        </p>
+                    </div>
+                    <div class="px-4 py-3 text-center">
+                        <p class="text-xs text-muted-foreground">En attente</p>
+                        <p
+                            class="mt-0.5 text-sm font-semibold"
+                            :class="
+                                cashback_solde.cashback_en_attente > 0
+                                    ? 'text-amber-600'
+                                    : ''
+                            "
+                        >
+                            {{
+                                formatMontant(
+                                    cashback_solde.cashback_en_attente,
+                                )
+                            }}
+                        </p>
+                    </div>
+                    <div class="px-4 py-3 text-center">
+                        <p class="text-xs text-muted-foreground">Total gagné</p>
+                        <p class="mt-0.5 text-sm font-semibold text-primary">
+                            {{
+                                formatMontant(
+                                    cashback_solde.total_cashback_gagne,
+                                )
+                            }}
+                        </p>
+                    </div>
+                    <div class="px-4 py-3 text-center">
+                        <p class="text-xs text-muted-foreground">Total versé</p>
+                        <p class="mt-0.5 text-sm font-semibold text-green-600">
+                            {{
+                                formatMontant(
+                                    cashback_solde.total_cashback_verse,
+                                )
+                            }}
+                        </p>
+                    </div>
+                </div>
+                <div
+                    v-if="cashback_solde.cashback_en_attente > 0"
+                    class="border-t bg-amber-50 px-4 py-2 text-xs text-amber-700"
+                >
+                    <TrendingUp class="mr-1 inline h-3 w-3" />
+                    Ce client a un cashback de
+                    <strong>{{
+                        formatMontant(cashback_solde.cashback_en_attente)
+                    }}</strong>
+                    à verser.
+                    <a
+                        href="/cashback"
+                        class="ml-1 underline hover:no-underline"
+                        >Gérer →</a
+                    >
+                </div>
             </div>
 
             <ClientForm

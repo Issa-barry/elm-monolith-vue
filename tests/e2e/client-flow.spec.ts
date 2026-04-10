@@ -48,6 +48,8 @@ async function createClientInApp(
 
     // Après création → redirigé vers la page edit du client
     await expect(page).toHaveURL(/\/clients\/\d+\/edit$/);
+    // Attendre que la réponse Inertia (avec flash) soit entièrement reçue
+    await page.waitForLoadState('networkidle');
 }
 
 // ─── Création → redirection vers edit ────────────────────────────────────────
