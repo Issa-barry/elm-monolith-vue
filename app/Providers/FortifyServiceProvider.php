@@ -66,9 +66,17 @@ class FortifyServiceProvider extends ServiceProvider
 
             $user = User::where('telephone', $phone)->first();
 
-            if ($user && Hash::check($request->password, $user->password)) {
-                return $user;
+            if (! $user || ! Hash::check($request->password, $user->password)) {
+                return null;
             }
+
+            if (! $user->is_active) {
+                throw ValidationException::withMessages([
+                    'telephone' => ['Votre compte est désactivé. Veuillez contacter l\'administrateur.'],
+                ]);
+            }
+
+            return $user;
         });
     }
 
