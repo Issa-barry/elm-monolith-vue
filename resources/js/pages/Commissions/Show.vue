@@ -341,7 +341,9 @@ function isVersementDisabled(part: CommissionPart): boolean {
                         >
                             Part Propriétaire (Total)
                         </p>
-                        <p class="mt-1 text-2xl font-bold text-foreground tabular-nums">
+                        <p
+                            class="mt-1 text-2xl font-bold text-foreground tabular-nums"
+                        >
                             {{ formatGNF(partProprietaireTotal) }}
                         </p>
                     </div>
@@ -570,7 +572,7 @@ function isVersementDisabled(part: CommissionPart): boolean {
                                         {{ formatGNF(livreurTotals.montant) }}
                                     </td>
                                     <td
-                                        class="px-4 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400"
+                                        class="px-4 py-2.5 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
                                     >
                                         {{ formatGNF(livreurTotals.verse) }}
                                     </td>
@@ -683,29 +685,54 @@ function isVersementDisabled(part: CommissionPart): boolean {
                                     >
                                         <!-- Frais déjà appliqués (après 1er versement) -->
                                         <div
-                                            v-if="part.frais_supplementaires > 0"
+                                            v-if="
+                                                part.frais_supplementaires > 0
+                                            "
                                             class="space-y-0.5"
                                         >
-                                            <p class="font-semibold text-destructive">
-                                                − {{ formatGNF(part.frais_supplementaires) }}
+                                            <p
+                                                class="font-semibold text-destructive"
+                                            >
+                                                −
+                                                {{
+                                                    formatGNF(
+                                                        part.frais_supplementaires,
+                                                    )
+                                                }}
                                             </p>
-                                            <p class="text-[11px] text-muted-foreground">
+                                            <p
+                                                class="text-[11px] text-muted-foreground"
+                                            >
                                                 {{
                                                     part.type_frais
-                                                        ? (typesFraisLabels[part.type_frais] ?? part.type_frais)
+                                                        ? (typesFraisLabels[
+                                                              part.type_frais
+                                                          ] ?? part.type_frais)
                                                         : 'Frais'
                                                 }}
                                             </p>
                                         </div>
                                         <!-- Frais en attente du véhicule (avant 1er versement) -->
                                         <div
-                                            v-else-if="commission.vehicule_frais_total > 0 && !part.is_versee"
+                                            v-else-if="
+                                                commission.vehicule_frais_total >
+                                                    0 && !part.is_versee
+                                            "
                                             class="space-y-0.5"
                                         >
-                                            <p class="font-semibold text-amber-600">
-                                                − {{ formatGNF(commission.vehicule_frais_total) }}
+                                            <p
+                                                class="font-semibold text-amber-600"
+                                            >
+                                                −
+                                                {{
+                                                    formatGNF(
+                                                        commission.vehicule_frais_total,
+                                                    )
+                                                }}
                                             </p>
-                                            <p class="text-[11px] text-muted-foreground italic">
+                                            <p
+                                                class="text-[11px] text-muted-foreground italic"
+                                            >
                                                 À déduire
                                             </p>
                                         </div>

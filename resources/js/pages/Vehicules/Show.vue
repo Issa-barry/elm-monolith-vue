@@ -160,12 +160,15 @@ function openEditModal(frais: Frais) {
 
 function submitEdit() {
     if (!editingFrais.value) return;
-    editForm.patch(`/vehicules/${props.vehicule.id}/frais/${editingFrais.value.id}`, {
-        onSuccess: () => {
-            showEditModal.value = false;
-            editingFrais.value = null;
+    editForm.patch(
+        `/vehicules/${props.vehicule.id}/frais/${editingFrais.value.id}`,
+        {
+            onSuccess: () => {
+                showEditModal.value = false;
+                editingFrais.value = null;
+            },
         },
-    });
+    );
 }
 
 // ── Frais : suppression ───────────────────────────────────────────────────────
@@ -219,7 +222,11 @@ function formatGNF(val: number): string {
                     :href="`/vehicules/${vehicule.id}/edit`"
                     class="absolute right-4"
                 >
-                    <Button size="sm" variant="outline" class="h-8 px-3 text-xs gap-1.5">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        class="h-8 gap-1.5 px-3 text-xs"
+                    >
                         <Pencil class="h-3.5 w-3.5" />
                         Modifier
                     </Button>
@@ -250,7 +257,10 @@ function formatGNF(val: number): string {
                             :alt="vehicule.nom_vehicule"
                             class="h-full w-full object-cover"
                         />
-                        <Car v-else class="h-10 w-10 text-muted-foreground/30" />
+                        <Car
+                            v-else
+                            class="h-10 w-10 text-muted-foreground/30"
+                        />
                     </div>
                     <!-- Title -->
                     <div>
@@ -259,7 +269,9 @@ function formatGNF(val: number): string {
                                 {{ vehicule.nom_vehicule }}
                             </h1>
                             <StatusDot
-                                :label="vehicule.is_active ? 'Actif' : 'Inactif'"
+                                :label="
+                                    vehicule.is_active ? 'Actif' : 'Inactif'
+                                "
                                 :dot-class="
                                     vehicule.is_active
                                         ? 'bg-emerald-500'
@@ -268,7 +280,9 @@ function formatGNF(val: number): string {
                                 class="text-sm text-muted-foreground"
                             />
                         </div>
-                        <p class="mt-0.5 font-mono text-sm text-muted-foreground">
+                        <p
+                            class="mt-0.5 font-mono text-sm text-muted-foreground"
+                        >
                             {{ vehicule.immatriculation }}
                         </p>
                         <div class="mt-1.5 flex items-center gap-2">
@@ -316,13 +330,17 @@ function formatGNF(val: number): string {
                     </h3>
                     <dl class="space-y-3">
                         <div>
-                            <dt class="text-xs text-muted-foreground">Équipe</dt>
+                            <dt class="text-xs text-muted-foreground">
+                                Équipe
+                            </dt>
                             <dd class="mt-0.5 text-sm font-medium">
                                 {{ vehicule.equipe_nom ?? '—' }}
                             </dd>
                         </div>
                         <div>
-                            <dt class="text-xs text-muted-foreground">Propriétaire</dt>
+                            <dt class="text-xs text-muted-foreground">
+                                Propriétaire
+                            </dt>
                             <dd class="mt-0.5 text-sm font-medium">
                                 {{ vehicule.proprietaire_nom ?? '—' }}
                             </dd>
@@ -340,7 +358,9 @@ function formatGNF(val: number): string {
                             <dd>
                                 <div class="space-y-1">
                                     <div
-                                        v-for="(m, i) in vehicule.equipe_membres"
+                                        v-for="(
+                                            m, i
+                                        ) in vehicule.equipe_membres"
                                         :key="i"
                                         class="flex items-center justify-between rounded-md bg-muted/40 px-2.5 py-1.5 text-xs"
                                     >
@@ -374,7 +394,9 @@ function formatGNF(val: number): string {
                             <dt class="text-xs text-muted-foreground">
                                 Taux propriétaire
                             </dt>
-                            <dd class="mt-0.5 text-sm font-semibold tabular-nums">
+                            <dd
+                                class="mt-0.5 text-sm font-semibold tabular-nums"
+                            >
                                 {{ vehicule.taux_commission_proprietaire }}%
                             </dd>
                         </div>
@@ -416,7 +438,7 @@ function formatGNF(val: number): string {
                     <div class="flex shrink-0 items-center gap-3">
                         <span
                             v-if="vehicule.frais.length"
-                            class="rounded-lg bg-amber-50 px-3 py-1 text-sm font-semibold tabular-nums text-amber-700"
+                            class="rounded-lg bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700 tabular-nums"
                         >
                             Total : {{ formatGNF(vehicule.frais_total) }}
                         </span>
@@ -437,7 +459,9 @@ function formatGNF(val: number): string {
                     v-if="!vehicule.frais.length"
                     class="rounded-lg border border-dashed py-10 text-center"
                 >
-                    <p class="text-sm text-muted-foreground">Aucun frais enregistré.</p>
+                    <p class="text-sm text-muted-foreground">
+                        Aucun frais enregistré.
+                    </p>
                     <Button
                         v-if="can('vehicules.update')"
                         type="button"
@@ -461,9 +485,15 @@ function formatGNF(val: number): string {
                         <!-- Icône type (avatar) -->
                         <div
                             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-                            :class="typesAvatarClass[f.type] ?? 'bg-muted text-muted-foreground'"
+                            :class="
+                                typesAvatarClass[f.type] ??
+                                'bg-muted text-muted-foreground'
+                            "
                         >
-                            <component :is="typesIcons[f.type] ?? Tag" class="h-4 w-4" />
+                            <component
+                                :is="typesIcons[f.type] ?? Tag"
+                                class="h-4 w-4"
+                            />
                         </div>
 
                         <!-- Montant + commentaire -->
@@ -482,7 +512,10 @@ function formatGNF(val: number): string {
                         <!-- Badge type -->
                         <span
                             class="shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
-                            :class="typesBadgeClass[f.type] ?? 'bg-muted text-muted-foreground'"
+                            :class="
+                                typesBadgeClass[f.type] ??
+                                'bg-muted text-muted-foreground'
+                            "
                         >
                             {{ typesFraisLabels[f.type] ?? f.type }}
                         </span>
@@ -506,7 +539,10 @@ function formatGNF(val: number): string {
                         </div>
 
                         <!-- Actions : crayon (admin) + corbeille -->
-                        <div v-if="can('vehicules.update')" class="flex shrink-0 gap-0.5">
+                        <div
+                            v-if="can('vehicules.update')"
+                            class="flex shrink-0 gap-0.5"
+                        >
                             <button
                                 type="button"
                                 title="Modifier"
@@ -540,7 +576,10 @@ function formatGNF(val: number): string {
         >
             <div class="space-y-4 pt-2 pb-1">
                 <div>
-                    <Label for="edit-montant" class="mb-1 block text-xs font-medium">
+                    <Label
+                        for="edit-montant"
+                        class="mb-1 block text-xs font-medium"
+                    >
                         Montant <span class="text-destructive">*</span>
                     </Label>
                     <InputNumber
@@ -555,12 +594,18 @@ function formatGNF(val: number): string {
                         :class="{ 'p-invalid': editForm.errors.montant }"
                         autofocus
                     />
-                    <p v-if="editForm.errors.montant" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="editForm.errors.montant"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ editForm.errors.montant }}
                     </p>
                 </div>
                 <div>
-                    <Label for="edit-type" class="mb-1 block text-xs font-medium">
+                    <Label
+                        for="edit-type"
+                        class="mb-1 block text-xs font-medium"
+                    >
                         Type <span class="text-destructive">*</span>
                     </Label>
                     <Dropdown
@@ -572,14 +617,25 @@ function formatGNF(val: number): string {
                         placeholder="Sélectionner un type…"
                         class="w-full"
                         :class="{ 'p-invalid': editForm.errors.type }"
-                        @update:model-value="(v) => { editForm.type = v; if (v !== 'autre') editForm.commentaire = null; }"
+                        @update:model-value="
+                            (v) => {
+                                editForm.type = v;
+                                if (v !== 'autre') editForm.commentaire = null;
+                            }
+                        "
                     />
-                    <p v-if="editForm.errors.type" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="editForm.errors.type"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ editForm.errors.type }}
                     </p>
                 </div>
                 <div v-if="editForm.type === 'autre'">
-                    <Label for="edit-commentaire" class="mb-1 block text-xs font-medium">
+                    <Label
+                        for="edit-commentaire"
+                        class="mb-1 block text-xs font-medium"
+                    >
                         Commentaire <span class="text-destructive">*</span>
                     </Label>
                     <InputText
@@ -590,7 +646,10 @@ function formatGNF(val: number): string {
                         class="w-full"
                         :class="{ 'p-invalid': editForm.errors.commentaire }"
                     />
-                    <p v-if="editForm.errors.commentaire" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="editForm.errors.commentaire"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ editForm.errors.commentaire }}
                     </p>
                 </div>
@@ -608,7 +667,11 @@ function formatGNF(val: number): string {
                     <Button
                         type="button"
                         size="sm"
-                        :disabled="editForm.processing || !editForm.montant || !editForm.type"
+                        :disabled="
+                            editForm.processing ||
+                            !editForm.montant ||
+                            !editForm.type
+                        "
                         @click="submitEdit"
                     >
                         {{ editForm.processing ? '…' : 'Enregistrer' }}
@@ -629,7 +692,10 @@ function formatGNF(val: number): string {
             <div class="space-y-4 pt-2 pb-1">
                 <!-- Montant -->
                 <div>
-                    <Label for="frais-montant" class="mb-1 block text-xs font-medium">
+                    <Label
+                        for="frais-montant"
+                        class="mb-1 block text-xs font-medium"
+                    >
                         Montant <span class="text-destructive">*</span>
                     </Label>
                     <InputNumber
@@ -645,14 +711,20 @@ function formatGNF(val: number): string {
                         placeholder="0 GNF"
                         autofocus
                     />
-                    <p v-if="addForm.errors.montant" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="addForm.errors.montant"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ addForm.errors.montant }}
                     </p>
                 </div>
 
                 <!-- Type -->
                 <div>
-                    <Label for="frais-type" class="mb-1 block text-xs font-medium">
+                    <Label
+                        for="frais-type"
+                        class="mb-1 block text-xs font-medium"
+                    >
                         Type <span class="text-destructive">*</span>
                     </Label>
                     <Dropdown
@@ -664,16 +736,27 @@ function formatGNF(val: number): string {
                         placeholder="Sélectionner un type…"
                         class="w-full"
                         :class="{ 'p-invalid': addForm.errors.type }"
-                        @update:model-value="(v) => { addForm.type = v; if (v !== 'autre') addForm.commentaire = null; }"
+                        @update:model-value="
+                            (v) => {
+                                addForm.type = v;
+                                if (v !== 'autre') addForm.commentaire = null;
+                            }
+                        "
                     />
-                    <p v-if="addForm.errors.type" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="addForm.errors.type"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ addForm.errors.type }}
                     </p>
                 </div>
 
                 <!-- Commentaire (type = autre) -->
                 <div v-if="addForm.type === 'autre'">
-                    <Label for="frais-commentaire" class="mb-1 block text-xs font-medium">
+                    <Label
+                        for="frais-commentaire"
+                        class="mb-1 block text-xs font-medium"
+                    >
                         Commentaire <span class="text-destructive">*</span>
                     </Label>
                     <InputText
@@ -684,7 +767,10 @@ function formatGNF(val: number): string {
                         class="w-full"
                         :class="{ 'p-invalid': addForm.errors.commentaire }"
                     />
-                    <p v-if="addForm.errors.commentaire" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="addForm.errors.commentaire"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ addForm.errors.commentaire }}
                     </p>
                 </div>
@@ -703,7 +789,11 @@ function formatGNF(val: number): string {
                     <Button
                         type="button"
                         size="sm"
-                        :disabled="addForm.processing || !addForm.montant || !addForm.type"
+                        :disabled="
+                            addForm.processing ||
+                            !addForm.montant ||
+                            !addForm.type
+                        "
                         @click="submitAdd"
                     >
                         {{ addForm.processing ? '…' : 'Ajouter' }}

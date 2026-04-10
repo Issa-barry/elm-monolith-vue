@@ -364,9 +364,7 @@ function submit() {
                                                 "
                                                 class="before:mr-2 before:content-['·']"
                                             >
-                                                {{
-                                                    option.capacite_packs
-                                                }}
+                                                {{ option.capacite_packs }}
                                                 packs
                                             </span>
                                             <span
