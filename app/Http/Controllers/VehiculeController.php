@@ -48,6 +48,9 @@ class VehiculeController extends Controller
                 'taux_commission' => (float) $m->taux_commission,
             ])->values()->all(),
             'taux_commission_proprietaire' => (float) $v->taux_commission_proprietaire,
+            'frais_proprietaire_montant' => (float) $v->frais_proprietaire_montant,
+            'frais_proprietaire_type' => $v->frais_proprietaire_type,
+            'frais_proprietaire_commentaire' => $v->frais_proprietaire_commentaire,
             'pris_en_charge_par_usine' => $v->pris_en_charge_par_usine,
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
@@ -102,12 +105,33 @@ class VehiculeController extends Controller
                 Rule::unique('vehicules', 'equipe_livraison_id')->whereNull('deleted_at'),
             ],
             'taux_commission_proprietaire' => 'nullable|numeric|min:0|max:100',
+            'frais_proprietaire_montant' => 'nullable|numeric|min:0',
+            'frais_proprietaire_type' => [
+                'nullable',
+                'in:carburant,reparation,autre',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ((float) ($request->input('frais_proprietaire_montant') ?? 0) > 0 && empty($value)) {
+                        $fail('Le type de frais est obligatoire si un montant est saisi.');
+                    }
+                },
+            ],
+            'frais_proprietaire_commentaire' => [
+                'nullable',
+                'string',
+                'max:150',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->input('frais_proprietaire_type') === 'autre' && empty($value)) {
+                        $fail('Le commentaire est obligatoire pour le type « Autre ».');
+                    }
+                },
+            ],
             'pris_en_charge_par_usine' => 'boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
+        $data = $this->normalizeFrais($data);
         $data['proprietaire_id'] = $this->resolveProprietaireIdFromEquipe((int) $data['equipe_livraison_id'], $orgId);
         $this->applyTauxProprietaireFromEquipe($data, $orgId);
 
@@ -120,6 +144,56 @@ class VehiculeController extends Controller
 
         return redirect()->route('vehicules.index')
             ->with('success', 'Véhicule créé avec succès.');
+    }
+
+    public function show(Vehicule $vehicule): Response
+    {
+        $this->authorize('view', $vehicule);
+
+        $vehicule->load(['proprietaire', 'equipe.membres.livreur']);
+
+        return Inertia::render('Vehicules/Show', [
+            'vehicule' => $this->vehiculeData($vehicule),
+        ]);
+    }
+
+    public function updateFrais(Request $request, Vehicule $vehicule): RedirectResponse
+    {
+        $this->authorize('update', $vehicule);
+
+        $data = $request->validate([
+            'frais_proprietaire_montant' => 'nullable|numeric|min:0',
+            'frais_proprietaire_type' => [
+                'nullable',
+                'in:carburant,reparation,autre',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ((float) ($request->input('frais_proprietaire_montant') ?? 0) > 0 && empty($value)) {
+                        $fail('Le type de frais est obligatoire si un montant est saisi.');
+                    }
+                },
+            ],
+            'frais_proprietaire_commentaire' => [
+                'nullable',
+                'string',
+                'max:150',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->input('frais_proprietaire_type') === 'autre' && empty($value)) {
+                        $fail('Le commentaire est obligatoire pour le type « Autre ».');
+                    }
+                },
+            ],
+        ], [
+            'frais_proprietaire_montant.numeric' => 'Le montant des frais doit être un nombre.',
+            'frais_proprietaire_montant.min' => 'Le montant des frais ne peut pas être négatif.',
+            'frais_proprietaire_type.in' => 'Type de frais invalide.',
+            'frais_proprietaire_commentaire.max' => 'Le commentaire ne peut pas dépasser 150 caractères.',
+        ]);
+
+        $vehicule->update($this->normalizeFrais($data));
+
+        return redirect()
+            ->route('vehicules.show', $vehicule)
+            ->with('success', 'Frais mis à jour.');
     }
 
     public function edit(Vehicule $vehicule): Response
@@ -159,12 +233,33 @@ class VehiculeController extends Controller
                 Rule::unique('vehicules', 'equipe_livraison_id')->whereNull('deleted_at')->ignore($vehicule->id),
             ],
             'taux_commission_proprietaire' => 'nullable|numeric|min:0|max:100',
+            'frais_proprietaire_montant' => 'nullable|numeric|min:0',
+            'frais_proprietaire_type' => [
+                'nullable',
+                'in:carburant,reparation,autre',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ((float) ($request->input('frais_proprietaire_montant') ?? 0) > 0 && empty($value)) {
+                        $fail('Le type de frais est obligatoire si un montant est saisi.');
+                    }
+                },
+            ],
+            'frais_proprietaire_commentaire' => [
+                'nullable',
+                'string',
+                'max:150',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->input('frais_proprietaire_type') === 'autre' && empty($value)) {
+                        $fail('Le commentaire est obligatoire pour le type « Autre ».');
+                    }
+                },
+            ],
             'pris_en_charge_par_usine' => 'boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
+        $data = $this->normalizeFrais($data);
         $data['proprietaire_id'] = $this->resolveProprietaireIdFromEquipe((int) $data['equipe_livraison_id'], $orgId);
         $this->applyTauxProprietaireFromEquipe($data, $orgId);
 
@@ -289,6 +384,21 @@ class VehiculeController extends Controller
         $data['taux_commission_proprietaire'] = round(max(0, 100 - $sommeMembres), 2);
     }
 
+    private function normalizeFrais(array $data): array
+    {
+        $montant = (float) ($data['frais_proprietaire_montant'] ?? 0);
+
+        if ($montant <= 0) {
+            $data['frais_proprietaire_montant'] = 0;
+            $data['frais_proprietaire_type'] = null;
+            $data['frais_proprietaire_commentaire'] = null;
+        } elseif (($data['frais_proprietaire_type'] ?? null) !== 'autre') {
+            $data['frais_proprietaire_commentaire'] = null;
+        }
+
+        return $data;
+    }
+
     private function normalizeStrings(array $data): array
     {
         if (! empty($data['nom_vehicule'])) {
@@ -315,6 +425,10 @@ class VehiculeController extends Controller
             'photo.image' => 'Le fichier doit être une image.',
             'photo.mimes' => 'La photo doit être au format jpg, jpeg, png ou webp.',
             'photo.max' => 'La photo ne peut pas dépasser 3 Mo.',
+            'frais_proprietaire_montant.numeric' => 'Le montant des frais doit être un nombre.',
+            'frais_proprietaire_montant.min' => 'Le montant des frais ne peut pas être négatif.',
+            'frais_proprietaire_type.in' => 'Type de frais invalide.',
+            'frais_proprietaire_commentaire.max' => 'Le commentaire ne peut pas dépasser 150 caractères.',
         ];
     }
 }

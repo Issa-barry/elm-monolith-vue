@@ -16,6 +16,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     Car,
+    Eye,
     MoreVertical,
     Pencil,
     Plus,
@@ -235,6 +236,15 @@ function confirmDelete(v: Vehicule) {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" class="w-44">
+                            <DropdownMenuItem as-child>
+                                <Link
+                                    :href="`/vehicules/${v.id}`"
+                                    class="flex w-full items-center gap-2"
+                                >
+                                    <Eye class="h-4 w-4" />
+                                    Voir le détail
+                                </Link>
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                                 v-if="can('vehicules.update')"
                                 as-child
@@ -248,10 +258,7 @@ function confirmDelete(v: Vehicule) {
                                 </Link>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator
-                                v-if="
-                                    can('vehicules.update') &&
-                                    can('vehicules.delete')
-                                "
+                                v-if="can('vehicules.delete')"
                             />
                             <DropdownMenuItem
                                 v-if="can('vehicules.delete')"
@@ -391,7 +398,10 @@ function confirmDelete(v: Vehicule) {
                         style="min-width: 260px"
                     >
                         <template #body="{ data }">
-                            <div class="leading-tight">
+                            <Link
+                                :href="`/vehicules/${data.id}`"
+                                class="block leading-tight hover:underline"
+                            >
                                 <div class="font-medium">
                                     {{ data.nom_vehicule }}
                                 </div>
@@ -400,7 +410,7 @@ function confirmDelete(v: Vehicule) {
                                 >
                                     {{ data.immatriculation }}
                                 </div>
-                            </div>
+                            </Link>
                         </template>
                     </Column>
 
@@ -525,6 +535,15 @@ function confirmDelete(v: Vehicule) {
                                         align="end"
                                         class="w-44"
                                     >
+                                        <DropdownMenuItem as-child>
+                                            <Link
+                                                :href="`/vehicules/${data.id}`"
+                                                class="flex w-full items-center gap-2"
+                                            >
+                                                <Eye class="h-4 w-4" />
+                                                Voir le détail
+                                            </Link>
+                                        </DropdownMenuItem>
                                         <DropdownMenuItem
                                             v-if="can('vehicules.update')"
                                             as-child
@@ -538,10 +557,7 @@ function confirmDelete(v: Vehicule) {
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator
-                                            v-if="
-                                                can('vehicules.update') &&
-                                                can('vehicules.delete')
-                                            "
+                                            v-if="can('vehicules.delete')"
                                         />
                                         <DropdownMenuItem
                                             v-if="can('vehicules.delete')"

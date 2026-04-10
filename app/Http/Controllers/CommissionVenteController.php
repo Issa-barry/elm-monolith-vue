@@ -47,6 +47,7 @@ class CommissionVenteController extends Controller
                 };
             })
             ->where('type_beneficiaire', $typeBeneficiaire)
+            ->when($tab === 'livreurs', fn ($q) => $q->where('role', 'principal'))
             ->orderByDesc('commission_vente_id');
 
         $parts = $query->get()->map(fn (CommissionPart $p) => $this->mapPart($p));
