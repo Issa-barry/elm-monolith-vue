@@ -73,6 +73,7 @@ interface CommissionItem {
     immatriculation: string | null;
     equipe_nom: string | null;
     proprietaire_nom: string | null;
+    vehicule_frais_total: number;
     montant_commande: number;
     montant_commission_totale: number;
     montant_verse: number;
@@ -680,32 +681,32 @@ function isVersementDisabled(part: CommissionPart): boolean {
                                     <td
                                         class="px-4 py-3 text-right tabular-nums"
                                     >
+                                        <!-- Frais déjà appliqués (après 1er versement) -->
                                         <div
-                                            v-if="
-                                                part.frais_supplementaires > 0
-                                            "
+                                            v-if="part.frais_supplementaires > 0"
                                             class="space-y-0.5"
                                         >
-                                            <p
-                                                class="font-semibold text-destructive"
-                                            >
-                                                −
-                                                {{
-                                                    formatGNF(
-                                                        part.frais_supplementaires,
-                                                    )
-                                                }}
+                                            <p class="font-semibold text-destructive">
+                                                − {{ formatGNF(part.frais_supplementaires) }}
                                             </p>
-                                            <p
-                                                class="text-[11px] text-muted-foreground"
-                                            >
+                                            <p class="text-[11px] text-muted-foreground">
                                                 {{
                                                     part.type_frais
-                                                        ? (typesFraisLabels[
-                                                              part.type_frais
-                                                          ] ?? part.type_frais)
+                                                        ? (typesFraisLabels[part.type_frais] ?? part.type_frais)
                                                         : 'Frais'
                                                 }}
+                                            </p>
+                                        </div>
+                                        <!-- Frais en attente du véhicule (avant 1er versement) -->
+                                        <div
+                                            v-else-if="commission.vehicule_frais_total > 0 && !part.is_versee"
+                                            class="space-y-0.5"
+                                        >
+                                            <p class="font-semibold text-amber-600">
+                                                − {{ formatGNF(commission.vehicule_frais_total) }}
+                                            </p>
+                                            <p class="text-[11px] text-muted-foreground italic">
+                                                À déduire
                                             </p>
                                         </div>
                                         <span

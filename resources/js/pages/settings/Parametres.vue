@@ -8,7 +8,7 @@ import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { edit } from '@/routes/parametres';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import { Settings } from 'lucide-vue-next';
+import { Download, Settings } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 interface Parametre {
@@ -28,7 +28,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Paramétrage système', href: edit().url },
 ];
 
-// ── Libellés ──────────────────────────────────────────────────────────────────
 const groupeLabels: Record<string, string> = {
     general: 'Général',
     packing: 'Packing',
@@ -46,7 +45,35 @@ const cleLabels: Record<string, string> = {
     cashback_montant_gain: 'Montant du cashback versé (GNF)',
 };
 
-// ── Regroupement ──────────────────────────────────────────────────────────────
+const importTemplates = [
+    {
+        key: 'produits',
+        title: 'Template Produits',
+        description: 'Champs de création des produits.',
+    },
+    {
+        key: 'sites',
+        title: 'Template Sites',
+        description: 'Champs de création des sites.',
+    },
+    {
+        key: 'users',
+        title: 'Template Utilisateurs',
+        description: 'Champs de création des utilisateurs (sans mot de passe).',
+    },
+    {
+        key: 'clients',
+        title: 'Template Clients',
+        description: 'Champs de création des clients.',
+    },
+    {
+        key: 'vehicules-pack',
+        title: 'Template Véhicules + Propriétaires + Livreurs',
+        description:
+            'Un seul fichier Excel avec 3 feuilles: propriétaires, livreurs et véhicules.',
+    },
+];
+
 const grouped = computed(() => {
     const map: Record<string, Parametre[]> = {};
     for (const p of props.parametres) {
@@ -56,7 +83,6 @@ const grouped = computed(() => {
     return map;
 });
 
-// ── Formulaires individuels ────────────────────────────────────────────────────
 const forms: Record<number, ReturnType<typeof useForm>> = {};
 
 function getForm(p: Parametre) {
@@ -97,13 +123,45 @@ function toggleBoolean(p: Parametre) {
                     description="Configurez les paramètres globaux de l'application"
                 />
 
-                <!-- Groupe de paramètres -->
+                <div class="overflow-hidden rounded-xl border bg-card">
+                    <div
+                        class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
+                    >
+                        <Download class="h-4 w-4 text-muted-foreground" />
+                        <h3 class="text-sm font-semibold text-foreground">
+                            Templates d'import
+                        </h3>
+                    </div>
+                    <div class="divide-y">
+                        <div
+                            v-for="template in importTemplates"
+                            :key="template.key"
+                            class="flex items-center justify-between gap-4 px-5 py-4"
+                        >
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm font-medium">
+                                    {{ template.title }}
+                                </p>
+                                <p class="mt-0.5 text-xs text-muted-foreground">
+                                    {{ template.description }}
+                                </p>
+                            </div>
+                            <a
+                                :href="`/settings/parametres/templates/${template.key}`"
+                                class="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                            >
+                                <Download class="h-3.5 w-3.5" />
+                                Télécharger
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
                 <div
                     v-for="(params, groupe) in grouped"
                     :key="groupe"
                     class="overflow-hidden rounded-xl border bg-card"
                 >
-                    <!-- En-tête groupe -->
                     <div
                         class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
                     >
@@ -113,14 +171,12 @@ function toggleBoolean(p: Parametre) {
                         </h3>
                     </div>
 
-                    <!-- Lignes de paramètres -->
                     <div class="divide-y">
                         <div
                             v-for="p in params"
                             :key="p.id"
                             class="flex items-center gap-4 px-5 py-4"
                         >
-                            <!-- Label + description -->
                             <div class="min-w-0 flex-1">
                                 <Label
                                     :for="`param-${p.id}`"
@@ -136,9 +192,7 @@ function toggleBoolean(p: Parametre) {
                                 </p>
                             </div>
 
-                            <!-- Contrôle -->
                             <div class="flex shrink-0 items-center gap-2">
-                                <!-- Boolean → toggle -->
                                 <template v-if="p.type === 'boolean'">
                                     <button
                                         :id="`param-${p.id}`"
@@ -167,7 +221,6 @@ function toggleBoolean(p: Parametre) {
                                     </button>
                                 </template>
 
-                                <!-- Integer / decimal / string → input + bouton -->
                                 <template v-else>
                                     <Input
                                         :id="`param-${p.id}`"
@@ -213,7 +266,6 @@ function toggleBoolean(p: Parametre) {
                     </div>
                 </div>
 
-                <!-- État vide -->
                 <div
                     v-if="Object.keys(grouped).length === 0"
                     class="py-12 text-center text-sm text-muted-foreground"

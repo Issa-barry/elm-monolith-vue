@@ -8,15 +8,23 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    CalendarClock,
     Car,
     CheckCircle,
+    Droplets,
     Pencil,
+    Plus,
+    Tag,
     Trash2,
+    UserRound,
+    Wrench,
 } from 'lucide-vue-next';
+import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import { computed } from 'vue';
+import { useConfirm } from 'primevue/useconfirm';
+import { computed, ref } from 'vue';
 
 interface EquipeMembre {
     livreur_nom: string | null;
@@ -29,6 +37,8 @@ interface Frais {
     montant: number;
     type: string;
     commentaire: string | null;
+    created_at: string | null;
+    createur_nom: string | null;
 }
 
 interface VehiculeData {
@@ -56,6 +66,7 @@ interface VehiculeData {
 const props = defineProps<{ vehicule: VehiculeData }>();
 
 const { can } = usePermissions();
+const confirm = useConfirm();
 const page = usePage();
 const flashSuccess = computed(
     () => (page.props as { flash?: { success?: string } }).flash?.success,
@@ -67,17 +78,13 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: props.vehicule.nom_vehicule, href: '#' },
 ];
 
+// ── Frais : types ─────────────────────────────────────────────────────────────
+
 const typesFraisOptions = [
     { value: 'carburant', label: 'Carburant' },
     { value: 'reparation', label: 'Réparation' },
     { value: 'autre', label: 'Autre' },
 ];
-
-const typesFraisColors: Record<string, string> = {
-    carburant: 'bg-blue-50 text-blue-700',
-    reparation: 'bg-orange-50 text-orange-700',
-    autre: 'bg-muted text-muted-foreground',
-};
 
 const typesFraisLabels: Record<string, string> = {
     carburant: 'Carburant',
@@ -85,23 +92,99 @@ const typesFraisLabels: Record<string, string> = {
     autre: 'Autre',
 };
 
+// Badge colors (pill texte)
+const typesBadgeClass: Record<string, string> = {
+    carburant: 'bg-blue-50 text-blue-700',
+    reparation: 'bg-orange-50 text-orange-700',
+    autre: 'bg-muted text-muted-foreground',
+};
+
+// Avatar circle colors
+const typesAvatarClass: Record<string, string> = {
+    carburant: 'bg-blue-100 text-blue-600',
+    reparation: 'bg-orange-100 text-orange-600',
+    autre: 'bg-muted text-muted-foreground',
+};
+
+// Icons
+const typesIcons: Record<string, typeof Droplets> = {
+    carburant: Droplets,
+    reparation: Wrench,
+    autre: Tag,
+};
+
+// ── Frais : modal ajout ───────────────────────────────────────────────────────
+
+const showFraisModal = ref(false);
+
 const addForm = useForm({
     montant: null as number | null,
     type: null as string | null,
     commentaire: null as string | null,
 });
 
+function openModal() {
+    addForm.reset();
+    addForm.clearErrors();
+    showFraisModal.value = true;
+}
+
 function submitAdd() {
     addForm.post(`/vehicules/${props.vehicule.id}/frais`, {
         onSuccess: () => {
+            showFraisModal.value = false;
             addForm.reset();
         },
     });
 }
 
-function deleteFrais(frais: Frais) {
-    router.delete(`/vehicules/${props.vehicule.id}/frais/${frais.id}`);
+// ── Frais : modal modification ────────────────────────────────────────────────
+
+const showEditModal = ref(false);
+const editingFrais = ref<Frais | null>(null);
+
+const editForm = useForm({
+    montant: null as number | null,
+    type: null as string | null,
+    commentaire: null as string | null,
+});
+
+function openEditModal(frais: Frais) {
+    editingFrais.value = frais;
+    editForm.montant = frais.montant;
+    editForm.type = frais.type;
+    editForm.commentaire = frais.commentaire;
+    editForm.clearErrors();
+    showEditModal.value = true;
 }
+
+function submitEdit() {
+    if (!editingFrais.value) return;
+    editForm.patch(`/vehicules/${props.vehicule.id}/frais/${editingFrais.value.id}`, {
+        onSuccess: () => {
+            showEditModal.value = false;
+            editingFrais.value = null;
+        },
+    });
+}
+
+// ── Frais : suppression ───────────────────────────────────────────────────────
+
+function confirmDeleteFrais(frais: Frais) {
+    confirm.require({
+        message: `Supprimer ce frais de ${formatGNF(frais.montant)} ?`,
+        header: 'Confirmer la suppression',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Supprimer',
+        acceptClass: 'p-button-danger',
+        accept: () => {
+            router.delete(`/vehicules/${props.vehicule.id}/frais/${frais.id}`);
+        },
+    });
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
@@ -167,10 +250,7 @@ function formatGNF(val: number): string {
                             :alt="vehicule.nom_vehicule"
                             class="h-full w-full object-cover"
                         />
-                        <Car
-                            v-else
-                            class="h-10 w-10 text-muted-foreground/30"
-                        />
+                        <Car v-else class="h-10 w-10 text-muted-foreground/30" />
                     </div>
                     <!-- Title -->
                     <div>
@@ -319,13 +399,13 @@ function formatGNF(val: number): string {
                 </div>
             </div>
 
-            <!-- Frais propriétaire -->
-            <div class="rounded-xl border bg-card p-4 sm:p-5">
-                <!-- Header -->
-                <div class="mb-4 flex items-center justify-between">
+            <!-- ── Frais propriétaire ──────────────────────────────────────── -->
+            <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+                <!-- En-tête section -->
+                <div class="mb-4 flex items-start justify-between gap-4">
                     <div>
                         <h3
-                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                            class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                         >
                             Frais propriétaire
                         </h3>
@@ -333,143 +413,303 @@ function formatGNF(val: number): string {
                             Déduits automatiquement lors du premier versement.
                         </p>
                     </div>
-                    <span
-                        v-if="vehicule.frais.length"
-                        class="rounded-lg bg-amber-50 px-3 py-1 text-sm font-semibold tabular-nums text-amber-700"
+                    <div class="flex shrink-0 items-center gap-3">
+                        <span
+                            v-if="vehicule.frais.length"
+                            class="rounded-lg bg-amber-50 px-3 py-1 text-sm font-semibold tabular-nums text-amber-700"
+                        >
+                            Total : {{ formatGNF(vehicule.frais_total) }}
+                        </span>
+                        <Button
+                            v-if="can('vehicules.update')"
+                            type="button"
+                            size="sm"
+                            @click="openModal"
+                        >
+                            <Plus class="mr-1.5 h-3.5 w-3.5" />
+                            Ajouter un frais
+                        </Button>
+                    </div>
+                </div>
+
+                <!-- État vide -->
+                <div
+                    v-if="!vehicule.frais.length"
+                    class="rounded-lg border border-dashed py-10 text-center"
+                >
+                    <p class="text-sm text-muted-foreground">Aucun frais enregistré.</p>
+                    <Button
+                        v-if="can('vehicules.update')"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        class="mt-3"
+                        @click="openModal"
                     >
-                        Total : {{ formatGNF(vehicule.frais_total) }}
-                    </span>
+                        <Plus class="mr-1.5 h-3.5 w-3.5" />
+                        Ajouter le premier frais
+                    </Button>
                 </div>
 
                 <!-- Liste des frais -->
-                <div class="mb-4 space-y-2">
+                <div v-else class="divide-y rounded-lg border">
                     <div
                         v-for="f in vehicule.frais"
                         :key="f.id"
-                        class="flex items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2 text-sm"
+                        class="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-muted/30"
                     >
-                        <span
-                            class="tabular-nums font-semibold"
-                        >{{ formatGNF(f.montant) }}</span>
-                        <span
-                            :class="[
-                                'rounded-full px-2 py-0.5 text-[11px] font-medium',
-                                typesFraisColors[f.type] ?? 'bg-muted text-muted-foreground',
-                            ]"
-                        >{{ typesFraisLabels[f.type] ?? f.type }}</span>
-                        <span
-                            v-if="f.commentaire"
-                            class="flex-1 truncate text-xs text-muted-foreground"
-                        >{{ f.commentaire }}</span>
-                        <span v-else class="flex-1" />
-                        <button
-                            v-if="can('vehicules.update')"
-                            type="button"
-                            class="shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
-                            title="Supprimer"
-                            @click="deleteFrais(f)"
+                        <!-- Icône type (avatar) -->
+                        <div
+                            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                            :class="typesAvatarClass[f.type] ?? 'bg-muted text-muted-foreground'"
                         >
-                            <Trash2 class="h-3.5 w-3.5" />
-                        </button>
+                            <component :is="typesIcons[f.type] ?? Tag" class="h-4 w-4" />
+                        </div>
+
+                        <!-- Montant + commentaire -->
+                        <div class="min-w-0 flex-1">
+                            <div class="text-sm font-semibold tabular-nums">
+                                {{ formatGNF(f.montant) }}
+                            </div>
+                            <div
+                                v-if="f.commentaire"
+                                class="truncate text-xs text-muted-foreground"
+                            >
+                                {{ f.commentaire }}
+                            </div>
+                        </div>
+
+                        <!-- Badge type -->
+                        <span
+                            class="shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
+                            :class="typesBadgeClass[f.type] ?? 'bg-muted text-muted-foreground'"
+                        >
+                            {{ typesFraisLabels[f.type] ?? f.type }}
+                        </span>
+
+                        <!-- Date + créateur -->
+                        <div class="hidden shrink-0 text-right sm:block">
+                            <div
+                                v-if="f.created_at"
+                                class="flex items-center justify-end gap-1 text-[11px] text-muted-foreground"
+                            >
+                                <CalendarClock class="h-3 w-3 shrink-0" />
+                                {{ f.created_at }}
+                            </div>
+                            <div
+                                v-if="f.createur_nom"
+                                class="flex items-center justify-end gap-1 text-[11px] text-muted-foreground"
+                            >
+                                <UserRound class="h-3 w-3 shrink-0" />
+                                {{ f.createur_nom }}
+                            </div>
+                        </div>
+
+                        <!-- Actions : crayon (admin) + corbeille -->
+                        <div v-if="can('vehicules.update')" class="flex shrink-0 gap-0.5">
+                            <button
+                                type="button"
+                                title="Modifier"
+                                class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                @click="openEditModal(f)"
+                            >
+                                <Pencil class="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                                type="button"
+                                title="Supprimer"
+                                class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                @click="confirmDeleteFrais(f)"
+                            >
+                                <Trash2 class="h-3.5 w-3.5" />
+                            </button>
+                        </div>
                     </div>
-                    <p
-                        v-if="!vehicule.frais.length"
-                        class="text-xs text-muted-foreground italic"
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Dialog : Modifier un frais ───────────────────────────────────── -->
+        <Dialog
+            v-model:visible="showEditModal"
+            modal
+            header="Modifier le frais"
+            :style="{ width: 'min(420px, 95vw)' }"
+            :dismissable-mask="true"
+            :pt="{ content: { style: 'overflow: visible' } }"
+        >
+            <div class="space-y-4 pt-2 pb-1">
+                <div>
+                    <Label for="edit-montant" class="mb-1 block text-xs font-medium">
+                        Montant <span class="text-destructive">*</span>
+                    </Label>
+                    <InputNumber
+                        input-id="edit-montant"
+                        v-model="editForm.montant"
+                        :min="0.01"
+                        :use-grouping="true"
+                        locale="fr-FR"
+                        suffix=" GNF"
+                        class="w-full"
+                        input-class="w-full"
+                        :class="{ 'p-invalid': editForm.errors.montant }"
+                        autofocus
+                    />
+                    <p v-if="editForm.errors.montant" class="mt-1 text-xs text-destructive">
+                        {{ editForm.errors.montant }}
+                    </p>
+                </div>
+                <div>
+                    <Label for="edit-type" class="mb-1 block text-xs font-medium">
+                        Type <span class="text-destructive">*</span>
+                    </Label>
+                    <Dropdown
+                        input-id="edit-type"
+                        v-model="editForm.type"
+                        :options="typesFraisOptions"
+                        option-label="label"
+                        option-value="value"
+                        placeholder="Sélectionner un type…"
+                        class="w-full"
+                        :class="{ 'p-invalid': editForm.errors.type }"
+                        @update:model-value="(v) => { editForm.type = v; if (v !== 'autre') editForm.commentaire = null; }"
+                    />
+                    <p v-if="editForm.errors.type" class="mt-1 text-xs text-destructive">
+                        {{ editForm.errors.type }}
+                    </p>
+                </div>
+                <div v-if="editForm.type === 'autre'">
+                    <Label for="edit-commentaire" class="mb-1 block text-xs font-medium">
+                        Commentaire <span class="text-destructive">*</span>
+                    </Label>
+                    <InputText
+                        id="edit-commentaire"
+                        v-model="editForm.commentaire"
+                        :maxlength="150"
+                        placeholder="Motif…"
+                        class="w-full"
+                        :class="{ 'p-invalid': editForm.errors.commentaire }"
+                    />
+                    <p v-if="editForm.errors.commentaire" class="mt-1 text-xs text-destructive">
+                        {{ editForm.errors.commentaire }}
+                    </p>
+                </div>
+            </div>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        @click="showEditModal = false"
                     >
-                        Aucun frais enregistré.
+                        Annuler
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        :disabled="editForm.processing || !editForm.montant || !editForm.type"
+                        @click="submitEdit"
+                    >
+                        {{ editForm.processing ? '…' : 'Enregistrer' }}
+                    </Button>
+                </div>
+            </template>
+        </Dialog>
+
+        <!-- ── Dialog : Ajouter un frais ──────────────────────────────────── -->
+        <Dialog
+            v-model:visible="showFraisModal"
+            modal
+            header="Ajouter un frais"
+            :style="{ width: 'min(420px, 95vw)' }"
+            :dismissable-mask="true"
+            :pt="{ content: { style: 'overflow: visible' } }"
+        >
+            <div class="space-y-4 pt-2 pb-1">
+                <!-- Montant -->
+                <div>
+                    <Label for="frais-montant" class="mb-1 block text-xs font-medium">
+                        Montant <span class="text-destructive">*</span>
+                    </Label>
+                    <InputNumber
+                        input-id="frais-montant"
+                        v-model="addForm.montant"
+                        :min="0.01"
+                        :use-grouping="true"
+                        locale="fr-FR"
+                        suffix=" GNF"
+                        class="w-full"
+                        input-class="w-full"
+                        :class="{ 'p-invalid': addForm.errors.montant }"
+                        placeholder="0 GNF"
+                        autofocus
+                    />
+                    <p v-if="addForm.errors.montant" class="mt-1 text-xs text-destructive">
+                        {{ addForm.errors.montant }}
                     </p>
                 </div>
 
-                <!-- Formulaire d'ajout -->
-                <form
-                    v-if="can('vehicules.update')"
-                    class="border-t pt-4"
-                    @submit.prevent="submitAdd"
-                >
-                    <p class="mb-2 text-xs font-medium text-muted-foreground">
-                        Ajouter un frais
+                <!-- Type -->
+                <div>
+                    <Label for="frais-type" class="mb-1 block text-xs font-medium">
+                        Type <span class="text-destructive">*</span>
+                    </Label>
+                    <Dropdown
+                        input-id="frais-type"
+                        v-model="addForm.type"
+                        :options="typesFraisOptions"
+                        option-label="label"
+                        option-value="value"
+                        placeholder="Sélectionner un type…"
+                        class="w-full"
+                        :class="{ 'p-invalid': addForm.errors.type }"
+                        @update:model-value="(v) => { addForm.type = v; if (v !== 'autre') addForm.commentaire = null; }"
+                    />
+                    <p v-if="addForm.errors.type" class="mt-1 text-xs text-destructive">
+                        {{ addForm.errors.type }}
                     </p>
-                    <div class="flex flex-wrap items-end gap-3">
-                        <!-- Montant -->
-                        <div class="min-w-[140px] flex-1">
-                            <Label for="add_montant" class="mb-1 block text-xs">
-                                Montant
-                            </Label>
-                            <InputNumber
-                                input-id="add_montant"
-                                v-model="addForm.montant"
-                                :min="0.01"
-                                :use-grouping="true"
-                                locale="fr-FR"
-                                suffix=" GNF"
-                                class="w-full"
-                                input-class="w-full h-9 text-sm"
-                                :class="{ 'p-invalid': addForm.errors.montant }"
-                                placeholder="0 GNF"
-                            />
-                            <p
-                                v-if="addForm.errors.montant"
-                                class="mt-1 text-xs text-destructive"
-                            >{{ addForm.errors.montant }}</p>
-                        </div>
+                </div>
 
-                        <!-- Type -->
-                        <div class="min-w-[140px] flex-1">
-                            <Label for="add_type" class="mb-1 block text-xs">
-                                Type <span class="text-destructive">*</span>
-                            </Label>
-                            <Dropdown
-                                input-id="add_type"
-                                v-model="addForm.type"
-                                @update:model-value="(v) => { addForm.type = v; if (v !== 'autre') addForm.commentaire = null; }"
-                                :options="typesFraisOptions"
-                                option-label="label"
-                                option-value="value"
-                                placeholder="Type…"
-                                class="w-full"
-                                :class="{ 'p-invalid': addForm.errors.type }"
-                            />
-                            <p
-                                v-if="addForm.errors.type"
-                                class="mt-1 text-xs text-destructive"
-                            >{{ addForm.errors.type }}</p>
-                        </div>
-
-                        <!-- Commentaire (type = autre) -->
-                        <div
-                            v-if="addForm.type === 'autre'"
-                            class="min-w-[160px] flex-[2]"
-                        >
-                            <Label for="add_commentaire" class="mb-1 block text-xs">
-                                Commentaire <span class="text-destructive">*</span>
-                            </Label>
-                            <InputText
-                                id="add_commentaire"
-                                v-model="addForm.commentaire"
-                                :maxlength="150"
-                                placeholder="Motif…"
-                                class="w-full"
-                                input-class="h-9 text-sm"
-                                :class="{ 'p-invalid': addForm.errors.commentaire }"
-                            />
-                            <p
-                                v-if="addForm.errors.commentaire"
-                                class="mt-1 text-xs text-destructive"
-                            >{{ addForm.errors.commentaire }}</p>
-                        </div>
-
-                        <!-- Bouton -->
-                        <Button
-                            type="submit"
-                            size="sm"
-                            class="h-9 shrink-0"
-                            :disabled="addForm.processing || !addForm.montant || !addForm.type"
-                        >
-                            {{ addForm.processing ? '…' : '+ Ajouter' }}
-                        </Button>
-                    </div>
-                </form>
+                <!-- Commentaire (type = autre) -->
+                <div v-if="addForm.type === 'autre'">
+                    <Label for="frais-commentaire" class="mb-1 block text-xs font-medium">
+                        Commentaire <span class="text-destructive">*</span>
+                    </Label>
+                    <InputText
+                        id="frais-commentaire"
+                        v-model="addForm.commentaire"
+                        :maxlength="150"
+                        placeholder="Motif…"
+                        class="w-full"
+                        :class="{ 'p-invalid': addForm.errors.commentaire }"
+                    />
+                    <p v-if="addForm.errors.commentaire" class="mt-1 text-xs text-destructive">
+                        {{ addForm.errors.commentaire }}
+                    </p>
+                </div>
             </div>
-        </div>
+
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        @click="showFraisModal = false"
+                    >
+                        Annuler
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        :disabled="addForm.processing || !addForm.montant || !addForm.type"
+                        @click="submitAdd"
+                    >
+                        {{ addForm.processing ? '…' : 'Ajouter' }}
+                    </Button>
+                </div>
+            </template>
+        </Dialog>
     </AppLayout>
 </template>

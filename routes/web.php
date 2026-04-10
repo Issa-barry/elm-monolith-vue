@@ -112,6 +112,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     Route::middleware('module:'.ModuleFeature::VEHICULES)->group(function () {
         Route::resource('vehicules', VehiculeController::class);
         Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
+        Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
         Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
         Route::resource('proprietaires', ProprietaireController::class);
         // Livreurs : gestion centralisée depuis les Équipes (lecture seule + API modale)

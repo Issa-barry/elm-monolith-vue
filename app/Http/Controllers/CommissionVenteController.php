@@ -89,6 +89,7 @@ class CommissionVenteController extends Controller
             'commande.site',
             'vehicule.equipe',
             'vehicule.proprietaire',
+            'vehicule.frais',
             'parts.versements.creator',
             'parts.proprietaire:id,telephone',
             'parts.livreur:id,telephone',
@@ -146,6 +147,9 @@ class CommissionVenteController extends Controller
             'proprietaire_nom' => $c->vehicule?->proprietaire
                 ? trim(($c->vehicule->proprietaire->prenom ?? '').' '.($c->vehicule->proprietaire->nom ?? ''))
                 : null,
+            'vehicule_frais_total' => $c->vehicule?->relationLoaded('frais')
+                ? (float) $c->vehicule->frais->sum('montant')
+                : 0.0,
             'montant_commande' => (float) $c->montant_commande,
             'montant_commission_totale' => (float) $c->montant_commission_totale,
             'montant_verse' => (float) $c->montant_verse,

@@ -29,6 +29,8 @@ Route::middleware('auth')->group(function () {
         ->name('two-factor.show');
 
     Route::get('settings/parametres', [ParametreController::class, 'edit'])->name('parametres.edit');
+    Route::get('settings/parametres/templates/{template}', [ParametreController::class, 'downloadTemplate'])
+        ->name('parametres.templates.download');
     Route::put('settings/parametres/{parametre}', [ParametreController::class, 'update'])->name('parametres.update');
 
     Route::get('settings/modules', [ModuleController::class, 'edit'])->name('modules.edit');

@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Models\Parametre;
+use App\Support\ExcelTemplateBuilder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class ParametreController extends Controller
 {
@@ -56,5 +58,139 @@ class ParametreController extends Controller
         Parametre::clearCache(auth()->user()->organization_id);
 
         return back()->with('success', 'Paramètre mis à jour.');
+    }
+
+    public function downloadTemplate(string $template): HttpResponse
+    {
+        abort_if(! auth()->user()->can('parametres.update'), 403);
+
+        [$filename, $sheets] = match ($template) {
+            'produits' => [
+                'template-produits.xls',
+                [[
+                    'name' => 'produits',
+                    'headers' => [
+                        'nom',
+                        'code_fournisseur',
+                        'type',
+                        'statut',
+                        'prix_usine',
+                        'prix_vente',
+                        'prix_achat',
+                        'cout',
+                        'qte_stock',
+                        'seuil_alerte_stock',
+                        'description',
+                        'is_critique',
+                    ],
+                ]],
+            ],
+            'sites' => [
+                'template-sites.xls',
+                [[
+                    'name' => 'sites',
+                    'headers' => [
+                        'nom',
+                        'type',
+                        'statut',
+                        'localisation',
+                        'pays',
+                        'ville',
+                        'quartier',
+                        'description',
+                        'parent_id',
+                        'latitude',
+                        'longitude',
+                        'telephone',
+                        'email',
+                    ],
+                ]],
+            ],
+            'users' => [
+                'template-utilisateurs-sans-mot-de-passe.xls',
+                [[
+                    'name' => 'utilisateurs',
+                    'headers' => [
+                        'prenom',
+                        'nom',
+                        'email',
+                        'telephone',
+                        'code_pays',
+                        'ville',
+                        'adresse',
+                        'role',
+                        'site_id',
+                        'is_active',
+                    ],
+                ]],
+            ],
+            'clients' => [
+                'template-clients.xls',
+                [[
+                    'name' => 'clients',
+                    'headers' => [
+                        'nom',
+                        'prenom',
+                        'email',
+                        'telephone',
+                        'code_pays',
+                        'ville',
+                        'adresse',
+                        'is_active',
+                    ],
+                ]],
+            ],
+            'vehicules-pack' => [
+                'template-vehicules-proprietaires-livreurs.xls',
+                [
+                    [
+                        'name' => 'proprietaires',
+                        'headers' => [
+                            'nom',
+                            'prenom',
+                            'email',
+                            'telephone',
+                            'code_pays',
+                            'ville',
+                            'adresse',
+                            'is_active',
+                        ],
+                    ],
+                    [
+                        'name' => 'livreurs',
+                        'headers' => [
+                            'nom',
+                            'prenom',
+                            'telephone',
+                        ],
+                    ],
+                    [
+                        'name' => 'vehicules',
+                        'headers' => [
+                            'nom_vehicule',
+                            'immatriculation',
+                            'type_vehicule',
+                            'capacite_packs',
+                            'equipe_livraison_id',
+                            'pris_en_charge_par_usine',
+                            'is_active',
+                        ],
+                    ],
+                ],
+            ],
+            default => [null, null],
+        };
+
+        abort_if($filename === null || $sheets === null, 404);
+
+        $content = ExcelTemplateBuilder::build($sheets);
+
+        return response($content, 200, [
+            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ]);
     }
 }
