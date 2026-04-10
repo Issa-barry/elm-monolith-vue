@@ -123,18 +123,22 @@ jobs:
         run: npm run build
 
       # dev → pre-prod : full E2E suite
+      # workers=1 : tous les tests partagent le même session cookie (chargé depuis
+      # .auth/user.json). Avec workers>1, un worker peut âger (ageFlashData) le flash
+      # d'un autre entre son POST et son GET, vidant la bannière de succès avant
+      # que le test ne la lise. workers=1 élimine ce conflit de session.
       - name: Run full E2E tests
         if: github.base_ref == 'pre-prod'
         env:
           E2E_BASE_URL: http://127.0.0.1:8080
-        run: npx playwright test --workers=2
+        run: npx playwright test --workers=1
 
       # pre-prod → main : smoke tests only (fast gate before production)
       - name: Run smoke E2E tests
         if: github.base_ref == 'main'
         env:
           E2E_BASE_URL: http://127.0.0.1:8080
-        run: npx playwright test tests/e2e/smoke.spec.ts --workers=2
+        run: npx playwright test tests/e2e/smoke.spec.ts --workers=1
 
       - name: Upload Playwright report
         if: always()
