@@ -1272,23 +1272,28 @@ function activiteDotClass(action: string): string {
                     Aucune activité enregistrée.
                 </div>
 
-                <ol v-else class="space-y-0">
+                <ol v-else>
                     <li
                         v-for="(activite, index) in activitesTriees"
                         :key="activite.id"
-                        class="flex gap-3 py-2"
+                        class="flex gap-3"
                     >
-                        <div class="relative flex w-5 justify-center">
-                            <span
-                                v-if="index < activitesTriees.length - 1"
-                                class="absolute left-1/2 top-4 bottom-[-18px] w-px -translate-x-1/2 bg-border"
-                            />
-                            <span class="relative mt-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-border bg-background">
+                        <!-- Colonne timeline : dot + connecteur vertical -->
+                        <div class="flex w-5 flex-col items-center">
+                            <span class="mt-1.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-border bg-background">
                                 <span :class="['h-1.5 w-1.5 rounded-full', activiteDotClass(activite.action)]" />
                             </span>
+                            <span
+                                v-if="index < activitesTriees.length - 1"
+                                class="mt-1 w-px flex-1 bg-border"
+                            />
                         </div>
 
-                        <div class="min-w-0 flex-1 rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
+                        <!-- Contenu -->
+                        <div
+                            class="min-w-0 flex-1 rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5"
+                            :class="index < activitesTriees.length - 1 ? 'mb-3' : ''"
+                        >
                             <div class="flex flex-wrap items-baseline gap-x-1.5">
                                 <span class="text-sm font-semibold">{{ activite.user_nom || 'Système' }}</span>
                                 <span class="text-sm text-muted-foreground">{{ activite.action_label }}</span>

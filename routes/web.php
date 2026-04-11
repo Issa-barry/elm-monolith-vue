@@ -6,6 +6,8 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
 use App\Http\Controllers\CommissionLogistiqueController;
+use App\Http\Controllers\CommissionPaymentController;
+use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\CommissionVenteController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\EncaissementVenteController;
@@ -80,6 +82,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 
         // Commissions
         Route::get('commissions', [CommissionVenteController::class, 'index'])->name('commissions.index');
+        Route::get('commissions/beneficiaires/{type}/{beneficiaireId}', [CommissionVenteController::class, 'showBeneficiaire'])->name('commissions.beneficiaires.show');
         Route::get('commissions/{commission_vente}', [CommissionVenteController::class, 'show'])->name('commissions.show');
 
         // Versements par part
@@ -163,9 +166,19 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::get('logistique/transferts', [TransfertLogistiqueController::class, 'indexTransferts'])->name('logistique.transferts.index');
         Route::get('logistique/receptions', [TransfertLogistiqueController::class, 'indexReceptions'])->name('logistique.receptions.index');
 
-        // Commissions logistiques — module autonome (AVANT {transfert_logistique})
-        Route::get('logistique/commissions', [CommissionLogistiqueController::class, 'index'])->name('logistique.commissions.index');
-        Route::get('logistique/commissions/{commission_logistique}', [CommissionLogistiqueController::class, 'show'])->name('logistique.commissions.show');
+        // Commissions logistiques — par véhicule (nouveau système)
+        Route::get('logistique/commissions', [CommissionVehiculeController::class, 'index'])
+            ->name('logistique.commissions.index');
+        Route::get('logistique/commissions/vehicules/{vehicule}', [CommissionVehiculeController::class, 'show'])
+            ->name('logistique.commissions.vehicule');
+        Route::get('logistique/commissions/vehicules/{vehicule}/beneficiaires/{type}/{beneficiaireId}', [CommissionVehiculeController::class, 'releve'])
+            ->name('logistique.commissions.releve');
+        Route::post('logistique/commissions/vehicules/{vehicule}/paiements', [CommissionPaymentController::class, 'store'])
+            ->name('logistique.commissions.paiements.store');
+
+        // Rétro-compat : accès direct par commission (page transfert Show)
+        Route::get('logistique/commissions/detail/{commission_logistique}', [CommissionLogistiqueController::class, 'show'])
+            ->name('logistique.commissions.show');
 
         Route::get('logistique/creer', [TransfertLogistiqueController::class, 'create'])->name('logistique.create');
         Route::post('logistique', [TransfertLogistiqueController::class, 'store'])->name('logistique.store');

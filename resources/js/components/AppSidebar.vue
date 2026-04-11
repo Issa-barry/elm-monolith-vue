@@ -137,6 +137,7 @@ const mainNavItems = computed((): NavItem[] => {
                     href: '/logistique/receptions',
                     badge: transfertsAReceptionner.value > 0 ? transfertsAReceptionner.value : undefined,
                 },
+                { title: 'Commissions', href: '/logistique/commissions' },
             ],
         });
     }

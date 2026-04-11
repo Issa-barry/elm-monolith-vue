@@ -4,10 +4,12 @@ namespace App\Services;
 
 use App\Enums\BaseCalculLogistique;
 use App\Enums\StatutCommissionLogistique;
+use App\Enums\StatutPartCommission;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\TransfertLogistique;
 use App\Models\VersementCommissionLogistique;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -15,9 +17,9 @@ use InvalidArgumentException;
 class CommissionLogistiqueService
 {
     /**
-     * Créer ou recalculer la commission d'un transfert clôturé.
+     * Créer ou recalculer la commission d'un transfert réceptionné/clôturé.
      *
-     * @throws InvalidArgumentException si le transfert n'est pas clôturé
+     * @throws InvalidArgumentException si le transfert n'est pas éligible
      */
     public static function genererPourTransfert(
         TransfertLogistique $transfert,
@@ -31,7 +33,6 @@ class CommissionLogistiqueService
             );
         }
 
-        // Bloquer le recalcul si au moins un versement a déjà été enregistré.
         $existingCommission = $transfert->commission()->first();
         if ($existingCommission && (float) $existingCommission->montant_verse > 0) {
             throw new InvalidArgumentException(
@@ -46,7 +47,14 @@ class CommissionLogistiqueService
 
         $montantTotal = self::calculerMontant($baseCalcul, $valeurBase, $quantiteReference);
 
-        return DB::transaction(function () use ($transfert, $baseCalcul, $valeurBase, $quantiteReference, $montantTotal) {
+        // earned_at = date de réception réelle si disponible, sinon maintenant
+        $earnedAt = $transfert->date_arrivee_reelle
+            ? Carbon::instance($transfert->date_arrivee_reelle)
+            : now();
+
+        return DB::transaction(function () use (
+            $transfert, $baseCalcul, $valeurBase, $quantiteReference, $montantTotal, $earnedAt
+        ) {
             /** @var CommissionLogistique $commission */
             $commission = CommissionLogistique::updateOrCreate(
                 ['transfert_logistique_id' => $transfert->id],
@@ -62,10 +70,9 @@ class CommissionLogistiqueService
                 ]
             );
 
-            // Reconstruire les parts uniquement si pas encore en cours de versement
             if ($commission->wasRecentlyCreated || $commission->isEnAttente()) {
                 $commission->parts()->delete();
-                self::creerParts($commission, $transfert, $montantTotal);
+                self::creerParts($commission, $transfert, $montantTotal, $earnedAt);
             }
 
             return $commission->load('parts');
@@ -73,7 +80,8 @@ class CommissionLogistiqueService
     }
 
     /**
-     * Enregistrer un versement pour une part de commission.
+     * Versement legacy (retro-compat, utilisé depuis la page Transfert Show).
+     * Les nouvelles saisies passent par CommissionPaymentService.
      */
     public static function verser(
         CommissionLogistiquePart $part,
@@ -96,7 +104,6 @@ class CommissionLogistiqueService
                 'created_by'                    => Auth::id(),
             ]);
 
-            // Recalcul statut de la part (propage au header automatiquement)
             $part->recalculStatut();
 
             return $versement;
@@ -118,51 +125,50 @@ class CommissionLogistiqueService
     private static function creerParts(
         CommissionLogistique $commission,
         TransfertLogistique $transfert,
-        float $montantTotal
+        float $montantTotal,
+        Carbon $earnedAt
     ): void {
         $vehicule = $transfert->vehicule;
-
         if (! $vehicule) {
             return;
         }
 
         // ── Part propriétaire ─────────────────────────────────────────────────
-        // FIX: utiliser taux_commission_proprietaire (pas taux_commission)
         if ($vehicule->proprietaire) {
-            $tauxProprietaire = (float) ($vehicule->taux_commission_proprietaire ?? 0);
-            $brutProprietaire = round($montantTotal * $tauxProprietaire / 100, 2);
+            $taux = (float) ($vehicule->taux_commission_proprietaire ?? 0);
+            $brut = round($montantTotal * $taux / 100, 2);
+            $unlockAt = CommissionLogistiquePart::calculerUnlockAt('proprietaire', $earnedAt);
 
             CommissionLogistiquePart::create([
                 'commission_logistique_id' => $commission->id,
                 'type_beneficiaire'        => 'proprietaire',
                 'proprietaire_id'          => $vehicule->proprietaire->id,
                 'livreur_id'               => null,
-                // FIX: utiliser prenom + nom, pas name
                 'beneficiaire_nom'         => trim(
                     ($vehicule->proprietaire->prenom ?? '') . ' ' . ($vehicule->proprietaire->nom ?? '')
                 ) ?: 'Propriétaire',
-                'taux_commission'          => $tauxProprietaire,
-                'montant_brut'             => $brutProprietaire,
+                'taux_commission'          => $taux,
+                'montant_brut'             => $brut,
                 'frais_supplementaires'    => 0,
-                'montant_net'              => $brutProprietaire,
+                'montant_net'              => $brut,
                 'montant_verse'            => 0,
-                'statut'                   => StatutCommissionLogistique::EN_ATTENTE,
+                'statut'                   => StatutPartCommission::PENDING,
+                'earned_at'                => $earnedAt->toDateString(),
+                'unlock_at'                => $unlockAt->toDateString(),
             ]);
         }
 
-        // ── Parts livreurs ─────────────────────────────────────────────────────
+        // ── Parts livreurs ────────────────────────────────────────────────────
         $equipe = $vehicule->equipe;
         if ($equipe) {
             $membres = $equipe->membres()->with('livreur')->get();
-
             foreach ($membres as $membre) {
                 $taux = (float) ($membre->taux_commission ?? 0);
                 $brut = round($montantTotal * $taux / 100, 2);
-
-                // FIX: utiliser prenom + nom du livreur
                 $nomLivreur = $membre->livreur
                     ? trim(($membre->livreur->prenom ?? '') . ' ' . ($membre->livreur->nom ?? ''))
                     : "Livreur #{$membre->livreur_id}";
+                $unlockAt = CommissionLogistiquePart::calculerUnlockAt('livreur', $earnedAt);
 
                 CommissionLogistiquePart::create([
                     'commission_logistique_id' => $commission->id,
@@ -175,7 +181,9 @@ class CommissionLogistiqueService
                     'frais_supplementaires'    => 0,
                     'montant_net'              => $brut,
                     'montant_verse'            => 0,
-                    'statut'                   => StatutCommissionLogistique::EN_ATTENTE,
+                    'statut'                   => StatutPartCommission::PENDING,
+                    'earned_at'                => $earnedAt->toDateString(),
+                    'unlock_at'                => $unlockAt->toDateString(),
                 ]);
             }
         }
