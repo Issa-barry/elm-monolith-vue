@@ -435,33 +435,35 @@ function detailUrl(b: BeneficiaireRow): string {
                     </Column>
 
                     <!-- Total net -->
-                    <Column field="total_net_cumule" header="Total net" sortable style="width: 160px">
+                    <Column field="total_net_cumule" header="Total net" sortable style="width: 150px">
                         <template #body="{ data }">
                             <span class="font-semibold tabular-nums">{{ formatGNF(data.total_net_cumule) }}</span>
-                            <p v-if="data.total_frais > 0" class="text-xs text-destructive tabular-nums">
-                                − {{ formatGNF(data.total_frais) }} frais
-                            </p>
+                        </template>
+                    </Column>
+
+                    <!-- Frais -->
+                    <Column field="total_frais" header="Frais" sortable style="width: 130px">
+                        <template #body="{ data }">
+                            <span
+                                class="tabular-nums"
+                                :class="data.total_frais > 0 ? 'text-destructive' : 'text-muted-foreground'"
+                            >
+                                {{ data.total_frais > 0 ? '− ' + formatGNF(data.total_frais) : '—' }}
+                            </span>
                         </template>
                     </Column>
 
                     <!-- Versé -->
-                    <Column field="total_verse" header="Versé" sortable style="width: 150px">
+                    <Column field="total_verse" header="Versé" sortable style="width: 140px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-emerald-700 dark:text-emerald-400">
-                                {{ formatGNF(data.total_verse) }}
-                            </span>
+                            <span class="tabular-nums">{{ formatGNF(data.total_verse) }}</span>
                         </template>
                     </Column>
 
                     <!-- Solde restant -->
-                    <Column field="solde_restant" header="Solde restant" sortable style="width: 150px">
+                    <Column field="solde_restant" header="Solde restant" sortable style="width: 140px">
                         <template #body="{ data }">
-                            <span
-                                class="font-semibold tabular-nums"
-                                :class="data.solde_restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
-                            >
-                                {{ formatGNF(data.solde_restant) }}
-                            </span>
+                            <span class="font-semibold tabular-nums">{{ formatGNF(data.solde_restant) }}</span>
                         </template>
                     </Column>
 

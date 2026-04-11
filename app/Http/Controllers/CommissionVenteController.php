@@ -231,9 +231,10 @@ class CommissionVenteController extends Controller
         ];
 
         // ── Filtres sur l'historique commandes ──────────────────────────────────
-        $dateFrom       = $request->input('date_from');
-        $dateTo         = $request->input('date_to');
-        $commandeSearch = $request->input('commande');
+        $dateFrom         = $request->input('date_from');
+        $dateTo           = $request->input('date_to');
+        $commandeSearch   = $request->input('commande');
+        $disponibleFilter = $request->input('disponible'); // disponible | en_attente
 
         $filteredParts = $allParts;
 
@@ -257,6 +258,21 @@ class CommissionVenteController extends Controller
                     $q
                 )
             );
+        }
+
+        if (in_array($disponibleFilter, ['disponible', 'en_attente'], true)) {
+            $filteredParts = $filteredParts->filter(function ($p) use ($type, $disponibleFilter) {
+                $da = $this->disponibleAt($type, $p->commission?->created_at);
+                if (! $da) {
+                    return $disponibleFilter === 'en_attente';
+                }
+
+                $isDisponible = now()->greaterThanOrEqualTo($da);
+
+                return $disponibleFilter === 'disponible'
+                    ? $isDisponible
+                    : ! $isDisponible;
+            });
         }
 
         // ── Historique commandes (lecture comptable, sans colonnes paiement) ───
@@ -321,9 +337,10 @@ class CommissionVenteController extends Controller
             'historique_paiements_globaux' => $historiquePaiements,
             'modes_paiement'               => ModePaiement::options(),
             'filtres'                      => [
-                'date_from' => $dateFrom,
-                'date_to'   => $dateTo,
-                'commande'  => $commandeSearch,
+                'date_from'  => $dateFrom,
+                'date_to'    => $dateTo,
+                'commande'   => $commandeSearch,
+                'disponible' => $disponibleFilter,
             ],
         ]);
     }

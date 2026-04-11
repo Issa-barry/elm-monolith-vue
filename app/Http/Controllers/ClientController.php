@@ -69,6 +69,7 @@ class ClientController extends Controller
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
+            'cashback_eligible' => 'boolean',
         ], $this->validationMessages());
 
         // Règle métier : Guinée → Conakry par défaut
@@ -160,8 +161,9 @@ class ClientController extends Controller
                 'ville' => $client->ville,
                 'pays' => $pays,
                 'code_pays' => $codePays,
-                'code_phone_pays' => $codePhonePays,
-                'is_active' => $client->is_active,
+                'code_phone_pays'    => $codePhonePays,
+                'is_active'          => $client->is_active,
+                'cashback_eligible'  => $client->cashback_eligible,
             ],
             'cashback_solde' => $cashbackSolde,
         ]);
@@ -180,6 +182,7 @@ class ClientController extends Controller
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
+            'cashback_eligible' => 'boolean',
         ], $this->validationMessages());
 
         // Règle métier : Guinée → Conakry par défaut

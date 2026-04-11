@@ -14,8 +14,8 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
-    CalendarDays,
     CreditCard,
+    Filter,
     History,
     MoreVertical,
     Pencil,
@@ -24,7 +24,6 @@ import {
     Truck,
     User,
     Wallet,
-    X,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
@@ -91,6 +90,7 @@ interface Filtres {
     date_from: string | null;
     date_to: string | null;
     commande: string | null;
+    disponible: '' | 'disponible' | 'en_attente' | null;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -140,31 +140,51 @@ const flashSuccess = computed(
     () => (page.props.flash as Record<string, string>)?.success ?? null,
 );
 
-// ── Filtres date (server-side) ────────────────────────────────────────────────
+// ── Filtres server-side (modal) ───────────────────────────────────────────────
 
-const filtresDate = reactive({
+const filtresDialogVisible = ref(false);
+
+const filtresServeur = reactive({
     date_from: props.filtres.date_from ?? '',
-    date_to:   props.filtres.date_to   ?? '',
+    date_to: props.filtres.date_to ?? '',
+    disponible: (props.filtres.disponible ?? '') as '' | 'disponible' | 'en_attente',
 });
 
-function applyDateFilters() {
+const disponibiliteOptions = [
+    { value: '', label: 'Tous' },
+    { value: 'disponible', label: 'Disponible maintenant' },
+    { value: 'en_attente', label: 'En attente' },
+];
+
+const nbFiltresActifs = computed(() =>
+    [filtresServeur.date_from, filtresServeur.date_to, filtresServeur.disponible]
+        .filter((v) => !!v)
+        .length
+);
+
+function applyFiltresServeur() {
     router.get(
         `/commissions/beneficiaires/${props.resume_global.type}/${props.resume_global.id}`,
         {
-            ...(filtresDate.date_from ? { date_from: filtresDate.date_from } : {}),
-            ...(filtresDate.date_to   ? { date_to:   filtresDate.date_to   } : {}),
+            ...(filtresServeur.date_from ? { date_from: filtresServeur.date_from } : {}),
+            ...(filtresServeur.date_to ? { date_to: filtresServeur.date_to } : {}),
+            ...(filtresServeur.disponible ? { disponible: filtresServeur.disponible } : {}),
         },
-        { preserveScroll: true, preserveState: true },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                filtresDialogVisible.value = false;
+            },
+        }
     );
 }
 
-function clearDateFilters() {
-    filtresDate.date_from = '';
-    filtresDate.date_to   = '';
-    applyDateFilters();
+function resetFiltresServeur() {
+    filtresServeur.date_from = '';
+    filtresServeur.date_to = '';
+    filtresServeur.disponible = '';
 }
-
-const hasDateFilters = computed(() => !!(filtresDate.date_from || filtresDate.date_to));
 
 // ── Recherche locale (DataTable) ───────────────────────────────────────────────
 
@@ -418,25 +438,35 @@ function closeDetailDialog() {
                 </Button>
             </div>
 
-            <!-- Filtres date mobile -->
+            <!-- Recherche + filtre mobile -->
             <div class="space-y-2 border-t px-4 py-3">
-                <div class="flex gap-2">
-                    <input
-                        v-model="filtresDate.date_from"
-                        type="date"
-                        class="h-8 flex-1 rounded-md border bg-background px-2 text-xs"
-                        @change="applyDateFilters"
-                    />
-                    <input
-                        v-model="filtresDate.date_to"
-                        type="date"
-                        class="h-8 flex-1 rounded-md border bg-background px-2 text-xs"
-                        @change="applyDateFilters"
-                    />
+                <div class="flex items-center gap-2">
+                    <div class="relative min-w-0 flex-1">
+                        <Search
+                            class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        />
+                        <input
+                            v-model="localSearch"
+                            type="text"
+                            placeholder="Commande, véhicule, site…"
+                            class="h-9 w-full rounded-md border bg-background pr-3 pl-8 text-sm"
+                        />
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        class="relative h-9 w-9 shrink-0"
+                        @click="filtresDialogVisible = true"
+                    >
+                        <Filter class="h-4 w-4" />
+                        <span
+                            v-if="nbFiltresActifs > 0"
+                            class="absolute -top-1 -right-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
+                        >
+                            {{ nbFiltresActifs }}
+                        </span>
+                    </Button>
                 </div>
-                <Button v-if="hasDateFilters" variant="ghost" size="sm" class="h-7 gap-1 text-xs" @click="clearDateFilters">
-                    <X class="h-3 w-3" /> Effacer
-                </Button>
             </div>
 
             <!-- Liste mobile -->
@@ -590,36 +620,25 @@ function closeDetailDialog() {
                                 />
                             </IconField>
 
-                            <!-- Date from / to -->
-                            <div class="flex items-center gap-1">
-                                <CalendarDays class="h-4 w-4 shrink-0 text-muted-foreground" />
-                                <input
-                                    v-model="filtresDate.date_from"
-                                    type="date"
-                                    class="h-9 rounded-md border bg-background px-2 text-sm"
-                                    @change="applyDateFilters"
-                                />
-                                <span class="text-muted-foreground">–</span>
-                                <input
-                                    v-model="filtresDate.date_to"
-                                    type="date"
-                                    class="h-9 rounded-md border bg-background px-2 text-sm"
-                                    @change="applyDateFilters"
-                                />
+                            <div class="ml-auto flex items-center gap-2">
                                 <Button
-                                    v-if="hasDateFilters"
-                                    variant="ghost"
+                                    variant="outline"
                                     size="icon"
-                                    class="h-8 w-8 shrink-0"
-                                    @click="clearDateFilters"
+                                    class="relative h-9 w-9"
+                                    @click="filtresDialogVisible = true"
                                 >
-                                    <X class="h-3.5 w-3.5" />
+                                    <Filter class="h-4 w-4" />
+                                    <span
+                                        v-if="nbFiltresActifs > 0"
+                                        class="absolute -top-1 -right-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
+                                    >
+                                        {{ nbFiltresActifs }}
+                                    </span>
                                 </Button>
+                                <span class="text-xs text-muted-foreground">
+                                    {{ commandesFiltrees.length }} résultat{{ commandesFiltrees.length !== 1 ? 's' : '' }}
+                                </span>
                             </div>
-
-                            <span class="ml-auto text-xs text-muted-foreground">
-                                {{ commandesFiltrees.length }} résultat{{ commandesFiltrees.length !== 1 ? 's' : '' }}
-                            </span>
                         </div>
                     </template>
 
@@ -816,6 +835,67 @@ function closeDetailDialog() {
                 </DataTable>
             </div>
         </div>
+
+        <!-- ══════════════════════ DIALOG FILTRES ═════════════════════════════ -->
+        <Dialog
+            v-model:visible="filtresDialogVisible"
+            modal
+            :dismissable-mask="true"
+            :style="{ width: 'min(420px, 95vw)' }"
+        >
+            <template #header>
+                <div class="flex w-full items-center justify-between">
+                    <span class="text-base font-semibold">Filtres</span>
+                    <button
+                        type="button"
+                        class="text-sm font-medium text-destructive hover:underline"
+                        @click="resetFiltresServeur"
+                    >
+                        Reset
+                    </button>
+                </div>
+            </template>
+
+            <div class="space-y-4 pt-1">
+                <div class="space-y-1.5">
+                    <label class="text-sm font-medium">Disponibilité</label>
+                    <Dropdown
+                        v-model="filtresServeur.disponible"
+                        :options="disponibiliteOptions"
+                        option-label="label"
+                        option-value="value"
+                        class="w-full"
+                    />
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="text-sm font-medium">Date du</label>
+                    <input
+                        v-model="filtresServeur.date_from"
+                        type="date"
+                        class="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                    />
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="text-sm font-medium">Date au</label>
+                    <input
+                        v-model="filtresServeur.date_to"
+                        type="date"
+                        class="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                    />
+                </div>
+
+                <div class="flex justify-end gap-2 pt-1">
+                    <Button variant="outline" @click="filtresDialogVisible = false">
+                        Annuler
+                    </Button>
+                    <Button @click="applyFiltresServeur">
+                        Appliquer filtres
+                    </Button>
+                </div>
+            </div>
+        </Dialog>
 
         <!-- ══════════════════════ DIALOG PAIEMENT GROUPÉ ══════════════════════ -->
         <Dialog

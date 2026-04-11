@@ -25,6 +25,7 @@ interface FormData {
     code_pays: string | null;
     code_phone_pays: string | null;
     is_active: boolean;
+    cashback_eligible: boolean;
 }
 
 const props = defineProps<{
@@ -334,6 +335,47 @@ function onTelephoneInput(value: string | null | undefined) {
                         {{ errors.email }}
                     </p>
                 </div>
+            </div>
+        </div>
+
+        <!-- Cashback -->
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3
+                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+            >
+                Cashback
+            </h3>
+            <div>
+                <p class="mb-2 text-sm font-medium">Éligible au cashback</p>
+                <div class="inline-flex rounded-lg border bg-muted/40 p-1 gap-1">
+                    <button
+                        type="button"
+                        class="rounded-md px-5 py-1.5 text-sm font-medium transition-colors"
+                        :class="form.cashback_eligible
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'"
+                        @click="$emit('update:form', { ...form, cashback_eligible: true })"
+                    >
+                        Oui
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-md px-5 py-1.5 text-sm font-medium transition-colors"
+                        :class="!form.cashback_eligible
+                            ? 'bg-destructive text-white shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'"
+                        @click="$emit('update:form', { ...form, cashback_eligible: false })"
+                    >
+                        Non
+                    </button>
+                </div>
+                <p class="mt-1.5 text-xs text-muted-foreground">
+                    {{
+                        form.cashback_eligible
+                            ? 'Ce client recevra du cashback selon les règles définies.'
+                            : 'Ce client ne recevra aucun cashback.'
+                    }}
+                </p>
             </div>
         </div>
 
