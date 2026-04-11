@@ -195,9 +195,7 @@ const commandesFiltrees = computed(() => {
     if (!q) return props.historique_commandes;
     return props.historique_commandes.filter(
         (c) =>
-            (c.commande_reference ?? '').toLowerCase().includes(q) ||
-            (c.vehicule ?? '').toLowerCase().includes(q) ||
-            (c.site ?? '').toLowerCase().includes(q),
+            (c.commande_reference ?? '').toLowerCase().includes(q),
     );
 });
 
@@ -448,7 +446,7 @@ function closeDetailDialog() {
                         <input
                             v-model="localSearch"
                             type="text"
-                            placeholder="Commande, véhicule, site…"
+                            placeholder="Référence commande…"
                             class="h-9 w-full rounded-md border bg-background pr-3 pl-8 text-sm"
                         />
                     </div>
@@ -475,8 +473,7 @@ function closeDetailDialog() {
                     <div class="flex items-start justify-between">
                         <div class="min-w-0 flex-1">
                             <p class="font-mono text-xs font-semibold text-primary">{{ c.commande_reference ?? '—' }}</p>
-                            <p class="text-xs text-muted-foreground">{{ c.date_commande }} · {{ c.site ?? '—' }}</p>
-                            <p class="mt-0.5 text-xs text-muted-foreground">{{ c.vehicule ?? '—' }}</p>
+                            <p class="text-xs text-muted-foreground">{{ c.date_commande }}</p>
                         </div>
                         <div class="text-right">
                             <p class="font-semibold tabular-nums">{{ formatGNF(c.montant_net) }}</p>
@@ -602,7 +599,7 @@ function closeDetailDialog() {
                         root:   { class: 'w-full' },
                         header: { class: 'border-b bg-muted/30 px-4 py-3' },
                         tbody:  { class: 'divide-y' },
-                        table:  { style: 'table-layout: fixed; min-width: 1260px' },
+                        table:  { style: 'table-layout: fixed; min-width: 980px' },
                     }"
                 >
                     <!-- ─ Header slot : filtres ─────────────────────────────── -->
@@ -615,7 +612,7 @@ function closeDetailDialog() {
                                 </InputIcon>
                                 <InputText
                                     v-model="localSearch"
-                                    placeholder="Commande, véhicule, site…"
+                                    placeholder="Référence commande…"
                                     class="w-full text-sm"
                                 />
                             </IconField>
@@ -670,40 +667,9 @@ function closeDetailDialog() {
                         </template>
                     </Column>
 
-                    <!-- ─ Colonne : Véhicule (22%) ────────────────────────── -->
-                    <Column
-                        field="vehicule"
-                        header="Véhicule"
-                        style="width: 210px"
-                        header-class="py-3 align-middle text-left"
-                        body-class="align-middle"
-                    >
-                        <template #body="{ data }">
-                            <div class="min-w-0 space-y-1 leading-tight">
-                                <p class="truncate font-medium">{{ data.vehicule ?? '—' }}</p>
-                                <p
-                                    v-if="data.immatriculation"
-                                    class="truncate font-mono text-xs text-muted-foreground"
-                                >
-                                    {{ data.immatriculation }}
-                                </p>
-                            </div>
-                        </template>
-                    </Column>
+                    <!-- Colonnes vehicule/site retirees: visibles dans le detail commande -->
 
-                    <!-- ─ Colonne : Brut (12%) ────────────────────────────── -->
-                    <Column
-                        field="site"
-                        header="Site"
-                        sortable
-                        style="width: 130px"
-                        header-class="py-3 align-middle text-left"
-                        body-class="align-middle"
-                    >
-                        <template #body="{ data }">
-                            <span class="block truncate leading-tight">{{ data.site ?? '—' }}</span>
-                        </template>
-                    </Column>
+
 
                     <Column
                         field="montant_brut"

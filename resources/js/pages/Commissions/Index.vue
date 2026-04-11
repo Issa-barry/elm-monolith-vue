@@ -261,16 +261,10 @@ function detailUrl(b: BeneficiaireRow): string {
                             {{ formatPhoneDisplay(b.telephone) }}
                         </p>
                         <p class="mt-1 text-sm font-semibold tabular-nums">
-                            {{ formatGNF(b.total_net_cumule) }}
+                            Net : {{ formatGNF(b.total_net_cumule) }}
                         </p>
-                        <p
-                            v-if="b.solde_restant > 0"
-                            class="text-xs font-semibold text-amber-600 tabular-nums dark:text-amber-400"
-                        >
-                            Restant : {{ formatGNF(b.solde_restant) }}
-                        </p>
-                        <p class="mt-0.5 text-xs text-muted-foreground">
-                            {{ b.nb_commandes }} commande{{ b.nb_commandes > 1 ? 's' : '' }}
+                        <p class="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                            Brut : {{ formatGNF(b.total_brut_cumule) }}
                         </p>
                     </div>
                     <div class="flex shrink-0 flex-col items-end gap-2">
@@ -379,7 +373,7 @@ function detailUrl(b: BeneficiaireRow): string {
                         root:   { class: 'w-full' },
                         header: { class: 'border-b bg-muted/30 px-4 py-3' },
                         tbody:  { class: 'divide-y' },
-                        table:  { style: 'table-layout: fixed; min-width: 800px' },
+                        table:  { style: 'table-layout: fixed; min-width: 760px' },
                     }"
                 >
                     <template #header>
@@ -415,8 +409,8 @@ function detailUrl(b: BeneficiaireRow): string {
                         </div>
                     </template>
 
-                    <!-- Bénéficiaire (22%) -->
-                    <Column field="beneficiaire_nom" header="Bénéficiaire" sortable style="width: 22%">
+                    <!-- Bénéficiaire (34%) -->
+                    <Column field="beneficiaire_nom" header="Bénéficiaire" sortable style="width: 34%">
                         <template #body="{ data }">
                             <p class="truncate font-semibold">{{ data.beneficiaire_nom }}</p>
                             <p v-if="data.telephone" class="mt-0.5 truncate text-xs text-muted-foreground">
@@ -425,25 +419,15 @@ function detailUrl(b: BeneficiaireRow): string {
                         </template>
                     </Column>
 
-                    <!-- Commandes (13%) -->
-                    <Column field="nb_commandes" header="Commandes" sortable style="width: 13%">
+                    <!-- Brut (15%) -->
+                    <Column field="total_brut_cumule" header="Brut" sortable style="width: 15%">
                         <template #body="{ data }">
-                            <span class="tabular-nums">{{ data.nb_commandes }}</span>
-                            <p v-if="data.date_derniere_commande" class="text-xs text-muted-foreground">
-                                {{ data.date_derniere_commande }}
-                            </p>
+                            <span class="whitespace-nowrap font-semibold tabular-nums">{{ formatGNF(data.total_brut_cumule) }}</span>
                         </template>
                     </Column>
 
-                    <!-- Total net (13%) -->
-                    <Column field="total_net_cumule" header="Total net" sortable style="width: 13%">
-                        <template #body="{ data }">
-                            <span class="whitespace-nowrap font-semibold tabular-nums">{{ formatGNF(data.total_net_cumule) }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Frais (11%) -->
-                    <Column field="total_frais" header="Frais" sortable style="width: 11%">
+                    <!-- Frais (13%) -->
+                    <Column field="total_frais" header="Frais" sortable style="width: 13%">
                         <template #body="{ data }">
                             <span
                                 class="whitespace-nowrap tabular-nums"
@@ -454,22 +438,15 @@ function detailUrl(b: BeneficiaireRow): string {
                         </template>
                     </Column>
 
-                    <!-- Versé (12%) -->
-                    <Column field="total_verse" header="Versé" sortable style="width: 12%">
+                    <!-- Total net (15%) -->
+                    <Column field="total_net_cumule" header="Total net" sortable style="width: 15%">
                         <template #body="{ data }">
-                            <span class="whitespace-nowrap tabular-nums">{{ formatGNF(data.total_verse) }}</span>
+                            <span class="whitespace-nowrap font-semibold tabular-nums">{{ formatGNF(data.total_net_cumule) }}</span>
                         </template>
                     </Column>
 
-                    <!-- Solde restant (13%) -->
-                    <Column field="solde_restant" header="Solde restant" sortable style="width: 13%">
-                        <template #body="{ data }">
-                            <span class="whitespace-nowrap font-semibold tabular-nums">{{ formatGNF(data.solde_restant) }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Statut (10%) -->
-                    <Column field="statut_global" header="Statut" sortable style="width: 10%">
+                    <!-- Statut (13%) -->
+                    <Column field="statut_global" header="Statut" sortable style="width: 13%">
                         <template #body="{ data }">
                             <StatusDot
                                 :label="statutLabel[data.statut_global] ?? data.statut_global"
@@ -479,8 +456,8 @@ function detailUrl(b: BeneficiaireRow): string {
                         </template>
                     </Column>
 
-                    <!-- Action (6%) -->
-                    <Column header="" style="width: 6%">
+                    <!-- Action (10%) -->
+                    <Column header="" style="width: 10%">
                         <template #body="{ data }">
                             <div class="flex justify-end">
                                 <Link :href="detailUrl(data)">
