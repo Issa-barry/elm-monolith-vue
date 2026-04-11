@@ -26,6 +26,8 @@ class ModuleFeature
 
     public const CASHBACK = 'module.cashback';
 
+    public const LOGISTIQUE = 'module.logistique';
+
     public const ALL = [
         self::VENTES,
         self::ACHATS,
@@ -37,6 +39,7 @@ class ModuleFeature
         self::UTILISATEURS,
         self::INSCRIPTION,
         self::CASHBACK,
+        self::LOGISTIQUE,
     ];
 
     /**
@@ -69,6 +72,7 @@ class ModuleFeature
             self::UTILISATEURS => 'Utilisateurs',
             self::INSCRIPTION => 'Inscription',
             self::CASHBACK => 'Cashback clients',
+            self::LOGISTIQUE => 'Logistique inter-sites',
         ];
     }
 }

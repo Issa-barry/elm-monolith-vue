@@ -15,6 +15,7 @@ class RolesAndPermissionsSeeder extends Seeder
     private const RESOURCES = [
         'clients', 'prestataires', 'livreurs', 'proprietaires',
         'vehicules', 'equipes-livraison', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres',
+        'logistique',
     ];
 
     private const ACTIONS = ['create', 'read', 'update', 'delete'];
@@ -31,6 +32,9 @@ class RolesAndPermissionsSeeder extends Seeder
                 Permission::firstOrCreate(['name' => "{$resource}.{$action}"]);
             }
         }
+
+        // Permissions standalone (hors matrice CRUD standard)
+        Permission::firstOrCreate(['name' => 'logistique.commission.verser']);
 
         // ── 2. Rôles + matrices de permissions ────────────────────────────────
         $superAdmin = Role::firstOrCreate(['name' => 'super_admin']);
@@ -56,6 +60,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'achats.create',            'achats.read',            'achats.update',            'achats.delete',
             'users.create',             'users.read',             'users.update',
             'parametres.read',          'parametres.update',
+            'logistique.create',        'logistique.read',        'logistique.update',      'logistique.delete',
+            'logistique.commission.verser',
         ]);
 
         $manager->syncPermissions([
@@ -72,6 +78,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'achats.create',            'achats.read',            'achats.update',
             'users.read',
             'parametres.read',
+            'logistique.create',        'logistique.read',        'logistique.update',
+            'logistique.commission.verser',
         ]);
 
         $commerciale->syncPermissions([
@@ -91,7 +99,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'clients.read',           'prestataires.read',      'livreurs.read',
             'proprietaires.read',     'vehicules.read',         'equipes-livraison.read',
             'sites.read',             'produits.read',          'packings.read',
-            'ventes.read',
+            'ventes.read',            'logistique.read',
         ]);
 
         // ── 3. Organisation par défaut ────────────────────────────────────────

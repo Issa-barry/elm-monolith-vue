@@ -5,6 +5,7 @@ use App\Http\Controllers\CashbackController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
+use App\Http\Controllers\CommissionLogistiqueController;
 use App\Http\Controllers\CommissionVenteController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\EncaissementVenteController;
@@ -17,9 +18,12 @@ use App\Http\Controllers\ProduitController;
 use App\Http\Controllers\ProprietaireController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SiteController;
+use App\Http\Controllers\TransfertLogistiqueController;
+use App\Http\Controllers\TransfertStatutController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VehiculeController;
 use App\Http\Controllers\VersementCommissionController;
+use App\Http\Controllers\VersementCommissionLogistiqueController;
 use App\Http\Controllers\VersementController;
 use App\Services\ModuleService;
 use Illuminate\Support\Facades\Route;
@@ -146,6 +150,29 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::get('cashback', [CashbackController::class, 'index'])->name('cashback.index');
         Route::patch('cashback/{cashbackTransaction}/valider', [CashbackController::class, 'valider'])->name('cashback.valider');
         Route::patch('cashback/{cashbackTransaction}/verser', [CashbackController::class, 'verser'])->name('cashback.verser');
+    });
+
+    // ── Module : Logistique inter-sites ───────────────────────────────────────
+    Route::middleware('module:'.ModuleFeature::LOGISTIQUE)->group(function () {
+        // Transferts
+        Route::get('logistique', [TransfertLogistiqueController::class, 'index'])->name('logistique.index');
+        Route::get('logistique/creer', [TransfertLogistiqueController::class, 'create'])->name('logistique.create');
+        Route::post('logistique', [TransfertLogistiqueController::class, 'store'])->name('logistique.store');
+        Route::get('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'show'])->name('logistique.show');
+        Route::get('logistique/{transfert_logistique}/editer', [TransfertLogistiqueController::class, 'edit'])->name('logistique.edit');
+        Route::put('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'update'])->name('logistique.update');
+        Route::delete('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'destroy'])->name('logistique.destroy');
+
+        // Transitions de statut
+        Route::post('logistique/{transfert_logistique}/statut/avancer', [TransfertStatutController::class, 'avancer'])->name('logistique.statut.avancer');
+        Route::post('logistique/{transfert_logistique}/statut/annuler', [TransfertStatutController::class, 'annuler'])->name('logistique.statut.annuler');
+
+        // Commission logistique
+        Route::post('logistique/{transfert_logistique}/commission', [CommissionLogistiqueController::class, 'store'])->name('logistique.commission.store');
+
+        // Versements de parts de commission
+        Route::post('commissions-logistique/parts/{part}/versements', [VersementCommissionLogistiqueController::class, 'store'])
+            ->name('logistique.commission.versements.store');
     });
 });
 

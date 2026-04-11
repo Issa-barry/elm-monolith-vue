@@ -15,9 +15,11 @@ export type Resource =
     | 'ventes'
     | 'achats'
     | 'users'
-    | 'parametres';
+    | 'parametres'
+    | 'logistique';
 export type CrudAction = 'create' | 'read' | 'update' | 'delete';
-export type PermissionKey = `${Resource}.${CrudAction}`;
+export type StandalonePermission = 'logistique.commission.verser';
+export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 export type AppRole =
     | 'super_admin'
@@ -57,7 +59,8 @@ export type ModuleFlagKey =
     | 'sites'
     | 'utilisateurs'
     | 'inscription'
-    | 'cashback';
+    | 'cashback'
+    | 'logistique';
 
 export type AppPageProps<
     T extends Record<string, unknown> = Record<string, unknown>,

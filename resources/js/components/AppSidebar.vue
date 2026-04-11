@@ -23,6 +23,7 @@ import {
     Package,
     PackageCheck,
     ShoppingCart,
+    Truck,
     UserCog,
     UserRoundCheck,
     Users,
@@ -120,6 +121,18 @@ const mainNavItems = computed((): NavItem[] => {
 
     if (canSee('sites.read', 'sites'))
         items.push({ title: 'Sites', href: '/sites', icon: Building2 });
+
+    if (moduleActive('logistique') && can('logistique.read')) {
+        items.push({
+            title: 'Logistique',
+            href: '/logistique',
+            icon: Truck,
+            items: [
+                { title: 'Transferts', href: '/logistique' },
+            ],
+        });
+    }
+
     if (canSee('users.read', 'utilisateurs'))
         items.push({ title: 'Utilisateurs', href: '/users', icon: UserCog });
 
