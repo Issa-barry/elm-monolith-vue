@@ -154,8 +154,19 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 
     // ── Module : Logistique inter-sites ───────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::LOGISTIQUE)->group(function () {
-        // Transferts
-        Route::get('logistique', [TransfertLogistiqueController::class, 'index'])->name('logistique.index');
+        // Redirection rétro-compatibilité : /logistique → /logistique/transferts
+        Route::get('logistique', function () {
+            return redirect()->route('logistique.transferts.index', [], 302);
+        })->name('logistique.index');
+
+        // Vues index séparées (statiques, AVANT le wildcard {transfert_logistique})
+        Route::get('logistique/transferts', [TransfertLogistiqueController::class, 'indexTransferts'])->name('logistique.transferts.index');
+        Route::get('logistique/receptions', [TransfertLogistiqueController::class, 'indexReceptions'])->name('logistique.receptions.index');
+
+        // Commissions logistiques — module autonome (AVANT {transfert_logistique})
+        Route::get('logistique/commissions', [CommissionLogistiqueController::class, 'index'])->name('logistique.commissions.index');
+        Route::get('logistique/commissions/{commission_logistique}', [CommissionLogistiqueController::class, 'show'])->name('logistique.commissions.show');
+
         Route::get('logistique/creer', [TransfertLogistiqueController::class, 'create'])->name('logistique.create');
         Route::post('logistique', [TransfertLogistiqueController::class, 'store'])->name('logistique.store');
         Route::get('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'show'])->name('logistique.show');

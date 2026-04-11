@@ -116,6 +116,11 @@ class TransfertLogistique extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function activites(): HasMany
+    {
+        return $this->hasMany(TransfertActivite::class)->orderBy('created_at');
+    }
+
     // ── Accessors ─────────────────────────────────────────────────────────────
 
     public function getStatutLabelAttribute(): string
@@ -133,6 +138,11 @@ class TransfertLogistique extends Model
     public function isEditable(): bool
     {
         return $this->statut instanceof StatutTransfert && $this->statut->isEditable();
+    }
+
+    public function isReception(): bool
+    {
+        return $this->statut === StatutTransfert::RECEPTION;
     }
 
     public function isCloture(): bool

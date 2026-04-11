@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Plus, Save, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Lock, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Calendar from 'primevue/calendar';
 import Dropdown from 'primevue/dropdown';
@@ -64,6 +64,7 @@ interface LigneForm {
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 const props = defineProps<{
+    site_source: SiteOption | null;
     sites: SiteOption[];
     vehicules: VehiculeOption[];
     equipes: EquipeOption[];
@@ -86,13 +87,17 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Form ──────────────────────────────────────────────────────────────────────
 
+const pad = (n: number) => String(n).padStart(2, '0');
+const today = new Date();
+const todayStr = `${pad(today.getDate())}/${pad(today.getMonth() + 1)}/${today.getFullYear()}`;
+
 const form = useForm({
-    site_source_id:      props.transfert?.site_source_id ?? (null as number | null),
+    site_source_id:      props.site_source?.id ?? (null as number | null),
     site_destination_id: props.transfert?.site_destination_id ?? (null as number | null),
     vehicule_id:         props.transfert?.vehicule_id ?? (null as number | null),
     equipe_livraison_id: props.transfert?.equipe_livraison_id ?? (null as number | null),
-    date_depart_prevue:  props.transfert?.date_depart_prevue ?? '',
-    date_arrivee_prevue: props.transfert?.date_arrivee_prevue ?? '',
+    date_depart_prevue:  props.transfert?.date_depart_prevue ?? todayStr,
+    date_arrivee_prevue: props.transfert?.date_arrivee_prevue ?? todayStr,
     notes:               props.transfert?.notes ?? '',
     lignes:              (props.transfert?.lignes ?? [{ produit_id: null, quantite_demandee: 1, notes: '' }]) as LigneForm[],
 });
@@ -117,15 +122,22 @@ function searchVehicule(event: { query: string }) {
 
 function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
-    if (v?.equipe_livraison_id) {
-        form.equipe_livraison_id = v.equipe_livraison_id;
+    form.equipe_livraison_id = v?.equipe_livraison_id ?? null;
+    if (v?.capacite_packs) {
+        form.lignes.forEach((l) => { l.quantite_demandee = v.capacite_packs!; });
     }
 }
 
 function onVehiculeClear() {
     form.vehicule_id = null;
+    form.equipe_livraison_id = null;
     vehiculeSelected.value = null;
 }
+
+const equipeNom = computed(() => {
+    if (!form.equipe_livraison_id) return null;
+    return props.equipes.find((e) => e.id === form.equipe_livraison_id)?.nom ?? null;
+});
 
 function vehiculeLabel(v: VehiculeOption): string {
     return `${v.nom_vehicule} — ${v.immatriculation}`;
@@ -168,9 +180,10 @@ function supprimerLigne(index: number) {
 
 const canSubmit = computed(
     () =>
-        form.site_source_id !== null &&
+        props.site_source !== null &&
         form.site_destination_id !== null &&
         form.site_source_id !== form.site_destination_id &&
+        form.vehicule_id !== null &&
         form.lignes.every((l) => l.produit_id !== null && l.quantite_demandee >= 1) &&
         !form.processing,
 );
@@ -226,19 +239,17 @@ function submit() {
                     <!-- Sites source / destination -->
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div>
-                            <Label class="mb-1.5 block text-sm">
-                                Site source <span class="text-destructive">*</span>
-                            </Label>
-                            <Dropdown
-                                v-model="form.site_source_id"
-                                :options="sites"
-                                option-label="nom"
-                                option-value="id"
-                                placeholder="Sélectionner un site"
-                                class="w-full"
-                                :class="{ 'p-invalid': form.errors.site_source_id }"
-                                filter
-                            />
+                            <Label class="mb-1.5 block text-sm">Site source</Label>
+                            <div
+                                class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 text-sm"
+                                :class="site_source ? 'text-foreground' : 'text-muted-foreground'"
+                            >
+                                <span>{{ site_source?.nom ?? 'Aucun site affecté' }}</span>
+                                <Lock class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                            </div>
+                            <p v-if="!site_source" class="mt-1 text-xs text-destructive">
+                                Vous n'êtes affecté à aucun site. Contactez un administrateur.
+                            </p>
                             <p v-if="form.errors.site_source_id" class="mt-1 text-xs text-destructive">
                                 {{ form.errors.site_source_id }}
                             </p>
@@ -249,7 +260,7 @@ function submit() {
                             </Label>
                             <Dropdown
                                 v-model="form.site_destination_id"
-                                :options="sites.filter((s) => s.id !== form.site_source_id)"
+                                :options="sites.filter((s) => s.id !== site_source?.id)"
                                 option-label="nom"
                                 option-value="id"
                                 placeholder="Sélectionner un site"
@@ -260,19 +271,13 @@ function submit() {
                             <p v-if="form.errors.site_destination_id" class="mt-1 text-xs text-destructive">
                                 {{ form.errors.site_destination_id }}
                             </p>
-                            <p
-                                v-if="form.site_source_id && form.site_destination_id && form.site_source_id === form.site_destination_id"
-                                class="mt-1 text-xs text-amber-600 dark:text-amber-400"
-                            >
-                                Le site destination doit être différent du site source.
-                            </p>
                         </div>
                     </div>
 
-                    <!-- Véhicule + Équipe -->
-                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                    <!-- Véhicule -->
+                    <div class="mt-4">
                         <div>
-                            <Label class="mb-1.5 block text-sm">Véhicule</Label>
+                            <Label class="mb-1.5 block text-sm">Véhicule <span class="text-destructive">*</span></Label>
                             <AutoComplete
                                 v-model="vehiculeSelected"
                                 :suggestions="vehiculeSuggests"
@@ -305,45 +310,10 @@ function submit() {
                                 </template>
                             </AutoComplete>
                         </div>
-                        <div>
-                            <Label class="mb-1.5 block text-sm">Équipe de livraison</Label>
-                            <Dropdown
-                                v-model="form.equipe_livraison_id"
-                                :options="equipes"
-                                option-label="nom"
-                                option-value="id"
-                                placeholder="Sélectionner une équipe"
-                                class="w-full"
-                                show-clear
-                            />
-                        </div>
+                        <!-- Équipe masquée — alimentée automatiquement par le véhicule -->
                     </div>
 
-                    <!-- Dates -->
-                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <Label class="mb-1.5 block text-sm">Date de départ prévue</Label>
-                            <Calendar
-                                v-model="form.date_depart_prevue"
-                                date-format="dd/mm/yy"
-                                placeholder="jj/mm/aaaa"
-                                class="w-full"
-                                input-class="w-full"
-                                show-icon
-                            />
-                        </div>
-                        <div>
-                            <Label class="mb-1.5 block text-sm">Date d'arrivée prévue</Label>
-                            <Calendar
-                                v-model="form.date_arrivee_prevue"
-                                date-format="dd/mm/yy"
-                                placeholder="jj/mm/aaaa"
-                                class="w-full"
-                                input-class="w-full"
-                                show-icon
-                            />
-                        </div>
-                    </div>
+                    <!-- Dates — masquées temporairement (valeur = date du jour par défaut) -->
 
                     <!-- Notes -->
                     <div class="mt-4">

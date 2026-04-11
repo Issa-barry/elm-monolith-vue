@@ -10,48 +10,48 @@ use Illuminate\Validation\ValidationException;
 class TransfertLogistiqueService
 {
     /**
-     * Faire avancer le statut d'un transfert vers l'étape suivante.
+     * Workflow : BROUILLON → CHARGEMENT → TRANSIT → RECEPTION → CLOTURE
      *
-     * @throws ValidationException si les pré-conditions de la transition ne sont pas satisfaites
+     * @throws ValidationException si les pré-conditions ne sont pas satisfaites
      */
     public static function avancerStatut(TransfertLogistique $transfert): TransfertLogistique
     {
         $suivant = match ($transfert->statut) {
-            StatutTransfert::BROUILLON   => StatutTransfert::PREPARATION,
-            StatutTransfert::PREPARATION => StatutTransfert::CHARGEMENT,
-            StatutTransfert::CHARGEMENT  => StatutTransfert::TRANSIT,
-            StatutTransfert::TRANSIT     => StatutTransfert::RECEPTION,
-            StatutTransfert::RECEPTION   => StatutTransfert::CLOTURE,
-            default                      => null,
+            StatutTransfert::BROUILLON  => StatutTransfert::CHARGEMENT,
+            StatutTransfert::CHARGEMENT => StatutTransfert::TRANSIT,
+            StatutTransfert::TRANSIT    => StatutTransfert::RECEPTION,
+            default                     => null,
         };
 
         if ($suivant === null) {
             return $transfert;
         }
 
-        // Valider les pré-conditions avant toute transaction
         self::validerPreconditions($transfert, $suivant);
 
         DB::transaction(function () use ($transfert, $suivant) {
-            $now     = now();
             $updates = ['statut' => $suivant->value];
 
-            // Départ réel enregistré au passage en TRANSIT
+            // Départ réel enregistré quand le camion part (TRANSIT)
             if ($suivant === StatutTransfert::TRANSIT) {
-                $updates['date_depart_reelle'] = $now->toDateString();
+                $updates['date_depart_reelle'] = now()->toDateString();
             }
 
-            // Arrivée réelle + mouvements stock destination à la CLÔTURE
-            if ($suivant === StatutTransfert::CLOTURE) {
-                $updates['date_arrivee_reelle'] = $now->toDateString();
-                MouvementStockService::enregistrerEntreeDestination($transfert);
+            // Arrivée réelle enregistrée à la RECEPTION
+            if ($suivant === StatutTransfert::RECEPTION) {
+                $updates['date_arrivee_reelle'] = now()->toDateString();
             }
 
             $transfert->update($updates);
 
-            // Mouvements stock source au passage en RECEPTION (produits physiquement partis)
-            if ($suivant === StatutTransfert::RECEPTION) {
+            // Sortie stock source : marchandises physiquement parties (TRANSIT)
+            if ($suivant === StatutTransfert::TRANSIT) {
                 MouvementStockService::enregistrerSortieSource($transfert);
+            }
+
+            // Entrée stock destination : marchandises reçues (RECEPTION)
+            if ($suivant === StatutTransfert::RECEPTION) {
+                MouvementStockService::enregistrerEntreeDestination($transfert);
             }
         });
 
@@ -59,11 +59,35 @@ class TransfertLogistiqueService
     }
 
     /**
-     * Annuler un transfert (si pas encore en état terminal).
+     * Clôturer automatiquement un transfert en RECEPTION une fois toutes les commissions versées.
+     * Ne pas appeler manuellement : déclenché uniquement par VersementCommissionLogistiqueController.
+     *
+     * @throws \LogicException si le transfert n'est pas en RECEPTION ou si la commission est incomplète
+     */
+    public static function cloturerAutomatiquement(TransfertLogistique $transfert): TransfertLogistique
+    {
+        if ($transfert->statut !== StatutTransfert::RECEPTION) {
+            throw new \LogicException('Seul un transfert en RECEPTION peut être clôturé automatiquement.');
+        }
+
+        $transfert->loadMissing('commission');
+
+        if ($transfert->commission && ! $transfert->commission->isVersee()) {
+            throw new \LogicException('La commission logistique n\'est pas encore entièrement versée.');
+        }
+
+        $transfert->update(['statut' => StatutTransfert::CLOTURE->value]);
+
+        return $transfert->fresh();
+    }
+
+    /**
+     * Annuler un transfert — autorisé uniquement en BROUILLON ou CHARGEMENT.
+     * Silently no-op si le statut n'est pas éligible (la policy devrait déjà avoir bloqué).
      */
     public static function annuler(TransfertLogistique $transfert): TransfertLogistique
     {
-        if ($transfert->isTerminal()) {
+        if (! in_array($transfert->statut, [StatutTransfert::BROUILLON, StatutTransfert::CHARGEMENT])) {
             return $transfert;
         }
 
@@ -74,22 +98,15 @@ class TransfertLogistiqueService
 
     // ── Pré-conditions ────────────────────────────────────────────────────────
 
-    /**
-     * Valide les pré-conditions métier avant une transition de statut.
-     *
-     * @throws ValidationException
-     */
     public static function validerPreconditions(TransfertLogistique $transfert, StatutTransfert $cible): void
     {
         $errors = [];
 
         match ($cible) {
-            StatutTransfert::PREPARATION => self::checkPreparation($transfert, $errors),
-            StatutTransfert::CHARGEMENT  => self::checkChargement($transfert, $errors),
-            StatutTransfert::TRANSIT     => self::checkTransit($transfert, $errors),
-            StatutTransfert::RECEPTION   => self::checkReception($transfert, $errors),
-            StatutTransfert::CLOTURE     => self::checkCloture($transfert, $errors),
-            default                      => null,
+            StatutTransfert::CHARGEMENT => self::checkChargement($transfert, $errors),
+            StatutTransfert::TRANSIT    => self::checkTransit($transfert, $errors),
+            StatutTransfert::RECEPTION  => self::checkReception($transfert, $errors),
+            default                     => null,
         };
 
         if (! empty($errors)) {
@@ -97,7 +114,10 @@ class TransfertLogistiqueService
         }
     }
 
-    private static function checkPreparation(TransfertLogistique $t, array &$errors): void
+    /**
+     * BROUILLON → CHARGEMENT : véhicule + au moins une ligne requise.
+     */
+    private static function checkChargement(TransfertLogistique $t, array &$errors): void
     {
         $t->loadMissing('lignes');
 
@@ -106,51 +126,49 @@ class TransfertLogistiqueService
         }
 
         if (! $t->vehicule_id) {
-            $errors[] = 'Un véhicule doit être assigné avant de démarrer la préparation.';
+            $errors[] = 'Un véhicule doit être assigné avant de démarrer le chargement.';
         }
     }
 
-    private static function checkChargement(TransfertLogistique $t, array &$errors): void
-    {
-        if (! $t->equipe_livraison_id) {
-            $errors[] = 'Une équipe de livraison doit être assignée avant le chargement.';
-        }
-
-        if (! $t->date_depart_prevue) {
-            $errors[] = 'La date de départ prévue doit être renseignée.';
-        }
-    }
-
+    /**
+     * CHARGEMENT → TRANSIT : toutes les quantités chargées doivent être renseignées.
+     */
     private static function checkTransit(TransfertLogistique $t, array &$errors): void
     {
         $t->loadMissing('lignes');
 
-        $lignesSansChargement = $t->lignes->filter(
-            fn ($l) => $l->quantite_chargee === null
-        );
+        $manquantes = $t->lignes->filter(fn ($l) => $l->quantite_chargee === null);
 
-        if ($lignesSansChargement->isNotEmpty()) {
+        if ($manquantes->isNotEmpty()) {
             $errors[] = 'Toutes les lignes doivent avoir une quantité chargée renseignée.';
         }
     }
 
+    /**
+     * TRANSIT → RECEPTION : toutes les quantités reçues et types d'écart requis.
+     */
     private static function checkReception(TransfertLogistique $t, array &$errors): void
-    {
-        if (! $t->date_depart_reelle) {
-            $errors[] = 'La date de départ réelle doit être renseignée.';
-        }
-    }
-
-    private static function checkCloture(TransfertLogistique $t, array &$errors): void
     {
         $t->loadMissing('lignes');
 
-        $lignesIncompletes = $t->lignes->filter(
-            fn ($l) => ! $l->estReceptionComplete()
+        $incompletes = $t->lignes->filter(
+            fn ($l) => $l->quantite_recue === null || $l->ecart_type === null
         );
 
-        if ($lignesIncompletes->isNotEmpty()) {
+        if ($incompletes->isNotEmpty()) {
             $errors[] = 'Toutes les lignes doivent avoir une quantité reçue et un type d\'écart renseigné.';
+        }
+    }
+
+    /**
+     * RECEPTION → CLOTURE : commissions entièrement versées (si existantes).
+     */
+    private static function checkCloture(TransfertLogistique $t, array &$errors): void
+    {
+        $t->loadMissing(['lignes', 'commission']);
+
+        if ($t->commission && ! $t->commission->isVersee()) {
+            $errors[] = 'Les commissions logistiques doivent être entièrement versées avant la clôture.';
         }
     }
 }

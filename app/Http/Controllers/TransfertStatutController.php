@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\StatutTransfert;
 use App\Models\TransfertLogistique;
+use App\Services\TransfertActiviteService;
 use App\Services\TransfertLogistiqueService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,14 +27,14 @@ class TransfertStatutController extends Controller
 
         // Données optionnelles pour les étapes qui nécessitent des saisies
         $request->validate([
-            // Saisie des quantités chargées (étape CHARGEMENT → TRANSIT)
-            'lignes'                          => ['sometimes', 'array'],
-            'lignes.*.id'                     => ['required_with:lignes', 'integer'],
-            'lignes.*.quantite_chargee'       => ['required_with:lignes', 'integer', 'min:0'],
-            // Saisie des réceptions (étape RECEPTION → CLOTURE)
-            'lignes.*.quantite_recue'         => ['sometimes', 'integer', 'min:0'],
-            'lignes.*.ecart_type'             => ['sometimes', 'nullable', 'string'],
-            'lignes.*.ecart_motif'            => ['sometimes', 'nullable', 'string', 'max:500'],
+            'lignes'                    => ['sometimes', 'array'],
+            'lignes.*.id'               => ['required_with:lignes', 'integer'],
+            // Chargement (CHARGEMENT → TRANSIT) : optionnel, présent seulement pour cette étape
+            'lignes.*.quantite_chargee' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            // Réception (TRANSIT → RECEPTION) : optionnel, présent seulement pour cette étape
+            'lignes.*.quantite_recue'   => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'lignes.*.ecart_type'       => ['sometimes', 'nullable', 'string'],
+            'lignes.*.ecart_motif'      => ['sometimes', 'nullable', 'string', 'max:500'],
         ]);
 
         // Mettre à jour les lignes si fournies
@@ -69,11 +71,22 @@ class TransfertStatutController extends Controller
             }
         }
 
+        $ancienStatut = $transfert_logistique->statut;
+
         try {
             TransfertLogistiqueService::avancerStatut($transfert_logistique);
         } catch (ValidationException $e) {
             return back()->withErrors($e->errors());
         }
+
+        $action = match ($ancienStatut) {
+            StatutTransfert::BROUILLON  => 'chargement_demarre',
+            StatutTransfert::CHARGEMENT => 'chargement_valide',
+            StatutTransfert::TRANSIT    => 'reception_validee',
+            StatutTransfert::RECEPTION  => 'cloture',
+            default                     => 'statut_change',
+        };
+        TransfertActiviteService::log($transfert_logistique, $action);
 
         return redirect()->route('logistique.show', $transfert_logistique)
             ->with('success', 'Statut mis à jour.');
@@ -86,7 +99,15 @@ class TransfertStatutController extends Controller
     {
         $this->authorize('annuler', $transfert_logistique);
 
+        // Garde API : annulation interdite dès TRANSIT (ne devrait pas passer la policy, mais double sécurité)
+        abort_unless(
+            in_array($transfert_logistique->statut, [StatutTransfert::BROUILLON, StatutTransfert::CHARGEMENT]),
+            422,
+            'L\'annulation n\'est possible qu\'en phase de brouillon ou de chargement.'
+        );
+
         TransfertLogistiqueService::annuler($transfert_logistique);
+        TransfertActiviteService::log($transfert_logistique, 'annule');
 
         return redirect()->route('logistique.show', $transfert_logistique)
             ->with('success', 'Transfert annulé.');

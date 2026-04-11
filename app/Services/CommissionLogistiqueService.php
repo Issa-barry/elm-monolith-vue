@@ -25,9 +25,17 @@ class CommissionLogistiqueService
         float $valeurBase,
         ?int $quantiteReference = null
     ): CommissionLogistique {
-        if (! $transfert->isCloture()) {
+        if (! $transfert->isReception() && ! $transfert->isCloture()) {
             throw new InvalidArgumentException(
-                'La commission ne peut être générée que sur un transfert clôturé.'
+                'La commission ne peut être générée que sur un transfert réceptionné ou clôturé.'
+            );
+        }
+
+        // Bloquer le recalcul si au moins un versement a déjà été enregistré.
+        $existingCommission = $transfert->commission()->first();
+        if ($existingCommission && (float) $existingCommission->montant_verse > 0) {
+            throw new InvalidArgumentException(
+                'Impossible de recalculer : des versements ont déjà été enregistrés sur cette commission.'
             );
         }
 

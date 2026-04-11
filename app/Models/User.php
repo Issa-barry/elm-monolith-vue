@@ -63,6 +63,14 @@ class User extends Authenticatable
             ->withTimestamps();
     }
 
+    /**
+     * Indique si l'utilisateur est affecté à un site donné (via user_sites).
+     */
+    public function isAssignedToSite(int $siteId): bool
+    {
+        return $this->sites()->where('sites.id', $siteId)->exists();
+    }
+
     public function isSuperAdmin(): bool
     {
         return $this->hasRole('super_admin');

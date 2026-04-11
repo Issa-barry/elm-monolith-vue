@@ -20,7 +20,6 @@ import {
     Pencil,
     Plus,
     Search,
-    Trash2,
     Truck,
     XCircle,
 } from 'lucide-vue-next';
@@ -30,7 +29,6 @@ import Dropdown from 'primevue/dropdown';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
-import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
@@ -58,14 +56,18 @@ interface Transfert {
     is_terminal: boolean;
     is_annule: boolean;
     is_editable: boolean;
+    can_annuler: boolean;
+    can_valider_reception: boolean;
     created_at: string;
 }
 
+// Kpis : champs optionnels — Transferts et Réceptions n'ont pas les mêmes compteurs
 interface Kpis {
-    en_preparation: number;
-    en_transit: number;
-    en_reception: number;
-    clotures_mois: number;
+    brouillons?: number;
+    en_chargement?: number;
+    en_transit?: number;
+    en_attente?: number;
+    clotures_mois?: number;
 }
 
 interface StatutOption {
@@ -80,18 +82,23 @@ const props = defineProps<{
     kpis: Kpis;
     statuts: StatutOption[];
     filtre_statut: string | null;
+    vue: 'transferts' | 'receptions';
+    can_create: boolean;
 }>();
 
 const { can } = usePermissions();
-const confirm = useConfirm();
 const toast = useToast();
 
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
 
-const breadcrumbs: BreadcrumbItem[] = [
+const breadcrumbs = computed((): BreadcrumbItem[] => [
     { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Logistique', href: '/logistique' },
-];
+    { title: 'Logistique', href: '/logistique/transferts' },
+    {
+        title: props.vue === 'receptions' ? 'Réceptions' : 'Transferts',
+        href: props.vue === 'receptions' ? '/logistique/receptions' : '/logistique/transferts',
+    },
+]);
 
 // ── Filtres desktop ───────────────────────────────────────────────────────────
 
@@ -105,8 +112,9 @@ watch(search, (val) => {
 
 function appliquerFiltreStatut(val: string | null) {
     statutFiltre.value = val;
+    const url = props.vue === 'receptions' ? '/logistique/receptions' : '/logistique/transferts';
     router.get(
-        '/logistique',
+        url,
         { statut: val ?? undefined },
         { preserveState: true, replace: true },
     );
@@ -128,42 +136,32 @@ const mobileFiltered = computed(() => {
     );
 });
 
-// ── Suppression ───────────────────────────────────────────────────────────────
-
-function confirmDelete(t: Transfert) {
-    confirm.require({
-        message: `Supprimer le transfert « ${t.reference} » ? Cette action est irréversible.`,
-        header: 'Confirmer la suppression',
-        icon: 'pi pi-exclamation-triangle',
-        rejectLabel: 'Annuler',
-        acceptLabel: 'Supprimer',
-        acceptClass: 'p-button-danger',
-        accept: () => {
-            router.delete(`/logistique/${t.id}`, {
-                onSuccess: () =>
-                    toast.add({
-                        severity: 'success',
-                        summary: 'Supprimé',
-                        detail: 'Transfert supprimé.',
-                        life: 3000,
-                    }),
-            });
-        },
-    });
-}
 
 // ── Étiquette prochaine étape ─────────────────────────────────────────────────
 
 const ETAPE_SUIVANTE: Record<string, string> = {
-    brouillon:   'Préparer',
-    preparation: 'Chargement',
-    chargement:  'Mettre en transit',
-    transit:     'Réceptionner',
-    reception:   'Clôturer',
+    brouillon:  'Démarrer le chargement',
+    chargement: 'Valider le chargement',
+    transit:    'Valider la réception',
 };
 
 function labelSuivant(statut: string): string {
     return ETAPE_SUIVANTE[statut] ?? '';
+}
+
+// ── Avancer direct (brouillon → chargement, sans dialog) ─────────────────────
+
+const avancementEnCours = ref<number | null>(null);
+
+function avancerDirect(t: Transfert) {
+    if (avancementEnCours.value) return;
+    avancementEnCours.value = t.id;
+    router.post(`/logistique/${t.id}/statut/avancer`, {}, {
+        preserveScroll: true,
+        onSuccess: () => toast.add({ severity: 'success', summary: 'Statut mis à jour', life: 3000 }),
+        onError: () => toast.add({ severity: 'error', summary: 'Erreur', detail: 'Impossible de mettre à jour le statut.', life: 4000 }),
+        onFinish: () => { avancementEnCours.value = null; },
+    });
 }
 
 // ── Commission statut dot class ───────────────────────────────────────────────
@@ -177,7 +175,7 @@ const commStatutDot: Record<string, string> = {
 </script>
 
 <template>
-    <Head title="Logistique" />
+    <Head :title="vue === 'receptions' ? 'Réceptions — Logistique' : 'Transferts — Logistique'" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- ── MOBILE VIEW ─────────────────────────────────────────────────── -->
@@ -192,8 +190,10 @@ const commStatutDot: Record<string, string> = {
                 >
                     <ArrowLeft class="h-5 w-5" />
                 </Link>
-                <span class="text-base font-semibold">Logistique</span>
-                <Link v-if="can('logistique.create')" href="/logistique/creer">
+                <span class="text-base font-semibold">
+                    {{ vue === 'receptions' ? 'Réceptions' : 'Transferts' }}
+                </span>
+                <Link v-if="can_create && vue === 'transferts'" href="/logistique/creer">
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
                         Nouveau
@@ -263,8 +263,10 @@ const commStatutDot: Record<string, string> = {
                 class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
             >
                 <Truck class="h-10 w-10 opacity-30" />
-                <p class="text-sm">Aucun transfert trouvé.</p>
-                <Link v-if="can('logistique.create')" href="/logistique/creer">
+                <p class="text-sm">
+                    {{ vue === 'receptions' ? 'Aucune réception trouvée.' : 'Aucun transfert trouvé.' }}
+                </p>
+                <Link v-if="can_create && vue === 'transferts'" href="/logistique/creer">
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
                         Créer le premier transfert
@@ -279,15 +281,13 @@ const commStatutDot: Record<string, string> = {
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-2xl font-semibold tracking-tight">
-                        Logistique inter-sites
+                        {{ vue === 'receptions' ? 'Réceptions' : 'Transferts' }}
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ transferts.length }} transfert{{
-                            transferts.length !== 1 ? 's' : ''
-                        }}
+                        {{ transferts.length }} {{ vue === 'receptions' ? 'réception' : 'transfert' }}{{ transferts.length !== 1 ? 's' : '' }}
                     </p>
                 </div>
-                <Link v-if="can('logistique.create')" href="/logistique/creer">
+                <Link v-if="can_create && vue === 'transferts'" href="/logistique/creer">
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouveau transfert
@@ -295,39 +295,54 @@ const commStatutDot: Record<string, string> = {
                 </Link>
             </div>
 
-            <!-- KPI cards -->
-            <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <!-- KPI cards — Transferts -->
+            <div v-if="vue === 'transferts'" class="grid grid-cols-2 gap-4 lg:grid-cols-3">
                 <div
                     class="rounded-xl border bg-card p-4 shadow-sm"
-                    :class="kpis.en_preparation > 0 ? 'border-blue-200 dark:border-blue-900' : ''"
+                    :class="(kpis.brouillons ?? 0) > 0 ? 'border-zinc-300 dark:border-zinc-700' : ''"
                 >
                     <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        En préparation
+                        Brouillons
                     </p>
-                    <p class="mt-1 text-2xl font-bold tabular-nums">
-                        {{ kpis.en_preparation }}
+                    <p class="mt-1 text-2xl font-bold tabular-nums text-zinc-600 dark:text-zinc-400">
+                        {{ kpis.brouillons ?? 0 }}
                     </p>
                 </div>
                 <div
                     class="rounded-xl border bg-card p-4 shadow-sm"
-                    :class="kpis.en_transit > 0 ? 'border-blue-200 dark:border-blue-900' : ''"
+                    :class="(kpis.en_chargement ?? 0) > 0 ? 'border-amber-200 dark:border-amber-900' : ''"
                 >
                     <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        En transit
-                    </p>
-                    <p class="mt-1 text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400">
-                        {{ kpis.en_transit }}
-                    </p>
-                </div>
-                <div
-                    class="rounded-xl border bg-card p-4 shadow-sm"
-                    :class="kpis.en_reception > 0 ? 'border-amber-200 dark:border-amber-900' : ''"
-                >
-                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        En réception
+                        En chargement
                     </p>
                     <p class="mt-1 text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400">
-                        {{ kpis.en_reception }}
+                        {{ kpis.en_chargement ?? 0 }}
+                    </p>
+                </div>
+                <div
+                    class="rounded-xl border bg-card p-4 shadow-sm"
+                    :class="(kpis.en_transit ?? 0) > 0 ? 'border-blue-200 dark:border-blue-900' : ''"
+                >
+                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Livraison en cours
+                    </p>
+                    <p class="mt-1 text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400">
+                        {{ kpis.en_transit ?? 0 }}
+                    </p>
+                </div>
+            </div>
+
+            <!-- KPI cards — Réceptions -->
+            <div v-else class="grid grid-cols-2 gap-4">
+                <div
+                    class="rounded-xl border bg-card p-4 shadow-sm"
+                    :class="(kpis.en_attente ?? 0) > 0 ? 'border-teal-200 dark:border-teal-900' : ''"
+                >
+                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        En cours / à réceptionner
+                    </p>
+                    <p class="mt-1 text-2xl font-bold tabular-nums text-teal-600 dark:text-teal-400">
+                        {{ kpis.en_attente ?? 0 }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
@@ -335,7 +350,7 @@ const commStatutDot: Record<string, string> = {
                         Clôturés ce mois
                     </p>
                     <p class="mt-1 text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-                        {{ kpis.clotures_mois }}
+                        {{ kpis.clotures_mois ?? 0 }}
                     </p>
                 </div>
             </div>
@@ -494,8 +509,19 @@ const commStatutDot: Record<string, string> = {
                                                 Modifier
                                             </Link>
                                         </DropdownMenuItem>
+                                        <!-- Brouillon → Chargement : action directe sans redirection -->
                                         <DropdownMenuItem
-                                            v-if="!data.is_terminal && can('logistique.update')"
+                                            v-if="data.is_brouillon && can('logistique.update')"
+                                            class="cursor-pointer text-blue-600 focus:text-blue-600"
+                                            :disabled="avancementEnCours === data.id"
+                                            @click="avancerDirect(data)"
+                                        >
+                                            <Truck class="h-4 w-4" />
+                                            {{ avancementEnCours === data.id ? 'En cours…' : labelSuivant(data.statut) }}
+                                        </DropdownMenuItem>
+                                        <!-- CHARGEMENT → TRANSIT : validation chargement (page de détail) -->
+                                        <DropdownMenuItem
+                                            v-if="data.statut === 'chargement' && can('logistique.update')"
                                             class="cursor-pointer text-blue-600 focus:text-blue-600"
                                             as-child
                                         >
@@ -507,19 +533,23 @@ const commStatutDot: Record<string, string> = {
                                                 {{ labelSuivant(data.statut) }}
                                             </Link>
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator
-                                            v-if="data.is_brouillon && can('logistique.delete')"
-                                        />
+                                        <!-- TRANSIT → RECEPTION : uniquement si utilisateur du site destination -->
                                         <DropdownMenuItem
-                                            v-if="data.is_brouillon && can('logistique.delete')"
-                                            class="cursor-pointer text-destructive focus:text-destructive"
-                                            @click="confirmDelete(data)"
+                                            v-if="data.statut === 'transit' && data.can_valider_reception"
+                                            class="cursor-pointer text-blue-600 focus:text-blue-600"
+                                            as-child
                                         >
-                                            <Trash2 class="h-4 w-4" />
-                                            Supprimer
+                                            <Link
+                                                :href="`/logistique/${data.id}`"
+                                                class="flex w-full cursor-pointer items-center gap-2"
+                                            >
+                                                <Truck class="h-4 w-4" />
+                                                {{ labelSuivant(data.statut) }}
+                                            </Link>
                                         </DropdownMenuItem>
+                                        <!-- Annuler : uniquement BROUILLON ou CHARGEMENT, site source seulement -->
                                         <DropdownMenuItem
-                                            v-if="!data.is_terminal && can('logistique.update')"
+                                            v-if="data.can_annuler"
                                             class="cursor-pointer text-amber-600 focus:text-amber-600"
                                             as-child
                                         >
@@ -542,8 +572,10 @@ const commStatutDot: Record<string, string> = {
                     <template #empty>
                         <div class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
                             <Truck class="h-12 w-12 opacity-30" />
-                            <p class="text-sm">Aucun transfert trouvé.</p>
-                            <Link v-if="can('logistique.create')" href="/logistique/creer">
+                            <p class="text-sm">
+                                {{ vue === 'receptions' ? 'Aucune réception trouvée.' : 'Aucun transfert trouvé.' }}
+                            </p>
+                            <Link v-if="can_create && vue === 'transferts'" href="/logistique/creer">
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />
                                     Créer le premier transfert

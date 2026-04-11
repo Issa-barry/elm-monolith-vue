@@ -72,6 +72,7 @@ export type AppPageProps<
     auth: Auth;
     sidebarOpen: boolean;
     stock_alertes: { ruptures: number; faibles: number; total: number };
+    transferts_a_receptionner: number;
     module_flags: Partial<Record<ModuleFlagKey, boolean>>;
 };
 

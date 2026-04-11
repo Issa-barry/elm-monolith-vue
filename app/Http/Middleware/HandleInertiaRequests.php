@@ -2,7 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\StatutTransfert;
 use App\Models\Produit;
+use App\Models\TransfertLogistique;
 use App\Services\ModuleService;
 use App\Support\AppVersion;
 use Illuminate\Foundation\Inspiring;
@@ -71,6 +73,31 @@ class HandleInertiaRequests extends Middleware
         return $flags;
     }
 
+    /**
+     * Nombre de transferts en TRANSIT destinés aux sites de l'utilisateur.
+     * Affiché comme badge sur le menu Réceptions.
+     */
+    private function transfertsAReceptionner(Request $request): int
+    {
+        $user = $request->user();
+        if (! $user || ! $user->organization_id) return 0;
+        if (! $user->can('logistique.read')) return 0;
+
+        $query = TransfertLogistique::where('organization_id', $user->organization_id)
+            ->where('statut', StatutTransfert::TRANSIT->value);
+
+        // Admins : voient tous les transferts en transit de l'org
+        if ($user->hasAnyRole(['super_admin', 'admin_entreprise'])) {
+            return $query->count();
+        }
+
+        // Autres : uniquement ceux destinés à leurs sites
+        $siteIds = $user->sites()->pluck('sites.id');
+        if ($siteIds->isEmpty()) return 0;
+
+        return $query->whereIn('site_destination_id', $siteIds)->count();
+    }
+
     private function contactMessagesNonLus(Request $request): int
     {
         $user = $request->user();
@@ -117,6 +144,7 @@ class HandleInertiaRequests extends Middleware
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'stock_alertes' => $this->stockAlertes($request),
             'contact_messages_non_lus' => $this->contactMessagesNonLus($request),
+            'transferts_a_receptionner' => $this->transfertsAReceptionner($request),
             'module_flags' => $this->moduleFlags($request),
             'flash' => ['success' => $request->session()->get('success')],
         ];
