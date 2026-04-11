@@ -8,6 +8,7 @@ use App\Models\Livreur;
 use App\Models\Parametre;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
+use App\Models\VehiculeFrais;
 use App\Services\ImageService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -48,6 +49,17 @@ class VehiculeController extends Controller
                 'taux_commission' => (float) $m->taux_commission,
             ])->values()->all(),
             'taux_commission_proprietaire' => (float) $v->taux_commission_proprietaire,
+            'frais' => $v->relationLoaded('frais')
+                ? $v->frais->map(fn (VehiculeFrais $f) => [
+                    'id' => $f->id,
+                    'montant' => (float) $f->montant,
+                    'type' => $f->type,
+                    'commentaire' => $f->commentaire,
+                    'created_at' => $f->created_at?->format('d/m/Y H:i'),
+                    'createur_nom' => $f->relationLoaded('createur') ? $f->createur?->name : null,
+                ])->values()->all()
+                : [],
+            'frais_total' => $v->relationLoaded('frais') ? (float) $v->frais->sum('montant') : 0.0,
             'pris_en_charge_par_usine' => $v->pris_en_charge_par_usine,
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
@@ -120,6 +132,108 @@ class VehiculeController extends Controller
 
         return redirect()->route('vehicules.index')
             ->with('success', 'Véhicule créé avec succès.');
+    }
+
+    public function show(Vehicule $vehicule): Response
+    {
+        $this->authorize('view', $vehicule);
+
+        $vehicule->load(['proprietaire', 'equipe.membres.livreur', 'frais.createur:id,name']);
+
+        return Inertia::render('Vehicules/Show', [
+            'vehicule' => $this->vehiculeData($vehicule),
+        ]);
+    }
+
+    public function storeFrais(Request $request, Vehicule $vehicule): RedirectResponse
+    {
+        $this->authorize('update', $vehicule);
+
+        $data = $request->validate([
+            'montant' => 'required|numeric|min:0.01',
+            'type' => [
+                'required',
+                'in:carburant,reparation,autre',
+            ],
+            'commentaire' => [
+                'nullable',
+                'string',
+                'max:150',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->input('type') === 'autre' && empty($value)) {
+                        $fail('Le commentaire est obligatoire pour le type « Autre ».');
+                    }
+                },
+            ],
+        ], [
+            'montant.required' => 'Le montant est obligatoire.',
+            'montant.min' => 'Le montant doit être supérieur à 0.',
+            'type.required' => 'Le type est obligatoire.',
+            'type.in' => 'Type de frais invalide.',
+            'commentaire.max' => 'Le commentaire ne peut pas dépasser 150 caractères.',
+        ]);
+
+        if ($data['type'] !== 'autre') {
+            $data['commentaire'] = null;
+        }
+
+        $vehicule->frais()->create([...$data, 'created_by' => auth()->id()]);
+
+        return redirect()
+            ->route('vehicules.show', $vehicule)
+            ->with('success', 'Frais ajouté.');
+    }
+
+    public function updateFrais(Request $request, Vehicule $vehicule, VehiculeFrais $frais): RedirectResponse
+    {
+        $this->authorize('update', $vehicule);
+        abort_unless($frais->vehicule_id === $vehicule->id, 403);
+
+        $data = $request->validate([
+            'montant' => 'required|numeric|min:0.01',
+            'type' => [
+                'required',
+                'in:carburant,reparation,autre',
+            ],
+            'commentaire' => [
+                'nullable',
+                'string',
+                'max:150',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->input('type') === 'autre' && empty($value)) {
+                        $fail('Le commentaire est obligatoire pour le type « Autre ».');
+                    }
+                },
+            ],
+        ], [
+            'montant.required' => 'Le montant est obligatoire.',
+            'montant.min' => 'Le montant doit être supérieur à 0.',
+            'type.required' => 'Le type est obligatoire.',
+            'type.in' => 'Type de frais invalide.',
+            'commentaire.max' => 'Le commentaire ne peut pas dépasser 150 caractères.',
+        ]);
+
+        if ($data['type'] !== 'autre') {
+            $data['commentaire'] = null;
+        }
+
+        $frais->update($data);
+
+        return redirect()
+            ->route('vehicules.show', $vehicule)
+            ->with('success', 'Frais modifié.');
+    }
+
+    public function destroyFrais(Vehicule $vehicule, VehiculeFrais $frais): RedirectResponse
+    {
+        $this->authorize('update', $vehicule);
+        abort_unless($frais->vehicule_id === $vehicule->id, 403);
+
+        $frais->delete();
+
+        return redirect()
+            ->route('vehicules.show', $vehicule)
+            ->with('success', 'Frais supprimé.');
     }
 
     public function edit(Vehicule $vehicule): Response

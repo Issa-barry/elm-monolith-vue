@@ -5,7 +5,6 @@ use App\Http\Controllers\CashbackController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
-use App\Http\Controllers\CommissionPartController;
 use App\Http\Controllers\CommissionVenteController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\EncaissementVenteController;
@@ -83,9 +82,6 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::post('commissions/{commission}/parts/{part}/versements', [VersementCommissionController::class, 'store'])->name('commissions.parts.versements.store');
         Route::delete('versements-commissions/{versement_commission}', [VersementCommissionController::class, 'destroy'])->name('commissions.versements.destroy');
 
-        // Frais propriétaire (par part)
-        Route::patch('commissions/{commission}/parts/{part}/frais', [CommissionPartController::class, 'updateFrais'])->name('commissions.parts.frais.update');
-
         // Encaissements factures
         Route::post('factures/{facture_vente}/encaissements', [EncaissementVenteController::class, 'store'])->name('encaissements.store');
         Route::delete('encaissements/{encaissement_vente}', [EncaissementVenteController::class, 'destroy'])->name('encaissements.destroy');
@@ -114,7 +110,10 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 
     // ── Module : Véhicules ────────────────────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::VEHICULES)->group(function () {
-        Route::resource('vehicules', VehiculeController::class)->except(['show']);
+        Route::resource('vehicules', VehiculeController::class);
+        Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
+        Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
+        Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
         Route::resource('proprietaires', ProprietaireController::class);
         // Livreurs : gestion centralisée depuis les Équipes (lecture seule + API modale)
         Route::get('livreurs', [LivreurController::class, 'index'])->name('livreurs.index');

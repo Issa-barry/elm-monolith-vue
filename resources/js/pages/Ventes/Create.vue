@@ -23,6 +23,7 @@ interface VehiculeOption {
     id: number;
     nom_vehicule: string;
     immatriculation: string;
+    capacite_packs: number | null;
     livreur_nom: string | null;
 }
 
@@ -87,11 +88,25 @@ function searchVehicule(event: { query: string }) {
 
 function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
+    applyVehiculeCapacityOnSingleLine(v);
 }
 
 function onVehiculeClear() {
     form.vehicule_id = null;
     vehiculeSelected.value = null;
+}
+
+function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
+    if (!vehicule || vehicule.capacite_packs === null) {
+        return;
+    }
+
+    if (form.lignes.length !== 1) {
+        return;
+    }
+
+    form.lignes[0].qte = vehicule.capacite_packs;
+    form.lignes[0].total = form.lignes[0].prix_vente * form.lignes[0].qte;
 }
 
 function vehiculeLabel(v: VehiculeOption): string {
@@ -195,6 +210,34 @@ const totalGeneral = computed(() =>
     form.lignes.reduce((sum, l) => sum + l.total, 0),
 );
 
+const quantiteTotale = computed(() =>
+    form.lignes.reduce((sum, l) => sum + (l.qte ?? 0), 0),
+);
+
+const vehiculeSelectionne = computed(() => {
+    if (form.vehicule_id === null) {
+        return null;
+    }
+
+    return props.vehicules.find((v) => v.id === form.vehicule_id) ?? null;
+});
+
+const capaciteVehiculeSelectionne = computed(
+    () => vehiculeSelectionne.value?.capacite_packs ?? null,
+);
+
+const capaciteVehiculeConforme = computed(() => {
+    if (form.vehicule_id === null) {
+        return true;
+    }
+
+    if (capaciteVehiculeSelectionne.value === null) {
+        return false;
+    }
+
+    return quantiteTotale.value === capaciteVehiculeSelectionne.value;
+});
+
 // ── Reset au montage (évite la persistance SPA entre navigations) ─────────────
 onMounted(() => {
     form.reset();
@@ -214,6 +257,7 @@ onMounted(() => {
 const canSubmit = computed(
     () =>
         (form.vehicule_id !== null || form.client_id !== null) &&
+        capaciteVehiculeConforme.value &&
         totalGeneral.value > 0 &&
         !form.processing,
 );
@@ -314,6 +358,16 @@ function submit() {
                                                 option.immatriculation
                                             }}</span>
                                             <span
+                                                v-if="
+                                                    option.capacite_packs !==
+                                                    null
+                                                "
+                                                class="before:mr-2 before:content-['·']"
+                                            >
+                                                {{ option.capacite_packs }}
+                                                packs
+                                            </span>
+                                            <span
                                                 v-if="option.livreur_nom"
                                                 class="before:mr-2 before:content-['·']"
                                                 >{{ option.livreur_nom }}</span
@@ -410,6 +464,24 @@ function submit() {
                         class="mb-3 text-xs text-destructive"
                     >
                         {{ form.errors.lignes }}
+                    </p>
+
+                    <p
+                        v-if="form.vehicule_id !== null"
+                        class="mb-3 text-xs"
+                        :class="
+                            capaciteVehiculeConforme
+                                ? 'text-muted-foreground'
+                                : 'text-amber-600 dark:text-amber-400'
+                        "
+                    >
+                        Capacité véhicule:
+                        {{
+                            capaciteVehiculeSelectionne === null
+                                ? 'non définie'
+                                : `${capaciteVehiculeSelectionne} packs`
+                        }}
+                        · Quantité saisie: {{ quantiteTotale }} packs
                     </p>
 
                     <!-- ── Tableau desktop ── -->

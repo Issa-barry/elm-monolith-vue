@@ -599,38 +599,6 @@ const tabLabel = computed(() =>
                     </Column>
 
                     <Column
-                        field="montant_verse"
-                        header="Versé"
-                        sortable
-                        style="width: 140px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground tabular-nums">{{
-                                formatGNF(data.montant_verse)
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <Column
-                        field="montant_restant"
-                        header="Restant"
-                        sortable
-                        style="width: 140px"
-                    >
-                        <template #body="{ data }">
-                            <span
-                                :class="
-                                    data.montant_restant > 0
-                                        ? 'font-semibold text-foreground tabular-nums'
-                                        : 'text-muted-foreground tabular-nums'
-                                "
-                            >
-                                {{ formatGNF(data.montant_restant) }}
-                            </span>
-                        </template>
-                    </Column>
-
-                    <Column
                         field="statut_label"
                         header="Statut"
                         sortable

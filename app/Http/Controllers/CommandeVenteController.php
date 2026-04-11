@@ -12,6 +12,7 @@ use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -90,6 +91,7 @@ class CommandeVenteController extends Controller
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
+                'capacite_packs' => $v->capacite_packs !== null ? (int) $v->capacite_packs : null,
                 'livreur_nom' => ($l = $v->equipe?->livreurs->first())
                     ? trim($l->prenom.' '.$l->nom)
                     : null,
@@ -159,6 +161,7 @@ class CommandeVenteController extends Controller
         );
 
         $this->ensureVehiculeOrClientSelected($data);
+        $this->ensureQuantiteMatchesVehiculeCapacity($data);
 
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
@@ -290,6 +293,7 @@ class CommandeVenteController extends Controller
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
+                'capacite_packs' => $v->capacite_packs !== null ? (int) $v->capacite_packs : null,
                 'livreur_nom' => ($l = $v->equipe?->livreurs->first())
                     ? trim($l->prenom.' '.$l->nom)
                     : null,
@@ -350,6 +354,7 @@ class CommandeVenteController extends Controller
         );
 
         $this->ensureVehiculeOrClientSelected($data);
+        $this->ensureQuantiteMatchesVehiculeCapacity($data);
 
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
@@ -441,10 +446,42 @@ class CommandeVenteController extends Controller
             return;
         }
 
-        throw \Illuminate\Validation\ValidationException::withMessages([
+        throw ValidationException::withMessages([
             'vehicule_id' => 'Veuillez sélectionner un véhicule ou un client.',
             'client_id' => 'Veuillez sélectionner un véhicule ou un client.',
         ]);
+    }
+
+    private function ensureQuantiteMatchesVehiculeCapacity(array $data): void
+    {
+        if (empty($data['vehicule_id'])) {
+            return;
+        }
+
+        $vehicule = Vehicule::query()
+            ->select(['id', 'capacite_packs'])
+            ->find($data['vehicule_id']);
+
+        if (! $vehicule) {
+            return;
+        }
+
+        if ($vehicule->capacite_packs === null) {
+            throw ValidationException::withMessages([
+                'vehicule_id' => 'Le véhicule sélectionné n\'a pas de capacité définie.',
+            ]);
+        }
+
+        $qteTotale = collect($data['lignes'] ?? [])->sum(
+            fn (array $ligne): int => (int) ($ligne['qte'] ?? 0),
+        );
+        $capacite = (int) $vehicule->capacite_packs;
+
+        if ($qteTotale !== $capacite) {
+            throw ValidationException::withMessages([
+                'lignes' => "La quantité totale des produits ({$qteTotale}) doit être égale à la capacité du véhicule sélectionné ({$capacite}).",
+            ]);
+        }
     }
 
     private function buildLignesDataAndTotal(array $lignes): array

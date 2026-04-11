@@ -64,6 +64,25 @@ class CommissionVenteIndexTest extends TestCase
             );
     }
 
+    public function test_index_livreurs_affiche_uniquement_la_part_principale(): void
+    {
+        $commission = CommissionVente::factory()->create(['organization_id' => $this->org->id]);
+
+        $commission->parts()->createMany([
+            $this->livreurPartData('principal', 'Oumar CAMARA', 27_000),
+            $this->livreurPartData('assistant', 'Abdoulaye SYLLA', 20_250),
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('commissions.index', ['tab' => 'livreurs', 'periode' => 'all']))
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->has('parts', 1)
+                ->where('parts.0.type_beneficiaire', 'livreur')
+                ->where('parts.0.beneficiaire_nom', 'Oumar CAMARA')
+            );
+    }
+
     public function test_index_only_shows_commissions_for_own_organization(): void
     {
         CommissionVente::factory()->create(['organization_id' => $this->org->id]);
@@ -87,5 +106,20 @@ class CommissionVenteIndexTest extends TestCase
                 ->where('totaux.nb_en_attente', 0)
                 ->where('totaux.nb_versees', 0)
             );
+    }
+
+    private function livreurPartData(string $role, string $nom, float $montant): array
+    {
+        return [
+            'type_beneficiaire' => 'livreur',
+            'beneficiaire_nom' => $nom,
+            'role' => $role,
+            'taux_commission' => 20,
+            'montant_brut' => $montant,
+            'frais_supplementaires' => 0,
+            'montant_net' => $montant,
+            'montant_verse' => 0,
+            'statut' => 'en_attente',
+        ];
     }
 }

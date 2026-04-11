@@ -6,6 +6,7 @@ use App\Enums\TypeVehicule;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Vehicule extends Model
@@ -68,6 +69,11 @@ class Vehicule extends Model
     public function equipe(): BelongsTo
     {
         return $this->belongsTo(EquipeLivraison::class, 'equipe_livraison_id');
+    }
+
+    public function frais(): HasMany
+    {
+        return $this->hasMany(VehiculeFrais::class);
     }
 
     // ── Métier ────────────────────────────────────────────────────────────────
