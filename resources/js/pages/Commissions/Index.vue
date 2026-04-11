@@ -376,9 +376,10 @@ function detailUrl(b: BeneficiaireRow): string {
                     removable-sort
                     class="text-sm"
                     :pt="{
-                        root: { class: 'w-full' },
+                        root:   { class: 'w-full' },
                         header: { class: 'border-b bg-muted/30 px-4 py-3' },
-                        tbody: { class: 'divide-y' },
+                        tbody:  { class: 'divide-y' },
+                        table:  { style: 'table-layout: fixed; min-width: 800px' },
                     }"
                 >
                     <template #header>
@@ -414,18 +415,18 @@ function detailUrl(b: BeneficiaireRow): string {
                         </div>
                     </template>
 
-                    <!-- Bénéficiaire -->
-                    <Column field="beneficiaire_nom" header="Bénéficiaire" sortable style="min-width: 200px">
+                    <!-- Bénéficiaire (22%) -->
+                    <Column field="beneficiaire_nom" header="Bénéficiaire" sortable style="width: 22%">
                         <template #body="{ data }">
-                            <p class="font-semibold">{{ data.beneficiaire_nom }}</p>
-                            <p v-if="data.telephone" class="mt-0.5 text-xs text-muted-foreground">
+                            <p class="truncate font-semibold">{{ data.beneficiaire_nom }}</p>
+                            <p v-if="data.telephone" class="mt-0.5 truncate text-xs text-muted-foreground">
                                 {{ formatPhoneDisplay(data.telephone) }}
                             </p>
                         </template>
                     </Column>
 
-                    <!-- Commandes -->
-                    <Column field="nb_commandes" header="Commandes" sortable style="width: 110px">
+                    <!-- Commandes (13%) -->
+                    <Column field="nb_commandes" header="Commandes" sortable style="width: 13%">
                         <template #body="{ data }">
                             <span class="tabular-nums">{{ data.nb_commandes }}</span>
                             <p v-if="data.date_derniere_commande" class="text-xs text-muted-foreground">
@@ -434,41 +435,41 @@ function detailUrl(b: BeneficiaireRow): string {
                         </template>
                     </Column>
 
-                    <!-- Total net -->
-                    <Column field="total_net_cumule" header="Total net" sortable style="width: 150px">
+                    <!-- Total net (13%) -->
+                    <Column field="total_net_cumule" header="Total net" sortable style="width: 13%">
                         <template #body="{ data }">
-                            <span class="font-semibold tabular-nums">{{ formatGNF(data.total_net_cumule) }}</span>
+                            <span class="whitespace-nowrap font-semibold tabular-nums">{{ formatGNF(data.total_net_cumule) }}</span>
                         </template>
                     </Column>
 
-                    <!-- Frais -->
-                    <Column field="total_frais" header="Frais" sortable style="width: 130px">
+                    <!-- Frais (11%) -->
+                    <Column field="total_frais" header="Frais" sortable style="width: 11%">
                         <template #body="{ data }">
                             <span
-                                class="tabular-nums"
+                                class="whitespace-nowrap tabular-nums"
                                 :class="data.total_frais > 0 ? 'text-destructive' : 'text-muted-foreground'"
                             >
-                                {{ data.total_frais > 0 ? '− ' + formatGNF(data.total_frais) : '—' }}
+                                {{ data.total_frais > 0 ? '−\u202F' + formatGNF(data.total_frais) : '—' }}
                             </span>
                         </template>
                     </Column>
 
-                    <!-- Versé -->
-                    <Column field="total_verse" header="Versé" sortable style="width: 140px">
+                    <!-- Versé (12%) -->
+                    <Column field="total_verse" header="Versé" sortable style="width: 12%">
                         <template #body="{ data }">
-                            <span class="tabular-nums">{{ formatGNF(data.total_verse) }}</span>
+                            <span class="whitespace-nowrap tabular-nums">{{ formatGNF(data.total_verse) }}</span>
                         </template>
                     </Column>
 
-                    <!-- Solde restant -->
-                    <Column field="solde_restant" header="Solde restant" sortable style="width: 140px">
+                    <!-- Solde restant (13%) -->
+                    <Column field="solde_restant" header="Solde restant" sortable style="width: 13%">
                         <template #body="{ data }">
-                            <span class="font-semibold tabular-nums">{{ formatGNF(data.solde_restant) }}</span>
+                            <span class="whitespace-nowrap font-semibold tabular-nums">{{ formatGNF(data.solde_restant) }}</span>
                         </template>
                     </Column>
 
-                    <!-- Statut -->
-                    <Column field="statut_global" header="Statut" sortable style="width: 130px">
+                    <!-- Statut (10%) -->
+                    <Column field="statut_global" header="Statut" sortable style="width: 10%">
                         <template #body="{ data }">
                             <StatusDot
                                 :label="statutLabel[data.statut_global] ?? data.statut_global"
@@ -478,12 +479,12 @@ function detailUrl(b: BeneficiaireRow): string {
                         </template>
                     </Column>
 
-                    <!-- Action -->
-                    <Column header="" style="width: 110px">
+                    <!-- Action (6%) -->
+                    <Column header="" style="width: 6%">
                         <template #body="{ data }">
                             <div class="flex justify-end">
                                 <Link :href="detailUrl(data)">
-                                    <Button size="sm" variant="ghost" class="h-8 gap-1.5 text-xs">
+                                    <Button size="sm" variant="ghost" class="h-8 gap-1 text-xs">
                                         Détails
                                         <ChevronRight class="h-3.5 w-3.5" />
                                     </Button>
