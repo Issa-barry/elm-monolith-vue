@@ -28,19 +28,19 @@ class FraisCommissionPartController extends Controller
         );
 
         $data = $request->validate([
-            'frais'             => ['required', 'numeric', 'min:0'],
-            'type_frais'        => ['required', 'string', 'in:carburant,reparation,autre'],
+            'frais' => ['required', 'numeric', 'min:0'],
+            'type_frais' => ['required', 'string', 'in:carburant,reparation,autre'],
             'commentaire_frais' => ['nullable', 'string', 'max:500'],
         ], [
-            'frais.required'      => 'Le montant des frais est obligatoire.',
-            'frais.min'           => 'Les frais ne peuvent pas être négatifs.',
+            'frais.required' => 'Le montant des frais est obligatoire.',
+            'frais.min' => 'Les frais ne peuvent pas être négatifs.',
             'type_frais.required' => 'Le type de frais est obligatoire.',
         ]);
 
         // Applique frais → recalcule montant_net = max(0, brut - frais)
         $part->appliquerFrais(
             (float) $data['frais'],
-            $data['type_frais']        ?? null,
+            $data['type_frais'] ?? null,
             $data['commentaire_frais'] ?? null,
         );
 

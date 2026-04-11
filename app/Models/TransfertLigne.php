@@ -27,9 +27,9 @@ class TransfertLigne extends Model
     {
         return [
             'quantite_demandee' => 'integer',
-            'quantite_chargee'  => 'integer',
-            'quantite_recue'    => 'integer',
-            'ecart_type'        => TypeEcartLogistique::class,
+            'quantite_chargee' => 'integer',
+            'quantite_recue' => 'integer',
+            'ecart_type' => TypeEcartLogistique::class,
         ];
     }
 

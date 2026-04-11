@@ -30,8 +30,8 @@ class Client extends Model
     protected function casts(): array
     {
         return [
-            'is_active'          => 'boolean',
-            'cashback_eligible'  => 'boolean',
+            'is_active' => 'boolean',
+            'cashback_eligible' => 'boolean',
         ];
     }
 

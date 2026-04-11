@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\StatutTransfert;
-use App\Models\Organization;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;

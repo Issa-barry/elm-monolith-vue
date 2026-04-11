@@ -27,8 +27,8 @@ class CommissionPayment extends Model
     protected function casts(): array
     {
         return [
-            'montant'  => 'decimal:2',
-            'paid_at'  => 'date',
+            'montant' => 'decimal:2',
+            'paid_at' => 'date',
         ];
     }
 

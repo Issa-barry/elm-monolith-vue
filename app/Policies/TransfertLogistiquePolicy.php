@@ -45,12 +45,20 @@ class TransfertLogistiquePolicy
      */
     public function avancerStatut(User $user, TransfertLogistique $transfert): bool
     {
-        if (! $user->can('logistique.update')) return false;
-        if (! $this->sameOrganization($user, $transfert)) return false;
-        if ($transfert->isTerminal()) return false;
+        if (! $user->can('logistique.update')) {
+            return false;
+        }
+        if (! $this->sameOrganization($user, $transfert)) {
+            return false;
+        }
+        if ($transfert->isTerminal()) {
+            return false;
+        }
 
         // RECEPTION → CLOTURE : transition manuelle interdite, clôture automatique uniquement
-        if ($transfert->statut === StatutTransfert::RECEPTION) return false;
+        if ($transfert->statut === StatutTransfert::RECEPTION) {
+            return false;
+        }
 
         // TRANSIT → RECEPTION : restriction au site destination
         if ($transfert->statut === StatutTransfert::TRANSIT) {
@@ -67,11 +75,17 @@ class TransfertLogistiquePolicy
      */
     public function validerReception(User $user, TransfertLogistique $transfert): bool
     {
-        if (! $user->can('logistique.update')) return false;
-        if (! $this->sameOrganization($user, $transfert)) return false;
+        if (! $user->can('logistique.update')) {
+            return false;
+        }
+        if (! $this->sameOrganization($user, $transfert)) {
+            return false;
+        }
 
         // super_admin uniquement : autorité globale
-        if ($user->hasRole('super_admin')) return true;
+        if ($user->hasRole('super_admin')) {
+            return true;
+        }
 
         // Tous les autres (y compris admin_entreprise) : doit être affecté au site destination
         return $transfert->site_destination_id !== null
@@ -85,8 +99,12 @@ class TransfertLogistiquePolicy
      */
     public function annuler(User $user, TransfertLogistique $transfert): bool
     {
-        if (! $user->can('logistique.update')) return false;
-        if (! $this->sameOrganization($user, $transfert)) return false;
+        if (! $user->can('logistique.update')) {
+            return false;
+        }
+        if (! $this->sameOrganization($user, $transfert)) {
+            return false;
+        }
 
         // Annulation interdite dès TRANSIT
         if (! in_array($transfert->statut, [StatutTransfert::BROUILLON, StatutTransfert::CHARGEMENT])) {
@@ -94,7 +112,9 @@ class TransfertLogistiquePolicy
         }
 
         // super_admin : autorité globale
-        if ($user->hasRole('super_admin')) return true;
+        if ($user->hasRole('super_admin')) {
+            return true;
+        }
 
         // Tous les autres : doit être affecté au site source (initiateur du transfert)
         return $transfert->site_source_id !== null

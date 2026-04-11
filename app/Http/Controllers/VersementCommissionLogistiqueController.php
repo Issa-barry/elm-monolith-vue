@@ -24,7 +24,7 @@ class VersementCommissionLogistiqueController extends Controller
     {
         // Vérification cross-org et autorisation via le transfert parent
         $commission = $part->commission()->with('transfert')->firstOrFail();
-        $transfert  = $commission->transfert;
+        $transfert = $commission->transfert;
 
         abort_unless(
             $transfert->organization_id === auth()->user()->organization_id,
@@ -39,15 +39,15 @@ class VersementCommissionLogistiqueController extends Controller
         $montantMax = (float) $part->montant_restant;
 
         $data = $request->validate([
-            'montant'      => ['required', 'numeric', 'min:1', "max:{$montantMax}"],
-            'mode_paiement'=> ['required', Rule::in(self::MODES_PAIEMENT)],
-            'note'         => ['nullable', 'string', 'max:500'],
+            'montant' => ['required', 'numeric', 'min:1', "max:{$montantMax}"],
+            'mode_paiement' => ['required', Rule::in(self::MODES_PAIEMENT)],
+            'note' => ['nullable', 'string', 'max:500'],
         ], [
-            'montant.required'       => 'Le montant est obligatoire.',
-            'montant.min'            => 'Le montant doit être supérieur à 0.',
-            'montant.max'            => "Le montant ne peut pas dépasser le restant dû ({$montantMax} GNF).",
+            'montant.required' => 'Le montant est obligatoire.',
+            'montant.min' => 'Le montant doit être supérieur à 0.',
+            'montant.max' => "Le montant ne peut pas dépasser le restant dû ({$montantMax} GNF).",
             'mode_paiement.required' => 'Le mode de paiement est obligatoire.',
-            'mode_paiement.in'       => 'Mode de paiement invalide.',
+            'mode_paiement.in' => 'Mode de paiement invalide.',
         ]);
 
         // La date est toujours la date du serveur — jamais saisie par l'utilisateur.
@@ -62,9 +62,9 @@ class VersementCommissionLogistiqueController extends Controller
         );
 
         TransfertActiviteService::log($transfert, 'versement_effectue', [
-            'montant'       => $data['montant'],
+            'montant' => $data['montant'],
             'mode_paiement' => $data['mode_paiement'],
-            'beneficiaire'  => $part->beneficiaire_nom,
+            'beneficiaire' => $part->beneficiaire_nom,
         ]);
 
         // Clôture automatique si toutes les commissions sont désormais versées

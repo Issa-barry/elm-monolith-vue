@@ -7,7 +7,6 @@ use App\Models\CommissionLogistiquePart;
 use App\Models\Vehicule;
 use App\Services\CommissionPaymentService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -24,8 +23,8 @@ class CommissionVehiculeController extends Controller
     {
         $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
 
-        $user   = auth()->user();
-        $orgId  = $user->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         $isAdmin = $user->hasAnyRole(['super_admin', 'admin_entreprise']);
 
         // KPIs globaux + liste véhicules depuis les parts
@@ -62,10 +61,10 @@ class CommissionVehiculeController extends Controller
             ->when($request->input('vehicule_id'), fn ($q, $v) => $q->where('cl.vehicule_id', $v))
             ->when($request->input('statut'), function ($q, $statut) {
                 match ($statut) {
-                    'pending'   => $q->havingRaw('pending > 0'),
+                    'pending' => $q->havingRaw('pending > 0'),
                     'available' => $q->havingRaw('available > 0'),
-                    'paid'      => $q->havingRaw('paid > 0'),
-                    default     => null,
+                    'paid' => $q->havingRaw('paid > 0'),
+                    default => null,
                 };
             })
             ->groupBy('vehicules.id', 'vehicules.nom_vehicule', 'vehicules.immatriculation')
@@ -74,19 +73,19 @@ class CommissionVehiculeController extends Controller
 
         $kpis = [
             'nb_vehicules' => $vehiculesRaw->count(),
-            'total_pending'   => (float) $vehiculesRaw->sum('pending'),
+            'total_pending' => (float) $vehiculesRaw->sum('pending'),
             'total_available' => (float) $vehiculesRaw->sum('available'),
-            'total_paid'      => (float) $vehiculesRaw->sum('paid'),
+            'total_paid' => (float) $vehiculesRaw->sum('paid'),
         ];
 
         $vehicules = $vehiculesRaw->map(fn ($row) => [
-            'vehicule_id'    => $row->vehicule_id,
-            'nom'            => $row->nom_vehicule,
-            'immatriculation'=> $row->immatriculation,
-            'pending'        => (float) $row->pending,
-            'available'      => (float) $row->available,
-            'paid'           => (float) $row->paid,
-            'nb_transferts'  => (int) $row->nb_transferts,
+            'vehicule_id' => $row->vehicule_id,
+            'nom' => $row->nom_vehicule,
+            'immatriculation' => $row->immatriculation,
+            'pending' => (float) $row->pending,
+            'available' => (float) $row->available,
+            'paid' => (float) $row->paid,
+            'nb_transferts' => (int) $row->nb_transferts,
         ])->values();
 
         // Liste véhicules pour le filtre dropdown
@@ -96,15 +95,15 @@ class CommissionVehiculeController extends Controller
             ->get()
             ->map(fn ($v) => [
                 'value' => $v->id,
-                'label' => $v->nom_vehicule . ($v->immatriculation ? " ({$v->immatriculation})" : ''),
+                'label' => $v->nom_vehicule.($v->immatriculation ? " ({$v->immatriculation})" : ''),
             ]);
 
         return Inertia::render('Logistique/Commissions/Index', [
-            'vehicules'       => $vehicules,
-            'kpis'            => $kpis,
-            'vehicule_options'=> $vehiculeOptions,
+            'vehicules' => $vehicules,
+            'kpis' => $kpis,
+            'vehicule_options' => $vehiculeOptions,
             'filtre_vehicule' => $request->input('vehicule_id'),
-            'filtre_statut'   => $request->input('statut'),
+            'filtre_statut' => $request->input('statut'),
         ]);
     }
 
@@ -118,33 +117,33 @@ class CommissionVehiculeController extends Controller
         $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
         abort_unless($vehicule->organization_id === auth()->user()->organization_id, 403);
 
-        $soldes  = CommissionPaymentService::soldesParVehicule($vehicule);
+        $soldes = CommissionPaymentService::soldesParVehicule($vehicule);
         $payments = \App\Models\CommissionPayment::with('createur:id,prenom,nom')
             ->where('vehicule_id', $vehicule->id)
             ->where('organization_id', $vehicule->organization_id)
             ->orderByDesc('paid_at')
             ->get()
             ->map(fn ($p) => [
-                'id'              => $p->id,
-                'beneficiary_type'=> $p->beneficiary_type,
+                'id' => $p->id,
+                'beneficiary_type' => $p->beneficiary_type,
                 'beneficiary_nom' => $p->beneficiary_nom,
-                'montant'         => (float) $p->montant,
-                'mode_paiement'   => $p->mode_paiement,
-                'note'            => $p->note,
-                'paid_at'         => $p->paid_at?->format(self::DATE_FORMAT),
-                'created_by'      => $p->createur ? trim("{$p->createur->prenom} {$p->createur->nom}") : null,
+                'montant' => (float) $p->montant,
+                'mode_paiement' => $p->mode_paiement,
+                'note' => $p->note,
+                'paid_at' => $p->paid_at?->format(self::DATE_FORMAT),
+                'created_by' => $p->createur ? trim("{$p->createur->prenom} {$p->createur->nom}") : null,
             ]);
 
         return Inertia::render('Logistique/Commissions/Vehicule/Show', [
             'vehicule' => [
-                'id'             => $vehicule->id,
-                'nom'            => $vehicule->nom_vehicule,
-                'immatriculation'=> $vehicule->immatriculation,
+                'id' => $vehicule->id,
+                'nom' => $vehicule->nom_vehicule,
+                'immatriculation' => $vehicule->immatriculation,
             ],
-            'livreurs'        => $soldes['livreurs'],
-            'proprietaires'   => $soldes['proprietaires'],
-            'payments'        => $payments,
-            'modes_paiement'  => [
+            'livreurs' => $soldes['livreurs'],
+            'proprietaires' => $soldes['proprietaires'],
+            'payments' => $payments,
+            'modes_paiement' => [
                 ['value' => 'especes',      'label' => 'Espèces'],
                 ['value' => 'virement',     'label' => 'Virement'],
                 ['value' => 'cheque',       'label' => 'Chèque'],
@@ -152,7 +151,7 @@ class CommissionVehiculeController extends Controller
             ],
             'can_payer' => auth()->user()->can('verserCommission', $vehicule->commissions()->first()
                 ? $vehicule->commissions()->first()->transfert
-                : new \App\Models\TransfertLogistique()),
+                : new \App\Models\TransfertLogistique),
         ]);
     }
 
@@ -173,32 +172,32 @@ class CommissionVehiculeController extends Controller
 
         return Inertia::render('Logistique/Commissions/Beneficiaire/Show', [
             'vehicule' => [
-                'id'             => $vehicule->id,
-                'nom'            => $vehicule->nom_vehicule,
-                'immatriculation'=> $vehicule->immatriculation,
+                'id' => $vehicule->id,
+                'nom' => $vehicule->nom_vehicule,
+                'immatriculation' => $vehicule->immatriculation,
             ],
             'beneficiaire' => [
-                'id'   => $beneficiaireId,
+                'id' => $beneficiaireId,
                 'type' => $type,
-                'nom'  => $nom,
+                'nom' => $nom,
             ],
             'parts' => $parts->map(fn ($p) => [
-                'id'                    => $p->id,
-                'transfert_reference'   => $p->commission?->transfert?->reference,
-                'taux_commission'       => (float) $p->taux_commission,
-                'montant_brut'          => (float) $p->montant_brut,
+                'id' => $p->id,
+                'transfert_reference' => $p->commission?->transfert?->reference,
+                'taux_commission' => (float) $p->taux_commission,
+                'montant_brut' => (float) $p->montant_brut,
                 'frais_supplementaires' => (float) $p->frais_supplementaires,
-                'montant_net'           => (float) $p->montant_net,
-                'montant_verse'         => (float) $p->montant_verse,
-                'montant_restant'       => (float) $p->montant_restant,
-                'earned_at'             => $p->earned_at?->format(self::DATE_FORMAT),
-                'unlock_at'             => $p->unlock_at?->format(self::DATE_FORMAT),
-                'statut'                => $p->statut?->value,
-                'statut_label'          => $p->statut_label,
-                'statut_dot_class'      => $p->statut_dot_class,
-                'payments'              => $p->paymentItems->map(fn ($item) => [
-                    'paid_at'       => $item->payment?->paid_at?->format(self::DATE_FORMAT),
-                    'montant'       => (float) $item->amount_allocated,
+                'montant_net' => (float) $p->montant_net,
+                'montant_verse' => (float) $p->montant_verse,
+                'montant_restant' => (float) $p->montant_restant,
+                'earned_at' => $p->earned_at?->format(self::DATE_FORMAT),
+                'unlock_at' => $p->unlock_at?->format(self::DATE_FORMAT),
+                'statut' => $p->statut?->value,
+                'statut_label' => $p->statut_label,
+                'statut_dot_class' => $p->statut_dot_class,
+                'payments' => $p->paymentItems->map(fn ($item) => [
+                    'paid_at' => $item->payment?->paid_at?->format(self::DATE_FORMAT),
+                    'montant' => (float) $item->amount_allocated,
                     'mode_paiement' => $item->payment?->mode_paiement,
                 ])->values()->all(),
             ])->values(),

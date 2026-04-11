@@ -15,9 +15,9 @@ class TransfertActiviteService
     ): void {
         TransfertActivite::create([
             'transfert_logistique_id' => $transfert->id,
-            'user_id'                 => $userId ?? auth()->id(),
-            'action'                  => $action,
-            'details'                 => $details ?: null,
+            'user_id' => $userId ?? auth()->id(),
+            'action' => $action,
+            'details' => $details ?: null,
         ]);
     }
 }

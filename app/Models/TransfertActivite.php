@@ -35,14 +35,14 @@ class TransfertActivite extends Model
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static array $labels = [
-        'creation'            => 'a créé le transfert',
-        'chargement_demarre'  => 'a démarré le chargement',
-        'chargement_valide'   => 'a validé le chargement',
-        'reception_validee'   => 'a validé la réception',
-        'cloture'             => 'a clôturé le transfert',
-        'annule'              => 'a annulé le transfert',
-        'commission_generee'  => 'a généré la commission logistique',
-        'versement_effectue'  => 'a effectué un versement',
+        'creation' => 'a créé le transfert',
+        'chargement_demarre' => 'a démarré le chargement',
+        'chargement_valide' => 'a validé le chargement',
+        'reception_validee' => 'a validé la réception',
+        'cloture' => 'a clôturé le transfert',
+        'annule' => 'a annulé le transfert',
+        'commission_generee' => 'a généré la commission logistique',
+        'versement_effectue' => 'a effectué un versement',
     ];
 
     public function getActionLabelAttribute(): string

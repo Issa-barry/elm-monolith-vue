@@ -80,8 +80,12 @@ class HandleInertiaRequests extends Middleware
     private function transfertsAReceptionner(Request $request): int
     {
         $user = $request->user();
-        if (! $user || ! $user->organization_id) return 0;
-        if (! $user->can('logistique.read')) return 0;
+        if (! $user || ! $user->organization_id) {
+            return 0;
+        }
+        if (! $user->can('logistique.read')) {
+            return 0;
+        }
 
         $query = TransfertLogistique::where('organization_id', $user->organization_id)
             ->where('statut', StatutTransfert::TRANSIT->value);
@@ -93,7 +97,9 @@ class HandleInertiaRequests extends Middleware
 
         // Autres : uniquement ceux destinés à leurs sites
         $siteIds = $user->sites()->pluck('sites.id');
-        if ($siteIds->isEmpty()) return 0;
+        if ($siteIds->isEmpty()) {
+            return 0;
+        }
 
         return $query->whereIn('site_destination_id', $siteIds)->count();
     }

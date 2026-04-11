@@ -30,13 +30,13 @@ class MouvementStockService
 
             self::creerSiAbsent([
                 'organization_id' => $transfert->organization_id,
-                'site_id'         => $transfert->site_source_id,
-                'produit_id'      => $ligne->produit_id,
-                'type'            => 'sortie',
-                'quantite'        => $quantite,
-                'source_type'     => TransfertLigne::class,
-                'source_id'       => $ligne->id,
-                'created_by'      => $userId,
+                'site_id' => $transfert->site_source_id,
+                'produit_id' => $ligne->produit_id,
+                'type' => 'sortie',
+                'quantite' => $quantite,
+                'source_type' => TransfertLigne::class,
+                'source_id' => $ligne->id,
+                'created_by' => $userId,
             ]);
         }
     }
@@ -57,13 +57,13 @@ class MouvementStockService
 
             self::creerSiAbsent([
                 'organization_id' => $transfert->organization_id,
-                'site_id'         => $transfert->site_destination_id,
-                'produit_id'      => $ligne->produit_id,
-                'type'            => 'entree',
-                'quantite'        => $quantite,
-                'source_type'     => TransfertLigne::class,
-                'source_id'       => $ligne->id,
-                'created_by'      => $userId,
+                'site_id' => $transfert->site_destination_id,
+                'produit_id' => $ligne->produit_id,
+                'type' => 'entree',
+                'quantite' => $quantite,
+                'source_type' => TransfertLigne::class,
+                'source_id' => $ligne->id,
+                'created_by' => $userId,
             ]);
         }
     }

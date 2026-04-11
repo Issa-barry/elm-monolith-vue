@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Enums\StatutPartCommission;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPayment;
 use App\Models\CommissionPaymentItem;
@@ -118,14 +117,15 @@ class MigrateCommissionsCommand extends Command
         ])->get();
 
         $nbPayments = 0;
-        $nbItems    = 0;
+        $nbItems = 0;
 
         foreach ($versements as $versement) {
-            $part     = $versement->part;
+            $part = $versement->part;
             $vehicule = $part?->commission?->vehicule;
 
             if (! $part || ! $vehicule) {
                 $this->warn("  Versement #{$versement->id} : pas de part/véhicule associé, ignoré");
+
                 continue;
             }
 
@@ -133,7 +133,7 @@ class MigrateCommissionsCommand extends Command
             $dejaMigre = CommissionPaymentItem::where('part_id', $part->id)
                 ->whereHas('payment', function ($q) use ($versement) {
                     $q->where('paid_at', $versement->date_versement)
-                      ->where('created_by', $versement->created_by);
+                        ->where('created_by', $versement->created_by);
                 })
                 ->exists();
 
@@ -145,27 +145,28 @@ class MigrateCommissionsCommand extends Command
                 $this->line("  [dry] Versement #{$versement->id} : {$versement->montant} GNF → Part #{$part->id} ({$part->beneficiaire_nom})");
                 $nbPayments++;
                 $nbItems++;
+
                 continue;
             }
 
             DB::transaction(function () use ($versement, $part, $vehicule, &$nbPayments, &$nbItems) {
                 $payment = CommissionPayment::create([
-                    'organization_id'  => $vehicule->organization_id,
-                    'vehicule_id'      => $vehicule->id,
-                    'livreur_id'       => $part->type_beneficiaire === 'livreur' ? $part->livreur_id : null,
-                    'proprietaire_id'  => $part->type_beneficiaire === 'proprietaire' ? $part->proprietaire_id : null,
+                    'organization_id' => $vehicule->organization_id,
+                    'vehicule_id' => $vehicule->id,
+                    'livreur_id' => $part->type_beneficiaire === 'livreur' ? $part->livreur_id : null,
+                    'proprietaire_id' => $part->type_beneficiaire === 'proprietaire' ? $part->proprietaire_id : null,
                     'beneficiary_type' => $part->type_beneficiaire,
-                    'beneficiary_nom'  => $part->beneficiaire_nom,
-                    'montant'          => $versement->montant,
-                    'mode_paiement'    => $versement->mode_paiement,
-                    'note'             => $versement->note ? "[migré] {$versement->note}" : '[migré depuis versements legacy]',
-                    'paid_at'          => $versement->date_versement,
-                    'created_by'       => $versement->created_by,
+                    'beneficiary_nom' => $part->beneficiaire_nom,
+                    'montant' => $versement->montant,
+                    'mode_paiement' => $versement->mode_paiement,
+                    'note' => $versement->note ? "[migré] {$versement->note}" : '[migré depuis versements legacy]',
+                    'paid_at' => $versement->date_versement,
+                    'created_by' => $versement->created_by,
                 ]);
 
                 CommissionPaymentItem::create([
-                    'payment_id'       => $payment->id,
-                    'part_id'          => $part->id,
+                    'payment_id' => $payment->id,
+                    'part_id' => $part->id,
                     'amount_allocated' => $versement->montant,
                 ]);
 
@@ -217,6 +218,7 @@ class MigrateCommissionsCommand extends Command
                 $totalNew,
                 $diff
             ));
+
             return false;
         }
 

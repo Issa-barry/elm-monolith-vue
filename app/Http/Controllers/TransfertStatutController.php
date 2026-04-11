@@ -27,14 +27,14 @@ class TransfertStatutController extends Controller
 
         // Données optionnelles pour les étapes qui nécessitent des saisies
         $request->validate([
-            'lignes'                    => ['sometimes', 'array'],
-            'lignes.*.id'               => ['required_with:lignes', 'integer'],
+            'lignes' => ['sometimes', 'array'],
+            'lignes.*.id' => ['required_with:lignes', 'integer'],
             // Chargement (CHARGEMENT → TRANSIT) : optionnel, présent seulement pour cette étape
             'lignes.*.quantite_chargee' => ['sometimes', 'nullable', 'integer', 'min:0'],
             // Réception (TRANSIT → RECEPTION) : optionnel, présent seulement pour cette étape
-            'lignes.*.quantite_recue'   => ['sometimes', 'nullable', 'integer', 'min:0'],
-            'lignes.*.ecart_type'       => ['sometimes', 'nullable', 'string'],
-            'lignes.*.ecart_motif'      => ['sometimes', 'nullable', 'string', 'max:500'],
+            'lignes.*.quantite_recue' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'lignes.*.ecart_type' => ['sometimes', 'nullable', 'string'],
+            'lignes.*.ecart_motif' => ['sometimes', 'nullable', 'string', 'max:500'],
         ]);
 
         // Mettre à jour les lignes si fournies
@@ -80,11 +80,11 @@ class TransfertStatutController extends Controller
         }
 
         $action = match ($ancienStatut) {
-            StatutTransfert::BROUILLON  => 'chargement_demarre',
+            StatutTransfert::BROUILLON => 'chargement_demarre',
             StatutTransfert::CHARGEMENT => 'chargement_valide',
-            StatutTransfert::TRANSIT    => 'reception_validee',
-            StatutTransfert::RECEPTION  => 'cloture',
-            default                     => 'statut_change',
+            StatutTransfert::TRANSIT => 'reception_validee',
+            StatutTransfert::RECEPTION => 'cloture',
+            default => 'statut_change',
         };
         TransfertActiviteService::log($transfert_logistique, $action);
 

@@ -95,10 +95,10 @@ class CommissionPart extends Model
     public function recalculStatut(): bool
     {
         // Cumul ancien système (versements unitaires par part)
-        $verseAncien  = (float) $this->versements()->sum('montant');
+        $verseAncien = (float) $this->versements()->sum('montant');
         // Cumul nouveau système (paiements groupés bénéficiaire, items alloués)
         $verseNouveau = (float) $this->paiementItems()->sum('amount_allocated');
-        $verse        = $verseAncien + $verseNouveau;
+        $verse = $verseAncien + $verseNouveau;
         $net = (float) $this->montant_net;
 
         $this->montant_verse = $verse;

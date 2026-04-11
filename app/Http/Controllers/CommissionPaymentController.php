@@ -26,29 +26,29 @@ class CommissionPaymentController extends Controller
 
         $data = $request->validate([
             'beneficiary_type' => ['required', Rule::in(['livreur', 'proprietaire'])],
-            'beneficiary_id'   => ['required', 'integer', 'min:1'],
-            'montant'          => ['required', 'numeric', 'min:1'],
-            'mode_paiement'    => ['required', Rule::in(self::MODES_PAIEMENT)],
-            'note'             => ['nullable', 'string', 'max:500'],
+            'beneficiary_id' => ['required', 'integer', 'min:1'],
+            'montant' => ['required', 'numeric', 'min:1'],
+            'mode_paiement' => ['required', Rule::in(self::MODES_PAIEMENT)],
+            'note' => ['nullable', 'string', 'max:500'],
         ], [
             'beneficiary_type.required' => 'Le type de bénéficiaire est obligatoire.',
-            'beneficiary_type.in'       => 'Type de bénéficiaire invalide.',
-            'beneficiary_id.required'   => 'Le bénéficiaire est obligatoire.',
-            'montant.required'          => 'Le montant est obligatoire.',
-            'montant.min'               => 'Le montant doit être supérieur à 0.',
-            'mode_paiement.required'    => 'Le mode de paiement est obligatoire.',
-            'mode_paiement.in'          => 'Mode de paiement invalide.',
+            'beneficiary_type.in' => 'Type de bénéficiaire invalide.',
+            'beneficiary_id.required' => 'Le bénéficiaire est obligatoire.',
+            'montant.required' => 'Le montant est obligatoire.',
+            'montant.min' => 'Le montant doit être supérieur à 0.',
+            'mode_paiement.required' => 'Le mode de paiement est obligatoire.',
+            'mode_paiement.in' => 'Mode de paiement invalide.',
         ]);
 
         try {
             CommissionPaymentService::payer(
-                vehicule:        $vehicule,
+                vehicule: $vehicule,
                 beneficiaryType: $data['beneficiary_type'],
-                beneficiaryId:   (int) $data['beneficiary_id'],
-                montant:         (float) $data['montant'],
-                modePaiement:    $data['mode_paiement'],
-                paidAt:          now()->toDateString(),
-                note:            $data['note'] ?? null,
+                beneficiaryId: (int) $data['beneficiary_id'],
+                montant: (float) $data['montant'],
+                modePaiement: $data['mode_paiement'],
+                paidAt: now()->toDateString(),
+                note: $data['note'] ?? null,
             );
         } catch (\InvalidArgumentException $e) {
             return back()->withErrors(['montant' => $e->getMessage()]);

@@ -5,18 +5,18 @@ namespace App\Enums;
 enum TypeEcartLogistique: string
 {
     case CONFORME = 'conforme';
-    case CASSE    = 'casse';
-    case PERTE    = 'perte';
-    case SURPLUS  = 'surplus';
+    case CASSE = 'casse';
+    case PERTE = 'perte';
+    case SURPLUS = 'surplus';
     case MANQUANT = 'manquant';
 
     public function label(): string
     {
         return match ($this) {
             self::CONFORME => 'Conforme',
-            self::CASSE    => 'Casse',
-            self::PERTE    => 'Perte',
-            self::SURPLUS  => 'Surplus',
+            self::CASSE => 'Casse',
+            self::PERTE => 'Perte',
+            self::SURPLUS => 'Surplus',
             self::MANQUANT => 'Manquant',
         };
     }
@@ -25,9 +25,9 @@ enum TypeEcartLogistique: string
     {
         return match ($this) {
             self::CONFORME => 'bg-emerald-500',
-            self::CASSE    => 'bg-red-500',
-            self::PERTE    => 'bg-red-500',
-            self::SURPLUS  => 'bg-amber-500',
+            self::CASSE => 'bg-red-500',
+            self::PERTE => 'bg-red-500',
+            self::SURPLUS => 'bg-amber-500',
             self::MANQUANT => 'bg-amber-500',
         };
     }

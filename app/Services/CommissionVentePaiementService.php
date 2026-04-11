@@ -6,7 +6,6 @@ use App\Enums\StatutCommission;
 use App\Models\CommissionPart;
 use App\Models\PaiementCommissionVente;
 use App\Models\PaiementCommissionVenteItem;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -23,19 +22,19 @@ class CommissionVentePaiementService
      * @throws InvalidArgumentException si montant ≤ 0 ou > disponible.
      */
     public static function payer(
-        int     $organizationId,
-        string  $type,
-        int     $beneficiaireId,
-        float   $montant,
-        string  $modePaiement,
-        string  $paidAt,
+        int $organizationId,
+        string $type,
+        int $beneficiaireId,
+        float $montant,
+        string $modePaiement,
+        string $paidAt,
         ?string $note = null
     ): PaiementCommissionVente {
         if ($montant <= 0) {
             throw new InvalidArgumentException('Le montant doit être supérieur à 0.');
         }
 
-        $parts           = self::partsDisponibles($organizationId, $type, $beneficiaireId);
+        $parts = self::partsDisponibles($organizationId, $type, $beneficiaireId);
         $totalDisponible = $parts->sum(fn ($p) => max(0.0, (float) $p->montant_net - (float) $p->montant_verse));
 
         if ($montant > $totalDisponible + 0.009) { // tolérance arrondi flottant
@@ -55,16 +54,16 @@ class CommissionVentePaiementService
             $montant, $modePaiement, $paidAt, $note, $parts
         ) {
             $paiement = PaiementCommissionVente::create([
-                'organization_id'   => $organizationId,
+                'organization_id' => $organizationId,
                 'type_beneficiaire' => $type,
-                'livreur_id'        => $type === 'livreur'      ? $beneficiaireId : null,
-                'proprietaire_id'   => $type === 'proprietaire' ? $beneficiaireId : null,
-                'beneficiaire_nom'  => $beneficiaireNom,
-                'montant'           => $montant,
-                'mode_paiement'     => $modePaiement,
-                'note'              => $note,
-                'paid_at'           => $paidAt,
-                'created_by'        => Auth::id(),
+                'livreur_id' => $type === 'livreur' ? $beneficiaireId : null,
+                'proprietaire_id' => $type === 'proprietaire' ? $beneficiaireId : null,
+                'beneficiaire_nom' => $beneficiaireNom,
+                'montant' => $montant,
+                'mode_paiement' => $modePaiement,
+                'note' => $note,
+                'paid_at' => $paidAt,
+                'created_by' => Auth::id(),
             ]);
 
             // ── Allocation FIFO ───────────────────────────────────────────────
@@ -83,9 +82,9 @@ class CommissionVentePaiementService
                 $alloue = min($restant, $partRestant);
 
                 PaiementCommissionVenteItem::create([
-                    'paiement_id'        => $paiement->id,
+                    'paiement_id' => $paiement->id,
                     'commission_part_id' => $part->id,
-                    'amount_allocated'   => round($alloue, 2),
+                    'amount_allocated' => round($alloue, 2),
                 ]);
 
                 // Recalcule montant_verse + statut sur la part, puis propage à la commission
@@ -105,9 +104,9 @@ class CommissionVentePaiementService
      * @return Collection<CommissionPart>
      */
     public static function partsDisponibles(
-        int    $organizationId,
+        int $organizationId,
         string $type,
-        int    $beneficiaireId
+        int $beneficiaireId
     ): Collection {
         $now = now();
 
@@ -137,9 +136,9 @@ class CommissionVentePaiementService
             }
 
             $disponibleAt = match ($type) {
-                'livreur'      => $earnedAt->clone()->addDays(14),
+                'livreur' => $earnedAt->clone()->addDays(14),
                 'proprietaire' => $earnedAt->clone()->addMonthNoOverflow()->startOfMonth(),
-                default        => null,
+                default => null,
             };
 
             return ! $disponibleAt || $now->greaterThanOrEqualTo($disponibleAt);

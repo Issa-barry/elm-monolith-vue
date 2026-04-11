@@ -11,11 +11,11 @@ return new class extends Migration
         Schema::create('paiements_commissions_ventes_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('paiement_id')
-                  ->constrained('paiements_commissions_ventes')
-                  ->cascadeOnDelete();
+                ->constrained('paiements_commissions_ventes')
+                ->cascadeOnDelete();
             $table->foreignId('commission_part_id')
-                  ->constrained('commission_parts')
-                  ->cascadeOnDelete();
+                ->constrained('commission_parts')
+                ->cascadeOnDelete();
             $table->decimal('amount_allocated', 15, 2);
             $table->timestamps();
 

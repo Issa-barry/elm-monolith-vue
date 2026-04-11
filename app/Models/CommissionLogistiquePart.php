@@ -35,14 +35,14 @@ class CommissionLogistiquePart extends Model
     protected function casts(): array
     {
         return [
-            'taux_commission'       => 'decimal:2',
-            'montant_brut'          => 'decimal:2',
+            'taux_commission' => 'decimal:2',
+            'montant_brut' => 'decimal:2',
             'frais_supplementaires' => 'decimal:2',
-            'montant_net'           => 'decimal:2',
-            'montant_verse'         => 'decimal:2',
-            'statut'                => StatutPartCommission::class,
-            'earned_at'             => 'date',
-            'unlock_at'             => 'date',
+            'montant_net' => 'decimal:2',
+            'montant_verse' => 'decimal:2',
+            'statut' => StatutPartCommission::class,
+            'earned_at' => 'date',
+            'unlock_at' => 'date',
         ];
     }
 
@@ -125,6 +125,7 @@ class CommissionLogistiquePart extends Model
         if ($this->isCancelled() || $this->isVersee()) {
             return false;
         }
+
         return $this->unlock_at !== null && $this->unlock_at->isPast();
     }
 
@@ -138,9 +139,9 @@ class CommissionLogistiquePart extends Model
     public function recalculStatut(): bool
     {
         $versePayments = (float) $this->paymentItems()->sum('amount_allocated');
-        $verseLegacy   = (float) $this->versements()->sum('montant');
-        $verse         = $versePayments + $verseLegacy;
-        $net           = (float) $this->montant_net;
+        $verseLegacy = (float) $this->versements()->sum('montant');
+        $verse = $versePayments + $verseLegacy;
+        $net = (float) $this->montant_net;
 
         $this->montant_verse = $verse;
 
@@ -174,6 +175,7 @@ class CommissionLogistiquePart extends Model
         }
 
         $this->statut = StatutPartCommission::AVAILABLE;
+
         return $this->saveQuietly();
     }
 
@@ -183,9 +185,9 @@ class CommissionLogistiquePart extends Model
     public function appliquerFrais(float $frais, ?string $typeFrais = null, ?string $commentaireFrais = null): bool
     {
         $this->frais_supplementaires = max(0.0, $frais);
-        $this->montant_net           = max(0.0, round((float) $this->montant_brut - $this->frais_supplementaires, 2));
-        $this->type_frais            = $frais > 0 ? $typeFrais : null;
-        $this->commentaire_frais     = ($frais > 0 && $typeFrais === 'autre') ? $commentaireFrais : null;
+        $this->montant_net = max(0.0, round((float) $this->montant_brut - $this->frais_supplementaires, 2));
+        $this->type_frais = $frais > 0 ? $typeFrais : null;
+        $this->commentaire_frais = ($frais > 0 && $typeFrais === 'autre') ? $commentaireFrais : null;
 
         return $this->save();
     }

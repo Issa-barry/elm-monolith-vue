@@ -29,12 +29,12 @@ class CommissionLogistique extends Model
     protected function casts(): array
     {
         return [
-            'base_calcul'        => BaseCalculLogistique::class,
-            'valeur_base'        => 'decimal:2',
-            'montant_total'      => 'decimal:2',
-            'montant_verse'      => 'decimal:2',
+            'base_calcul' => BaseCalculLogistique::class,
+            'valeur_base' => 'decimal:2',
+            'montant_total' => 'decimal:2',
+            'montant_verse' => 'decimal:2',
             'quantite_reference' => 'integer',
-            'statut'             => StatutCommissionLogistique::class,
+            'statut' => StatutCommissionLogistique::class,
         ];
     }
 
@@ -103,9 +103,9 @@ class CommissionLogistique extends Model
     public function calculerMontantTotal(): float
     {
         return match ($this->base_calcul) {
-            BaseCalculLogistique::FORFAIT  => (float) $this->valeur_base,
+            BaseCalculLogistique::FORFAIT => (float) $this->valeur_base,
             BaseCalculLogistique::PAR_PACK,
-            BaseCalculLogistique::PAR_KM   => (float) $this->valeur_base * ($this->quantite_reference ?? 0),
+            BaseCalculLogistique::PAR_KM => (float) $this->valeur_base * ($this->quantite_reference ?? 0),
         };
     }
 
@@ -121,8 +121,8 @@ class CommissionLogistique extends Model
 
         $parts = $this->parts()->get();
 
-        $totalVerse  = (float) $parts->sum('montant_verse');
-        $totalNet    = (float) $parts->sum('montant_net');
+        $totalVerse = (float) $parts->sum('montant_verse');
+        $totalNet = (float) $parts->sum('montant_net');
 
         $this->montant_verse = $totalVerse;
 

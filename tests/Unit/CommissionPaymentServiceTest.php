@@ -5,7 +5,6 @@ namespace Tests\Unit;
 use App\Enums\StatutPartCommission;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionPayment;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Site;
@@ -55,16 +54,16 @@ class CommissionPaymentServiceTest extends TestCase
         $payment = CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 3000, 'especes', now()->toDateString());
 
         $this->assertDatabaseHas('commission_payments', [
-            'vehicule_id'      => $vehicule->id,
-            'livreur_id'       => $livreur->id,
+            'vehicule_id' => $vehicule->id,
+            'livreur_id' => $livreur->id,
             'beneficiary_type' => 'livreur',
-            'montant'          => 3000,
-            'mode_paiement'    => 'especes',
+            'montant' => 3000,
+            'mode_paiement' => 'especes',
         ]);
 
         $this->assertDatabaseHas('commission_payment_items', [
-            'payment_id'       => $payment->id,
-            'part_id'          => $part->id,
+            'payment_id' => $payment->id,
+            'part_id' => $part->id,
             'amount_allocated' => 3000,
         ]);
 
@@ -86,40 +85,40 @@ class CommissionPaymentServiceTest extends TestCase
 
     public function test_payer_alloue_en_fifo_sur_plusieurs_parts(): void
     {
-        $org      = Organization::factory()->create();
+        $org = Organization::factory()->create();
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
-        $livreur  = Livreur::factory()->create(['organization_id' => $org->id]);
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
 
         // 2 parts, earned_at différents (partAncienne plus vieille = doit être soldée en premier)
         $commission = $this->makeCommission($org, $vehicule);
 
         $partAncienne = $this->makePart($commission, $livreur, [
             'montant_net' => 1000,
-            'earned_at'   => now()->subDays(20)->toDateString(),
-            'unlock_at'   => now()->subDays(6)->toDateString(),
+            'earned_at' => now()->subDays(20)->toDateString(),
+            'unlock_at' => now()->subDays(6)->toDateString(),
         ]);
         $partRecente = $this->makePart($commission, $livreur, [
             'montant_net' => 2000,
-            'earned_at'   => now()->subDays(10)->toDateString(),
-            'unlock_at'   => now()->subDays(1)->toDateString(),
+            'earned_at' => now()->subDays(10)->toDateString(),
+            'unlock_at' => now()->subDays(1)->toDateString(),
         ]);
 
         $this->actingAs($this->makeUser($org));
         // Paiement de 1 500 GNF : doit solder la part ancienne (1 000) puis allouer 500 sur la récente
         CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 1500, 'especes', now()->toDateString());
 
-        $this->assertEquals(StatutPartCommission::PAID,    $partAncienne->fresh()->statut);
+        $this->assertEquals(StatutPartCommission::PAID, $partAncienne->fresh()->statut);
         $this->assertEquals(1000.0, (float) $partAncienne->fresh()->montant_verse);
 
         $this->assertEquals(StatutPartCommission::PARTIAL, $partRecente->fresh()->statut);
-        $this->assertEquals(500.0,  (float) $partRecente->fresh()->montant_verse);
+        $this->assertEquals(500.0, (float) $partRecente->fresh()->montant_verse);
     }
 
     public function test_payer_peut_solder_plusieurs_parts_en_une_fois(): void
     {
-        $org      = Organization::factory()->create();
+        $org = Organization::factory()->create();
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
-        $livreur  = Livreur::factory()->create(['organization_id' => $org->id]);
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
         $commission = $this->makeCommission($org, $vehicule);
 
         $part1 = $this->makePart($commission, $livreur, ['montant_net' => 1000, 'earned_at' => now()->subDays(20)->toDateString(), 'unlock_at' => now()->subDays(6)->toDateString()]);
@@ -138,14 +137,14 @@ class CommissionPaymentServiceTest extends TestCase
 
     public function test_parts_disponibles_exclut_parts_pending(): void
     {
-        $org      = Organization::factory()->create();
+        $org = Organization::factory()->create();
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
-        $livreur  = Livreur::factory()->create(['organization_id' => $org->id]);
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
         $commission = $this->makeCommission($org, $vehicule);
 
         // Part PENDING (pas encore déblocable)
         $this->makePart($commission, $livreur, [
-            'statut'    => StatutPartCommission::PENDING,
+            'statut' => StatutPartCommission::PENDING,
             'unlock_at' => now()->addDays(5)->toDateString(),
         ]);
 
@@ -156,9 +155,9 @@ class CommissionPaymentServiceTest extends TestCase
 
     public function test_parts_disponibles_inclut_available_et_partial(): void
     {
-        $org      = Organization::factory()->create();
+        $org = Organization::factory()->create();
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
-        $livreur  = Livreur::factory()->create(['organization_id' => $org->id]);
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
         $commission = $this->makeCommission($org, $vehicule);
 
         $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::AVAILABLE, 'unlock_at' => now()->subDay()->toDateString()]);
@@ -174,9 +173,9 @@ class CommissionPaymentServiceTest extends TestCase
 
     public function test_soldes_par_vehicule_agrege_correctement(): void
     {
-        $org      = Organization::factory()->create();
+        $org = Organization::factory()->create();
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
-        $livreur  = Livreur::factory()->create(['organization_id' => $org->id]);
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
         $commission = $this->makeCommission($org, $vehicule);
 
         $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::PENDING,   'montant_net' => 1000]);
@@ -188,16 +187,16 @@ class CommissionPaymentServiceTest extends TestCase
         $this->assertCount(1, $soldes['livreurs']);
         $livreurRow = $soldes['livreurs'][0];
 
-        $this->assertEquals((float) $livreurRow['pending'],   1000.0);
+        $this->assertEquals((float) $livreurRow['pending'], 1000.0);
         $this->assertEquals((float) $livreurRow['available'], 2000.0);
-        $this->assertEquals((float) $livreurRow['paid'],      500.0);
+        $this->assertEquals((float) $livreurRow['paid'], 500.0);
     }
 
     public function test_soldes_par_vehicule_exclut_les_annules(): void
     {
-        $org      = Organization::factory()->create();
+        $org = Organization::factory()->create();
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
-        $livreur  = Livreur::factory()->create(['organization_id' => $org->id]);
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
         $commission = $this->makeCommission($org, $vehicule);
 
         $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::CANCELLED, 'montant_net' => 9999]);
@@ -214,9 +213,9 @@ class CommissionPaymentServiceTest extends TestCase
      */
     private function makeScenario(float $montantNet = 3000): array
     {
-        $org      = Organization::factory()->create();
+        $org = Organization::factory()->create();
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
-        $livreur  = Livreur::factory()->create(['organization_id' => $org->id]);
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
         $commission = $this->makeCommission($org, $vehicule);
 
         $part = $this->makePart($commission, $livreur, ['montant_net' => $montantNet]);
@@ -227,14 +226,14 @@ class CommissionPaymentServiceTest extends TestCase
     private function makeCommission(Organization $org, Vehicule $vehicule): CommissionLogistique
     {
         return CommissionLogistique::create([
-            'organization_id'         => $org->id,
+            'organization_id' => $org->id,
             'transfert_logistique_id' => $this->makeTransfert($org, $vehicule)->id,
-            'vehicule_id'             => $vehicule->id,
-            'base_calcul'             => 'forfait',
-            'valeur_base'             => 5000,
-            'montant_total'           => 5000,
-            'montant_verse'           => 0,
-            'statut'                  => 'en_attente',
+            'vehicule_id' => $vehicule->id,
+            'base_calcul' => 'forfait',
+            'valeur_base' => 5000,
+            'montant_total' => 5000,
+            'montant_verse' => 0,
+            'statut' => 'en_attente',
         ]);
     }
 
@@ -245,19 +244,19 @@ class CommissionPaymentServiceTest extends TestCase
 
         $site = Site::create([
             'organization_id' => $org->id,
-            'nom'             => 'Site '.uniqid(),
-            'type'            => 'depot',
-            'localisation'    => 'Test',
+            'nom' => 'Site '.uniqid(),
+            'type' => 'depot',
+            'localisation' => 'Test',
         ]);
 
         return TransfertLogistique::create([
-            'organization_id'     => $org->id,
-            'reference'           => 'TRF-'.uniqid(),
-            'site_source_id'      => $site->id,
+            'organization_id' => $org->id,
+            'reference' => 'TRF-'.uniqid(),
+            'site_source_id' => $site->id,
             'site_destination_id' => $site->id,
-            'vehicule_id'         => $vehicule->id,
-            'statut'              => 'cloture',
-            'created_by'          => $user->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => 'cloture',
+            'created_by' => $user->id,
         ]);
     }
 
@@ -268,17 +267,17 @@ class CommissionPaymentServiceTest extends TestCase
     ): CommissionLogistiquePart {
         return CommissionLogistiquePart::create(array_merge([
             'commission_logistique_id' => $commission->id,
-            'type_beneficiaire'        => 'livreur',
-            'livreur_id'               => $livreur->id,
-            'beneficiaire_nom'         => $livreur->prenom.' '.$livreur->nom,
-            'taux_commission'          => 60,
-            'montant_brut'             => 3000,
-            'frais_supplementaires'    => 0,
-            'montant_net'              => 3000,
-            'montant_verse'            => 0,
-            'statut'                   => StatutPartCommission::AVAILABLE,
-            'earned_at'                => now()->subDays(15)->toDateString(),
-            'unlock_at'                => now()->subDays(1)->toDateString(),
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => $livreur->prenom.' '.$livreur->nom,
+            'taux_commission' => 60,
+            'montant_brut' => 3000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 3000,
+            'montant_verse' => 0,
+            'statut' => StatutPartCommission::AVAILABLE,
+            'earned_at' => now()->subDays(15)->toDateString(),
+            'unlock_at' => now()->subDays(1)->toDateString(),
         ], $overrides));
     }
 
@@ -290,9 +289,9 @@ class CommissionPaymentServiceTest extends TestCase
 
         $site = \App\Models\Site::create([
             'organization_id' => $org->id,
-            'nom'             => 'Site Test',
-            'type'            => 'depot',
-            'localisation'    => 'Conakry',
+            'nom' => 'Site Test',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
         ]);
         $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
 

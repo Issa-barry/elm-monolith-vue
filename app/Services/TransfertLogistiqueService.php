@@ -17,10 +17,10 @@ class TransfertLogistiqueService
     public static function avancerStatut(TransfertLogistique $transfert): TransfertLogistique
     {
         $suivant = match ($transfert->statut) {
-            StatutTransfert::BROUILLON  => StatutTransfert::CHARGEMENT,
+            StatutTransfert::BROUILLON => StatutTransfert::CHARGEMENT,
             StatutTransfert::CHARGEMENT => StatutTransfert::TRANSIT,
-            StatutTransfert::TRANSIT    => StatutTransfert::RECEPTION,
-            default                     => null,
+            StatutTransfert::TRANSIT => StatutTransfert::RECEPTION,
+            default => null,
         };
 
         if ($suivant === null) {
@@ -104,9 +104,9 @@ class TransfertLogistiqueService
 
         match ($cible) {
             StatutTransfert::CHARGEMENT => self::checkChargement($transfert, $errors),
-            StatutTransfert::TRANSIT    => self::checkTransit($transfert, $errors),
-            StatutTransfert::RECEPTION  => self::checkReception($transfert, $errors),
-            default                     => null,
+            StatutTransfert::TRANSIT => self::checkTransit($transfert, $errors),
+            StatutTransfert::RECEPTION => self::checkReception($transfert, $errors),
+            default => null,
         };
 
         if (! empty($errors)) {

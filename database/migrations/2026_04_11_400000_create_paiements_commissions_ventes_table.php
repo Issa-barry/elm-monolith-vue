@@ -22,7 +22,7 @@ return new class extends Migration
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
-            $table->index(['organization_id', 'type_beneficiaire', 'livreur_id'],      'pcv_org_type_livreur_idx');
+            $table->index(['organization_id', 'type_beneficiaire', 'livreur_id'], 'pcv_org_type_livreur_idx');
             $table->index(['organization_id', 'type_beneficiaire', 'proprietaire_id'], 'pcv_org_type_proprio_idx');
         });
     }

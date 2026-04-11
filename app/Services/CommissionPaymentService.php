@@ -21,24 +21,21 @@ class CommissionPaymentService
      * ancien sont soldées en premier. Le montant saisi peut couvrir plusieurs
      * parts ou seulement une fraction d'une part.
      *
-     * @param  Vehicule  $vehicule
-     * @param  string    $beneficiaryType  livreur|proprietaire
-     * @param  int       $beneficiaryId    livreur_id ou proprietaire_id
-     * @param  float     $montant          montant total à payer
-     * @param  string    $modePaiement
-     * @param  string    $paidAt           date ISO Y-m-d
-     * @param  string|null $note
+     * @param  string  $beneficiaryType  livreur|proprietaire
+     * @param  int  $beneficiaryId  livreur_id ou proprietaire_id
+     * @param  float  $montant  montant total à payer
+     * @param  string  $paidAt  date ISO Y-m-d
      *
      * @throws InvalidArgumentException
      */
     public static function payer(
         Vehicule $vehicule,
-        string   $beneficiaryType,
-        int      $beneficiaryId,
-        float    $montant,
-        string   $modePaiement,
-        string   $paidAt,
-        ?string  $note = null
+        string $beneficiaryType,
+        int $beneficiaryId,
+        float $montant,
+        string $modePaiement,
+        string $paidAt,
+        ?string $note = null
     ): CommissionPayment {
         if ($montant <= 0) {
             throw new InvalidArgumentException('Le montant doit être supérieur à 0.');
@@ -68,17 +65,17 @@ class CommissionPaymentService
             $montant, $modePaiement, $paidAt, $note, $parts
         ) {
             $payment = CommissionPayment::create([
-                'organization_id'  => $vehicule->organization_id,
-                'vehicule_id'      => $vehicule->id,
-                'livreur_id'       => $beneficiaryType === 'livreur' ? $beneficiaryId : null,
-                'proprietaire_id'  => $beneficiaryType === 'proprietaire' ? $beneficiaryId : null,
+                'organization_id' => $vehicule->organization_id,
+                'vehicule_id' => $vehicule->id,
+                'livreur_id' => $beneficiaryType === 'livreur' ? $beneficiaryId : null,
+                'proprietaire_id' => $beneficiaryType === 'proprietaire' ? $beneficiaryId : null,
                 'beneficiary_type' => $beneficiaryType,
-                'beneficiary_nom'  => $beneficiaryNom,
-                'montant'          => $montant,
-                'mode_paiement'    => $modePaiement,
-                'note'             => $note,
-                'paid_at'          => $paidAt,
-                'created_by'       => Auth::id(),
+                'beneficiary_nom' => $beneficiaryNom,
+                'montant' => $montant,
+                'mode_paiement' => $modePaiement,
+                'note' => $note,
+                'paid_at' => $paidAt,
+                'created_by' => Auth::id(),
             ]);
 
             // ── Allocation FIFO ───────────────────────────────────────────────
@@ -90,11 +87,11 @@ class CommissionPaymentService
                 }
 
                 $montantRestant = (float) $part->montant_restant;
-                $alloue         = min($restant, $montantRestant);
+                $alloue = min($restant, $montantRestant);
 
                 CommissionPaymentItem::create([
-                    'payment_id'       => $payment->id,
-                    'part_id'          => $part->id,
+                    'payment_id' => $payment->id,
+                    'part_id' => $part->id,
                     'amount_allocated' => round($alloue, 2),
                 ]);
 
@@ -114,8 +111,8 @@ class CommissionPaymentService
      */
     public static function partsDisponibles(
         Vehicule $vehicule,
-        string   $beneficiaryType,
-        int      $beneficiaryId
+        string $beneficiaryType,
+        int $beneficiaryId
     ): Collection {
         $query = CommissionLogistiquePart::query()
             ->whereIn('statut', [
@@ -125,7 +122,7 @@ class CommissionPaymentService
             ->where('type_beneficiaire', $beneficiaryType)
             ->whereHas('commission', function ($q) use ($vehicule) {
                 $q->where('vehicule_id', $vehicule->id)
-                  ->where('organization_id', $vehicule->organization_id);
+                    ->where('organization_id', $vehicule->organization_id);
             })
             ->orderBy('earned_at')   // FIFO
             ->orderBy('id');
@@ -167,7 +164,7 @@ class CommissionPaymentService
             )
             ->whereHas('commission', function ($q) use ($vehicule) {
                 $q->where('vehicule_id', $vehicule->id)
-                  ->where('organization_id', $vehicule->organization_id);
+                    ->where('organization_id', $vehicule->organization_id);
             })
             ->where('statut', '!=', StatutPartCommission::CANCELLED->value)
             ->groupBy('type_beneficiaire', 'beneficiary_id', 'beneficiaire_nom')
@@ -176,14 +173,14 @@ class CommissionPaymentService
         $result = ['livreurs' => [], 'proprietaires' => []];
 
         foreach ($rows as $row) {
-            $key  = $row->type_beneficiaire === 'livreur' ? 'livreurs' : 'proprietaires';
+            $key = $row->type_beneficiaire === 'livreur' ? 'livreurs' : 'proprietaires';
             $result[$key][] = [
-                'id'        => (int) $row->beneficiary_id,
-                'type'      => $row->type_beneficiaire,
-                'nom'       => $row->beneficiaire_nom,
-                'pending'   => (float) $row->pending,
+                'id' => (int) $row->beneficiary_id,
+                'type' => $row->type_beneficiaire,
+                'nom' => $row->beneficiaire_nom,
+                'pending' => (float) $row->pending,
                 'available' => (float) $row->available,
-                'paid'      => (float) $row->paid,
+                'paid' => (float) $row->paid,
             ];
         }
 
@@ -196,21 +193,21 @@ class CommissionPaymentService
      */
     public static function releve(
         Vehicule $vehicule,
-        string   $beneficiaryType,
-        int      $beneficiaryId
+        string $beneficiaryType,
+        int $beneficiaryId
     ): Collection {
         $query = CommissionLogistiquePart::with([
             'commission.transfert:id,reference,date_arrivee_reelle',
             'paymentItems.payment:id,paid_at,mode_paiement,montant',
         ])
-        ->whereHas('commission', function ($q) use ($vehicule) {
-            $q->where('vehicule_id', $vehicule->id)
-              ->where('organization_id', $vehicule->organization_id);
-        })
-        ->where('type_beneficiaire', $beneficiaryType)
-        ->where('statut', '!=', StatutPartCommission::CANCELLED->value)
-        ->orderBy('earned_at')
-        ->orderBy('id');
+            ->whereHas('commission', function ($q) use ($vehicule) {
+                $q->where('vehicule_id', $vehicule->id)
+                    ->where('organization_id', $vehicule->organization_id);
+            })
+            ->where('type_beneficiaire', $beneficiaryType)
+            ->where('statut', '!=', StatutPartCommission::CANCELLED->value)
+            ->orderBy('earned_at')
+            ->orderBy('id');
 
         if ($beneficiaryType === 'livreur') {
             $query->where('livreur_id', $beneficiaryId);

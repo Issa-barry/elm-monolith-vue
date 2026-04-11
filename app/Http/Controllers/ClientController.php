@@ -161,9 +161,9 @@ class ClientController extends Controller
                 'ville' => $client->ville,
                 'pays' => $pays,
                 'code_pays' => $codePays,
-                'code_phone_pays'    => $codePhonePays,
-                'is_active'          => $client->is_active,
-                'cashback_eligible'  => $client->cashback_eligible,
+                'code_phone_pays' => $codePhonePays,
+                'is_active' => $client->is_active,
+                'cashback_eligible' => $client->cashback_eligible,
             ],
             'cashback_solde' => $cashbackSolde,
         ]);
