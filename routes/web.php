@@ -24,6 +24,8 @@ use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VehiculeController;
+use App\Http\Controllers\FraisCommissionPartController;
+use App\Http\Controllers\PaiementCommissionVenteController;
 use App\Http\Controllers\VersementCommissionController;
 use App\Http\Controllers\VersementCommissionLogistiqueController;
 use App\Http\Controllers\VersementController;
@@ -85,7 +87,13 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::get('commissions/beneficiaires/{type}/{beneficiaireId}', [CommissionVenteController::class, 'showBeneficiaire'])->name('commissions.beneficiaires.show');
         Route::get('commissions/{commission_vente}', [CommissionVenteController::class, 'show'])->name('commissions.show');
 
-        // Versements par part
+        // Paiement groupé bénéficiaire (nouveau workflow)
+        Route::post('commissions/beneficiaires/{type}/{beneficiaireId}/paiements', [PaiementCommissionVenteController::class, 'store'])->name('commissions.beneficiaires.paiements.store');
+
+        // Frais par part (livreur)
+        Route::patch('commissions/parts/{part}/frais', [FraisCommissionPartController::class, 'update'])->name('commissions.parts.frais.update');
+
+        // Versements par part (ancien système — conservé pour compatibilité)
         Route::post('commissions/{commission}/parts/{part}/versements', [VersementCommissionController::class, 'store'])->name('commissions.parts.versements.store');
         Route::delete('versements-commissions/{versement_commission}', [VersementCommissionController::class, 'destroy'])->name('commissions.versements.destroy');
 

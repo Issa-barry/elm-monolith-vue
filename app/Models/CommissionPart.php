@@ -64,6 +64,11 @@ class CommissionPart extends Model
         return $this->hasMany(VersementCommission::class, 'commission_part_id');
     }
 
+    public function paiementItems(): HasMany
+    {
+        return $this->hasMany(PaiementCommissionVenteItem::class, 'commission_part_id');
+    }
+
     // ── Accessors ─────────────────────────────────────────────────────────────
 
     public function getMontantRestantAttribute(): float
@@ -89,7 +94,11 @@ class CommissionPart extends Model
      */
     public function recalculStatut(): bool
     {
-        $verse = (float) $this->versements()->sum('montant');
+        // Cumul ancien système (versements unitaires par part)
+        $verseAncien  = (float) $this->versements()->sum('montant');
+        // Cumul nouveau système (paiements groupés bénéficiaire, items alloués)
+        $verseNouveau = (float) $this->paiementItems()->sum('amount_allocated');
+        $verse        = $verseAncien + $verseNouveau;
         $net = (float) $this->montant_net;
 
         $this->montant_verse = $verse;

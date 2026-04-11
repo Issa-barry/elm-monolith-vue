@@ -1,75 +1,85 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
-    ChevronRight,
-    HandCoins,
+    CalendarDays,
+    CreditCard,
     History,
+    MoreVertical,
+    Pencil,
+    Plus,
+    Search,
     Truck,
     User,
+    Wallet,
+    X,
 } from 'lucide-vue-next';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface VersementItem {
+interface ResumeGlobal {
     id: number;
-    part_id: number;
-    commission_id: number;
-    date_versement: string | null;
-    enregistre_le: string | null;
-    montant: number;
-    mode_paiement: string;
-    note: string | null;
-    created_by: string | null;
+    type: 'livreur' | 'proprietaire';
+    nom: string;
+    telephone: string | null;
+    nb_commandes: number;
+    total_brut_cumule: number;
+    total_frais: number;
+    total_net_cumule: number;
+    total_verse: number;
+    disponible_maintenant: number;
+    en_attente: number;
+    solde_global: number;
+    statut_global: 'en_attente' | 'a_verser' | 'partielle' | 'solde';
 }
 
 interface CommandeRow {
     commission_id: number;
     commande_reference: string | null;
     commande_id: number | null;
-    date: string | null;
+    date_commande: string | null;
+    site: string | null;
     vehicule: string | null;
     immatriculation: string | null;
-    site: string | null;
     taux: number;
     montant_brut: number;
     frais: number;
     montant_net: number;
     montant_verse: number;
-    restant: number;
-    statut: string;
-    statut_label: string;
+    unlock_at: string | null;
     part_id: number;
-    versements: VersementItem[];
-    disponible_le: string | null;
-    montant_disponible: number;
-    montant_en_attente: number;
+    type_frais: string | null;
+    commentaire_frais: string | null;
 }
 
-interface Resume {
+interface PaiementRow {
     id: number;
-    type: 'livreur' | 'proprietaire';
-    nom: string;
-    telephone: string | null;
-    nb_commandes: number;
-    total_brut: number;
-    total_frais: number;
-    total_net: number;
-    total_verse: number;
-    solde_restant: number;
-    total_disponible: number;
-    total_en_attente: number;
+    paid_at: string | null;
+    montant: number;
+    mode_paiement: string;
+    note: string | null;
+    created_by: string | null;
 }
 
 interface ModePaiementOption {
@@ -77,115 +87,271 @@ interface ModePaiementOption {
     label: string;
 }
 
+interface Filtres {
+    date_from: string | null;
+    date_to: string | null;
+    commande: string | null;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 const props = defineProps<{
-    resume: Resume;
-    commandes: CommandeRow[];
+    resume_global: ResumeGlobal;
+    historique_commandes: CommandeRow[];
+    historique_paiements_globaux: PaiementRow[];
     modes_paiement: ModePaiementOption[];
+    filtres: Filtres;
 }>();
 
 const { can } = usePermissions();
+const page = usePage();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Commissions', href: '/commissions' },
-    { title: props.resume.nom, href: '' },
+    { title: props.resume_global.nom, href: '' },
 ];
 
-// ── Formatage ─────────────────────────────────────────────────────────────────
+const isLivreur = computed(() => props.resume_global.type === 'livreur');
+
+// ── Formatage ──────────────────────────────────────────────────────────────────
 
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
 
-const statutDotColor: Record<string, string> = {
-    en_attente: 'bg-amber-500',
-    partielle: 'bg-blue-500',
-    versee: 'bg-emerald-500',
-    annulee: 'bg-zinc-400 dark:bg-zinc-500',
+const typeIcon = computed(() => (isLivreur.value ? Truck : User));
+const typeLabel = computed(() => (isLivreur.value ? 'Livreur' : 'Propriétaire'));
+
+const statutGlobalConfig: Record<string, { label: string; dotClass: string }> = {
+    en_attente: { label: 'En attente', dotClass: 'bg-zinc-400' },
+    a_verser:   { label: 'À verser',   dotClass: 'bg-amber-500' },
+    partielle:  { label: 'Partiel',    dotClass: 'bg-blue-500' },
+    solde:      { label: 'Soldé',      dotClass: 'bg-emerald-500' },
 };
 
-const typeIcon = computed(() =>
-    props.resume.type === 'livreur' ? Truck : User,
+const statutCfg = computed(
+    () => statutGlobalConfig[props.resume_global.statut_global] ?? statutGlobalConfig.en_attente,
 );
 
-const typeLabel = computed(() =>
-    props.resume.type === 'livreur' ? 'Livreur' : 'Propriétaire',
+// ── Flash ─────────────────────────────────────────────────────────────────────
+
+const flashSuccess = computed(
+    () => (page.props.flash as Record<string, string>)?.success ?? null,
 );
 
-// ── Dialog versement ──────────────────────────────────────────────────────────
+// ── Filtres date (server-side) ────────────────────────────────────────────────
 
-const dialogVisible = ref(false);
-const dialogCommande = ref<CommandeRow | null>(null);
+const filtresDate = reactive({
+    date_from: props.filtres.date_from ?? '',
+    date_to:   props.filtres.date_to   ?? '',
+});
 
-interface VersementForm {
+function applyDateFilters() {
+    router.get(
+        `/commissions/beneficiaires/${props.resume_global.type}/${props.resume_global.id}`,
+        {
+            ...(filtresDate.date_from ? { date_from: filtresDate.date_from } : {}),
+            ...(filtresDate.date_to   ? { date_to:   filtresDate.date_to   } : {}),
+        },
+        { preserveScroll: true, preserveState: true },
+    );
+}
+
+function clearDateFilters() {
+    filtresDate.date_from = '';
+    filtresDate.date_to   = '';
+    applyDateFilters();
+}
+
+const hasDateFilters = computed(() => !!(filtresDate.date_from || filtresDate.date_to));
+
+// ── Recherche locale (DataTable) ───────────────────────────────────────────────
+
+const localSearch = ref('');
+
+const commandesFiltrees = computed(() => {
+    const q = localSearch.value.toLowerCase().trim();
+    if (!q) return props.historique_commandes;
+    return props.historique_commandes.filter(
+        (c) =>
+            (c.commande_reference ?? '').toLowerCase().includes(q) ||
+            (c.vehicule ?? '').toLowerCase().includes(q) ||
+            (c.site ?? '').toLowerCase().includes(q),
+    );
+});
+
+// ── Totaux ligne DataTable (recalculés sur le dataset local filtré) ────────────
+
+const totauxFiltres = computed(() => {
+    const list = commandesFiltrees.value;
+    return {
+        nb:       list.length,
+        brut:     list.reduce((s, c) => s + c.montant_brut, 0),
+        frais:    list.reduce((s, c) => s + c.frais, 0),
+        net:      list.reduce((s, c) => s + c.montant_net, 0),
+    };
+});
+
+// ── Dialog paiement groupé ─────────────────────────────────────────────────────
+
+const paiementVisible = ref(false);
+const today = new Date().toISOString().slice(0, 10);
+
+interface PaiementForm {
     montant: number | null;
     mode_paiement: string;
+    paid_at: string;
     note: string | null;
     processing: boolean;
 }
 
-const versementForm = reactive<VersementForm>({
-    montant: null,
+const paiementForm = reactive<PaiementForm>({
+    montant:       null,
     mode_paiement: 'especes',
-    note: null,
-    processing: false,
+    paid_at:       today,
+    note:          null,
+    processing:    false,
 });
 
-function openVersementDialog(commande: CommandeRow) {
-    dialogCommande.value = commande;
-    versementForm.montant = commande.restant > 0 ? commande.restant : null;
-    versementForm.mode_paiement = 'especes';
-    versementForm.note = null;
-    versementForm.processing = false;
-    dialogVisible.value = true;
+const paiementErrors = ref<Record<string, string>>({});
+
+function openPaiementDialog() {
+    paiementForm.montant       = props.resume_global.disponible_maintenant > 0
+        ? props.resume_global.disponible_maintenant
+        : null;
+    paiementForm.mode_paiement = 'especes';
+    paiementForm.paid_at       = today;
+    paiementForm.note          = null;
+    paiementForm.processing    = false;
+    paiementErrors.value       = {};
+    paiementVisible.value      = true;
 }
 
-function closeDialog() {
-    dialogVisible.value = false;
-    dialogCommande.value = null;
+function closePaiementDialog() {
+    paiementVisible.value = false;
 }
 
-function submitVersement() {
-    const commande = dialogCommande.value;
-    if (!commande || !versementForm.montant || versementForm.montant <= 0) return;
-    versementForm.processing = true;
-    const today = new Date().toISOString().slice(0, 10);
+function submitPaiement() {
+    if (!paiementForm.montant || paiementForm.montant <= 0) return;
+    paiementForm.processing = true;
+    paiementErrors.value    = {};
     router.post(
-        `/commissions/${commande.commission_id}/parts/${commande.part_id}/versements`,
+        `/commissions/beneficiaires/${props.resume_global.type}/${props.resume_global.id}/paiements`,
         {
-            montant: versementForm.montant,
-            mode_paiement: versementForm.mode_paiement,
-            date_versement: today,
-            note: versementForm.note,
+            montant:       paiementForm.montant,
+            mode_paiement: paiementForm.mode_paiement,
+            paid_at:       paiementForm.paid_at,
+            note:          paiementForm.note,
         },
         {
             preserveScroll: true,
-            onSuccess: () => closeDialog(),
-            onFinish: () => { versementForm.processing = false; },
+            onSuccess:  ()    => closePaiementDialog(),
+            onError:    (err) => { paiementErrors.value = err; },
+            onFinish:   ()    => { paiementForm.processing = false; },
         },
     );
 }
 
-// ── Dialog historique ─────────────────────────────────────────────────────────
+const montantDepasse = computed(
+    () =>
+        paiementForm.montant !== null &&
+        paiementForm.montant > props.resume_global.disponible_maintenant + 0.009,
+);
+
+// ── Dialog historique paiements ────────────────────────────────────────────────
 
 const historyVisible = ref(false);
-const historyCommande = ref<CommandeRow | null>(null);
 
-function openHistory(commande: CommandeRow) {
-    historyCommande.value = commande;
+function openHistory() {
     historyVisible.value = true;
+}
+
+// ── Dialog frais livreur ───────────────────────────────────────────────────────
+
+const fraisVisible    = ref(false);
+const fraisCommande   = ref<CommandeRow | null>(null);
+
+const typeFraisOptions = [
+    { value: 'carburant', label: 'Carburant' },
+    { value: 'reparation', label: 'Réparation' },
+    { value: 'autre',     label: 'Autre' },
+];
+
+interface FraisForm {
+    frais: number;
+    type_frais: string | null;
+    commentaire_frais: string | null;
+    processing: boolean;
+}
+
+const fraisForm = reactive<FraisForm>({
+    frais:             0,
+    type_frais:        null,
+    commentaire_frais: null,
+    processing:        false,
+});
+
+function openFraisDialog(c: CommandeRow) {
+    fraisCommande.value        = c;
+    fraisForm.frais            = c.frais;
+    fraisForm.type_frais       = c.type_frais ?? null;
+    fraisForm.commentaire_frais= c.commentaire_frais ?? null;
+    fraisForm.processing       = false;
+    fraisVisible.value         = true;
+}
+
+function closeFraisDialog() {
+    fraisVisible.value   = false;
+    fraisCommande.value  = null;
+}
+
+function submitFrais() {
+    if (!fraisCommande.value || fraisForm.frais < 0 || !fraisForm.type_frais) return;
+    fraisForm.processing = true;
+    router.patch(
+        `/commissions/parts/${fraisCommande.value.part_id}/frais`,
+        {
+            frais:             fraisForm.frais,
+            type_frais:        fraisForm.type_frais,
+            commentaire_frais: fraisForm.commentaire_frais,
+        },
+        {
+            preserveScroll: true,
+            onSuccess: ()  => closeFraisDialog(),
+            onFinish:  ()  => { fraisForm.processing = false; },
+        },
+    );
+}
+
+// Réinitialise commentaire quand le type change
+watch(() => fraisForm.type_frais, (val) => {
+    if (val !== 'autre') fraisForm.commentaire_frais = null;
+});
+
+// ── Dialog détail commission ───────────────────────────────────────────────────
+
+const detailVisible  = ref(false);
+const detailCommande = ref<CommandeRow | null>(null);
+
+function openDetailDialog(c: CommandeRow) {
+    detailCommande.value = c;
+    detailVisible.value  = true;
+}
+
+function closeDetailDialog() {
+    detailVisible.value  = false;
+    detailCommande.value = null;
 }
 </script>
 
 <template>
-    <Head :title="`Commission — ${resume.nom}`" />
+    <Head :title="`Commission — ${resume_global.nom}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+
         <!-- ══════════════════════ MOBILE ══════════════════════════════════════ -->
         <div class="flex flex-col sm:hidden">
-            <!-- Header -->
             <div class="sticky top-0 z-10 border-b bg-background">
                 <div class="flex items-center justify-between px-4 py-3">
                     <Link
@@ -194,331 +360,606 @@ function openHistory(commande: CommandeRow) {
                     >
                         <ArrowLeft class="h-5 w-5" />
                     </Link>
-                    <span class="text-base font-semibold">{{ resume.nom }}</span>
+                    <span class="text-base font-semibold">{{ resume_global.nom }}</span>
                     <div class="w-8" />
                 </div>
             </div>
 
-            <!-- Résumé mobile -->
+            <div v-if="flashSuccess" class="mx-4 mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                {{ flashSuccess }}
+            </div>
+
+            <!-- KPI mobile -->
             <div class="grid grid-cols-2 gap-3 p-4">
+                <div class="col-span-2 rounded-xl border bg-card p-3 shadow-sm">
+                    <p class="text-xs text-muted-foreground">Total brut cumulé</p>
+                    <p class="mt-1 text-base font-bold tabular-nums">{{ formatGNF(resume_global.total_brut_cumule) }}</p>
+                </div>
                 <div class="rounded-xl border bg-card p-3 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Total net</p>
-                    <p class="mt-1 text-base font-bold tabular-nums">{{ formatGNF(resume.total_net) }}</p>
+                    <p class="text-xs text-muted-foreground">Total net cumulé</p>
+                    <p class="mt-1 text-base font-bold tabular-nums">{{ formatGNF(resume_global.total_net_cumule) }}</p>
                 </div>
                 <div class="rounded-xl border bg-card p-3 shadow-sm">
                     <p class="text-xs text-muted-foreground">Total versé</p>
-                    <p class="mt-1 text-base font-bold text-emerald-600 tabular-nums dark:text-emerald-400">
-                        {{ formatGNF(resume.total_verse) }}
+                    <p class="mt-1 text-base font-bold tabular-nums">
+                        {{ formatGNF(resume_global.total_verse) }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-3 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Disponible</p>
-                    <p class="mt-1 text-base font-bold text-emerald-700 tabular-nums dark:text-emerald-400">
-                        {{ formatGNF(resume.total_disponible) }}
+                    <p class="text-xs text-muted-foreground">Total frais</p>
+                    <p class="mt-1 text-base font-bold tabular-nums" :class="resume_global.total_frais > 0 ? 'text-destructive' : 'text-muted-foreground'">
+                        {{ resume_global.total_frais > 0 ? '− ' + formatGNF(resume_global.total_frais) : '—' }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-3 shadow-sm">
-                    <p class="text-xs text-muted-foreground">En attente</p>
-                    <p class="mt-1 text-base font-bold text-amber-600 tabular-nums dark:text-amber-400">
-                        {{ formatGNF(resume.total_en_attente) }}
-                    </p>
+                    <p class="text-xs text-muted-foreground">Commandes</p>
+                    <p class="mt-1 text-base font-bold tabular-nums">{{ resume_global.nb_commandes }}</p>
                 </div>
             </div>
 
-            <!-- Liste commandes mobile -->
-            <div class="divide-y">
-                <div
-                    v-for="c in commandes"
-                    :key="c.commission_id"
-                    class="px-4 py-3.5"
+            <!-- Actions mobile -->
+            <div class="flex gap-2 px-4 pb-3">
+                <Button
+                    v-if="can('ventes.update')"
+                    class="flex-1 gap-2"
+                    @click="openPaiementDialog"
                 >
+                    <Plus class="h-4 w-4" />
+                    Nouveau versement
+                </Button>
+                <Button
+                    v-if="historique_paiements_globaux.length > 0"
+                    variant="outline"
+                    class="gap-2"
+                    @click="openHistory"
+                >
+                    <History class="h-4 w-4" />
+                    {{ historique_paiements_globaux.length }}
+                </Button>
+            </div>
+
+            <!-- Filtres date mobile -->
+            <div class="space-y-2 border-t px-4 py-3">
+                <div class="flex gap-2">
+                    <input
+                        v-model="filtresDate.date_from"
+                        type="date"
+                        class="h-8 flex-1 rounded-md border bg-background px-2 text-xs"
+                        @change="applyDateFilters"
+                    />
+                    <input
+                        v-model="filtresDate.date_to"
+                        type="date"
+                        class="h-8 flex-1 rounded-md border bg-background px-2 text-xs"
+                        @change="applyDateFilters"
+                    />
+                </div>
+                <Button v-if="hasDateFilters" variant="ghost" size="sm" class="h-7 gap-1 text-xs" @click="clearDateFilters">
+                    <X class="h-3 w-3" /> Effacer
+                </Button>
+            </div>
+
+            <!-- Liste mobile -->
+            <div class="divide-y">
+                <div v-for="c in commandesFiltrees" :key="c.commission_id" class="px-4 py-3.5">
                     <div class="flex items-start justify-between">
                         <div class="min-w-0 flex-1">
-                            <p class="font-mono text-xs font-semibold text-primary">
-                                {{ c.commande_reference ?? '—' }}
-                            </p>
-                            <p class="text-xs text-muted-foreground">{{ c.date }} · {{ c.site ?? '—' }}</p>
-                            <p class="mt-1 font-semibold tabular-nums">{{ formatGNF(c.montant_net) }}</p>
-                            <p v-if="c.restant > 0" class="text-xs text-amber-600 tabular-nums dark:text-amber-400">
-                                Restant : {{ formatGNF(c.restant) }}
-                            </p>
+                            <p class="font-mono text-xs font-semibold text-primary">{{ c.commande_reference ?? '—' }}</p>
+                            <p class="text-xs text-muted-foreground">{{ c.date_commande }} · {{ c.site ?? '—' }}</p>
+                            <p class="mt-0.5 text-xs text-muted-foreground">{{ c.vehicule ?? '—' }}</p>
                         </div>
-                        <StatusDot
-                            :label="c.statut_label"
-                            :dot-class="statutDotColor[c.statut] ?? 'bg-zinc-400'"
-                            class="shrink-0 text-xs text-muted-foreground"
-                        />
+                        <div class="text-right">
+                            <p class="font-semibold tabular-nums">{{ formatGNF(c.montant_net) }}</p>
+                            <p v-if="c.frais > 0" class="text-xs text-destructive tabular-nums">− {{ formatGNF(c.frais) }}</p>
+                        </div>
                     </div>
-                    <div class="mt-2 flex gap-2">
-                        <Button
-                            v-if="can('ventes.update') && c.restant > 0"
-                            size="sm"
-                            variant="outline"
-                            class="h-7 gap-1 text-xs"
-                            @click="openVersementDialog(c)"
-                        >
-                            <HandCoins class="h-3.5 w-3.5" />
-                            Verser
-                        </Button>
-                        <Button
-                            v-if="c.versements.length > 0"
-                            size="sm"
-                            variant="ghost"
-                            class="h-7 gap-1 text-xs"
-                            @click="openHistory(c)"
-                        >
-                            <History class="h-3.5 w-3.5" />
-                            {{ c.versements.length }}
-                        </Button>
-                        <Link :href="`/commissions/${c.commission_id}`">
-                            <Button size="sm" variant="ghost" class="h-7 gap-1 text-xs">
-                                Détails
-                                <ChevronRight class="h-3 w-3" />
+                    <div class="mt-1 flex items-center justify-between">
+                        <p v-if="c.unlock_at" class="text-xs text-muted-foreground">Dès {{ c.unlock_at }}</p>
+                        <div class="flex gap-1">
+                            <Button
+                                v-if="isLivreur && can('ventes.update')"
+                                size="sm"
+                                variant="ghost"
+                                class="h-7 gap-1 text-xs"
+                                @click="openFraisDialog(c)"
+                            >
+                                <Pencil class="h-3 w-3" /> Frais
                             </Button>
-                        </Link>
+                            <Button size="sm" variant="ghost" class="h-7 text-xs" @click="openDetailDialog(c)">
+                                Détails
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>
-
-            <div v-if="commandes.length === 0" class="py-16 text-center text-sm text-muted-foreground">
+            <div v-if="commandesFiltrees.length === 0" class="py-12 text-center text-sm text-muted-foreground">
                 Aucune commande.
             </div>
         </div>
 
         <!-- ══════════════════════ DESKTOP ═════════════════════════════════════ -->
-        <div class="hidden w-full space-y-6 p-6 sm:block">
-            <!-- Navigation retour -->
-            <div class="flex items-center gap-3">
-                <Link href="/commissions" class="text-sm text-muted-foreground hover:text-foreground">
-                    ← Commissions
-                </Link>
+        <div class="hidden flex-col gap-6 p-6 sm:flex">
+
+            <!-- Flash -->
+            <div v-if="flashSuccess" class="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                {{ flashSuccess }}
             </div>
 
-            <!-- En-tête bénéficiaire -->
-            <div class="flex items-start gap-4 rounded-xl border bg-card p-6 shadow-sm">
-                <div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                    <component :is="typeIcon" class="h-6 w-6 text-primary" />
-                </div>
-                <div class="flex-1">
-                    <div class="flex items-center gap-2">
-                        <h1 class="text-xl font-semibold">{{ resume.nom }}</h1>
-                        <span class="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+            <!-- En-tête (style Ventes) -->
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <p class="text-sm text-muted-foreground">
+                        <Link href="/commissions" class="hover:text-foreground">Commissions</Link>
+                        <span class="mx-1">›</span>
+                        <span class="inline-flex items-center gap-1.5">
+                            <component :is="typeIcon" class="h-3.5 w-3.5" />
                             {{ typeLabel }}
                         </span>
-                    </div>
-                    <p v-if="resume.telephone" class="mt-0.5 text-sm text-muted-foreground">
-                        {{ formatPhoneDisplay(resume.telephone) }}
                     </p>
+                    <div class="mt-1 flex items-center gap-2">
+                        <h1 class="text-2xl font-semibold tracking-tight">{{ resume_global.nom }}</h1>
+                        <StatusDot :label="statutCfg.label" :dot-class="statutCfg.dotClass" class="text-sm text-muted-foreground" />
+                    </div>
+                    <p v-if="resume_global.telephone" class="mt-0.5 text-sm text-muted-foreground">
+                        {{ formatPhoneDisplay(resume_global.telephone) }}
+                    </p>
+                </div>
+
+                <!-- Actions droite -->
+                <div class="flex shrink-0 items-center gap-2">
+                    <Button
+                        v-if="historique_paiements_globaux.length > 0"
+                        variant="outline"
+                        class="gap-2"
+                        @click="openHistory"
+                    >
+                        <History class="h-4 w-4" />
+                        {{ historique_paiements_globaux.length }} versement{{ historique_paiements_globaux.length > 1 ? 's' : '' }}
+                    </Button>
+                    <Button
+                        v-if="can('ventes.update')"
+                        class="gap-2"
+                        @click="openPaiementDialog"
+                    >
+                        <Plus class="h-4 w-4" />
+                        Nouveau versement
+                    </Button>
                 </div>
             </div>
 
-            <!-- KPI résumé -->
+            <!-- Cards KPI (5 cards — sans Disponible maintenant) -->
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Commandes</p>
-                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ resume.nb_commandes }}</p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ resume_global.nb_commandes }}</p>
+                </div>
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Total brut cumulé</p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(resume_global.total_brut_cumule) }}</p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Total net cumulé</p>
-                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(resume.total_net) }}</p>
-                    <p v-if="resume.total_frais > 0" class="mt-0.5 text-xs text-destructive tabular-nums">
-                        − {{ formatGNF(resume.total_frais) }} frais
-                    </p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(resume_global.total_net_cumule) }}</p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Disponible maintenant</p>
+                    <p class="text-sm text-muted-foreground">Total frais</p>
                     <p
                         class="mt-2 text-2xl font-bold tabular-nums"
-                        :class="resume.total_disponible > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'"
+                        :class="resume_global.total_frais > 0 ? 'text-destructive' : 'text-muted-foreground'"
                     >
-                        {{ formatGNF(resume.total_disponible) }}
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <p class="text-sm text-muted-foreground">En attente</p>
-                    <p
-                        class="mt-2 text-2xl font-bold tabular-nums"
-                        :class="resume.total_en_attente > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
-                    >
-                        {{ formatGNF(resume.total_en_attente) }}
-                    </p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ resume.type === 'livreur' ? '(+14 j après commande)' : '(1er du mois suivant)' }}
+                        {{ resume_global.total_frais > 0 ? '− ' + formatGNF(resume_global.total_frais) : '—' }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Total versé</p>
-                    <p class="mt-2 text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400">
-                        {{ formatGNF(resume.total_verse) }}
+                    <p class="mt-2 text-2xl font-bold tabular-nums">
+                        {{ formatGNF(resume_global.total_verse) }}
                     </p>
                 </div>
             </div>
 
-            <!-- Tableau des commandes -->
-            <div class="overflow-hidden rounded-xl border bg-card">
-                <div class="border-b bg-muted/30 px-4 py-3">
-                    <p class="text-sm font-medium">Historique des commandes</p>
-                </div>
-                <table class="w-full text-sm">
-                    <thead class="border-b bg-muted/20">
-                        <tr>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Commande</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Véhicule</th>
-                            <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Brut</th>
-                            <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Net</th>
-                            <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Versé</th>
-                            <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Restant</th>
-                            <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Disponible</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Statut</th>
-                            <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        <tr
-                            v-for="c in commandes"
-                            :key="c.commission_id"
-                            class="transition-colors hover:bg-muted/20"
-                        >
-                            <!-- Commande ref + date + site -->
-                            <td class="px-4 py-3">
-                                <Link
-                                    v-if="c.commande_id"
-                                    :href="`/ventes/${c.commande_id}`"
-                                    class="font-mono text-xs font-semibold text-primary hover:underline"
-                                >
-                                    {{ c.commande_reference ?? '—' }}
-                                </Link>
-                                <span v-else class="font-mono text-xs">{{ c.commande_reference ?? '—' }}</span>
-                                <p class="text-xs text-muted-foreground">
-                                    {{ c.date }}
-                                    <span v-if="c.site"> · {{ c.site }}</span>
-                                </p>
-                            </td>
-
-                            <!-- Véhicule -->
-                            <td class="px-4 py-3">
-                                <p>{{ c.vehicule ?? '—' }}</p>
-                                <p v-if="c.immatriculation" class="font-mono text-xs text-muted-foreground">
-                                    {{ c.immatriculation }}
-                                </p>
-                            </td>
-
-                            <!-- Montant brut -->
-                            <td class="px-4 py-3 text-right tabular-nums">
-                                {{ formatGNF(c.montant_brut) }}
-                                <p v-if="c.frais > 0" class="text-xs text-destructive">
-                                    − {{ formatGNF(c.frais) }}
-                                </p>
-                            </td>
-
-                            <!-- Montant net -->
-                            <td class="px-4 py-3 text-right font-semibold tabular-nums">
-                                {{ formatGNF(c.montant_net) }}
-                                <p class="text-xs font-normal text-muted-foreground">{{ c.taux }}%</p>
-                            </td>
-
-                            <!-- Versé -->
-                            <td class="px-4 py-3 text-right tabular-nums text-emerald-700 dark:text-emerald-400">
-                                {{ formatGNF(c.montant_verse) }}
-                            </td>
-
-                            <!-- Restant -->
-                            <td class="px-4 py-3 text-right font-semibold tabular-nums"
-                                :class="c.restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'">
-                                {{ formatGNF(c.restant) }}
-                            </td>
-
-                            <!-- Disponible -->
-                            <td class="px-4 py-3 text-right tabular-nums">
-                                <span
-                                    class="font-semibold"
-                                    :class="c.montant_disponible > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'"
-                                >
-                                    {{ formatGNF(c.montant_disponible) }}
-                                </span>
-                                <p v-if="c.montant_en_attente > 0 && c.disponible_le" class="text-xs text-muted-foreground">
-                                    dès {{ c.disponible_le }}
-                                </p>
-                            </td>
-
-                            <!-- Statut -->
-                            <td class="px-4 py-3">
-                                <StatusDot
-                                    :label="c.statut_label"
-                                    :dot-class="statutDotColor[c.statut] ?? 'bg-zinc-400'"
-                                    class="text-muted-foreground"
+            <!-- Tableau DataTable (style Factures) -->
+            <div class="overflow-x-auto rounded-xl border bg-card">
+                <DataTable
+                    :value="commandesFiltrees"
+                    :paginator="commandesFiltrees.length > 25"
+                    :rows="25"
+                    data-key="commission_id"
+                    striped-rows
+                    removable-sort
+                    class="text-sm"
+                    :pt="{
+                        root:   { class: 'w-full' },
+                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
+                        tbody:  { class: 'divide-y' },
+                        table:  { style: 'table-layout: fixed; min-width: 1260px' },
+                    }"
+                >
+                    <!-- ─ Header slot : filtres ─────────────────────────────── -->
+                    <template #header>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <!-- Recherche locale -->
+                            <IconField class="max-w-xs flex-1">
+                                <InputIcon class="pointer-events-none">
+                                    <Search class="h-4 w-4 text-muted-foreground" />
+                                </InputIcon>
+                                <InputText
+                                    v-model="localSearch"
+                                    placeholder="Commande, véhicule, site…"
+                                    class="w-full text-sm"
                                 />
-                            </td>
+                            </IconField>
 
-                            <!-- Actions -->
-                            <td class="px-4 py-3">
-                                <div class="flex items-center justify-end gap-1">
-                                    <!-- Historique versements -->
-                                    <Button
-                                        v-if="c.versements.length > 0"
-                                        size="sm"
-                                        variant="ghost"
-                                        class="h-7 gap-1 text-xs"
-                                        @click="openHistory(c)"
-                                    >
-                                        <History class="h-3.5 w-3.5" />
-                                        {{ c.versements.length }}
-                                    </Button>
+                            <!-- Date from / to -->
+                            <div class="flex items-center gap-1">
+                                <CalendarDays class="h-4 w-4 shrink-0 text-muted-foreground" />
+                                <input
+                                    v-model="filtresDate.date_from"
+                                    type="date"
+                                    class="h-9 rounded-md border bg-background px-2 text-sm"
+                                    @change="applyDateFilters"
+                                />
+                                <span class="text-muted-foreground">–</span>
+                                <input
+                                    v-model="filtresDate.date_to"
+                                    type="date"
+                                    class="h-9 rounded-md border bg-background px-2 text-sm"
+                                    @change="applyDateFilters"
+                                />
+                                <Button
+                                    v-if="hasDateFilters"
+                                    variant="ghost"
+                                    size="icon"
+                                    class="h-8 w-8 shrink-0"
+                                    @click="clearDateFilters"
+                                >
+                                    <X class="h-3.5 w-3.5" />
+                                </Button>
+                            </div>
 
-                                    <!-- Verser -->
-                                    <Button
-                                        v-if="can('ventes.update') && c.restant > 0"
-                                        size="sm"
-                                        variant="outline"
-                                        class="h-7 gap-1 text-xs"
-                                        @click="openVersementDialog(c)"
-                                    >
-                                        <HandCoins class="h-3.5 w-3.5" />
-                                        Verser
-                                    </Button>
+                            <span class="ml-auto text-xs text-muted-foreground">
+                                {{ commandesFiltrees.length }} résultat{{ commandesFiltrees.length !== 1 ? 's' : '' }}
+                            </span>
+                        </div>
+                    </template>
 
-                                    <!-- Lien vers commission détail -->
-                                    <Link :href="`/commissions/${c.commission_id}`">
-                                        <Button size="sm" variant="ghost" class="h-7 px-2">
-                                            <ChevronRight class="h-4 w-4" />
+                    <!-- ─ Colonne : Commande (20%) ────────────────────────── -->
+                    <Column
+                        field="commande_reference"
+                        header="Commande"
+                        sortable
+                        style="width: 220px"
+                        header-class="py-3 align-middle text-left"
+                        body-class="align-middle"
+                    >
+                        <template #body="{ data }">
+                            <div class="min-w-0 space-y-1 leading-tight">
+                                <Link
+                                    v-if="data.commande_id"
+                                    :href="`/ventes/${data.commande_id}`"
+                                    class="inline-block max-w-full truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground hover:text-foreground"
+                                >
+                                    {{ data.commande_reference ?? '—' }}
+                                </Link>
+                                <span
+                                    v-else
+                                    class="inline-block max-w-full truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+                                >
+                                    {{ data.commande_reference ?? '—' }}
+                                </span>
+                            </div>
+                        </template>
+                    </Column>
+
+                    <!-- ─ Colonne : Véhicule (22%) ────────────────────────── -->
+                    <Column
+                        field="vehicule"
+                        header="Véhicule"
+                        style="width: 210px"
+                        header-class="py-3 align-middle text-left"
+                        body-class="align-middle"
+                    >
+                        <template #body="{ data }">
+                            <div class="min-w-0 space-y-1 leading-tight">
+                                <p class="truncate font-medium">{{ data.vehicule ?? '—' }}</p>
+                                <p
+                                    v-if="data.immatriculation"
+                                    class="truncate font-mono text-xs text-muted-foreground"
+                                >
+                                    {{ data.immatriculation }}
+                                </p>
+                            </div>
+                        </template>
+                    </Column>
+
+                    <!-- ─ Colonne : Brut (12%) ────────────────────────────── -->
+                    <Column
+                        field="site"
+                        header="Site"
+                        sortable
+                        style="width: 130px"
+                        header-class="py-3 align-middle text-left"
+                        body-class="align-middle"
+                    >
+                        <template #body="{ data }">
+                            <span class="block truncate leading-tight">{{ data.site ?? '—' }}</span>
+                        </template>
+                    </Column>
+
+                    <Column
+                        field="montant_brut"
+                        header="Brut"
+                        sortable
+                        style="width: 140px"
+                        header-class="py-3 align-middle text-left"
+                        body-class="align-middle"
+                    >
+                        <template #body="{ data }">
+                            <div class="flex flex-col items-start justify-center gap-1 leading-tight">
+                                <p class="whitespace-nowrap text-muted-foreground tabular-nums">
+                                    {{ formatGNF(data.montant_brut) }}
+                                </p>
+                                <p class="text-xs text-muted-foreground tabular-nums">{{ data.taux }}%</p>
+                            </div>
+                        </template>
+                    </Column>
+
+                    <!-- ─ Colonne : Frais (11%) ───────────────────────────── -->
+                    <Column
+                        field="frais"
+                        header="Frais"
+                        sortable
+                        style="width: 130px"
+                        header-class="py-3 align-middle text-left"
+                        body-class="align-middle"
+                    >
+                        <template #body="{ data }">
+                            <div class="flex items-center justify-start leading-tight">
+                                <span
+                                    class="inline-block whitespace-nowrap tabular-nums"
+                                    :class="data.frais > 0 ? 'text-destructive' : 'text-muted-foreground'"
+                                >
+                                    {{ data.frais > 0 ? '−\u202F' + formatGNF(data.frais) : '—' }}
+                                </span>
+                            </div>
+                        </template>
+                    </Column>
+
+                    <!-- ─ Colonne : Net (12%) ─────────────────────────────── -->
+                    <Column
+                        field="montant_net"
+                        header="Net"
+                        sortable
+                        style="width: 140px"
+                        header-class="py-3 align-middle text-left"
+                        body-class="align-middle"
+                    >
+                        <template #body="{ data }">
+                            <p class="whitespace-nowrap text-left font-semibold tabular-nums">{{ formatGNF(data.montant_net) }}</p>
+                        </template>
+                    </Column>
+
+                    <!-- ─ Colonne : Date (9%) ─────────────────────────────── -->
+                    <Column
+                        field="date_commande"
+                        header="Date"
+                        sortable
+                        style="width: 120px"
+                        header-class="py-3 align-middle text-left"
+                        body-class="align-middle"
+                    >
+                        <template #body="{ data }">
+                            <span class="block whitespace-nowrap text-left text-xs text-muted-foreground tabular-nums">
+                                {{ data.date_commande ?? '—' }}
+                            </span>
+                        </template>
+                    </Column>
+
+                    <!-- ─ Colonne : Disponible dès (10%) ─────────────────── -->
+                    <Column
+                        field="unlock_at"
+                        header="Disponible dès"
+                        sortable
+                        style="width: 130px"
+                        header-class="py-3 align-middle text-left"
+                        body-class="align-middle"
+                    >
+                        <template #body="{ data }">
+                            <span class="block whitespace-nowrap text-left text-xs text-muted-foreground tabular-nums">
+                                {{ data.unlock_at ?? '—' }}
+                            </span>
+                        </template>
+                    </Column>
+
+                    <!-- ─ Colonne : Actions (4%) ──────────────────────────── -->
+                    <Column
+                        header=""
+                        style="width: 72px"
+                        header-class="py-3 align-middle text-center"
+                        body-class="align-middle"
+                    >
+                        <template #body="{ data }">
+                            <div class="flex justify-center">
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger as-child>
+                                        <Button variant="ghost" size="icon" class="h-8 w-8">
+                                            <MoreVertical class="h-4 w-4" />
                                         </Button>
-                                    </Link>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" class="w-44">
+                                        <DropdownMenuItem
+                                            v-if="isLivreur && can('ventes.update')"
+                                            class="cursor-pointer"
+                                            @click="openFraisDialog(data)"
+                                        >
+                                            <Pencil class="h-4 w-4" />
+                                            Modifier frais
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            class="cursor-pointer"
+                                            @click="openDetailDialog(data)"
+                                        >
+                                            <CreditCard class="h-4 w-4" />
+                                            Détail commission
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                        </template>
+                    </Column>
 
-                <div v-if="commandes.length === 0" class="py-16 text-center text-sm text-muted-foreground">
-                    Aucune commande pour ce bénéficiaire.
-                </div>
+                    <template #empty>
+                        <div class="py-16 text-center text-sm text-muted-foreground">
+                            Aucune commande trouvée.
+                        </div>
+                    </template>
+                </DataTable>
             </div>
         </div>
 
-        <!-- ══════════════════════ DIALOGS ═════════════════════════════════════ -->
-
-        <!-- Dialog versement -->
+        <!-- ══════════════════════ DIALOG PAIEMENT GROUPÉ ══════════════════════ -->
         <Dialog
-            v-model:visible="dialogVisible"
-            :header="`Verser — ${dialogCommande?.commande_reference ?? '—'}`"
+            v-model:visible="paiementVisible"
+            header="Paiement groupé"
             modal
-            :style="{ width: '420px' }"
-            @hide="closeDialog"
+            :style="{ width: '440px' }"
+            @hide="closePaiementDialog"
         >
-            <div v-if="dialogCommande" class="space-y-4 pt-2">
-                <div class="rounded-lg bg-muted/40 p-3 text-sm">
-                    <p class="text-muted-foreground">
-                        Solde disponible :
-                        <span class="font-semibold text-foreground">{{ formatGNF(dialogCommande.restant) }}</span>
-                    </p>
+            <div class="space-y-4 pt-2">
+                <div class="rounded-lg bg-muted/40 p-3 text-sm space-y-1">
+                    <div class="flex justify-between">
+                        <span class="text-muted-foreground">Disponible maintenant :</span>
+                        <span class="font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
+                            {{ formatGNF(resume_global.disponible_maintenant) }}
+                        </span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                        <span class="text-muted-foreground">Solde restant :</span>
+                        <span class="tabular-nums">{{ formatGNF(resume_global.solde_global) }}</span>
+                    </div>
                 </div>
 
                 <div class="space-y-1">
                     <label class="text-sm font-medium">Montant (GNF)</label>
                     <InputNumber
-                        v-model="versementForm.montant"
-                        :max="dialogCommande.restant"
+                        v-model="paiementForm.montant"
+                        :max="resume_global.disponible_maintenant"
                         :min="1"
+                        class="w-full"
+                        :use-grouping="true"
+                        locale="fr-FR"
+                        :class="{ 'p-invalid': montantDepasse || paiementErrors.montant }"
+                    />
+                    <p v-if="montantDepasse" class="text-xs text-destructive">
+                        Le montant dépasse le disponible ({{ formatGNF(resume_global.disponible_maintenant) }}).
+                    </p>
+                    <p v-if="paiementErrors.montant" class="text-xs text-destructive">{{ paiementErrors.montant }}</p>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-sm font-medium">Mode de paiement</label>
+                    <Dropdown v-model="paiementForm.mode_paiement" :options="modes_paiement" option-label="label" option-value="value" class="w-full" />
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-sm font-medium">Date du paiement</label>
+                    <input v-model="paiementForm.paid_at" type="date" class="h-9 w-full rounded-md border bg-background px-3 text-sm" />
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-sm font-medium">Note (optionnel)</label>
+                    <InputText v-model="paiementForm.note" class="w-full" placeholder="Commentaire…" />
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <Button variant="ghost" @click="closePaiementDialog">Annuler</Button>
+                    <Button
+                        :disabled="paiementForm.processing || !paiementForm.montant || paiementForm.montant <= 0 || montantDepasse"
+                        @click="submitPaiement"
+                    >
+                        <Wallet class="mr-1.5 h-4 w-4" />
+                        Enregistrer
+                    </Button>
+                </div>
+            </div>
+        </Dialog>
+
+        <!-- ══════════════════════ DIALOG HISTORIQUE PAIEMENTS ═════════════════ -->
+        <Dialog
+            v-model:visible="historyVisible"
+            header="Historique des paiements versés"
+            modal
+            :style="{ width: '560px' }"
+        >
+            <div class="pt-2">
+                <table v-if="historique_paiements_globaux.length > 0" class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b">
+                            <th class="pb-2 text-left font-medium text-muted-foreground">Date</th>
+                            <th class="pb-2 text-right font-medium text-muted-foreground">Montant</th>
+                            <th class="pb-2 text-left font-medium text-muted-foreground">Mode</th>
+                            <th class="pb-2 text-left font-medium text-muted-foreground">Note</th>
+                            <th class="pb-2 text-left font-medium text-muted-foreground">Par</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="p in historique_paiements_globaux" :key="p.id" class="hover:bg-muted/20">
+                            <td class="py-2.5 pr-3 text-muted-foreground">{{ p.paid_at ?? '—' }}</td>
+                            <td class="py-2.5 pr-3 text-right font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                                {{ formatGNF(p.montant) }}
+                            </td>
+                            <td class="py-2.5 pr-3">{{ p.mode_paiement }}</td>
+                            <td class="py-2.5 pr-3 text-xs italic text-muted-foreground">{{ p.note ?? '—' }}</td>
+                            <td class="py-2.5 text-xs text-muted-foreground">{{ p.created_by ?? '—' }}</td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr class="border-t">
+                            <td class="pt-2 font-medium">Total</td>
+                            <td class="pt-2 text-right font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                                {{ formatGNF(historique_paiements_globaux.reduce((s, p) => s + p.montant, 0)) }}
+                            </td>
+                            <td colspan="3" />
+                        </tr>
+                    </tfoot>
+                </table>
+                <p v-else class="py-8 text-center text-sm text-muted-foreground">Aucun paiement enregistré.</p>
+            </div>
+        </Dialog>
+
+        <!-- ══════════════════════ DIALOG FRAIS LIVREUR ════════════════════════ -->
+        <Dialog
+            v-model:visible="fraisVisible"
+            :header="`Frais — ${fraisCommande?.commande_reference ?? '—'}`"
+            modal
+            :style="{ width: '400px' }"
+            @hide="closeFraisDialog"
+        >
+            <div v-if="fraisCommande" class="space-y-4 pt-2">
+                <!-- Rappel brut -->
+                <div class="rounded-lg bg-muted/40 p-3 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-muted-foreground">Montant brut :</span>
+                        <span class="tabular-nums font-medium">{{ formatGNF(fraisCommande.montant_brut) }}</span>
+                    </div>
+                    <div class="flex justify-between mt-1 text-xs">
+                        <span class="text-muted-foreground">Net après frais :</span>
+                        <span class="tabular-nums font-semibold">
+                            {{
+                                formatGNF(
+                                    Math.max(0, fraisCommande.montant_brut - (fraisForm.frais ?? 0))
+                                )
+                            }}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-sm font-medium">Montant des frais (GNF)</label>
+                    <InputNumber
+                        v-model="fraisForm.frais"
+                        :max="fraisCommande.montant_brut"
+                        :min="0"
                         class="w-full"
                         :use-grouping="true"
                         locale="fr-FR"
@@ -526,65 +967,138 @@ function openHistory(commande: CommandeRow) {
                 </div>
 
                 <div class="space-y-1">
-                    <label class="text-sm font-medium">Mode de paiement</label>
+                    <label class="text-sm font-medium">Type de frais <span class="text-destructive">*</span></label>
                     <Dropdown
-                        v-model="versementForm.mode_paiement"
-                        :options="modes_paiement"
+                        v-model="fraisForm.type_frais"
+                        :options="typeFraisOptions"
                         option-label="label"
                         option-value="value"
+                        placeholder="Sélectionner…"
                         class="w-full"
+                        :class="{ 'p-invalid': !fraisForm.type_frais }"
                     />
                 </div>
 
-                <div class="space-y-1">
-                    <label class="text-sm font-medium">Note (optionnel)</label>
-                    <InputText v-model="versementForm.note" class="w-full" placeholder="Commentaire…" />
+                <div v-if="fraisForm.type_frais === 'autre'" class="space-y-1">
+                    <label class="text-sm font-medium">Commentaire</label>
+                    <InputText v-model="fraisForm.commentaire_frais" class="w-full" placeholder="Préciser…" />
                 </div>
 
                 <div class="flex justify-end gap-2 pt-2">
-                    <Button variant="ghost" @click="closeDialog">Annuler</Button>
+                    <Button variant="ghost" @click="closeFraisDialog">Annuler</Button>
                     <Button
-                        :disabled="
-                            versementForm.processing ||
-                            !versementForm.montant ||
-                            versementForm.montant <= 0
-                        "
-                        @click="submitVersement"
+                        :disabled="fraisForm.processing || fraisForm.frais < 0 || !fraisForm.type_frais"
+                        @click="submitFrais"
                     >
-                        <HandCoins class="mr-1.5 h-4 w-4" />
+                        <Pencil class="mr-1.5 h-4 w-4" />
                         Enregistrer
                     </Button>
                 </div>
             </div>
         </Dialog>
 
-        <!-- Dialog historique -->
+        <!-- ══════════════════════ DIALOG DÉTAIL COMMISSION ══════════════════ -->
         <Dialog
-            v-model:visible="historyVisible"
-            :header="`Versements — ${historyCommande?.commande_reference ?? '—'}`"
+            v-model:visible="detailVisible"
+            :header="detailCommande ? `Commission — ${detailCommande.commande_reference ?? '—'}` : 'Détail commission'"
             modal
             :style="{ width: '480px' }"
+            @hide="closeDetailDialog"
         >
-            <div v-if="historyCommande" class="divide-y pt-2">
-                <div
-                    v-for="v in historyCommande.versements"
-                    :key="v.id"
-                    class="flex items-center justify-between py-3"
-                >
-                    <div>
-                        <p class="text-sm font-semibold tabular-nums">{{ formatGNF(v.montant) }}</p>
-                        <p class="text-xs text-muted-foreground">
-                            {{ v.mode_paiement }}
-                            <span v-if="v.date_versement"> · {{ v.date_versement }}</span>
-                        </p>
-                        <p v-if="v.note" class="mt-0.5 text-xs text-muted-foreground italic">{{ v.note }}</p>
+            <div v-if="detailCommande" class="space-y-4 pt-2">
+
+                <!-- Infos commande -->
+                <div class="rounded-lg border bg-muted/20 p-3 text-sm space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-muted-foreground">Commande</span>
+                        <Link
+                            v-if="detailCommande.commande_id"
+                            :href="`/ventes/${detailCommande.commande_id}`"
+                            class="font-mono text-xs font-semibold text-primary hover:underline"
+                        >
+                            {{ detailCommande.commande_reference ?? '—' }}
+                        </Link>
+                        <span v-else class="font-mono text-xs font-semibold">{{ detailCommande.commande_reference ?? '—' }}</span>
                     </div>
-                    <p class="text-xs text-muted-foreground">{{ v.created_by }}</p>
+                    <div class="flex items-center justify-between">
+                        <span class="text-muted-foreground">Date</span>
+                        <span class="tabular-nums">{{ detailCommande.date_commande ?? '—' }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-muted-foreground">Site</span>
+                        <span>{{ detailCommande.site ?? '—' }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-muted-foreground">Véhicule</span>
+                        <span class="text-right">
+                            {{ detailCommande.vehicule ?? '—' }}
+                            <span v-if="detailCommande.immatriculation" class="ml-1 font-mono text-xs text-muted-foreground">
+                                {{ detailCommande.immatriculation }}
+                            </span>
+                        </span>
+                    </div>
                 </div>
-                <div v-if="historyCommande.versements.length === 0" class="py-6 text-center text-sm text-muted-foreground">
-                    Aucun versement.
+
+                <!-- Montants -->
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="rounded-lg bg-muted/30 p-3 text-center">
+                        <p class="text-xs text-muted-foreground">Taux</p>
+                        <p class="mt-1 text-lg font-bold tabular-nums">{{ detailCommande.taux }}%</p>
+                    </div>
+                    <div class="rounded-lg bg-muted/30 p-3 text-center">
+                        <p class="text-xs text-muted-foreground">Brut</p>
+                        <p class="mt-1 text-lg font-bold tabular-nums">{{ formatGNF(detailCommande.montant_brut) }}</p>
+                    </div>
+                    <div class="rounded-lg bg-muted/30 p-3 text-center">
+                        <p class="text-xs text-muted-foreground">Frais</p>
+                        <p
+                            class="mt-1 text-lg font-bold tabular-nums"
+                            :class="detailCommande.frais > 0 ? 'text-destructive' : 'text-muted-foreground'"
+                        >
+                            {{ detailCommande.frais > 0 ? '− ' + formatGNF(detailCommande.frais) : '—' }}
+                        </p>
+                        <p v-if="detailCommande.type_frais" class="mt-0.5 text-xs text-muted-foreground capitalize">
+                            {{ detailCommande.type_frais }}
+                            <span v-if="detailCommande.commentaire_frais"> · {{ detailCommande.commentaire_frais }}</span>
+                        </p>
+                    </div>
+                    <div class="rounded-lg bg-muted/30 p-3 text-center">
+                        <p class="text-xs text-muted-foreground">Net</p>
+                        <p class="mt-1 text-lg font-bold tabular-nums">{{ formatGNF(detailCommande.montant_net) }}</p>
+                    </div>
+                </div>
+
+                <!-- Statut paiement -->
+                <div class="rounded-lg border bg-muted/20 p-3 text-sm space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-muted-foreground">Versé</span>
+                        <span
+                            class="font-semibold tabular-nums"
+                            :class="detailCommande.montant_verse > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'"
+                        >
+                            {{ formatGNF(detailCommande.montant_verse) }}
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-muted-foreground">Restant</span>
+                        <span
+                            class="font-semibold tabular-nums"
+                            :class="(detailCommande.montant_net - detailCommande.montant_verse) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+                        >
+                            {{ formatGNF(Math.max(0, detailCommande.montant_net - detailCommande.montant_verse)) }}
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-muted-foreground">Disponible dès</span>
+                        <span class="tabular-nums text-xs">{{ detailCommande.unlock_at ?? '—' }}</span>
+                    </div>
+                </div>
+
+                <div class="flex justify-end pt-1">
+                    <Button variant="ghost" @click="closeDetailDialog">Fermer</Button>
                 </div>
             </div>
         </Dialog>
+
     </AppLayout>
 </template>
