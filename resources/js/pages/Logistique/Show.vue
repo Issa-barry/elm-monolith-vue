@@ -18,7 +18,6 @@ import {
     PackageCheck,
     Pencil,
     Truck,
-    User,
     XCircle,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
@@ -150,7 +149,6 @@ const props = defineProps<{
     can_annuler: boolean;
     can_update: boolean;
     can_generer_commission: boolean;
-    can_verser_commission: boolean;
     activites: Activite[];
 }>();
 
@@ -241,7 +239,6 @@ const mainActionLabel = computed(() => {
 const showChargementDialog = ref(false);
 const showReceptionDialog = ref(false);
 const showCommissionDialog = ref(false);
-const showVersementDialog = ref(false);
 const processing = ref(false);
 const dialogErrors = ref<string[]>([]);
 
@@ -451,49 +448,6 @@ const MODES_PAIEMENT = [
     { value: 'mobile_money', label: 'Mobile Money' },
 ];
 
-const selectedPart = ref<CommissionPart | null>(null);
-
-const versementForm = useForm({
-    montant: 0 as number,
-    mode_paiement: 'especes',
-    note: '',
-});
-
-function openVersementDialog(part: CommissionPart) {
-    selectedPart.value = part;
-    versementForm.reset();
-    versementForm.montant = part.montant_restant;
-    showVersementDialog.value = true;
-}
-
-function submitVersement() {
-    if (!selectedPart.value) return;
-    versementForm.post(
-        `/commissions-logistique/parts/${selectedPart.value.id}/versements`,
-        {
-            onSuccess: () => {
-                showVersementDialog.value = false;
-                toast.add({
-                    severity: 'success',
-                    summary: 'Versement enregistré',
-                    life: 3000,
-                });
-            },
-            onError: (errors) => {
-                const firstError = Object.values(errors)[0];
-                if (firstError && !errors.montant && !errors.mode_paiement) {
-                    toast.add({
-                        severity: 'error',
-                        summary: 'Erreur',
-                        detail: String(firstError),
-                        life: 5000,
-                    });
-                }
-            },
-        },
-    );
-}
-
 // ── Formatage ─────────────────────────────────────────────────────────────────
 
 function formatGNF(val: number): string {
@@ -545,37 +499,6 @@ const livreurParts = computed(
         ) ?? [],
 );
 
-const proprietaireParts = computed(
-    () =>
-        props.transfert.commission?.parts.filter(
-            (part) => part.type_beneficiaire === 'proprietaire',
-        ) ?? [],
-);
-
-const activeCommissionTab = ref<'livreurs' | 'proprietaires'>('livreurs');
-
-watch(
-    [livreurParts, proprietaireParts],
-    ([livreurs, proprietaires]) => {
-        if (
-            activeCommissionTab.value === 'livreurs' &&
-            livreurs.length === 0 &&
-            proprietaires.length > 0
-        ) {
-            activeCommissionTab.value = 'proprietaires';
-        }
-
-        if (
-            activeCommissionTab.value === 'proprietaires' &&
-            proprietaires.length === 0 &&
-            livreurs.length > 0
-        ) {
-            activeCommissionTab.value = 'livreurs';
-        }
-    },
-    { immediate: true },
-);
-
 function aggregateParts(parts: CommissionPart[]) {
     return parts.reduce(
         (acc, part) => {
@@ -597,12 +520,7 @@ function aggregateParts(parts: CommissionPart[]) {
 }
 
 const livreurTotals = computed(() => aggregateParts(livreurParts.value));
-const proprietaireTotals = computed(() =>
-    aggregateParts(proprietaireParts.value),
-);
-
 const partLivreurTotal = computed(() => livreurTotals.value.net);
-const partProprietaireTotal = computed(() => proprietaireTotals.value.net);
 
 const showHistoriqueDialog = ref(false);
 const historiquePart = ref<CommissionPart | null>(null);
@@ -881,7 +799,7 @@ function activiteDotClass(action: string): string {
                 </div>
 
                 <!-- Colonne droite : Lignes produits ─────────────────────────── -->
-                <div class="lg:col-span-3">
+                <div class="space-y-4 lg:col-span-3">
                     <div
                         class="overflow-hidden rounded-xl border bg-card shadow-sm"
                     >
@@ -1025,568 +943,160 @@ function activiteDotClass(action: string): string {
                             </tbody>
                         </table>
                     </div>
-                </div>
-            </div>
 
-            <!-- ══ Commission logistique ═══════════════════════════════════════ -->
-            <div
-                v-if="showCommissionSection"
-                class="overflow-hidden rounded-xl border bg-card shadow-sm"
-            >
-                <div
-                    class="flex items-center justify-between border-b px-5 py-3.5"
-                >
-                    <h2
-                        class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                    >
-                        Commission logistique
-                    </h2>
-                    <Button
-                        v-if="
-                            can_generer_commission &&
-                            transfert.statut === 'reception' &&
-                            !(
-                                transfert.commission &&
-                                transfert.commission.montant_verse > 0
-                            )
-                        "
-                        variant="outline"
-                        size="sm"
-                        @click="showCommissionDialog = true"
-                    >
-                        <HandCoins class="mr-1.5 h-3.5 w-3.5" />
-                        {{ transfert.commission ? 'Recalculer' : 'Générer' }}
-                    </Button>
-                </div>
-
-                <!-- Pas encore de commission -->
-                <div
-                    v-if="!transfert.commission"
-                    class="px-5 py-8 text-center text-sm text-muted-foreground"
-                >
-                    Aucune commission générée. Cliquez sur "Générer" pour
-                    calculer les commissions livreur/propriétaire.
-                </div>
-
-                <!-- Commission existante -->
-                <div v-else class="space-y-4 px-5 py-4">
-                    <!-- Synthese style commission vente -->
-                    <div class="rounded-xl border bg-card p-5 shadow-sm">
-                        <div
-                            class="flex flex-wrap items-center justify-between gap-4"
-                        >
-                            <div>
-                                <p
-                                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                                >
-                                    Total commission
-                                </p>
-                                <p class="mt-1 text-2xl font-bold tabular-nums">
-                                    {{
-                                        formatGNF(
-                                            transfert.commission.montant_total,
-                                        )
-                                    }}
-                                </p>
-                            </div>
-                            <div class="text-right">
-                                <p
-                                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                                >
-                                    Part Livreur (Total)
-                                </p>
-                                <p class="mt-1 text-2xl font-bold tabular-nums">
-                                    {{ formatGNF(partLivreurTotal) }}
-                                </p>
-                            </div>
-                            <div class="text-right">
-                                <p
-                                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                                >
-                                    Part Proprietaire (Total)
-                                </p>
-                                <p class="mt-1 text-2xl font-bold tabular-nums">
-                                    {{ formatGNF(partProprietaireTotal) }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="flex justify-center">
-                        <div
-                            class="inline-flex items-center gap-1 rounded-xl border bg-card p-1 shadow-sm"
-                        >
-                            <button
-                                class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
-                                :class="
-                                    activeCommissionTab === 'livreurs'
-                                        ? 'bg-primary/10 text-primary'
-                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                                "
-                                :disabled="livreurParts.length === 0"
-                                @click="activeCommissionTab = 'livreurs'"
-                            >
-                                <Truck class="h-3.5 w-3.5" />
-                                Livreurs
-                                <span
-                                    class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
-                                >
-                                    {{ livreurParts.length }}
-                                </span>
-                            </button>
-                            <button
-                                class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
-                                :class="
-                                    activeCommissionTab === 'proprietaires'
-                                        ? 'bg-primary/10 text-primary'
-                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                                "
-                                :disabled="proprietaireParts.length === 0"
-                                @click="activeCommissionTab = 'proprietaires'"
-                            >
-                                <User class="h-3.5 w-3.5" />
-                                Proprietaire
-                                <span
-                                    class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
-                                >
-                                    {{ proprietaireParts.length }}
-                                </span>
-                            </button>
-                        </div>
-                    </div>
-
+                    <!-- ══ Commission logistique ═══════════════════════════════════════ -->
                     <div
-                        v-if="activeCommissionTab === 'livreurs'"
+                        v-if="showCommissionSection"
                         class="overflow-hidden rounded-xl border bg-card shadow-sm"
                     >
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-sm">
-                                <thead>
-                                    <tr class="border-b bg-muted/40">
-                                        <th
-                                            class="px-4 py-3 text-left font-medium text-muted-foreground"
-                                        >
-                                            Livreur
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
-                                        >
-                                            Taux
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
-                                        >
-                                            Montant
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
-                                        >
-                                            Verse
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
-                                        >
-                                            Restant
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-left font-medium text-muted-foreground"
-                                        >
-                                            Statut
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-center font-medium text-muted-foreground"
-                                        >
-                                            Action
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y">
-                                    <tr
-                                        v-for="part in livreurParts"
-                                        :key="part.id"
-                                        class="transition-colors hover:bg-muted/10"
-                                    >
-                                        <td class="px-4 py-3 font-medium">
-                                            {{ part.beneficiaire_nom }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right text-muted-foreground tabular-nums"
-                                        >
-                                            {{ part.taux_commission }}%
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right font-semibold tabular-nums"
-                                        >
-                                            {{ formatGNF(part.montant_net) }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right text-foreground tabular-nums"
-                                        >
-                                            {{ formatGNF(part.montant_verse) }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right font-semibold tabular-nums"
-                                            :class="
-                                                part.montant_restant > 0
-                                                    ? 'text-amber-600 dark:text-amber-400'
-                                                    : 'text-foreground'
-                                            "
-                                        >
-                                            {{
-                                                formatGNF(part.montant_restant)
-                                            }}
-                                        </td>
-                                        <td class="px-4 py-3">
-                                            <StatusDot
-                                                :label="part.statut_label"
-                                                :dot-class="
-                                                    part.statut_dot_class
-                                                "
-                                                class="text-xs text-muted-foreground"
-                                            />
-                                        </td>
-                                        <td class="px-4 py-3 text-center">
-                                            <div
-                                                class="flex items-center justify-center gap-2"
-                                            >
-                                                <Button
-                                                    v-if="
-                                                        part.versements.length >
-                                                        0
-                                                    "
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    class="h-8 px-2.5"
-                                                    @click="
-                                                        openHistoriqueDialog(
-                                                            part,
-                                                        )
-                                                    "
-                                                >
-                                                    <History
-                                                        class="mr-1.5 h-3.5 w-3.5"
-                                                    />
-                                                    Hist. ({{
-                                                        part.versements.length
-                                                    }})
-                                                </Button>
-                                                <Button
-                                                    v-if="
-                                                        can_verser_commission &&
-                                                        !part.is_versee &&
-                                                        transfert.statut ===
-                                                            'reception'
-                                                    "
-                                                    size="sm"
-                                                    @click="
-                                                        openVersementDialog(
-                                                            part,
-                                                        )
-                                                    "
-                                                >
-                                                    Verser
-                                                </Button>
-                                                <span
-                                                    v-else-if="part.is_versee"
-                                                    class="text-xs font-medium text-emerald-600"
-                                                    >Verse ✓</span
-                                                >
-                                                <span
-                                                    v-else
-                                                    class="text-xs text-muted-foreground"
-                                                    >—</span
-                                                >
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                                <tfoot>
-                                    <tr
-                                        class="border-t-2 bg-muted/20 text-sm font-semibold"
-                                    >
-                                        <td
-                                            colspan="2"
-                                            class="px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase"
-                                        >
-                                            Total
-                                        </td>
-                                        <td
-                                            class="px-4 py-2.5 text-right tabular-nums"
-                                        >
-                                            {{ formatGNF(livreurTotals.net) }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-2.5 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
-                                        >
-                                            {{ formatGNF(livreurTotals.verse) }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-2.5 text-right tabular-nums"
-                                            :class="
-                                                livreurTotals.restant > 0
-                                                    ? 'text-amber-600 dark:text-amber-400'
-                                                    : 'text-muted-foreground'
-                                            "
-                                        >
-                                            {{
-                                                formatGNF(livreurTotals.restant)
-                                            }}
-                                        </td>
-                                        <td colspan="2" />
-                                    </tr>
-                                </tfoot>
-                            </table>
+                        <div
+                            class="flex items-center justify-between border-b px-5 py-3.5"
+                        >
+                            <h2
+                                class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Commission logistique
+                            </h2>
+                            <Button
+                                v-if="
+                                    can_generer_commission &&
+                                    transfert.statut === 'reception' &&
+                                    !(
+                                        transfert.commission &&
+                                        transfert.commission.montant_verse > 0
+                                    )
+                                "
+                                variant="outline"
+                                size="sm"
+                                @click="showCommissionDialog = true"
+                            >
+                                <HandCoins class="mr-1.5 h-3.5 w-3.5" />
+                                {{ transfert.commission ? 'Recalculer' : 'Générer' }}
+                            </Button>
                         </div>
-                    </div>
 
-                    <div
-                        v-if="activeCommissionTab === 'proprietaires'"
-                        class="overflow-hidden rounded-xl border bg-card shadow-sm"
-                    >
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-sm">
-                                <thead>
-                                    <tr class="border-b bg-muted/40">
-                                        <th
-                                            class="px-4 py-3 text-left font-medium text-muted-foreground"
+                        <!-- Pas encore de commission -->
+                        <div
+                            v-if="!transfert.commission"
+                            class="px-5 py-8 text-center text-sm text-muted-foreground"
+                        >
+                            Aucune commission générée. Cliquez sur "Générer" pour
+                            calculer les commissions livreur/propriétaire.
+                        </div>
+
+                        <!-- Commission existante -->
+                        <div v-else class="space-y-4 px-5 py-4">
+                            <!-- Synthese style commission vente -->
+                            <div class="rounded-xl border bg-card p-5 shadow-sm">
+                                <div
+                                    class="flex flex-wrap items-center justify-between gap-4"
+                                >
+                                    <div>
+                                        <p
+                                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                                         >
-                                            Proprietaire
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
-                                        >
-                                            Taux
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
-                                        >
-                                            Brut
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
-                                        >
-                                            Frais
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
-                                        >
-                                            Net
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
-                                        >
-                                            Verse
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
-                                        >
-                                            Restant
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-left font-medium text-muted-foreground"
-                                        >
-                                            Statut
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-center font-medium text-muted-foreground"
-                                        >
-                                            Action
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y">
-                                    <tr
-                                        v-for="part in proprietaireParts"
-                                        :key="part.id"
-                                        class="transition-colors hover:bg-muted/10"
-                                    >
-                                        <td class="px-4 py-3 font-medium">
-                                            {{ part.beneficiaire_nom }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right text-muted-foreground tabular-nums"
-                                        >
-                                            {{ part.taux_commission }}%
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right font-semibold tabular-nums"
-                                        >
-                                            {{ formatGNF(part.montant_brut) }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right tabular-nums"
-                                        >
-                                            <span
-                                                v-if="
-                                                    part.frais_supplementaires >
-                                                    0
-                                                "
-                                                class="font-semibold text-destructive"
-                                            >
-                                                -
-                                                {{
-                                                    formatGNF(
-                                                        part.frais_supplementaires,
-                                                    )
-                                                }}
-                                            </span>
-                                            <span
-                                                v-else
-                                                class="text-muted-foreground"
-                                                >{{ formatGNF(0) }}</span
-                                            >
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right font-semibold tabular-nums"
-                                        >
-                                            {{ formatGNF(part.montant_net) }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right text-foreground tabular-nums"
-                                        >
-                                            {{ formatGNF(part.montant_verse) }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right font-semibold tabular-nums"
-                                            :class="
-                                                part.montant_restant > 0
-                                                    ? 'text-amber-600 dark:text-amber-400'
-                                                    : 'text-foreground'
-                                            "
-                                        >
+                                            Total commission
+                                        </p>
+                                        <p class="mt-1 text-2xl font-bold tabular-nums">
                                             {{
-                                                formatGNF(part.montant_restant)
+                                                formatGNF(
+                                                    transfert.commission.montant_total,
+                                                )
                                             }}
-                                        </td>
-                                        <td class="px-4 py-3">
-                                            <StatusDot
-                                                :label="part.statut_label"
-                                                :dot-class="
-                                                    part.statut_dot_class
-                                                "
-                                                class="text-xs text-muted-foreground"
-                                            />
-                                        </td>
-                                        <td class="px-4 py-3 text-center">
-                                            <div
-                                                class="flex items-center justify-center gap-2"
-                                            >
-                                                <Button
-                                                    v-if="
-                                                        part.versements.length >
-                                                        0
-                                                    "
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    class="h-8 px-2.5"
-                                                    @click="
-                                                        openHistoriqueDialog(
-                                                            part,
-                                                        )
-                                                    "
+                                        </p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p
+                                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                                        >
+                                            Part livreurs (total)
+                                        </p>
+                                        <p class="mt-1 text-2xl font-bold tabular-nums">
+                                            {{ formatGNF(partLivreurTotal) }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div
+                                class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                            >
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-sm">
+                                        <thead>
+                                            <tr class="border-b bg-muted/40">
+                                                <th
+                                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
                                                 >
-                                                    <History
-                                                        class="mr-1.5 h-3.5 w-3.5"
+                                                    Livreur
+                                                </th>
+                                                <th
+                                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                                >
+                                                    Taux
+                                                </th>
+                                                <th
+                                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                                >
+                                                    Montant
+                                                </th>
+                                                <th
+                                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                                >
+                                                    Statut
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y">
+                                            <tr
+                                                v-for="part in livreurParts"
+                                                :key="part.id"
+                                                class="transition-colors hover:bg-muted/10"
+                                            >
+                                                <td class="px-4 py-3 font-medium">
+                                                    {{ part.beneficiaire_nom }}
+                                                </td>
+                                                <td
+                                                    class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                                >
+                                                    {{ part.taux_commission }}%
+                                                </td>
+                                                <td
+                                                    class="px-4 py-3 text-right font-semibold tabular-nums"
+                                                >
+                                                    {{ formatGNF(part.montant_net) }}
+                                                </td>
+                                                <td class="px-4 py-3">
+                                                    <StatusDot
+                                                        :label="part.statut_label"
+                                                        :dot-class="
+                                                            part.statut_dot_class
+                                                        "
+                                                        class="text-xs text-muted-foreground"
                                                     />
-                                                    Hist. ({{
-                                                        part.versements.length
-                                                    }})
-                                                </Button>
-                                                <Button
-                                                    v-if="
-                                                        can_verser_commission &&
-                                                        !part.is_versee &&
-                                                        transfert.statut ===
-                                                            'reception'
-                                                    "
-                                                    size="sm"
-                                                    @click="
-                                                        openVersementDialog(
-                                                            part,
-                                                        )
-                                                    "
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                        <tfoot>
+                                            <tr
+                                                class="border-t-2 bg-muted/20 text-sm font-semibold"
+                                            >
+                                                <td
+                                                    colspan="2"
+                                                    class="px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase"
                                                 >
-                                                    Verser
-                                                </Button>
-                                                <span
-                                                    v-else-if="part.is_versee"
-                                                    class="text-xs font-medium text-emerald-600"
-                                                    >Verse ✓</span
+                                                    Total
+                                                </td>
+                                                <td
+                                                    class="px-4 py-2.5 text-right tabular-nums"
                                                 >
-                                                <span
-                                                    v-else
-                                                    class="text-xs text-muted-foreground"
-                                                    >—</span
-                                                >
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                                <tfoot>
-                                    <tr
-                                        class="border-t-2 bg-muted/20 text-sm font-semibold"
-                                    >
-                                        <td
-                                            colspan="2"
-                                            class="px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase"
-                                        >
-                                            Total
-                                        </td>
-                                        <td
-                                            class="px-4 py-2.5 text-right tabular-nums"
-                                        >
-                                            {{
-                                                formatGNF(
-                                                    proprietaireTotals.brut,
-                                                )
-                                            }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-2.5 text-right text-destructive tabular-nums"
-                                        >
-                                            -
-                                            {{
-                                                formatGNF(
-                                                    proprietaireTotals.frais,
-                                                )
-                                            }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-2.5 text-right tabular-nums"
-                                        >
-                                            {{
-                                                formatGNF(
-                                                    proprietaireTotals.net,
-                                                )
-                                            }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-2.5 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
-                                        >
-                                            {{
-                                                formatGNF(
-                                                    proprietaireTotals.verse,
-                                                )
-                                            }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-2.5 text-right tabular-nums"
-                                            :class="
-                                                proprietaireTotals.restant > 0
-                                                    ? 'text-amber-600 dark:text-amber-400'
-                                                    : 'text-muted-foreground'
-                                            "
-                                        >
-                                            {{
-                                                formatGNF(
-                                                    proprietaireTotals.restant,
-                                                )
-                                            }}
-                                        </td>
-                                        <td colspan="2" />
-                                    </tr>
-                                </tfoot>
-                            </table>
+                                                    {{ formatGNF(livreurTotals.net) }}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1961,66 +1471,6 @@ function activiteDotClass(action: string): string {
                     @click="submitCommission"
                 >
                     {{ commissionForm.processing ? 'Calcul…' : 'Générer' }}
-                </Button>
-            </template>
-        </Dialog>
-
-        <!-- ══ Dialog : Enregistrer un versement ═════════════════════════════ -->
-        <Dialog
-            v-model:visible="showVersementDialog"
-            modal
-            :header="`Versement — ${selectedPart?.beneficiaire_nom}`"
-            :style="{ width: '420px' }"
-            :draggable="false"
-        >
-            <div class="space-y-4 py-2">
-                <div>
-                    <Label class="mb-1.5 block text-sm">Montant (GNF)</Label>
-                    <InputNumber
-                        v-model="versementForm.montant"
-                        :min="0"
-                        class="w-full"
-                        input-class="w-full"
-                    />
-                    <p
-                        v-if="versementForm.errors.montant"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ versementForm.errors.montant }}
-                    </p>
-                </div>
-                <div>
-                    <Label class="mb-1.5 block text-sm">Mode de paiement</Label>
-                    <Dropdown
-                        v-model="versementForm.mode_paiement"
-                        :options="MODES_PAIEMENT"
-                        option-label="label"
-                        option-value="value"
-                        class="w-full"
-                    />
-                </div>
-                <div>
-                    <Label class="mb-1.5 block text-sm">Note (optionnel)</Label>
-                    <InputText
-                        v-model="versementForm.note"
-                        class="w-full"
-                        placeholder="Remarque…"
-                    />
-                </div>
-            </div>
-            <template #footer>
-                <Button variant="outline" @click="showVersementDialog = false"
-                    >Annuler</Button
-                >
-                <Button
-                    :disabled="versementForm.processing"
-                    @click="submitVersement"
-                >
-                    {{
-                        versementForm.processing
-                            ? 'Enregistrement…'
-                            : 'Enregistrer'
-                    }}
                 </Button>
             </template>
         </Dialog>

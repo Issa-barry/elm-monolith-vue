@@ -302,7 +302,7 @@ class TransfertLogistiqueController extends Controller
         $transfert_logistique->load([
             'siteSource:id,nom',
             'siteDestination:id,nom',
-            'vehicule:id,nom_vehicule,immatriculation,taux_commission_proprietaire',
+            'vehicule:id,nom_vehicule,immatriculation',
             'vehicule.equipe:id,nom',
             'vehicule.proprietaire:id,prenom,nom',
             'equipeLivraison:id,nom',

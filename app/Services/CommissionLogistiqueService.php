@@ -133,31 +133,6 @@ class CommissionLogistiqueService
             return;
         }
 
-        // ── Part propriétaire ─────────────────────────────────────────────────
-        if ($vehicule->proprietaire) {
-            $taux = (float) ($vehicule->taux_commission_proprietaire ?? 0);
-            $brut = round($montantTotal * $taux / 100, 2);
-            $unlockAt = CommissionLogistiquePart::calculerUnlockAt('proprietaire', $earnedAt);
-
-            CommissionLogistiquePart::create([
-                'commission_logistique_id' => $commission->id,
-                'type_beneficiaire' => 'proprietaire',
-                'proprietaire_id' => $vehicule->proprietaire->id,
-                'livreur_id' => null,
-                'beneficiaire_nom' => trim(
-                    ($vehicule->proprietaire->prenom ?? '').' '.($vehicule->proprietaire->nom ?? '')
-                ) ?: 'Propriétaire',
-                'taux_commission' => $taux,
-                'montant_brut' => $brut,
-                'frais_supplementaires' => 0,
-                'montant_net' => $brut,
-                'montant_verse' => 0,
-                'statut' => StatutPartCommission::PENDING,
-                'earned_at' => $earnedAt->toDateString(),
-                'unlock_at' => $unlockAt->toDateString(),
-            ]);
-        }
-
         // ── Parts livreurs ────────────────────────────────────────────────────
         $equipe = $vehicule->equipe;
         if ($equipe) {
@@ -168,8 +143,6 @@ class CommissionLogistiqueService
                 $nomLivreur = $membre->livreur
                     ? trim(($membre->livreur->prenom ?? '').' '.($membre->livreur->nom ?? ''))
                     : "Livreur #{$membre->livreur_id}";
-                $unlockAt = CommissionLogistiquePart::calculerUnlockAt('livreur', $earnedAt);
-
                 CommissionLogistiquePart::create([
                     'commission_logistique_id' => $commission->id,
                     'type_beneficiaire' => 'livreur',
@@ -181,9 +154,9 @@ class CommissionLogistiqueService
                     'frais_supplementaires' => 0,
                     'montant_net' => $brut,
                     'montant_verse' => 0,
-                    'statut' => StatutPartCommission::PENDING,
+                    'statut' => StatutPartCommission::AVAILABLE,
                     'earned_at' => $earnedAt->toDateString(),
-                    'unlock_at' => $unlockAt->toDateString(),
+                    'unlock_at' => $earnedAt->toDateString(),
                 ]);
             }
         }

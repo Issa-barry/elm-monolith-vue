@@ -143,7 +143,7 @@ class CommissionVehiculeTest extends TestCase
             ->assertRedirect(route('login'));
     }
 
-    public function test_index_renvoie_les_vehicules_avec_commissions(): void
+    public function test_index_renvoie_les_livreurs_avec_commissions(): void
     {
         $org = $this->makeOrg();
         $user = $this->makeUser($org);
@@ -156,13 +156,13 @@ class CommissionVehiculeTest extends TestCase
             ->get('/logistique/commissions')
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Logistique/Commissions/Index')
-                ->has('vehicules', 1)
-                ->where('vehicules.0.vehicule_id', $vehicule->id)
-                ->where('kpis.nb_vehicules', 1)
+                ->has('livreurs', 1)
+                ->where('livreurs.0.livreur_id', $livreur->id)
+                ->where('kpis.nb_livreurs', 1)
             );
     }
 
-    public function test_index_naffiche_pas_vehicules_dautres_organisations(): void
+    public function test_index_naffiche_pas_livreurs_dautres_organisations(): void
     {
         $org1 = $this->makeOrg();
         $org2 = $this->makeOrg();
@@ -176,7 +176,7 @@ class CommissionVehiculeTest extends TestCase
         $this->actingAs($user1)
             ->get('/logistique/commissions')
             ->assertInertia(fn (Assert $page) => $page
-                ->has('vehicules', 0)
+                ->has('livreurs', 0)
             );
     }
 

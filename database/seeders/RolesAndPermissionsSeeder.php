@@ -100,6 +100,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'proprietaires.read',     'vehicules.read',         'equipes-livraison.read',
             'sites.read',             'produits.read',          'packings.read',
             'ventes.read',            'logistique.read',
+            'logistique.commission.verser',
         ]);
 
         // ── 3. Organisation par défaut ────────────────────────────────────────
