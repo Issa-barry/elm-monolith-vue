@@ -35,6 +35,12 @@ class SitePolicy
             && $this->sameOrganization($user, $site);
     }
 
+    public function invite(User $user, Site $site): bool
+    {
+        return $user->can('users.create')
+            && $this->sameOrganization($user, $site);
+    }
+
     private function sameOrganization(User $user, Site $site): bool
     {
         return $user->organization_id === $site->organization_id;

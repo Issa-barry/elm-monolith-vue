@@ -264,7 +264,7 @@ function confirmDelete(c: Client) {
                                     class="flex w-full items-center gap-2"
                                 >
                                     <Pencil class="h-4 w-4" />
-                                    Modifier
+                                    Voir
                                 </Link>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator
@@ -546,7 +546,7 @@ function confirmDelete(c: Client) {
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Pencil class="h-4 w-4" />
-                                                Modifier
+                                                Voir
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator

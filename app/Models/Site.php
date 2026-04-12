@@ -110,6 +110,11 @@ class Site extends Model
         return $this->hasMany(UserSite::class);
     }
 
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(UserInvitation::class);
+    }
+
     // ── Scopes ────────────────────────────────────────────────────────────────
 
     public function scopeActives($query)

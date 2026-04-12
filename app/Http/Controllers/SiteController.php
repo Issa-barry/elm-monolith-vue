@@ -5,11 +5,13 @@ namespace App\Http\Controllers;
 use App\Enums\SiteStatut;
 use App\Enums\SiteType;
 use App\Models\Site;
+use App\Models\UserInvitation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Spatie\Permission\Models\Role;
 
 class SiteController extends Controller
 {
@@ -58,7 +60,55 @@ class SiteController extends Controller
     {
         $this->authorize('view', $site);
 
-        $site->load(['parent', 'enfants', 'users']);
+        $site->load([
+            'parent',
+            'enfants',
+            'users.roles',
+            'invitations' => fn ($q) => $q->orderByDesc('created_at'),
+        ]);
+
+        $canInvite = auth()->user()->can('invite', $site);
+
+        // Active users assigned to this site
+        $membresUsers = $site->users->map(fn ($u) => [
+            'id' => $u->id,
+            'type' => 'user',
+            'invitation_id' => null,
+            'nom_complet' => $u->name,
+            'email' => $u->email,
+            'telephone' => $u->telephone,
+            'role' => $u->getRoleNames()->first(),
+            'statut' => $u->is_active ? 'actif' : 'inactif',
+            'statut_label' => $u->is_active ? 'Actif' : 'Inactif',
+            'date' => $u->pivot->created_at?->format('d/m/Y'),
+            'can_resend' => false,
+            'can_revoke' => false,
+        ])->values();
+
+        // Invitations (pending/expired/revoked — skip accepted since they become users)
+        $membresInvitations = $site->invitations
+            ->filter(fn (UserInvitation $inv) => ! $inv->isAccepted())
+            ->map(fn (UserInvitation $inv) => [
+                'id' => null,
+                'type' => 'invitation',
+                'invitation_id' => $inv->id,
+                'nom_complet' => null,
+                'email' => $inv->email,
+                'telephone' => null,
+                'role' => $inv->role,
+                'statut' => $inv->statut,
+                'statut_label' => $inv->statut_label,
+                'date' => $inv->created_at?->format('d/m/Y'),
+                'can_resend' => $canInvite && in_array($inv->statut, ['expired', 'revoked'], true),
+                'can_revoke' => $canInvite && $inv->statut === 'pending',
+            ])->values();
+
+        $membres = $membresUsers->concat($membresInvitations)->values();
+
+        $rolesDisponibles = Role::whereIn('name', UserController::STAFF_ROLES)
+            ->get(['id', 'name'])
+            ->map(fn ($r) => ['value' => $r->name, 'label' => $this->roleLabel($r->name)])
+            ->values();
 
         return Inertia::render('Sites/Show', [
             'site' => [
@@ -71,14 +121,23 @@ class SiteController extends Controller
                     'statut' => $e->statut?->value,
                     'statut_label' => $e->statut_label,
                 ]),
-                'users' => $site->users->map(fn ($u) => [
-                    'id' => $u->id,
-                    'name' => $u->name,
-                    'email' => $u->email,
-                    'role' => $u->pivot->role,
-                ]),
             ],
+            'membres' => $membres,
+            'roles_disponibles' => $rolesDisponibles,
+            'can_invite' => $canInvite,
         ]);
+    }
+
+    private function roleLabel(string $role): string
+    {
+        return match ($role) {
+            'super_admin' => 'Super administrateur',
+            'admin_entreprise' => 'Administrateur',
+            'manager' => 'Manager',
+            'commerciale' => 'Commercial(e)',
+            'comptable' => 'Comptable',
+            default => $role,
+        };
     }
 
     public function create(): Response
