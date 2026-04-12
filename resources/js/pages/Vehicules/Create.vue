@@ -11,13 +11,6 @@ interface Option {
     value: number | string;
     label: string;
 }
-interface EquipeOption {
-    value: number;
-    label: string;
-    proprietaire_id: number | null;
-    proprietaire_label?: string | null;
-    somme_taux: number;
-}
 interface TypeOption {
     value: string;
     label: string;
@@ -26,9 +19,8 @@ interface TypeOption {
 
 const props = defineProps<{
     proprietaires: Option[];
-    equipes: EquipeOption[];
     types: TypeOption[];
-    tauxProprietaireDefaut: number;
+    currentSiteName: string;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -41,11 +33,10 @@ const form = useForm({
     nom_vehicule: '',
     immatriculation: '',
     type_vehicule: null as string | null,
+    categorie: null as string | null,
     capacite_packs: null as number | null,
     proprietaire_id: null as number | null,
-    equipe_livraison_id: null as number | null,
     pris_en_charge_par_usine: false,
-    taux_commission_proprietaire: props.tauxProprietaireDefaut as number | null,
     photo: null as File | null,
     is_active: true,
 });
@@ -53,7 +44,8 @@ const form = useForm({
 const canSubmit = computed(() => {
     return (
         !form.processing &&
-        !!form.equipe_livraison_id &&
+        !!form.categorie &&
+        (form.categorie === 'interne' || !!form.proprietaire_id) &&
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
         !!form.type_vehicule
@@ -105,8 +97,8 @@ function submit() {
                 :errors="form.errors"
                 :processing="form.processing"
                 :proprietaires="proprietaires"
-                :equipes="equipes"
                 :types="types"
+                :current-site-name="currentSiteName"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

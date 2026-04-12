@@ -48,14 +48,13 @@ interface VehiculeData {
     type_label: string;
     type_vehicule: string | null;
     capacite_packs: number | null;
+    categorie: string | null;
     proprietaire_id: number | null;
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
-    equipe_livraison_id: number | null;
     equipe_nom: string | null;
     livreur_principal_nom: string | null;
     equipe_membres: EquipeMembre[];
-    taux_commission_proprietaire: number;
     frais: Frais[];
     frais_total: number;
     pris_en_charge_par_usine: boolean;
@@ -390,16 +389,6 @@ function formatGNF(val: number): string {
                         Commission
                     </h3>
                     <dl class="space-y-3">
-                        <div>
-                            <dt class="text-xs text-muted-foreground">
-                                Taux propriétaire
-                            </dt>
-                            <dd
-                                class="mt-0.5 text-sm font-semibold tabular-nums"
-                            >
-                                {{ vehicule.taux_commission_proprietaire }}%
-                            </dd>
-                        </div>
                         <div>
                             <dt class="text-xs text-muted-foreground">
                                 Pris en charge par l'usine

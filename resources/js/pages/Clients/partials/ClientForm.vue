@@ -42,6 +42,21 @@ const props = withDefaults(
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
 const isReadOnly = computed(() => props.readonly);
+const readonlyInputClass = computed(() =>
+    isReadOnly.value
+        ? 'disabled:!bg-muted/20 disabled:!text-foreground/85 disabled:!border-border/70 disabled:!opacity-100'
+        : '',
+);
+const readonlyDropdownClass = computed(() =>
+    isReadOnly.value
+        ? '!bg-muted/20 !text-foreground/85 !border-border/70 !opacity-100'
+        : '',
+);
+const readonlyPrefixClass = computed(() =>
+    isReadOnly.value
+        ? '!bg-muted/20 !text-foreground/85 !border-border/70'
+        : '',
+);
 
 const selectedCountry = computed(() =>
     PAYS_OPTIONS.find((c) => c.code === props.form.code_pays),
@@ -149,7 +164,10 @@ function onSubmit() {
                         "
                         class="w-full"
                         :disabled="isReadOnly"
-                        :class="{ 'p-invalid': errors.prenom }"
+                        :class="[
+                            readonlyInputClass,
+                            { 'p-invalid': errors.prenom },
+                        ]"
                     />
                     <p
                         v-if="errors.prenom"
@@ -173,7 +191,10 @@ function onSubmit() {
                         "
                         class="w-full"
                         :disabled="isReadOnly"
-                        :class="{ 'p-invalid': errors.nom }"
+                        :class="[
+                            readonlyInputClass,
+                            { 'p-invalid': errors.nom },
+                        ]"
                     />
                     <p v-if="errors.nom" class="mt-1 text-xs text-destructive">
                         {{ errors.nom }}
@@ -203,7 +224,10 @@ function onSubmit() {
                         placeholder="Sélectionner…"
                         class="w-full"
                         :disabled="isReadOnly"
-                        :class="{ 'p-invalid': errors.code_pays }"
+                        :class="[
+                            readonlyDropdownClass,
+                            { 'p-invalid': errors.code_pays },
+                        ]"
                     >
                         <template #value="{ value }">
                             <div v-if="value" class="flex items-center gap-2">
@@ -254,7 +278,10 @@ function onSubmit() {
                         "
                         class="w-full"
                         :disabled="isReadOnly"
-                        :class="{ 'p-invalid': errors.ville }"
+                        :class="[
+                            readonlyInputClass,
+                            { 'p-invalid': errors.ville },
+                        ]"
                     />
                     <p
                         v-if="errors.ville"
@@ -276,6 +303,7 @@ function onSubmit() {
                         "
                         class="w-full"
                         :disabled="isReadOnly"
+                        :class="readonlyInputClass"
                     />
                 </div>
             </div>
@@ -297,6 +325,7 @@ function onSubmit() {
                     <div class="flex gap-2">
                         <div
                             class="flex h-10 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border bg-muted/40 px-2 font-mono text-sm text-muted-foreground"
+                            :class="readonlyPrefixClass"
                         >
                             <img
                                 v-if="selectedCountry"
@@ -318,7 +347,10 @@ function onSubmit() {
                             :maxlength="phoneMaxLength"
                             class="w-full"
                             :disabled="isReadOnly"
-                            :class="{ 'p-invalid': errors.telephone }"
+                            :class="[
+                                readonlyInputClass,
+                                { 'p-invalid': errors.telephone },
+                            ]"
                         />
                     </div>
                     <p
@@ -345,7 +377,10 @@ function onSubmit() {
                         type="email"
                         class="w-full"
                         :disabled="isReadOnly"
-                        :class="{ 'p-invalid': errors.email }"
+                        :class="[
+                            readonlyInputClass,
+                            { 'p-invalid': errors.email },
+                        ]"
                     />
                     <p
                         v-if="errors.email"

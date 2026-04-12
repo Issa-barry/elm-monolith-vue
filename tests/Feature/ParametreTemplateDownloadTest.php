@@ -74,7 +74,7 @@ class ParametreTemplateDownloadTest extends TestCase
             ->assertSee('Worksheet ss:Name="proprietaires"', false)
             ->assertSee('Worksheet ss:Name="livreurs"', false)
             ->assertSee('Worksheet ss:Name="vehicules"', false)
-            ->assertSee('equipe_livraison_id');
+            ->assertSee('categorie');
     }
 
     public function test_download_unknown_template_returns_404(): void

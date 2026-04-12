@@ -220,7 +220,9 @@ const commandesFiltrees = computed(() => {
 // ── Dialog paiement groupé ─────────────────────────────────────────────────────
 
 const paiementVisible = ref(false);
-const today = new Date().toISOString().slice(0, 10);
+function currentDateYmd(): string {
+    return new Date().toISOString().slice(0, 10);
+}
 
 interface PaiementForm {
     montant: number | null;
@@ -233,7 +235,7 @@ interface PaiementForm {
 const paiementForm = reactive<PaiementForm>({
     montant: null,
     mode_paiement: 'especes',
-    paid_at: today,
+    paid_at: currentDateYmd(),
     note: null,
     processing: false,
 });
@@ -246,7 +248,9 @@ function openPaiementDialog() {
             ? props.resume_global.disponible_maintenant
             : null;
     paiementForm.mode_paiement = 'especes';
-    paiementForm.paid_at = today;
+    // Date de paiement forcée au jour courant (champ non affiché pour l'instant).
+    paiementForm.paid_at = currentDateYmd();
+    // Note conservée en back, non affichée dans l'UI pour l'instant.
     paiementForm.note = null;
     paiementForm.processing = false;
     paiementErrors.value = {};
@@ -259,6 +263,8 @@ function closePaiementDialog() {
 
 function submitPaiement() {
     if (!paiementForm.montant || paiementForm.montant <= 0) return;
+    // Sécurité: on force la date du jour au moment de l'envoi.
+    paiementForm.paid_at = currentDateYmd();
     paiementForm.processing = true;
     paiementErrors.value = {};
     router.post(
@@ -1084,6 +1090,7 @@ function closeDetailDialog() {
                     />
                 </div>
 
+                <!--
                 <div class="space-y-1">
                     <label class="text-sm font-medium">Date du paiement</label>
                     <input
@@ -1101,6 +1108,7 @@ function closeDetailDialog() {
                         placeholder="Commentaire…"
                     />
                 </div>
+                -->
 
                 <div class="flex justify-end gap-2 pt-2">
                     <Button variant="ghost" @click="closePaiementDialog"

@@ -191,14 +191,14 @@ class TransfertLogistiqueController extends Controller
                 ->get(),
             'vehicules' => Vehicule::where('organization_id', $orgId)
                 ->where('is_active', true)
-                ->with('equipe:id,nom')
-                ->select('id', 'nom_vehicule', 'immatriculation', 'equipe_livraison_id', 'capacite_packs')
+                ->with('equipe:id,nom,vehicule_id')
+                ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs')
                 ->get()
                 ->map(fn ($v) => [
                     'id' => $v->id,
                     'nom_vehicule' => $v->nom_vehicule,
                     'immatriculation' => $v->immatriculation,
-                    'equipe_livraison_id' => $v->equipe_livraison_id,
+                    'equipe_livraison_id' => $v->equipe?->id,
                     'equipe_nom' => $v->equipe?->nom,
                     'capacite_packs' => $v->capacite_packs,
                 ]),
@@ -370,14 +370,14 @@ class TransfertLogistiqueController extends Controller
             'site_source' => $siteSourceModel ? ['id' => $siteSourceModel->id, 'nom' => $siteSourceModel->nom] : null,
             'sites' => Site::where('organization_id', $orgId)->select('id', 'nom')->orderBy('nom')->get(),
             'vehicules' => Vehicule::where('organization_id', $orgId)->where('is_active', true)
-                ->with('equipe:id,nom')
-                ->select('id', 'nom_vehicule', 'immatriculation', 'equipe_livraison_id', 'capacite_packs')
+                ->with('equipe:id,nom,vehicule_id')
+                ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs')
                 ->get()
                 ->map(fn ($v) => [
                     'id' => $v->id,
                     'nom_vehicule' => $v->nom_vehicule,
                     'immatriculation' => $v->immatriculation,
-                    'equipe_livraison_id' => $v->equipe_livraison_id,
+                    'equipe_livraison_id' => $v->equipe?->id,
                     'equipe_nom' => $v->equipe?->nom,
                     'capacite_packs' => $v->capacite_packs,
                 ]),

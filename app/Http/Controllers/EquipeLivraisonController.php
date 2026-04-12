@@ -7,6 +7,7 @@ use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Parametre;
 use App\Models\Proprietaire;
+use App\Models\Vehicule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +42,7 @@ class EquipeLivraisonController extends Controller
         return Inertia::render('EquipesLivraison/Create', [
             'proprietaires' => $this->proprietairesOptions($orgId),
             'tauxProprietaireDefaut' => Parametre::getTauxProprietaireDefaut($orgId),
+            'vehicules' => $this->vehiculesOptions($orgId),
         ]);
     }
 
@@ -54,6 +56,11 @@ class EquipeLivraisonController extends Controller
         $data = $request->validate([
             'nom' => ['required', 'string', 'max:100', Rule::unique('equipes_livraison', 'nom')->where('organization_id', $orgId)->whereNull('deleted_at')],
             'is_active' => 'boolean',
+            'vehicule_id' => [
+                'required', 'integer',
+                Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
+                Rule::unique('equipes_livraison', 'vehicule_id')->whereNull('deleted_at'),
+            ],
             'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
             'taux_commission_proprietaire' => 'required|numeric|min:0|max:100',
             'membres' => 'required|array|min:1',
@@ -74,6 +81,7 @@ class EquipeLivraisonController extends Controller
         DB::transaction(function () use ($data, $orgId) {
             $equipe = EquipeLivraison::create([
                 'organization_id' => $orgId,
+                'vehicule_id' => $data['vehicule_id'],
                 'proprietaire_id' => $data['proprietaire_id'],
                 'nom' => $data['nom'],
                 'is_active' => $data['is_active'] ?? true,
@@ -101,12 +109,13 @@ class EquipeLivraisonController extends Controller
         $this->authorize('update', $equipes_livraison);
 
         $orgId = auth()->user()->organization_id;
-        $equipes_livraison->load('membres.livreur', 'proprietaire');
+        $equipes_livraison->load('membres.livreur', 'proprietaire', 'vehicule');
 
         return Inertia::render('EquipesLivraison/Edit', [
             'equipe' => $this->equipeData($equipes_livraison),
             'proprietaires' => $this->proprietairesOptions($orgId),
             'tauxProprietaireDefaut' => Parametre::getTauxProprietaireDefaut($orgId),
+            'vehicules' => $this->vehiculesOptions($orgId, $equipes_livraison->id),
         ]);
     }
 
@@ -119,6 +128,11 @@ class EquipeLivraisonController extends Controller
         $data = $request->validate([
             'nom' => ['required', 'string', 'max:100', Rule::unique('equipes_livraison', 'nom')->where('organization_id', $orgId)->whereNull('deleted_at')->ignore($equipes_livraison->id)],
             'is_active' => 'boolean',
+            'vehicule_id' => [
+                'required', 'integer',
+                Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
+                Rule::unique('equipes_livraison', 'vehicule_id')->whereNull('deleted_at')->ignore($equipes_livraison->id),
+            ],
             'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
             'taux_commission_proprietaire' => 'required|numeric|min:0|max:100',
             'membres' => 'required|array|min:1',
@@ -138,6 +152,7 @@ class EquipeLivraisonController extends Controller
 
         DB::transaction(function () use ($data, $orgId, $equipes_livraison) {
             $equipes_livraison->update([
+                'vehicule_id' => $data['vehicule_id'],
                 'proprietaire_id' => $data['proprietaire_id'],
                 'nom' => $data['nom'],
                 'is_active' => $data['is_active'] ?? $equipes_livraison->is_active,
@@ -167,11 +182,6 @@ class EquipeLivraisonController extends Controller
     {
         $this->authorize('delete', $equipes_livraison);
 
-        if ($equipes_livraison->vehicules()->where('is_active', true)->exists()) {
-            return redirect()->back()
-                ->withErrors(['equipe' => 'Cette équipe est assignée à un ou plusieurs véhicules actifs.']);
-        }
-
         $equipes_livraison->membres()->delete();
         $equipes_livraison->delete();
 
@@ -190,6 +200,9 @@ class EquipeLivraisonController extends Controller
             'id' => $e->id,
             'nom' => $e->nom,
             'is_active' => $e->is_active,
+            'vehicule_id' => $e->vehicule_id,
+            'vehicule_immatriculation' => $e->vehicule?->immatriculation,
+            'vehicule_nom' => $e->vehicule?->nom_vehicule,
             'proprietaire_id' => $e->proprietaire_id,
             'taux_commission_proprietaire' => $e->taux_commission_proprietaire !== null ? (float) $e->taux_commission_proprietaire : null,
             'nb_membres' => $membres->count(),
@@ -207,6 +220,31 @@ class EquipeLivraisonController extends Controller
                 'ordre' => $m->ordre,
             ])->values()->all(),
         ];
+    }
+
+    private function vehiculesOptions(int $orgId, ?int $currentEquipeId = null): array
+    {
+        return Vehicule::where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->where(function ($q) use ($currentEquipeId) {
+                // Véhicules sans équipe
+                $q->whereDoesntHave('equipe');
+                // En édition : inclure aussi le véhicule de l'équipe courante
+                if ($currentEquipeId) {
+                    $q->orWhereHas('equipe', fn ($eq) => $eq->where('id', $currentEquipeId));
+                }
+            })
+            ->orderBy('nom_vehicule')
+            ->get()
+            ->map(fn (Vehicule $v) => [
+                'value' => $v->id,
+                'label' => $v->nom_vehicule,
+                'immatriculation' => $v->immatriculation,
+                'categorie' => $v->categorie,
+                'type_label' => $v->type_label,
+            ])
+            ->toArray();
     }
 
     private function proprietairesOptions(int $orgId): array
@@ -325,6 +363,9 @@ class EquipeLivraisonController extends Controller
         return [
             'nom.required' => "Le nom de l'équipe est obligatoire.",
             'nom.unique' => 'Une équipe avec ce nom existe déjà dans votre organisation.',
+            'vehicule_id.required' => 'Le véhicule est obligatoire.',
+            'vehicule_id.exists' => 'Le véhicule sélectionné est introuvable.',
+            'vehicule_id.unique' => 'Ce véhicule est déjà affecté à une autre équipe.',
             'proprietaire_id.required' => 'Le propriétaire est obligatoire.',
             'proprietaire_id.exists' => "Le propriétaire sélectionné est introuvable ou n'appartient pas à votre organisation.",
             'taux_commission_proprietaire.required' => 'Le taux propriétaire est obligatoire.',

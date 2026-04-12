@@ -11,13 +11,6 @@ interface Option {
     value: number | string;
     label: string;
 }
-interface EquipeOption {
-    value: number;
-    label: string;
-    proprietaire_id: number | null;
-    proprietaire_label?: string | null;
-    somme_taux: number;
-}
 interface TypeOption {
     value: string;
     label: string;
@@ -29,11 +22,10 @@ interface VehiculeData {
     nom_vehicule: string;
     immatriculation: string;
     type_vehicule: string | null;
+    categorie: string | null;
     capacite_packs: number | null;
     proprietaire_id: number | null;
-    equipe_livraison_id: number | null;
     pris_en_charge_par_usine: boolean;
-    taux_commission_proprietaire: number | null;
     photo_url: string | null;
     is_active: boolean;
 }
@@ -41,9 +33,8 @@ interface VehiculeData {
 const props = defineProps<{
     vehicule: VehiculeData;
     proprietaires: Option[];
-    equipes: EquipeOption[];
     types: TypeOption[];
-    tauxProprietaireDefaut: number;
+    currentSiteName: string;
 }>();
 const page = usePage();
 const flashSuccess = computed(
@@ -61,11 +52,10 @@ const form = useForm({
     nom_vehicule: props.vehicule.nom_vehicule,
     immatriculation: props.vehicule.immatriculation,
     type_vehicule: props.vehicule.type_vehicule,
+    categorie: props.vehicule.categorie,
     capacite_packs: props.vehicule.capacite_packs,
     proprietaire_id: props.vehicule.proprietaire_id,
-    equipe_livraison_id: props.vehicule.equipe_livraison_id,
     pris_en_charge_par_usine: props.vehicule.pris_en_charge_par_usine,
-    taux_commission_proprietaire: props.vehicule.taux_commission_proprietaire,
     photo: null as File | null,
     is_active: props.vehicule.is_active,
 });
@@ -73,7 +63,8 @@ const form = useForm({
 const canSubmit = computed(() => {
     return (
         !form.processing &&
-        !!form.equipe_livraison_id &&
+        !!form.categorie &&
+        (form.categorie === 'interne' || !!form.proprietaire_id) &&
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
         !!form.type_vehicule
@@ -138,9 +129,9 @@ function submit() {
                 :errors="form.errors"
                 :processing="form.processing"
                 :proprietaires="proprietaires"
-                :equipes="equipes"
                 :types="types"
                 :photo-url="vehicule.photo_url"
+                :current-site-name="currentSiteName"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

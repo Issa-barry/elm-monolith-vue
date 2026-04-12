@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\EquipeLivraison;
 use App\Models\Organization;
 use App\Models\Proprietaire;
+use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -83,9 +84,10 @@ class EquipeLivraisonTest extends TestCase
     public function test_store_creates_equipe_avec_proprietaire_meme_org(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
 
         $this->actingAs($this->user)
-            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
             ->assertRedirect(route('equipes-livraison.index'));
 
         $this->assertDatabaseHas('equipes_livraison', [
@@ -99,9 +101,10 @@ class EquipeLivraisonTest extends TestCase
     public function test_store_persiste_telephone_normalise_e164(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
 
         $this->actingAs($this->user)
-            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
             ->assertRedirect(route('equipes-livraison.index'));
 
         $this->assertDatabaseHas('livreurs', [
@@ -166,9 +169,11 @@ class EquipeLivraisonTest extends TestCase
     public function test_store_persiste_taux_commission_proprietaire(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
                 'taux_commission_proprietaire' => 75.50,
                 'membres' => [[
                     'livreur_id' => null,
@@ -212,10 +217,12 @@ class EquipeLivraisonTest extends TestCase
     public function test_store_echoue_si_total_taux_different_de_100(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
 
         // propriétaire 60 + livreur 30 = 90 % → doit échouer
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
                 'taux_commission_proprietaire' => 60,
                 'membres' => [[
                     'livreur_id' => null,
@@ -241,9 +248,10 @@ class EquipeLivraisonTest extends TestCase
     public function test_store_fails_si_nom_deja_utilise_dans_meme_org(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
 
         $this->actingAs($this->user)
-            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
             ->assertRedirect(route('equipes-livraison.index'));
 
         // Même nom, membre différent pour éviter conflit livreur
@@ -262,9 +270,10 @@ class EquipeLivraisonTest extends TestCase
     public function test_store_autorise_meme_nom_apres_suppression_equipe(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule1 = $this->makeVehicule();
 
         $this->actingAs($this->user)
-            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule1->id]))
             ->assertRedirect(route('equipes-livraison.index'));
 
         $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
@@ -274,8 +283,10 @@ class EquipeLivraisonTest extends TestCase
             ->assertRedirect(route('equipes-livraison.index'));
 
         // Le même nom doit être disponible après suppression (soft-delete)
+        // vehicule1 est libéré après le soft-delete de l'équipe
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule1->id,
                 'membres' => [[
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
@@ -289,14 +300,17 @@ class EquipeLivraisonTest extends TestCase
     public function test_store_fails_si_livreur_deja_dans_autre_equipe(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
 
         $this->actingAs($this->user)
-            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
             ->assertRedirect(route('equipes-livraison.index'));
 
         // Même livreur (+224620000001) dans une autre équipe
+        $vehicule2 = $this->makeVehicule();
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule2->id,
                 'nom' => 'Équipe Deux',
                 'membres' => [[
                     'livreur_id' => null,
@@ -312,31 +326,35 @@ class EquipeLivraisonTest extends TestCase
     public function test_update_autorise_membres_deja_dans_meme_equipe(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
 
         $this->actingAs($this->user)
-            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
             ->assertRedirect(route('equipes-livraison.index'));
 
         $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
 
         // Mettre à jour en conservant le même membre → doit réussir
         $this->actingAs($this->user)
-            ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($proprietaire->id))
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
             ->assertRedirect(route('equipes-livraison.edit', $equipe));
     }
 
     public function test_update_fails_si_livreur_deja_dans_autre_equipe(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule1 = $this->makeVehicule();
+        $vehicule2 = $this->makeVehicule();
 
         // Equipe 1 avec +224620000001
         $this->actingAs($this->user)
-            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule1->id]))
             ->assertRedirect(route('equipes-livraison.index'));
 
         // Equipe 2 avec +224620000002
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule2->id,
                 'nom' => 'Équipe Deux',
                 'membres' => [[
                     'livreur_id' => null,
@@ -353,6 +371,7 @@ class EquipeLivraisonTest extends TestCase
         // Tenter d'affecter le livreur de l'équipe 1 à l'équipe 2
         $this->actingAs($this->user)
             ->patch(route('equipes-livraison.update', $equipe2), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule2->id,
                 'nom' => 'Équipe Deux',
                 'membres' => [[
                     'livreur_id' => null,
@@ -400,11 +419,13 @@ class EquipeLivraisonTest extends TestCase
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $equipe = $this->makeEquipe($proprietaire->id);
+        $vehicule = $this->makeVehicule();
 
         $nouveauProprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
 
         $this->actingAs($this->user)
             ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($nouveauProprietaire->id, [
+                'vehicule_id' => $vehicule->id,
                 'nom' => 'Équipe Modifiée',
                 'taux_commission_proprietaire' => 55,
                 'membres' => [[
@@ -453,11 +474,23 @@ class EquipeLivraisonTest extends TestCase
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
+    private function makeVehicule(): Vehicule
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        return Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'categorie' => 'externe',
+        ]);
+    }
+
     private function makeEquipe(int $proprietaireId): EquipeLivraison
     {
         return EquipeLivraison::create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaireId,
+            'vehicule_id' => null,
             'nom' => 'Équipe Fixture',
             'is_active' => true,
             'taux_commission_proprietaire' => 60,
