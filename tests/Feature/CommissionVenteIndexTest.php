@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\CommissionVente;
+use App\Models\Livreur;
 use App\Models\Organization;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -57,7 +58,7 @@ class CommissionVenteIndexTest extends TestCase
             ->get(route('commissions.index'))
             ->assertStatus(200)
             ->assertInertia(fn ($page) => $page
-                ->has('parts')
+                ->has('beneficiaires')
                 ->has('totaux')
                 ->has('periode')
                 ->has('tab')
@@ -66,20 +67,23 @@ class CommissionVenteIndexTest extends TestCase
 
     public function test_index_livreurs_affiche_uniquement_la_part_principale(): void
     {
+        $livreur1 = Livreur::factory()->create(['organization_id' => $this->org->id]);
+        $livreur2 = Livreur::factory()->create(['organization_id' => $this->org->id]);
+
         $commission = CommissionVente::factory()->create(['organization_id' => $this->org->id]);
 
         $commission->parts()->createMany([
-            $this->livreurPartData('principal', 'Oumar CAMARA', 27_000),
-            $this->livreurPartData('assistant', 'Abdoulaye SYLLA', 20_250),
+            array_merge($this->livreurPartData('principal', 'Oumar CAMARA', 27_000), ['livreur_id' => $livreur1->id]),
+            array_merge($this->livreurPartData('assistant', 'Abdoulaye SYLLA', 20_250), ['livreur_id' => $livreur2->id]),
         ]);
 
         $this->actingAs($this->user)
             ->get(route('commissions.index', ['tab' => 'livreurs', 'periode' => 'all']))
             ->assertStatus(200)
             ->assertInertia(fn ($page) => $page
-                ->has('parts', 1)
-                ->where('parts.0.type_beneficiaire', 'livreur')
-                ->where('parts.0.beneficiaire_nom', 'Oumar CAMARA')
+                ->has('beneficiaires', 1)
+                ->where('beneficiaires.0.type_beneficiaire', 'livreur')
+                ->where('beneficiaires.0.beneficiaire_nom', 'Oumar CAMARA')
             );
     }
 
@@ -94,7 +98,7 @@ class CommissionVenteIndexTest extends TestCase
             ->get(route('commissions.index', ['periode' => 'all']))
             ->assertStatus(200)
             ->assertInertia(fn ($page) => $page
-                ->has('parts')
+                ->has('beneficiaires')
             );
     }
 
@@ -104,7 +108,7 @@ class CommissionVenteIndexTest extends TestCase
             ->get(route('commissions.index', ['periode' => 'all']))
             ->assertInertia(fn ($page) => $page
                 ->where('totaux.nb_en_attente', 0)
-                ->where('totaux.nb_versees', 0)
+                ->where('totaux.nb_versee', 0)
             );
     }
 

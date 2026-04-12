@@ -5,21 +5,29 @@ use App\Http\Controllers\CashbackController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
+use App\Http\Controllers\CommissionLogistiqueController;
+use App\Http\Controllers\CommissionPaymentController;
+use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\CommissionVenteController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\EncaissementVenteController;
 use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
+use App\Http\Controllers\FraisCommissionPartController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\PackingController;
+use App\Http\Controllers\PaiementCommissionVenteController;
 use App\Http\Controllers\PrestataireController;
 use App\Http\Controllers\ProduitController;
 use App\Http\Controllers\ProprietaireController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SiteController;
+use App\Http\Controllers\TransfertLogistiqueController;
+use App\Http\Controllers\TransfertStatutController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VehiculeController;
 use App\Http\Controllers\VersementCommissionController;
+use App\Http\Controllers\VersementCommissionLogistiqueController;
 use App\Http\Controllers\VersementController;
 use App\Services\ModuleService;
 use Illuminate\Support\Facades\Route;
@@ -76,9 +84,16 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 
         // Commissions
         Route::get('commissions', [CommissionVenteController::class, 'index'])->name('commissions.index');
+        Route::get('commissions/beneficiaires/{type}/{beneficiaireId}', [CommissionVenteController::class, 'showBeneficiaire'])->name('commissions.beneficiaires.show');
         Route::get('commissions/{commission_vente}', [CommissionVenteController::class, 'show'])->name('commissions.show');
 
-        // Versements par part
+        // Paiement groupé bénéficiaire (nouveau workflow)
+        Route::post('commissions/beneficiaires/{type}/{beneficiaireId}/paiements', [PaiementCommissionVenteController::class, 'store'])->name('commissions.beneficiaires.paiements.store');
+
+        // Frais par part (livreur)
+        Route::patch('commissions/parts/{part}/frais', [FraisCommissionPartController::class, 'update'])->name('commissions.parts.frais.update');
+
+        // Versements par part (ancien système — conservé pour compatibilité)
         Route::post('commissions/{commission}/parts/{part}/versements', [VersementCommissionController::class, 'store'])->name('commissions.parts.versements.store');
         Route::delete('versements-commissions/{versement_commission}', [VersementCommissionController::class, 'destroy'])->name('commissions.versements.destroy');
 
@@ -146,6 +161,50 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::get('cashback', [CashbackController::class, 'index'])->name('cashback.index');
         Route::patch('cashback/{cashbackTransaction}/valider', [CashbackController::class, 'valider'])->name('cashback.valider');
         Route::patch('cashback/{cashbackTransaction}/verser', [CashbackController::class, 'verser'])->name('cashback.verser');
+    });
+
+    // ── Module : Logistique inter-sites ───────────────────────────────────────
+    Route::middleware('module:'.ModuleFeature::LOGISTIQUE)->group(function () {
+        // Redirection rétro-compatibilité : /logistique → /logistique/transferts
+        Route::get('logistique', function () {
+            return redirect()->route('logistique.transferts.index', [], 302);
+        })->name('logistique.index');
+
+        // Vues index séparées (statiques, AVANT le wildcard {transfert_logistique})
+        Route::get('logistique/transferts', [TransfertLogistiqueController::class, 'indexTransferts'])->name('logistique.transferts.index');
+        Route::get('logistique/receptions', [TransfertLogistiqueController::class, 'indexReceptions'])->name('logistique.receptions.index');
+
+        // Commissions logistiques — par véhicule (nouveau système)
+        Route::get('logistique/commissions', [CommissionVehiculeController::class, 'index'])
+            ->name('logistique.commissions.index');
+        Route::get('logistique/commissions/vehicules/{vehicule}', [CommissionVehiculeController::class, 'show'])
+            ->name('logistique.commissions.vehicule');
+        Route::get('logistique/commissions/vehicules/{vehicule}/beneficiaires/{type}/{beneficiaireId}', [CommissionVehiculeController::class, 'releve'])
+            ->name('logistique.commissions.releve');
+        Route::post('logistique/commissions/vehicules/{vehicule}/paiements', [CommissionPaymentController::class, 'store'])
+            ->name('logistique.commissions.paiements.store');
+
+        // Rétro-compat : accès direct par commission (page transfert Show)
+        Route::get('logistique/commissions/detail/{commission_logistique}', [CommissionLogistiqueController::class, 'show'])
+            ->name('logistique.commissions.show');
+
+        Route::get('logistique/creer', [TransfertLogistiqueController::class, 'create'])->name('logistique.create');
+        Route::post('logistique', [TransfertLogistiqueController::class, 'store'])->name('logistique.store');
+        Route::get('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'show'])->name('logistique.show');
+        Route::get('logistique/{transfert_logistique}/editer', [TransfertLogistiqueController::class, 'edit'])->name('logistique.edit');
+        Route::put('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'update'])->name('logistique.update');
+        Route::delete('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'destroy'])->name('logistique.destroy');
+
+        // Transitions de statut
+        Route::post('logistique/{transfert_logistique}/statut/avancer', [TransfertStatutController::class, 'avancer'])->name('logistique.statut.avancer');
+        Route::post('logistique/{transfert_logistique}/statut/annuler', [TransfertStatutController::class, 'annuler'])->name('logistique.statut.annuler');
+
+        // Commission logistique
+        Route::post('logistique/{transfert_logistique}/commission', [CommissionLogistiqueController::class, 'store'])->name('logistique.commission.store');
+
+        // Versements de parts de commission
+        Route::post('commissions-logistique/parts/{part}/versements', [VersementCommissionLogistiqueController::class, 'store'])
+            ->name('logistique.commission.versements.store');
     });
 });
 

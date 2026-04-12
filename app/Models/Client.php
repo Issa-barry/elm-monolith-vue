@@ -24,12 +24,14 @@ class Client extends Model
         'ville',
         'adresse',
         'is_active',
+        'cashback_eligible',
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'cashback_eligible' => 'boolean',
         ];
     }
 

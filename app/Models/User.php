@@ -63,6 +63,14 @@ class User extends Authenticatable
             ->withTimestamps();
     }
 
+    /**
+     * Indique si l'utilisateur est affecté à un site donné (via user_sites).
+     */
+    public function isAssignedToSite(int $siteId): bool
+    {
+        return $this->sites()->where('sites.id', $siteId)->exists();
+    }
+
     public function isSuperAdmin(): bool
     {
         return $this->hasRole('super_admin');
@@ -74,7 +82,7 @@ class User extends Authenticatable
      */
     public function permissionsMap(): array
     {
-        $resources = ['clients', 'prestataires', 'livreurs', 'proprietaires', 'vehicules', 'equipes-livraison', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres'];
+        $resources = ['clients', 'prestataires', 'livreurs', 'proprietaires', 'vehicules', 'equipes-livraison', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres', 'logistique'];
         $actions = ['create', 'read', 'update', 'delete'];
 
         $map = [];
@@ -83,6 +91,12 @@ class User extends Authenticatable
                 $key = "{$resource}.{$action}";
                 $map[$key] = $this->isSuperAdmin() || $this->can($key);
             }
+        }
+
+        // Permissions standalone hors matrice CRUD
+        $standalone = ['logistique.commission.verser'];
+        foreach ($standalone as $perm) {
+            $map[$perm] = $this->isSuperAdmin() || $this->can($perm);
         }
 
         return $map;

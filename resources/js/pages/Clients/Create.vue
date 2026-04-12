@@ -23,6 +23,7 @@ const form = useForm({
     code_pays: 'GN' as string | null,
     code_phone_pays: '+224' as string | null,
     is_active: true,
+    cashback_eligible: false,
 });
 
 function submit() {
