@@ -137,6 +137,16 @@ class ClientAuthorizationTest extends TestCase
             ->assertOk();
     }
 
+    public function test_comptable_peut_voir_detail_client_de_son_org(): void
+    {
+        $user = $this->makeUser('comptable', $this->org->id);
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($user)
+            ->get(route('clients.show', $client))
+            ->assertOk();
+    }
+
     public function test_comptable_ne_peut_pas_creer_client(): void
     {
         $user = $this->makeUser('comptable', $this->org->id);

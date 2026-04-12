@@ -1,6 +1,7 @@
 <?php
 
 use App\Features\ModuleFeature;
+use App\Http\Controllers\Auth\AcceptInvitationController;
 use App\Http\Controllers\CashbackController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
@@ -25,6 +26,7 @@ use App\Http\Controllers\SiteController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\UserInvitationController;
 use App\Http\Controllers\VehiculeController;
 use App\Http\Controllers\VersementCommissionController;
 use App\Http\Controllers\VersementCommissionLogistiqueController;
@@ -40,6 +42,20 @@ Route::middleware('guest')->group(function () {
     Route::post('/register/otp/verify', \App\Http\Controllers\Auth\RegisterOtpController::class)
         ->name('register.otp.verify');
 });
+
+// ── Onboarding via lien d'invitation ─────────────────────────────────────────
+Route::get('/invitations/accept/{token}', [AcceptInvitationController::class, 'show'])
+    ->name('invitations.accept')
+    ->middleware('throttle:20,1');
+Route::post('/invitations/accept/{token}/phone', [AcceptInvitationController::class, 'checkPhone'])
+    ->name('invitations.accept.phone')
+    ->middleware('throttle:10,1');
+Route::post('/invitations/accept/{token}/otp', [AcceptInvitationController::class, 'verifyOtp'])
+    ->name('invitations.accept.otp')
+    ->middleware('throttle:10,1');
+Route::post('/invitations/accept/{token}', [AcceptInvitationController::class, 'accept'])
+    ->name('invitations.accept.store')
+    ->middleware('throttle:5,1');
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -147,6 +163,9 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     // ── Module : Sites ────────────────────────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::SITES)->group(function () {
         Route::resource('sites', SiteController::class);
+        Route::post('sites/{site}/invitations', [UserInvitationController::class, 'store'])
+            ->name('sites.invitations.store')
+            ->middleware('throttle:10,1');
     });
 
     // ── Module : Utilisateurs ─────────────────────────────────────────────────
@@ -154,6 +173,10 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::resource('users', UserController::class)->except(['show']);
         Route::put('users/{user}/password', [UserController::class, 'updatePassword'])->name('users.update-password');
         Route::resource('roles', RoleController::class)->only(['index', 'edit', 'update']);
+        Route::post('invitations/{invitation}/resend', [UserInvitationController::class, 'resend'])
+            ->name('invitations.resend');
+        Route::delete('invitations/{invitation}', [UserInvitationController::class, 'destroy'])
+            ->name('invitations.destroy');
     });
 
     // ── Module : Cashback clients ─────────────────────────────────────────────

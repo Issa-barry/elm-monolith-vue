@@ -28,13 +28,20 @@ interface FormData {
     cashback_eligible: boolean;
 }
 
-const props = defineProps<{
-    form: FormData;
-    errors: Partial<Record<keyof FormData, string>>;
-    processing: boolean;
-}>();
+const props = withDefaults(
+    defineProps<{
+        form: FormData;
+        errors: Partial<Record<keyof FormData, string>>;
+        processing: boolean;
+        readonly?: boolean;
+    }>(),
+    {
+        readonly: false,
+    },
+);
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
+const isReadOnly = computed(() => props.readonly);
 
 const selectedCountry = computed(() =>
     PAYS_OPTIONS.find((c) => c.code === props.form.code_pays),
@@ -106,13 +113,18 @@ function onTelephoneInput(value: string | null | undefined) {
     const digits = raw.slice(0, max);
     emit('update:form', { ...props.form, telephone: digits || null });
 }
+
+function onSubmit() {
+    if (isReadOnly.value) return;
+    emit('submit');
+}
 </script>
 
 <template>
     <form
         id="client-form"
         class="space-y-4 sm:space-y-6"
-        @submit.prevent="emit('submit')"
+        @submit.prevent="onSubmit"
     >
         <!-- Identité -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
@@ -136,6 +148,7 @@ function onTelephoneInput(value: string | null | undefined) {
                             })
                         "
                         class="w-full"
+                        :disabled="isReadOnly"
                         :class="{ 'p-invalid': errors.prenom }"
                     />
                     <p
@@ -159,6 +172,7 @@ function onTelephoneInput(value: string | null | undefined) {
                             })
                         "
                         class="w-full"
+                        :disabled="isReadOnly"
                         :class="{ 'p-invalid': errors.nom }"
                     />
                     <p v-if="errors.nom" class="mt-1 text-xs text-destructive">
@@ -188,6 +202,7 @@ function onTelephoneInput(value: string | null | undefined) {
                         option-value="value"
                         placeholder="Sélectionner…"
                         class="w-full"
+                        :disabled="isReadOnly"
                         :class="{ 'p-invalid': errors.code_pays }"
                     >
                         <template #value="{ value }">
@@ -238,6 +253,7 @@ function onTelephoneInput(value: string | null | undefined) {
                             })
                         "
                         class="w-full"
+                        :disabled="isReadOnly"
                         :class="{ 'p-invalid': errors.ville }"
                     />
                     <p
@@ -259,6 +275,7 @@ function onTelephoneInput(value: string | null | undefined) {
                             })
                         "
                         class="w-full"
+                        :disabled="isReadOnly"
                     />
                 </div>
             </div>
@@ -300,6 +317,7 @@ function onTelephoneInput(value: string | null | undefined) {
                             autocomplete="tel-national"
                             :maxlength="phoneMaxLength"
                             class="w-full"
+                            :disabled="isReadOnly"
                             :class="{ 'p-invalid': errors.telephone }"
                         />
                     </div>
@@ -326,6 +344,7 @@ function onTelephoneInput(value: string | null | undefined) {
                         "
                         type="email"
                         class="w-full"
+                        :disabled="isReadOnly"
                         :class="{ 'p-invalid': errors.email }"
                     />
                     <p
@@ -352,7 +371,8 @@ function onTelephoneInput(value: string | null | undefined) {
                 >
                     <button
                         type="button"
-                        class="rounded-md px-5 py-1.5 text-sm font-medium transition-colors"
+                        :disabled="isReadOnly"
+                        class="rounded-md px-5 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                         :class="
                             form.cashback_eligible
                                 ? 'bg-primary text-primary-foreground shadow-sm'
@@ -369,7 +389,8 @@ function onTelephoneInput(value: string | null | undefined) {
                     </button>
                     <button
                         type="button"
-                        class="rounded-md px-5 py-1.5 text-sm font-medium transition-colors"
+                        :disabled="isReadOnly"
+                        class="rounded-md px-5 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                         :class="
                             !form.cashback_eligible
                                 ? 'bg-destructive text-white shadow-sm'
@@ -406,6 +427,7 @@ function onTelephoneInput(value: string | null | undefined) {
                 <Checkbox
                     id="is_active"
                     :model-value="Boolean(form.is_active)"
+                    :disabled="isReadOnly"
                     @update:model-value="
                         $emit('update:form', {
                             ...form,
@@ -433,7 +455,7 @@ function onTelephoneInput(value: string | null | undefined) {
             <a href="/clients">
                 <Button type="button" variant="outline"> Retour </Button>
             </a>
-            <Button type="submit" :disabled="processing">
+            <Button v-if="!isReadOnly" type="submit" :disabled="processing">
                 <Save class="mr-2 h-4 w-4" />
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>

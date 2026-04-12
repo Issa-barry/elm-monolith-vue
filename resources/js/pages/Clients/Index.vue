@@ -16,6 +16,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    Eye,
     MoreVertical,
     Pencil,
     Plus,
@@ -256,6 +257,18 @@ function confirmDelete(c: Client) {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" class="w-44">
                             <DropdownMenuItem
+                                v-if="can('clients.read')"
+                                as-child
+                            >
+                                <Link
+                                    :href="`/clients/${c.id}`"
+                                    class="flex w-full items-center gap-2"
+                                >
+                                    <Eye class="h-4 w-4" />
+                                    Voir
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                                 v-if="can('clients.update')"
                                 as-child
                             >
@@ -269,7 +282,8 @@ function confirmDelete(c: Client) {
                             </DropdownMenuItem>
                             <DropdownMenuSeparator
                                 v-if="
-                                    can('clients.update') &&
+                                    (can('clients.read') ||
+                                        can('clients.update')) &&
                                     can('clients.delete')
                                 "
                             />
@@ -538,6 +552,18 @@ function confirmDelete(c: Client) {
                                         class="w-44"
                                     >
                                         <DropdownMenuItem
+                                            v-if="can('clients.read')"
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="`/clients/${data.id}`"
+                                                class="flex w-full items-center gap-2"
+                                            >
+                                                <Eye class="h-4 w-4" />
+                                                Voir
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
                                             v-if="can('clients.update')"
                                             as-child
                                         >
@@ -551,7 +577,8 @@ function confirmDelete(c: Client) {
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator
                                             v-if="
-                                                can('clients.update') &&
+                                                (can('clients.read') ||
+                                                    can('clients.update')) &&
                                                 can('clients.delete')
                                             "
                                         />
