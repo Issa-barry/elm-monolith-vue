@@ -135,7 +135,10 @@ const mainNavItems = computed((): NavItem[] => {
                 {
                     title: 'Réceptions',
                     href: '/logistique/receptions',
-                    badge: transfertsAReceptionner.value > 0 ? transfertsAReceptionner.value : undefined,
+                    badge:
+                        transfertsAReceptionner.value > 0
+                            ? transfertsAReceptionner.value
+                            : undefined,
                 },
                 { title: 'Commissions', href: '/logistique/commissions' },
             ],

@@ -3,13 +3,7 @@ import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import {
-    Car,
-    ChevronRight,
-    HandCoins,
-    Search,
-    Truck,
-} from 'lucide-vue-next';
+import { ChevronRight, HandCoins, Truck } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import { ref, watch } from 'vue';
 
@@ -57,13 +51,13 @@ const breadcrumbs: BreadcrumbItem[] = [
 // ── Filtres ───────────────────────────────────────────────────────────────────
 
 const vehiculeFiltre = ref<number | null>(props.filtre_vehicule ?? null);
-const statutFiltre   = ref<string | null>(props.filtre_statut ?? null);
+const statutFiltre = ref<string | null>(props.filtre_statut ?? null);
 
 const STATUT_OPTIONS: SelectOption[] = [
-    { value: null,        label: 'Tous les statuts' },
+    { value: null, label: 'Tous les statuts' },
     { value: 'available', label: 'Disponible à payer' },
-    { value: 'pending',   label: 'En attente de déblocage' },
-    { value: 'paid',      label: 'Entièrement versé' },
+    { value: 'pending', label: 'En attente de déblocage' },
+    { value: 'paid', label: 'Entièrement versé' },
 ];
 
 function appliquerFiltres() {
@@ -71,7 +65,7 @@ function appliquerFiltres() {
         '/logistique/commissions',
         {
             vehicule_id: vehiculeFiltre.value ?? undefined,
-            statut:      statutFiltre.value ?? undefined,
+            statut: statutFiltre.value ?? undefined,
         },
         { preserveState: true, replace: true },
     );
@@ -91,13 +85,17 @@ function formatGNF(val: number): string {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="space-y-6 p-6">
-
             <!-- ── En-tête ───────────────────────────────────────────────────── -->
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">Commissions logistiques</h1>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Commissions logistiques
+                    </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ kpis.nb_vehicules }} véhicule{{ kpis.nb_vehicules !== 1 ? 's' : '' }} avec commissions
+                        {{ kpis.nb_vehicules }} véhicule{{
+                            kpis.nb_vehicules !== 1 ? 's' : ''
+                        }}
+                        avec commissions
                     </p>
                 </div>
             </div>
@@ -105,26 +103,50 @@ function formatGNF(val: number): string {
             <!-- ── KPIs ──────────────────────────────────────────────────────── -->
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">En attente de déblocage</p>
-                    <p class="mt-1 text-xl font-bold tabular-nums text-zinc-500 dark:text-zinc-400">
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        En attente de déblocage
+                    </p>
+                    <p
+                        class="mt-1 text-xl font-bold text-zinc-500 tabular-nums dark:text-zinc-400"
+                    >
                         {{ formatGNF(kpis.total_pending) }}
                     </p>
                 </div>
                 <div
                     class="rounded-xl border bg-card p-4 shadow-sm"
-                    :class="kpis.total_available > 0 ? 'border-amber-200 dark:border-amber-900' : ''"
+                    :class="
+                        kpis.total_available > 0
+                            ? 'border-amber-200 dark:border-amber-900'
+                            : ''
+                    "
                 >
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Disponible à payer</p>
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Disponible à payer
+                    </p>
                     <p
                         class="mt-1 text-xl font-bold tabular-nums"
-                        :class="kpis.total_available > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'"
+                        :class="
+                            kpis.total_available > 0
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : 'text-foreground'
+                        "
                     >
                         {{ formatGNF(kpis.total_available) }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Versé (total)</p>
-                    <p class="mt-1 text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Versé (total)
+                    </p>
+                    <p
+                        class="mt-1 text-xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
+                    >
                         {{ formatGNF(kpis.total_paid) }}
                     </p>
                 </div>
@@ -133,7 +155,10 @@ function formatGNF(val: number): string {
             <!-- ── Filtres ────────────────────────────────────────────────────── -->
             <div class="flex flex-wrap items-center gap-3">
                 <Dropdown
-                    :options="[{ value: null, label: 'Tous les véhicules' }, ...vehicule_options]"
+                    :options="[
+                        { value: null, label: 'Tous les véhicules' },
+                        ...vehicule_options,
+                    ]"
                     option-label="label"
                     option-value="value"
                     :model-value="vehiculeFiltre"
@@ -150,7 +175,11 @@ function formatGNF(val: number): string {
                     class="w-52 text-sm"
                     @change="(e) => (statutFiltre = e.value)"
                 />
-                <span class="text-xs text-muted-foreground">{{ vehicules.length }} résultat{{ vehicules.length !== 1 ? 's' : '' }}</span>
+                <span class="text-xs text-muted-foreground"
+                    >{{ vehicules.length }} résultat{{
+                        vehicules.length !== 1 ? 's' : ''
+                    }}</span
+                >
             </div>
 
             <!-- ── Tableau véhicules ──────────────────────────────────────────── -->
@@ -158,11 +187,31 @@ function formatGNF(val: number): string {
                 <table v-if="vehicules.length > 0" class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
-                            <th class="px-4 py-3 text-left font-medium text-muted-foreground">Véhicule</th>
-                            <th class="px-4 py-3 text-right font-medium text-muted-foreground">En attente</th>
-                            <th class="px-4 py-3 text-right font-medium text-muted-foreground">Disponible</th>
-                            <th class="px-4 py-3 text-right font-medium text-muted-foreground">Versé</th>
-                            <th class="px-4 py-3 text-center font-medium text-muted-foreground">Transferts</th>
+                            <th
+                                class="px-4 py-3 text-left font-medium text-muted-foreground"
+                            >
+                                Véhicule
+                            </th>
+                            <th
+                                class="px-4 py-3 text-right font-medium text-muted-foreground"
+                            >
+                                En attente
+                            </th>
+                            <th
+                                class="px-4 py-3 text-right font-medium text-muted-foreground"
+                            >
+                                Disponible
+                            </th>
+                            <th
+                                class="px-4 py-3 text-right font-medium text-muted-foreground"
+                            >
+                                Versé
+                            </th>
+                            <th
+                                class="px-4 py-3 text-center font-medium text-muted-foreground"
+                            >
+                                Transferts
+                            </th>
                             <th class="px-4 py-3" />
                         </tr>
                     </thead>
@@ -174,31 +223,54 @@ function formatGNF(val: number): string {
                         >
                             <td class="px-4 py-3">
                                 <div class="flex items-center gap-2">
-                                    <Truck class="h-4 w-4 shrink-0 text-muted-foreground" />
+                                    <Truck
+                                        class="h-4 w-4 shrink-0 text-muted-foreground"
+                                    />
                                     <div>
                                         <p class="font-medium">{{ v.nom }}</p>
-                                        <p v-if="v.immatriculation" class="font-mono text-xs text-muted-foreground">
+                                        <p
+                                            v-if="v.immatriculation"
+                                            class="font-mono text-xs text-muted-foreground"
+                                        >
                                             {{ v.immatriculation }}
                                         </p>
                                     </div>
                                 </div>
                             </td>
-                            <td class="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                            <td
+                                class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                            >
                                 {{ formatGNF(v.pending) }}
                             </td>
-                            <td class="px-4 py-3 text-right font-semibold tabular-nums"
-                                :class="v.available > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'">
+                            <td
+                                class="px-4 py-3 text-right font-semibold tabular-nums"
+                                :class="
+                                    v.available > 0
+                                        ? 'text-amber-600 dark:text-amber-400'
+                                        : 'text-muted-foreground'
+                                "
+                            >
                                 {{ formatGNF(v.available) }}
                             </td>
-                            <td class="px-4 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                            <td
+                                class="px-4 py-3 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
+                            >
                                 {{ formatGNF(v.paid) }}
                             </td>
-                            <td class="px-4 py-3 text-center tabular-nums text-muted-foreground">
+                            <td
+                                class="px-4 py-3 text-center text-muted-foreground tabular-nums"
+                            >
                                 {{ v.nb_transferts }}
                             </td>
                             <td class="px-4 py-3 text-right">
-                                <Link :href="`/logistique/commissions/vehicules/${v.vehicule_id}`">
-                                    <Button variant="ghost" size="sm" class="gap-1">
+                                <Link
+                                    :href="`/logistique/commissions/vehicules/${v.vehicule_id}`"
+                                >
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        class="gap-1"
+                                    >
                                         Détail
                                         <ChevronRight class="h-3.5 w-3.5" />
                                     </Button>
@@ -208,12 +280,16 @@ function formatGNF(val: number): string {
                     </tbody>
                 </table>
 
-                <div v-else class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                <div
+                    v-else
+                    class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+                >
                     <HandCoins class="h-12 w-12 opacity-30" />
-                    <p class="text-sm">Aucune commission trouvée pour ce filtre.</p>
+                    <p class="text-sm">
+                        Aucune commission trouvée pour ce filtre.
+                    </p>
                 </div>
             </div>
-
         </div>
     </AppLayout>
 </template>

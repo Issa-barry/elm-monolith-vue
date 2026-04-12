@@ -121,17 +121,22 @@ function formatGNF(val: number): string {
 }
 
 const typeIcon = computed(() => (isLivreur.value ? Truck : User));
-const typeLabel = computed(() => (isLivreur.value ? 'Livreur' : 'Propriétaire'));
+const typeLabel = computed(() =>
+    isLivreur.value ? 'Livreur' : 'Propriétaire',
+);
 
-const statutGlobalConfig: Record<string, { label: string; dotClass: string }> = {
-    en_attente: { label: 'En attente', dotClass: 'bg-zinc-400' },
-    a_verser:   { label: 'À verser',   dotClass: 'bg-amber-500' },
-    partielle:  { label: 'Partiel',    dotClass: 'bg-blue-500' },
-    solde:      { label: 'Soldé',      dotClass: 'bg-emerald-500' },
-};
+const statutGlobalConfig: Record<string, { label: string; dotClass: string }> =
+    {
+        en_attente: { label: 'En attente', dotClass: 'bg-zinc-400' },
+        a_verser: { label: 'À verser', dotClass: 'bg-amber-500' },
+        partielle: { label: 'Partiel', dotClass: 'bg-blue-500' },
+        solde: { label: 'Soldé', dotClass: 'bg-emerald-500' },
+    };
 
 const statutCfg = computed(
-    () => statutGlobalConfig[props.resume_global.statut_global] ?? statutGlobalConfig.en_attente,
+    () =>
+        statutGlobalConfig[props.resume_global.statut_global] ??
+        statutGlobalConfig.en_attente,
 );
 
 // ── Flash ─────────────────────────────────────────────────────────────────────
@@ -147,7 +152,10 @@ const filtresDialogVisible = ref(false);
 const filtresServeur = reactive({
     date_from: props.filtres.date_from ?? '',
     date_to: props.filtres.date_to ?? '',
-    disponible: (props.filtres.disponible ?? '') as '' | 'disponible' | 'en_attente',
+    disponible: (props.filtres.disponible ?? '') as
+        | ''
+        | 'disponible'
+        | 'en_attente',
 });
 
 const disponibiliteOptions = [
@@ -156,19 +164,28 @@ const disponibiliteOptions = [
     { value: 'en_attente', label: 'En attente' },
 ];
 
-const nbFiltresActifs = computed(() =>
-    [filtresServeur.date_from, filtresServeur.date_to, filtresServeur.disponible]
-        .filter((v) => !!v)
-        .length
+const nbFiltresActifs = computed(
+    () =>
+        [
+            filtresServeur.date_from,
+            filtresServeur.date_to,
+            filtresServeur.disponible,
+        ].filter((v) => !!v).length,
 );
 
 function applyFiltresServeur() {
     router.get(
         `/commissions/beneficiaires/${props.resume_global.type}/${props.resume_global.id}`,
         {
-            ...(filtresServeur.date_from ? { date_from: filtresServeur.date_from } : {}),
-            ...(filtresServeur.date_to ? { date_to: filtresServeur.date_to } : {}),
-            ...(filtresServeur.disponible ? { disponible: filtresServeur.disponible } : {}),
+            ...(filtresServeur.date_from
+                ? { date_from: filtresServeur.date_from }
+                : {}),
+            ...(filtresServeur.date_to
+                ? { date_to: filtresServeur.date_to }
+                : {}),
+            ...(filtresServeur.disponible
+                ? { disponible: filtresServeur.disponible }
+                : {}),
         },
         {
             preserveScroll: true,
@@ -176,7 +193,7 @@ function applyFiltresServeur() {
             onSuccess: () => {
                 filtresDialogVisible.value = false;
             },
-        }
+        },
     );
 }
 
@@ -193,9 +210,8 @@ const localSearch = ref('');
 const commandesFiltrees = computed(() => {
     const q = localSearch.value.toLowerCase().trim();
     if (!q) return props.historique_commandes;
-    return props.historique_commandes.filter(
-        (c) =>
-            (c.commande_reference ?? '').toLowerCase().includes(q),
+    return props.historique_commandes.filter((c) =>
+        (c.commande_reference ?? '').toLowerCase().includes(q),
     );
 });
 
@@ -204,10 +220,10 @@ const commandesFiltrees = computed(() => {
 const totauxFiltres = computed(() => {
     const list = commandesFiltrees.value;
     return {
-        nb:       list.length,
-        brut:     list.reduce((s, c) => s + c.montant_brut, 0),
-        frais:    list.reduce((s, c) => s + c.frais, 0),
-        net:      list.reduce((s, c) => s + c.montant_net, 0),
+        nb: list.length,
+        brut: list.reduce((s, c) => s + c.montant_brut, 0),
+        frais: list.reduce((s, c) => s + c.frais, 0),
+        net: list.reduce((s, c) => s + c.montant_net, 0),
     };
 });
 
@@ -225,25 +241,26 @@ interface PaiementForm {
 }
 
 const paiementForm = reactive<PaiementForm>({
-    montant:       null,
+    montant: null,
     mode_paiement: 'especes',
-    paid_at:       today,
-    note:          null,
-    processing:    false,
+    paid_at: today,
+    note: null,
+    processing: false,
 });
 
 const paiementErrors = ref<Record<string, string>>({});
 
 function openPaiementDialog() {
-    paiementForm.montant       = props.resume_global.disponible_maintenant > 0
-        ? props.resume_global.disponible_maintenant
-        : null;
+    paiementForm.montant =
+        props.resume_global.disponible_maintenant > 0
+            ? props.resume_global.disponible_maintenant
+            : null;
     paiementForm.mode_paiement = 'especes';
-    paiementForm.paid_at       = today;
-    paiementForm.note          = null;
-    paiementForm.processing    = false;
-    paiementErrors.value       = {};
-    paiementVisible.value      = true;
+    paiementForm.paid_at = today;
+    paiementForm.note = null;
+    paiementForm.processing = false;
+    paiementErrors.value = {};
+    paiementVisible.value = true;
 }
 
 function closePaiementDialog() {
@@ -253,20 +270,24 @@ function closePaiementDialog() {
 function submitPaiement() {
     if (!paiementForm.montant || paiementForm.montant <= 0) return;
     paiementForm.processing = true;
-    paiementErrors.value    = {};
+    paiementErrors.value = {};
     router.post(
         `/commissions/beneficiaires/${props.resume_global.type}/${props.resume_global.id}/paiements`,
         {
-            montant:       paiementForm.montant,
+            montant: paiementForm.montant,
             mode_paiement: paiementForm.mode_paiement,
-            paid_at:       paiementForm.paid_at,
-            note:          paiementForm.note,
+            paid_at: paiementForm.paid_at,
+            note: paiementForm.note,
         },
         {
             preserveScroll: true,
-            onSuccess:  ()    => closePaiementDialog(),
-            onError:    (err) => { paiementErrors.value = err; },
-            onFinish:   ()    => { paiementForm.processing = false; },
+            onSuccess: () => closePaiementDialog(),
+            onError: (err) => {
+                paiementErrors.value = err;
+            },
+            onFinish: () => {
+                paiementForm.processing = false;
+            },
         },
     );
 }
@@ -274,7 +295,8 @@ function submitPaiement() {
 const montantDepasse = computed(
     () =>
         paiementForm.montant !== null &&
-        paiementForm.montant > props.resume_global.disponible_maintenant + 0.009,
+        paiementForm.montant >
+            props.resume_global.disponible_maintenant + 0.009,
 );
 
 // ── Dialog historique paiements ────────────────────────────────────────────────
@@ -287,13 +309,13 @@ function openHistory() {
 
 // ── Dialog frais livreur ───────────────────────────────────────────────────────
 
-const fraisVisible    = ref(false);
-const fraisCommande   = ref<CommandeRow | null>(null);
+const fraisVisible = ref(false);
+const fraisCommande = ref<CommandeRow | null>(null);
 
 const typeFraisOptions = [
     { value: 'carburant', label: 'Carburant' },
     { value: 'reparation', label: 'Réparation' },
-    { value: 'autre',     label: 'Autre' },
+    { value: 'autre', label: 'Autre' },
 ];
 
 interface FraisForm {
@@ -304,61 +326,67 @@ interface FraisForm {
 }
 
 const fraisForm = reactive<FraisForm>({
-    frais:             0,
-    type_frais:        null,
+    frais: 0,
+    type_frais: null,
     commentaire_frais: null,
-    processing:        false,
+    processing: false,
 });
 
 function openFraisDialog(c: CommandeRow) {
-    fraisCommande.value        = c;
-    fraisForm.frais            = c.frais;
-    fraisForm.type_frais       = c.type_frais ?? null;
-    fraisForm.commentaire_frais= c.commentaire_frais ?? null;
-    fraisForm.processing       = false;
-    fraisVisible.value         = true;
+    fraisCommande.value = c;
+    fraisForm.frais = c.frais;
+    fraisForm.type_frais = c.type_frais ?? null;
+    fraisForm.commentaire_frais = c.commentaire_frais ?? null;
+    fraisForm.processing = false;
+    fraisVisible.value = true;
 }
 
 function closeFraisDialog() {
-    fraisVisible.value   = false;
-    fraisCommande.value  = null;
+    fraisVisible.value = false;
+    fraisCommande.value = null;
 }
 
 function submitFrais() {
-    if (!fraisCommande.value || fraisForm.frais < 0 || !fraisForm.type_frais) return;
+    if (!fraisCommande.value || fraisForm.frais < 0 || !fraisForm.type_frais)
+        return;
     fraisForm.processing = true;
     router.patch(
         `/commissions/parts/${fraisCommande.value.part_id}/frais`,
         {
-            frais:             fraisForm.frais,
-            type_frais:        fraisForm.type_frais,
+            frais: fraisForm.frais,
+            type_frais: fraisForm.type_frais,
             commentaire_frais: fraisForm.commentaire_frais,
         },
         {
             preserveScroll: true,
-            onSuccess: ()  => closeFraisDialog(),
-            onFinish:  ()  => { fraisForm.processing = false; },
+            onSuccess: () => closeFraisDialog(),
+            onFinish: () => {
+                fraisForm.processing = false;
+            },
         },
     );
 }
 
 // Réinitialise commentaire quand le type change
-watch(() => fraisForm.type_frais, (val) => {
-    if (val !== 'autre') fraisForm.commentaire_frais = null;
-});
+watch(
+    () => fraisForm.type_frais,
+    (val) => {
+        if (val !== 'autre') fraisForm.commentaire_frais = null;
+    },
+);
 
 // ── Dialog détail commission ───────────────────────────────────────────────────
 
-const detailVisible  = ref(false);
+const detailVisible = ref(false);
 const detailCommande = ref<CommandeRow | null>(null);
 
 function openDetailDialog(c: CommandeRow) {
     detailCommande.value = c;
-    detailVisible.value  = true;
+    detailVisible.value = true;
 }
 
 function closeDetailDialog() {
-    detailVisible.value  = false;
+    detailVisible.value = false;
     detailCommande.value = null;
 }
 </script>
@@ -367,7 +395,6 @@ function closeDetailDialog() {
     <Head :title="`Commission — ${resume_global.nom}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-
         <!-- ══════════════════════ MOBILE ══════════════════════════════════════ -->
         <div class="flex flex-col sm:hidden">
             <div class="sticky top-0 z-10 border-b bg-background">
@@ -378,24 +405,37 @@ function closeDetailDialog() {
                     >
                         <ArrowLeft class="h-5 w-5" />
                     </Link>
-                    <span class="text-base font-semibold">{{ resume_global.nom }}</span>
+                    <span class="text-base font-semibold">{{
+                        resume_global.nom
+                    }}</span>
                     <div class="w-8" />
                 </div>
             </div>
 
-            <div v-if="flashSuccess" class="mx-4 mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+            <div
+                v-if="flashSuccess"
+                class="mx-4 mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+            >
                 {{ flashSuccess }}
             </div>
 
             <!-- KPI mobile -->
             <div class="grid grid-cols-2 gap-3 p-4">
                 <div class="col-span-2 rounded-xl border bg-card p-3 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Total brut cumulé</p>
-                    <p class="mt-1 text-base font-bold tabular-nums">{{ formatGNF(resume_global.total_brut_cumule) }}</p>
+                    <p class="text-xs text-muted-foreground">
+                        Total brut cumulé
+                    </p>
+                    <p class="mt-1 text-base font-bold tabular-nums">
+                        {{ formatGNF(resume_global.total_brut_cumule) }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-3 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Total net cumulé</p>
-                    <p class="mt-1 text-base font-bold tabular-nums">{{ formatGNF(resume_global.total_net_cumule) }}</p>
+                    <p class="text-xs text-muted-foreground">
+                        Total net cumulé
+                    </p>
+                    <p class="mt-1 text-base font-bold tabular-nums">
+                        {{ formatGNF(resume_global.total_net_cumule) }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-3 shadow-sm">
                     <p class="text-xs text-muted-foreground">Total versé</p>
@@ -405,13 +445,26 @@ function closeDetailDialog() {
                 </div>
                 <div class="rounded-xl border bg-card p-3 shadow-sm">
                     <p class="text-xs text-muted-foreground">Total frais</p>
-                    <p class="mt-1 text-base font-bold tabular-nums" :class="resume_global.total_frais > 0 ? 'text-destructive' : 'text-muted-foreground'">
-                        {{ resume_global.total_frais > 0 ? '− ' + formatGNF(resume_global.total_frais) : '—' }}
+                    <p
+                        class="mt-1 text-base font-bold tabular-nums"
+                        :class="
+                            resume_global.total_frais > 0
+                                ? 'text-destructive'
+                                : 'text-muted-foreground'
+                        "
+                    >
+                        {{
+                            resume_global.total_frais > 0
+                                ? '− ' + formatGNF(resume_global.total_frais)
+                                : '—'
+                        }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-3 shadow-sm">
                     <p class="text-xs text-muted-foreground">Commandes</p>
-                    <p class="mt-1 text-base font-bold tabular-nums">{{ resume_global.nb_commandes }}</p>
+                    <p class="mt-1 text-base font-bold tabular-nums">
+                        {{ resume_global.nb_commandes }}
+                    </p>
                 </div>
             </div>
 
@@ -469,19 +522,41 @@ function closeDetailDialog() {
 
             <!-- Liste mobile -->
             <div class="divide-y">
-                <div v-for="c in commandesFiltrees" :key="c.commission_id" class="px-4 py-3.5">
+                <div
+                    v-for="c in commandesFiltrees"
+                    :key="c.commission_id"
+                    class="px-4 py-3.5"
+                >
                     <div class="flex items-start justify-between">
                         <div class="min-w-0 flex-1">
-                            <p class="font-mono text-xs font-semibold text-primary">{{ c.commande_reference ?? '—' }}</p>
-                            <p class="text-xs text-muted-foreground">{{ c.date_commande }}</p>
+                            <p
+                                class="font-mono text-xs font-semibold text-primary"
+                            >
+                                {{ c.commande_reference ?? '—' }}
+                            </p>
+                            <p class="text-xs text-muted-foreground">
+                                {{ c.date_commande }}
+                            </p>
                         </div>
                         <div class="text-right">
-                            <p class="font-semibold tabular-nums">{{ formatGNF(c.montant_net) }}</p>
-                            <p v-if="c.frais > 0" class="text-xs text-destructive tabular-nums">− {{ formatGNF(c.frais) }}</p>
+                            <p class="font-semibold tabular-nums">
+                                {{ formatGNF(c.montant_net) }}
+                            </p>
+                            <p
+                                v-if="c.frais > 0"
+                                class="text-xs text-destructive tabular-nums"
+                            >
+                                − {{ formatGNF(c.frais) }}
+                            </p>
                         </div>
                     </div>
                     <div class="mt-1 flex items-center justify-between">
-                        <p v-if="c.unlock_at" class="text-xs text-muted-foreground">Dès {{ c.unlock_at }}</p>
+                        <p
+                            v-if="c.unlock_at"
+                            class="text-xs text-muted-foreground"
+                        >
+                            Dès {{ c.unlock_at }}
+                        </p>
                         <div class="flex gap-1">
                             <Button
                                 v-if="isLivreur && can('ventes.update')"
@@ -492,23 +567,33 @@ function closeDetailDialog() {
                             >
                                 <Pencil class="h-3 w-3" /> Frais
                             </Button>
-                            <Button size="sm" variant="ghost" class="h-7 text-xs" @click="openDetailDialog(c)">
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                class="h-7 text-xs"
+                                @click="openDetailDialog(c)"
+                            >
                                 Détails
                             </Button>
                         </div>
                     </div>
                 </div>
             </div>
-            <div v-if="commandesFiltrees.length === 0" class="py-12 text-center text-sm text-muted-foreground">
+            <div
+                v-if="commandesFiltrees.length === 0"
+                class="py-12 text-center text-sm text-muted-foreground"
+            >
                 Aucune commande.
             </div>
         </div>
 
         <!-- ══════════════════════ DESKTOP ═════════════════════════════════════ -->
         <div class="hidden flex-col gap-6 p-6 sm:flex">
-
             <!-- Flash -->
-            <div v-if="flashSuccess" class="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+            <div
+                v-if="flashSuccess"
+                class="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+            >
                 {{ flashSuccess }}
             </div>
 
@@ -516,7 +601,9 @@ function closeDetailDialog() {
             <div class="flex items-center justify-between gap-4">
                 <div>
                     <p class="text-sm text-muted-foreground">
-                        <Link href="/commissions" class="hover:text-foreground">Commissions</Link>
+                        <Link href="/commissions" class="hover:text-foreground"
+                            >Commissions</Link
+                        >
                         <span class="mx-1">›</span>
                         <span class="inline-flex items-center gap-1.5">
                             <component :is="typeIcon" class="h-3.5 w-3.5" />
@@ -524,10 +611,19 @@ function closeDetailDialog() {
                         </span>
                     </p>
                     <div class="mt-1 flex items-center gap-2">
-                        <h1 class="text-2xl font-semibold tracking-tight">{{ resume_global.nom }}</h1>
-                        <StatusDot :label="statutCfg.label" :dot-class="statutCfg.dotClass" class="text-sm text-muted-foreground" />
+                        <h1 class="text-2xl font-semibold tracking-tight">
+                            {{ resume_global.nom }}
+                        </h1>
+                        <StatusDot
+                            :label="statutCfg.label"
+                            :dot-class="statutCfg.dotClass"
+                            class="text-sm text-muted-foreground"
+                        />
                     </div>
-                    <p v-if="resume_global.telephone" class="mt-0.5 text-sm text-muted-foreground">
+                    <p
+                        v-if="resume_global.telephone"
+                        class="mt-0.5 text-sm text-muted-foreground"
+                    >
                         {{ formatPhoneDisplay(resume_global.telephone) }}
                     </p>
                 </div>
@@ -541,7 +637,9 @@ function closeDetailDialog() {
                         @click="openHistory"
                     >
                         <History class="h-4 w-4" />
-                        {{ historique_paiements_globaux.length }} versement{{ historique_paiements_globaux.length > 1 ? 's' : '' }}
+                        {{ historique_paiements_globaux.length }} versement{{
+                            historique_paiements_globaux.length > 1 ? 's' : ''
+                        }}
                     </Button>
                     <Button
                         v-if="can('ventes.update')"
@@ -558,23 +656,41 @@ function closeDetailDialog() {
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Commandes</p>
-                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ resume_global.nb_commandes }}</p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">
+                        {{ resume_global.nb_commandes }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Total brut cumulé</p>
-                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(resume_global.total_brut_cumule) }}</p>
+                    <p class="text-sm text-muted-foreground">
+                        Total brut cumulé
+                    </p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">
+                        {{ formatGNF(resume_global.total_brut_cumule) }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Total net cumulé</p>
-                    <p class="mt-2 text-2xl font-bold tabular-nums">{{ formatGNF(resume_global.total_net_cumule) }}</p>
+                    <p class="text-sm text-muted-foreground">
+                        Total net cumulé
+                    </p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">
+                        {{ formatGNF(resume_global.total_net_cumule) }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Total frais</p>
                     <p
                         class="mt-2 text-2xl font-bold tabular-nums"
-                        :class="resume_global.total_frais > 0 ? 'text-destructive' : 'text-muted-foreground'"
+                        :class="
+                            resume_global.total_frais > 0
+                                ? 'text-destructive'
+                                : 'text-muted-foreground'
+                        "
                     >
-                        {{ resume_global.total_frais > 0 ? '− ' + formatGNF(resume_global.total_frais) : '—' }}
+                        {{
+                            resume_global.total_frais > 0
+                                ? '− ' + formatGNF(resume_global.total_frais)
+                                : '—'
+                        }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
@@ -596,10 +712,12 @@ function closeDetailDialog() {
                     removable-sort
                     class="text-sm"
                     :pt="{
-                        root:   { class: 'w-full' },
+                        root: { class: 'w-full' },
                         header: { class: 'border-b bg-muted/30 px-4 py-3' },
-                        tbody:  { class: 'divide-y' },
-                        table:  { style: 'table-layout: fixed; min-width: 980px' },
+                        tbody: { class: 'divide-y' },
+                        table: {
+                            style: 'table-layout: fixed; min-width: 980px',
+                        },
                     }"
                 >
                     <!-- ─ Header slot : filtres ─────────────────────────────── -->
@@ -608,7 +726,9 @@ function closeDetailDialog() {
                             <!-- Recherche locale -->
                             <IconField class="max-w-xs flex-1">
                                 <InputIcon class="pointer-events-none">
-                                    <Search class="h-4 w-4 text-muted-foreground" />
+                                    <Search
+                                        class="h-4 w-4 text-muted-foreground"
+                                    />
                                 </InputIcon>
                                 <InputText
                                     v-model="localSearch"
@@ -633,7 +753,11 @@ function closeDetailDialog() {
                                     </span>
                                 </Button>
                                 <span class="text-xs text-muted-foreground">
-                                    {{ commandesFiltrees.length }} résultat{{ commandesFiltrees.length !== 1 ? 's' : '' }}
+                                    {{ commandesFiltrees.length }} résultat{{
+                                        commandesFiltrees.length !== 1
+                                            ? 's'
+                                            : ''
+                                    }}
                                 </span>
                             </div>
                         </div>
@@ -669,8 +793,6 @@ function closeDetailDialog() {
 
                     <!-- Colonnes vehicule/site retirees: visibles dans le detail commande -->
 
-
-
                     <Column
                         field="montant_brut"
                         header="Brut"
@@ -680,11 +802,19 @@ function closeDetailDialog() {
                         body-class="align-middle"
                     >
                         <template #body="{ data }">
-                            <div class="flex flex-col items-start justify-center gap-1 leading-tight">
-                                <p class="whitespace-nowrap text-muted-foreground tabular-nums">
+                            <div
+                                class="flex flex-col items-start justify-center gap-1 leading-tight"
+                            >
+                                <p
+                                    class="whitespace-nowrap text-muted-foreground tabular-nums"
+                                >
                                     {{ formatGNF(data.montant_brut) }}
                                 </p>
-                                <p class="text-xs text-muted-foreground tabular-nums">{{ data.taux }}%</p>
+                                <p
+                                    class="text-xs text-muted-foreground tabular-nums"
+                                >
+                                    {{ data.taux }}%
+                                </p>
                             </div>
                         </template>
                     </Column>
@@ -699,12 +829,22 @@ function closeDetailDialog() {
                         body-class="align-middle"
                     >
                         <template #body="{ data }">
-                            <div class="flex items-center justify-start leading-tight">
+                            <div
+                                class="flex items-center justify-start leading-tight"
+                            >
                                 <span
                                     class="inline-block whitespace-nowrap tabular-nums"
-                                    :class="data.frais > 0 ? 'text-destructive' : 'text-muted-foreground'"
+                                    :class="
+                                        data.frais > 0
+                                            ? 'text-destructive'
+                                            : 'text-muted-foreground'
+                                    "
                                 >
-                                    {{ data.frais > 0 ? '−\u202F' + formatGNF(data.frais) : '—' }}
+                                    {{
+                                        data.frais > 0
+                                            ? '−\u202F' + formatGNF(data.frais)
+                                            : '—'
+                                    }}
                                 </span>
                             </div>
                         </template>
@@ -720,7 +860,11 @@ function closeDetailDialog() {
                         body-class="align-middle"
                     >
                         <template #body="{ data }">
-                            <p class="whitespace-nowrap text-left font-semibold tabular-nums">{{ formatGNF(data.montant_net) }}</p>
+                            <p
+                                class="text-left font-semibold whitespace-nowrap tabular-nums"
+                            >
+                                {{ formatGNF(data.montant_net) }}
+                            </p>
                         </template>
                     </Column>
 
@@ -734,7 +878,9 @@ function closeDetailDialog() {
                         body-class="align-middle"
                     >
                         <template #body="{ data }">
-                            <span class="block whitespace-nowrap text-left text-xs text-muted-foreground tabular-nums">
+                            <span
+                                class="block text-left text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+                            >
                                 {{ data.date_commande ?? '—' }}
                             </span>
                         </template>
@@ -750,7 +896,9 @@ function closeDetailDialog() {
                         body-class="align-middle"
                     >
                         <template #body="{ data }">
-                            <span class="block whitespace-nowrap text-left text-xs text-muted-foreground tabular-nums">
+                            <span
+                                class="block text-left text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+                            >
                                 {{ data.unlock_at ?? '—' }}
                             </span>
                         </template>
@@ -767,13 +915,23 @@ function closeDetailDialog() {
                             <div class="flex justify-center">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger as-child>
-                                        <Button variant="ghost" size="icon" class="h-8 w-8">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-8 w-8"
+                                        >
                                             <MoreVertical class="h-4 w-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" class="w-44">
+                                    <DropdownMenuContent
+                                        align="end"
+                                        class="w-44"
+                                    >
                                         <DropdownMenuItem
-                                            v-if="isLivreur && can('ventes.update')"
+                                            v-if="
+                                                isLivreur &&
+                                                can('ventes.update')
+                                            "
                                             class="cursor-pointer"
                                             @click="openFraisDialog(data)"
                                         >
@@ -794,7 +952,9 @@ function closeDetailDialog() {
                     </Column>
 
                     <template #empty>
-                        <div class="py-16 text-center text-sm text-muted-foreground">
+                        <div
+                            class="py-16 text-center text-sm text-muted-foreground"
+                        >
                             Aucune commande trouvée.
                         </div>
                     </template>
@@ -853,7 +1013,10 @@ function closeDetailDialog() {
                 </div>
 
                 <div class="flex justify-end gap-2 pt-1">
-                    <Button variant="outline" @click="filtresDialogVisible = false">
+                    <Button
+                        variant="outline"
+                        @click="filtresDialogVisible = false"
+                    >
                         Annuler
                     </Button>
                     <Button @click="applyFiltresServeur">
@@ -872,16 +1035,24 @@ function closeDetailDialog() {
             @hide="closePaiementDialog"
         >
             <div class="space-y-4 pt-2">
-                <div class="rounded-lg bg-muted/40 p-3 text-sm space-y-1">
+                <div class="space-y-1 rounded-lg bg-muted/40 p-3 text-sm">
                     <div class="flex justify-between">
-                        <span class="text-muted-foreground">Disponible maintenant :</span>
-                        <span class="font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
+                        <span class="text-muted-foreground"
+                            >Disponible maintenant :</span
+                        >
+                        <span
+                            class="font-semibold text-emerald-700 tabular-nums dark:text-emerald-400"
+                        >
                             {{ formatGNF(resume_global.disponible_maintenant) }}
                         </span>
                     </div>
                     <div class="flex justify-between text-xs">
-                        <span class="text-muted-foreground">Solde restant :</span>
-                        <span class="tabular-nums">{{ formatGNF(resume_global.solde_global) }}</span>
+                        <span class="text-muted-foreground"
+                            >Solde restant :</span
+                        >
+                        <span class="tabular-nums">{{
+                            formatGNF(resume_global.solde_global)
+                        }}</span>
                     </div>
                 </div>
 
@@ -894,33 +1065,64 @@ function closeDetailDialog() {
                         class="w-full"
                         :use-grouping="true"
                         locale="fr-FR"
-                        :class="{ 'p-invalid': montantDepasse || paiementErrors.montant }"
+                        :class="{
+                            'p-invalid':
+                                montantDepasse || paiementErrors.montant,
+                        }"
                     />
                     <p v-if="montantDepasse" class="text-xs text-destructive">
-                        Le montant dépasse le disponible ({{ formatGNF(resume_global.disponible_maintenant) }}).
+                        Le montant dépasse le disponible ({{
+                            formatGNF(resume_global.disponible_maintenant)
+                        }}).
                     </p>
-                    <p v-if="paiementErrors.montant" class="text-xs text-destructive">{{ paiementErrors.montant }}</p>
+                    <p
+                        v-if="paiementErrors.montant"
+                        class="text-xs text-destructive"
+                    >
+                        {{ paiementErrors.montant }}
+                    </p>
                 </div>
 
                 <div class="space-y-1">
                     <label class="text-sm font-medium">Mode de paiement</label>
-                    <Dropdown v-model="paiementForm.mode_paiement" :options="modes_paiement" option-label="label" option-value="value" class="w-full" />
+                    <Dropdown
+                        v-model="paiementForm.mode_paiement"
+                        :options="modes_paiement"
+                        option-label="label"
+                        option-value="value"
+                        class="w-full"
+                    />
                 </div>
 
                 <div class="space-y-1">
                     <label class="text-sm font-medium">Date du paiement</label>
-                    <input v-model="paiementForm.paid_at" type="date" class="h-9 w-full rounded-md border bg-background px-3 text-sm" />
+                    <input
+                        v-model="paiementForm.paid_at"
+                        type="date"
+                        class="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                    />
                 </div>
 
                 <div class="space-y-1">
                     <label class="text-sm font-medium">Note (optionnel)</label>
-                    <InputText v-model="paiementForm.note" class="w-full" placeholder="Commentaire…" />
+                    <InputText
+                        v-model="paiementForm.note"
+                        class="w-full"
+                        placeholder="Commentaire…"
+                    />
                 </div>
 
                 <div class="flex justify-end gap-2 pt-2">
-                    <Button variant="ghost" @click="closePaiementDialog">Annuler</Button>
+                    <Button variant="ghost" @click="closePaiementDialog"
+                        >Annuler</Button
+                    >
                     <Button
-                        :disabled="paiementForm.processing || !paiementForm.montant || paiementForm.montant <= 0 || montantDepasse"
+                        :disabled="
+                            paiementForm.processing ||
+                            !paiementForm.montant ||
+                            paiementForm.montant <= 0 ||
+                            montantDepasse
+                        "
                         @click="submitPaiement"
                     >
                         <Wallet class="mr-1.5 h-4 w-4" />
@@ -938,38 +1140,89 @@ function closeDetailDialog() {
             :style="{ width: '560px' }"
         >
             <div class="pt-2">
-                <table v-if="historique_paiements_globaux.length > 0" class="w-full text-sm">
+                <table
+                    v-if="historique_paiements_globaux.length > 0"
+                    class="w-full text-sm"
+                >
                     <thead>
                         <tr class="border-b">
-                            <th class="pb-2 text-left font-medium text-muted-foreground">Date</th>
-                            <th class="pb-2 text-right font-medium text-muted-foreground">Montant</th>
-                            <th class="pb-2 text-left font-medium text-muted-foreground">Mode</th>
-                            <th class="pb-2 text-left font-medium text-muted-foreground">Note</th>
-                            <th class="pb-2 text-left font-medium text-muted-foreground">Par</th>
+                            <th
+                                class="pb-2 text-left font-medium text-muted-foreground"
+                            >
+                                Date
+                            </th>
+                            <th
+                                class="pb-2 text-right font-medium text-muted-foreground"
+                            >
+                                Montant
+                            </th>
+                            <th
+                                class="pb-2 text-left font-medium text-muted-foreground"
+                            >
+                                Mode
+                            </th>
+                            <th
+                                class="pb-2 text-left font-medium text-muted-foreground"
+                            >
+                                Note
+                            </th>
+                            <th
+                                class="pb-2 text-left font-medium text-muted-foreground"
+                            >
+                                Par
+                            </th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
-                        <tr v-for="p in historique_paiements_globaux" :key="p.id" class="hover:bg-muted/20">
-                            <td class="py-2.5 pr-3 text-muted-foreground">{{ p.paid_at ?? '—' }}</td>
-                            <td class="py-2.5 pr-3 text-right font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                        <tr
+                            v-for="p in historique_paiements_globaux"
+                            :key="p.id"
+                            class="hover:bg-muted/20"
+                        >
+                            <td class="py-2.5 pr-3 text-muted-foreground">
+                                {{ p.paid_at ?? '—' }}
+                            </td>
+                            <td
+                                class="py-2.5 pr-3 text-right font-semibold text-emerald-700 tabular-nums dark:text-emerald-400"
+                            >
                                 {{ formatGNF(p.montant) }}
                             </td>
                             <td class="py-2.5 pr-3">{{ p.mode_paiement }}</td>
-                            <td class="py-2.5 pr-3 text-xs italic text-muted-foreground">{{ p.note ?? '—' }}</td>
-                            <td class="py-2.5 text-xs text-muted-foreground">{{ p.created_by ?? '—' }}</td>
+                            <td
+                                class="py-2.5 pr-3 text-xs text-muted-foreground italic"
+                            >
+                                {{ p.note ?? '—' }}
+                            </td>
+                            <td class="py-2.5 text-xs text-muted-foreground">
+                                {{ p.created_by ?? '—' }}
+                            </td>
                         </tr>
                     </tbody>
                     <tfoot>
                         <tr class="border-t">
                             <td class="pt-2 font-medium">Total</td>
-                            <td class="pt-2 text-right font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
-                                {{ formatGNF(historique_paiements_globaux.reduce((s, p) => s + p.montant, 0)) }}
+                            <td
+                                class="pt-2 text-right font-bold text-emerald-700 tabular-nums dark:text-emerald-400"
+                            >
+                                {{
+                                    formatGNF(
+                                        historique_paiements_globaux.reduce(
+                                            (s, p) => s + p.montant,
+                                            0,
+                                        ),
+                                    )
+                                }}
                             </td>
                             <td colspan="3" />
                         </tr>
                     </tfoot>
                 </table>
-                <p v-else class="py-8 text-center text-sm text-muted-foreground">Aucun paiement enregistré.</p>
+                <p
+                    v-else
+                    class="py-8 text-center text-sm text-muted-foreground"
+                >
+                    Aucun paiement enregistré.
+                </p>
             </div>
         </Dialog>
 
@@ -985,15 +1238,25 @@ function closeDetailDialog() {
                 <!-- Rappel brut -->
                 <div class="rounded-lg bg-muted/40 p-3 text-sm">
                     <div class="flex justify-between">
-                        <span class="text-muted-foreground">Montant brut :</span>
-                        <span class="tabular-nums font-medium">{{ formatGNF(fraisCommande.montant_brut) }}</span>
+                        <span class="text-muted-foreground"
+                            >Montant brut :</span
+                        >
+                        <span class="font-medium tabular-nums">{{
+                            formatGNF(fraisCommande.montant_brut)
+                        }}</span>
                     </div>
-                    <div class="flex justify-between mt-1 text-xs">
-                        <span class="text-muted-foreground">Net après frais :</span>
-                        <span class="tabular-nums font-semibold">
+                    <div class="mt-1 flex justify-between text-xs">
+                        <span class="text-muted-foreground"
+                            >Net après frais :</span
+                        >
+                        <span class="font-semibold tabular-nums">
                             {{
                                 formatGNF(
-                                    Math.max(0, fraisCommande.montant_brut - (fraisForm.frais ?? 0))
+                                    Math.max(
+                                        0,
+                                        fraisCommande.montant_brut -
+                                            (fraisForm.frais ?? 0),
+                                    ),
                                 )
                             }}
                         </span>
@@ -1001,7 +1264,9 @@ function closeDetailDialog() {
                 </div>
 
                 <div class="space-y-1">
-                    <label class="text-sm font-medium">Montant des frais (GNF)</label>
+                    <label class="text-sm font-medium"
+                        >Montant des frais (GNF)</label
+                    >
                     <InputNumber
                         v-model="fraisForm.frais"
                         :max="fraisCommande.montant_brut"
@@ -1013,7 +1278,10 @@ function closeDetailDialog() {
                 </div>
 
                 <div class="space-y-1">
-                    <label class="text-sm font-medium">Type de frais <span class="text-destructive">*</span></label>
+                    <label class="text-sm font-medium"
+                        >Type de frais
+                        <span class="text-destructive">*</span></label
+                    >
                     <Dropdown
                         v-model="fraisForm.type_frais"
                         :options="typeFraisOptions"
@@ -1027,13 +1295,23 @@ function closeDetailDialog() {
 
                 <div v-if="fraisForm.type_frais === 'autre'" class="space-y-1">
                     <label class="text-sm font-medium">Commentaire</label>
-                    <InputText v-model="fraisForm.commentaire_frais" class="w-full" placeholder="Préciser…" />
+                    <InputText
+                        v-model="fraisForm.commentaire_frais"
+                        class="w-full"
+                        placeholder="Préciser…"
+                    />
                 </div>
 
                 <div class="flex justify-end gap-2 pt-2">
-                    <Button variant="ghost" @click="closeFraisDialog">Annuler</Button>
+                    <Button variant="ghost" @click="closeFraisDialog"
+                        >Annuler</Button
+                    >
                     <Button
-                        :disabled="fraisForm.processing || fraisForm.frais < 0 || !fraisForm.type_frais"
+                        :disabled="
+                            fraisForm.processing ||
+                            fraisForm.frais < 0 ||
+                            !fraisForm.type_frais
+                        "
                         @click="submitFrais"
                     >
                         <Pencil class="mr-1.5 h-4 w-4" />
@@ -1046,15 +1324,20 @@ function closeDetailDialog() {
         <!-- ══════════════════════ DIALOG DÉTAIL COMMISSION ══════════════════ -->
         <Dialog
             v-model:visible="detailVisible"
-            :header="detailCommande ? `Commission — ${detailCommande.commande_reference ?? '—'}` : 'Détail commission'"
+            :header="
+                detailCommande
+                    ? `Commission — ${detailCommande.commande_reference ?? '—'}`
+                    : 'Détail commission'
+            "
             modal
             :style="{ width: '480px' }"
             @hide="closeDetailDialog"
         >
             <div v-if="detailCommande" class="space-y-4 pt-2">
-
                 <!-- Infos commande -->
-                <div class="rounded-lg border bg-muted/20 p-3 text-sm space-y-2">
+                <div
+                    class="space-y-2 rounded-lg border bg-muted/20 p-3 text-sm"
+                >
                     <div class="flex items-center justify-between">
                         <span class="text-muted-foreground">Commande</span>
                         <Link
@@ -1064,11 +1347,15 @@ function closeDetailDialog() {
                         >
                             {{ detailCommande.commande_reference ?? '—' }}
                         </Link>
-                        <span v-else class="font-mono text-xs font-semibold">{{ detailCommande.commande_reference ?? '—' }}</span>
+                        <span v-else class="font-mono text-xs font-semibold">{{
+                            detailCommande.commande_reference ?? '—'
+                        }}</span>
                     </div>
                     <div class="flex items-center justify-between">
                         <span class="text-muted-foreground">Date</span>
-                        <span class="tabular-nums">{{ detailCommande.date_commande ?? '—' }}</span>
+                        <span class="tabular-nums">{{
+                            detailCommande.date_commande ?? '—'
+                        }}</span>
                     </div>
                     <div class="flex items-center justify-between">
                         <span class="text-muted-foreground">Site</span>
@@ -1078,7 +1365,10 @@ function closeDetailDialog() {
                         <span class="text-muted-foreground">Véhicule</span>
                         <span class="text-right">
                             {{ detailCommande.vehicule ?? '—' }}
-                            <span v-if="detailCommande.immatriculation" class="ml-1 font-mono text-xs text-muted-foreground">
+                            <span
+                                v-if="detailCommande.immatriculation"
+                                class="ml-1 font-mono text-xs text-muted-foreground"
+                            >
                                 {{ detailCommande.immatriculation }}
                             </span>
                         </span>
@@ -1089,38 +1379,63 @@ function closeDetailDialog() {
                 <div class="grid grid-cols-2 gap-2">
                     <div class="rounded-lg bg-muted/30 p-3 text-center">
                         <p class="text-xs text-muted-foreground">Taux</p>
-                        <p class="mt-1 text-lg font-bold tabular-nums">{{ detailCommande.taux }}%</p>
+                        <p class="mt-1 text-lg font-bold tabular-nums">
+                            {{ detailCommande.taux }}%
+                        </p>
                     </div>
                     <div class="rounded-lg bg-muted/30 p-3 text-center">
                         <p class="text-xs text-muted-foreground">Brut</p>
-                        <p class="mt-1 text-lg font-bold tabular-nums">{{ formatGNF(detailCommande.montant_brut) }}</p>
+                        <p class="mt-1 text-lg font-bold tabular-nums">
+                            {{ formatGNF(detailCommande.montant_brut) }}
+                        </p>
                     </div>
                     <div class="rounded-lg bg-muted/30 p-3 text-center">
                         <p class="text-xs text-muted-foreground">Frais</p>
                         <p
                             class="mt-1 text-lg font-bold tabular-nums"
-                            :class="detailCommande.frais > 0 ? 'text-destructive' : 'text-muted-foreground'"
+                            :class="
+                                detailCommande.frais > 0
+                                    ? 'text-destructive'
+                                    : 'text-muted-foreground'
+                            "
                         >
-                            {{ detailCommande.frais > 0 ? '− ' + formatGNF(detailCommande.frais) : '—' }}
+                            {{
+                                detailCommande.frais > 0
+                                    ? '− ' + formatGNF(detailCommande.frais)
+                                    : '—'
+                            }}
                         </p>
-                        <p v-if="detailCommande.type_frais" class="mt-0.5 text-xs text-muted-foreground capitalize">
+                        <p
+                            v-if="detailCommande.type_frais"
+                            class="mt-0.5 text-xs text-muted-foreground capitalize"
+                        >
                             {{ detailCommande.type_frais }}
-                            <span v-if="detailCommande.commentaire_frais"> · {{ detailCommande.commentaire_frais }}</span>
+                            <span v-if="detailCommande.commentaire_frais">
+                                · {{ detailCommande.commentaire_frais }}</span
+                            >
                         </p>
                     </div>
                     <div class="rounded-lg bg-muted/30 p-3 text-center">
                         <p class="text-xs text-muted-foreground">Net</p>
-                        <p class="mt-1 text-lg font-bold tabular-nums">{{ formatGNF(detailCommande.montant_net) }}</p>
+                        <p class="mt-1 text-lg font-bold tabular-nums">
+                            {{ formatGNF(detailCommande.montant_net) }}
+                        </p>
                     </div>
                 </div>
 
                 <!-- Statut paiement -->
-                <div class="rounded-lg border bg-muted/20 p-3 text-sm space-y-2">
+                <div
+                    class="space-y-2 rounded-lg border bg-muted/20 p-3 text-sm"
+                >
                     <div class="flex items-center justify-between">
                         <span class="text-muted-foreground">Versé</span>
                         <span
                             class="font-semibold tabular-nums"
-                            :class="detailCommande.montant_verse > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'"
+                            :class="
+                                detailCommande.montant_verse > 0
+                                    ? 'text-emerald-700 dark:text-emerald-400'
+                                    : 'text-muted-foreground'
+                            "
                         >
                             {{ formatGNF(detailCommande.montant_verse) }}
                         </span>
@@ -1129,22 +1444,41 @@ function closeDetailDialog() {
                         <span class="text-muted-foreground">Restant</span>
                         <span
                             class="font-semibold tabular-nums"
-                            :class="(detailCommande.montant_net - detailCommande.montant_verse) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+                            :class="
+                                detailCommande.montant_net -
+                                    detailCommande.montant_verse >
+                                0
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-muted-foreground'
+                            "
                         >
-                            {{ formatGNF(Math.max(0, detailCommande.montant_net - detailCommande.montant_verse)) }}
+                            {{
+                                formatGNF(
+                                    Math.max(
+                                        0,
+                                        detailCommande.montant_net -
+                                            detailCommande.montant_verse,
+                                    ),
+                                )
+                            }}
                         </span>
                     </div>
                     <div class="flex items-center justify-between">
-                        <span class="text-muted-foreground">Disponible dès</span>
-                        <span class="tabular-nums text-xs">{{ detailCommande.unlock_at ?? '—' }}</span>
+                        <span class="text-muted-foreground"
+                            >Disponible dès</span
+                        >
+                        <span class="text-xs tabular-nums">{{
+                            detailCommande.unlock_at ?? '—'
+                        }}</span>
                     </div>
                 </div>
 
                 <div class="flex justify-end pt-1">
-                    <Button variant="ghost" @click="closeDetailDialog">Fermer</Button>
+                    <Button variant="ghost" @click="closeDetailDialog"
+                        >Fermer</Button
+                    >
                 </div>
             </div>
         </Dialog>
-
     </AppLayout>
 </template>

@@ -120,8 +120,14 @@ interface Transfert {
     created_at: string;
 }
 
-interface BaseCalculOption { value: string; label: string }
-interface TypeEcartOption  { value: string; label: string }
+interface BaseCalculOption {
+    value: string;
+    label: string;
+}
+interface TypeEcartOption {
+    value: string;
+    label: string;
+}
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -150,31 +156,62 @@ const props = defineProps<{
 
 const toast = useToast();
 
-const contexteLabel = props.contexte === 'receptions' ? 'Réceptions' : 'Transferts';
-const contexteHref  = `/logistique/${props.contexte}`;
+const contexteLabel =
+    props.contexte === 'receptions' ? 'Réceptions' : 'Transferts';
+const contexteHref = `/logistique/${props.contexte}`;
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: contexteLabel, href: contexteHref },
-    { title: props.transfert.reference, href: `/logistique/${props.transfert.id}` },
+    {
+        title: props.transfert.reference,
+        href: `/logistique/${props.transfert.id}`,
+    },
 ];
 
 // ── Progression ───────────────────────────────────────────────────────────────
 
 const STEPS = [
-    { key: 'brouillon',  label: 'Brouillon',      shortLabel: 'Brouillon',    icon: FileEdit    },
-    { key: 'chargement', label: 'En chargement',   shortLabel: 'Chargement',   icon: Package     },
-    { key: 'transit',    label: 'Livraison',        shortLabel: 'Livraison',    icon: Truck       },
-    { key: 'reception',  label: 'Réceptionné',      shortLabel: 'Réceptionné',  icon: PackageCheck },
-    { key: 'cloture',    label: 'Clôturé',          shortLabel: 'Clôturé',      icon: CheckCircle2 },
+    {
+        key: 'brouillon',
+        label: 'Brouillon',
+        shortLabel: 'Brouillon',
+        icon: FileEdit,
+    },
+    {
+        key: 'chargement',
+        label: 'En chargement',
+        shortLabel: 'Chargement',
+        icon: Package,
+    },
+    {
+        key: 'transit',
+        label: 'Livraison',
+        shortLabel: 'Livraison',
+        icon: Truck,
+    },
+    {
+        key: 'reception',
+        label: 'Réceptionné',
+        shortLabel: 'Réceptionné',
+        icon: PackageCheck,
+    },
+    {
+        key: 'cloture',
+        label: 'Clôturé',
+        shortLabel: 'Clôturé',
+        icon: CheckCircle2,
+    },
 ];
 
-const currentStepIdx = computed(() => STEPS.findIndex((s) => s.key === props.transfert.statut));
+const currentStepIdx = computed(() =>
+    STEPS.findIndex((s) => s.key === props.transfert.statut),
+);
 
 function stepState(idx: number): 'done' | 'current' | 'future' {
     const cur = currentStepIdx.value;
     if (cur === -1) return 'future'; // annulé
-    if (idx < cur)  return 'done';
+    if (idx < cur) return 'done';
     if (idx === cur) return 'current';
     return 'future';
 }
@@ -193,7 +230,7 @@ const mainActionLabel = computed(() => {
     // Autres transitions (brouillon, chargement)
     if (!props.can_avancer) return null;
     const labels: Record<string, string> = {
-        brouillon:  'Démarrer le chargement',
+        brouillon: 'Démarrer le chargement',
         chargement: 'Valider le chargement',
     };
     return labels[statut] ?? null;
@@ -202,28 +239,40 @@ const mainActionLabel = computed(() => {
 // ── Dialogs visibilité ────────────────────────────────────────────────────────
 
 const showChargementDialog = ref(false);
-const showReceptionDialog  = ref(false);
+const showReceptionDialog = ref(false);
 const showCommissionDialog = ref(false);
-const showVersementDialog  = ref(false);
-const processing    = ref(false);
-const dialogErrors  = ref<string[]>([]);
+const showVersementDialog = ref(false);
+const processing = ref(false);
+const dialogErrors = ref<string[]>([]);
 
 // ── Données formulaires dialogs (réinitialisées à chaque ouverture) ───────────
 
-interface ChargementLigne { id: number; produit_nom: string; quantite_demandee: number; quantite_chargee: number }
-interface ReceptionLigne  { id: number; produit_nom: string; quantite_chargee: number; quantite_recue: number; ecart_type: string; ecart_motif: string }
+interface ChargementLigne {
+    id: number;
+    produit_nom: string;
+    quantite_demandee: number;
+    quantite_chargee: number;
+}
+interface ReceptionLigne {
+    id: number;
+    produit_nom: string;
+    quantite_chargee: number;
+    quantite_recue: number;
+    ecart_type: string;
+    ecart_motif: string;
+}
 
 const chargementLignes = ref<ChargementLigne[]>([]);
-const receptionLignes  = ref<ReceptionLigne[]>([]);
+const receptionLignes = ref<ReceptionLigne[]>([]);
 
 // Réinitialiser depuis les props courantes à chaque ouverture du dialog
 watch(showChargementDialog, (open) => {
     if (open) {
         chargementLignes.value = props.transfert.lignes.map((l) => ({
-            id:                l.id,
-            produit_nom:       l.produit_nom,
+            id: l.id,
+            produit_nom: l.produit_nom,
             quantite_demandee: l.quantite_demandee,
-            quantite_chargee:  l.quantite_chargee ?? l.quantite_demandee,
+            quantite_chargee: l.quantite_chargee ?? l.quantite_demandee,
         }));
     }
 });
@@ -231,12 +280,12 @@ watch(showChargementDialog, (open) => {
 watch(showReceptionDialog, (open) => {
     if (open) {
         receptionLignes.value = props.transfert.lignes.map((l) => ({
-            id:               l.id,
-            produit_nom:      l.produit_nom,
+            id: l.id,
+            produit_nom: l.produit_nom,
             quantite_chargee: l.quantite_chargee ?? 0,
-            quantite_recue:   l.quantite_recue ?? l.quantite_chargee ?? 0,
-            ecart_type:       l.ecart_type ?? 'conforme',
-            ecart_motif:      l.ecart_motif ?? '',
+            quantite_recue: l.quantite_recue ?? l.quantite_chargee ?? 0,
+            ecart_type: l.ecart_type ?? 'conforme',
+            ecart_motif: l.ecart_motif ?? '',
         }));
     }
 });
@@ -245,24 +294,34 @@ watch(showReceptionDialog, (open) => {
 
 function onMainAction() {
     const statut = props.transfert.statut;
-    if (statut === 'brouillon')        avancerDirect();
-    else if (statut === 'chargement')  showChargementDialog.value = true;
-    else if (statut === 'transit')     showReceptionDialog.value  = true;
+    if (statut === 'brouillon') avancerDirect();
+    else if (statut === 'chargement') showChargementDialog.value = true;
+    else if (statut === 'transit') showReceptionDialog.value = true;
     // reception → clôture automatique, pas d'action manuelle
 }
 
 function avancerDirect() {
     processing.value = true;
     dialogErrors.value = [];
-    router.post(`/logistique/${props.transfert.id}/statut/avancer`, {}, {
-        onSuccess: () => {
-            toast.add({ severity: 'success', summary: 'Statut mis à jour', life: 3000 });
+    router.post(
+        `/logistique/${props.transfert.id}/statut/avancer`,
+        {},
+        {
+            onSuccess: () => {
+                toast.add({
+                    severity: 'success',
+                    summary: 'Statut mis à jour',
+                    life: 3000,
+                });
+            },
+            onError: (errors) => {
+                dialogErrors.value = Object.values(errors).flat() as string[];
+            },
+            onFinish: () => {
+                processing.value = false;
+            },
         },
-        onError: (errors) => {
-            dialogErrors.value = Object.values(errors).flat() as string[];
-        },
-        onFinish: () => { processing.value = false; },
-    });
+    );
 }
 
 function submitChargement() {
@@ -270,16 +329,28 @@ function submitChargement() {
     dialogErrors.value = [];
     router.post(
         `/logistique/${props.transfert.id}/statut/avancer`,
-        { lignes: chargementLignes.value.map((l) => ({ id: l.id, quantite_chargee: l.quantite_chargee })) },
+        {
+            lignes: chargementLignes.value.map((l) => ({
+                id: l.id,
+                quantite_chargee: l.quantite_chargee,
+            })),
+        },
         {
             onSuccess: () => {
                 showChargementDialog.value = false;
-                toast.add({ severity: 'success', summary: 'Chargement validé', detail: 'Le transfert est en cours de livraison.', life: 4000 });
+                toast.add({
+                    severity: 'success',
+                    summary: 'Chargement validé',
+                    detail: 'Le transfert est en cours de livraison.',
+                    life: 4000,
+                });
             },
             onError: (errors) => {
                 dialogErrors.value = Object.values(errors).flat() as string[];
             },
-            onFinish: () => { processing.value = false; },
+            onFinish: () => {
+                processing.value = false;
+            },
         },
     );
 }
@@ -291,37 +362,50 @@ function submitReception() {
         `/logistique/${props.transfert.id}/statut/avancer`,
         {
             lignes: receptionLignes.value.map((l) => ({
-                id:             l.id,
+                id: l.id,
                 quantite_recue: l.quantite_recue,
-                ecart_type:     l.ecart_type,
-                ecart_motif:    l.ecart_motif,
+                ecart_type: l.ecart_type,
+                ecart_motif: l.ecart_motif,
             })),
         },
         {
             onSuccess: () => {
                 showReceptionDialog.value = false;
-                toast.add({ severity: 'success', summary: 'Réception validée', detail: 'Le transfert est maintenant réceptionné.', life: 4000 });
+                toast.add({
+                    severity: 'success',
+                    summary: 'Réception validée',
+                    detail: 'Le transfert est maintenant réceptionné.',
+                    life: 4000,
+                });
             },
             onError: (errors) => {
                 dialogErrors.value = Object.values(errors).flat() as string[];
             },
-            onFinish: () => { processing.value = false; },
+            onFinish: () => {
+                processing.value = false;
+            },
         },
     );
 }
 
 function annulerTransfert() {
     processing.value = true;
-    router.post(`/logistique/${props.transfert.id}/statut/annuler`, {}, {
-        onFinish: () => { processing.value = false; },
-    });
+    router.post(
+        `/logistique/${props.transfert.id}/statut/annuler`,
+        {},
+        {
+            onFinish: () => {
+                processing.value = false;
+            },
+        },
+    );
 }
 
 // ── Commission ────────────────────────────────────────────────────────────────
 
 const commissionForm = useForm({
-    base_calcul:        'forfait',
-    valeur_base:        0 as number,
+    base_calcul: 'forfait',
+    valeur_base: 0 as number,
     quantite_reference: null as number | null,
 });
 
@@ -333,12 +417,26 @@ function submitCommission() {
     commissionForm.post(`/logistique/${props.transfert.id}/commission`, {
         onSuccess: () => {
             showCommissionDialog.value = false;
-            toast.add({ severity: 'success', summary: 'Commission générée', life: 3000 });
+            toast.add({
+                severity: 'success',
+                summary: 'Commission générée',
+                life: 3000,
+            });
         },
         onError: (errors) => {
             const firstError = Object.values(errors)[0];
-            if (firstError && !errors.base_calcul && !errors.valeur_base && !errors.quantite_reference) {
-                toast.add({ severity: 'error', summary: 'Erreur', detail: String(firstError), life: 5000 });
+            if (
+                firstError &&
+                !errors.base_calcul &&
+                !errors.valeur_base &&
+                !errors.quantite_reference
+            ) {
+                toast.add({
+                    severity: 'error',
+                    summary: 'Erreur',
+                    detail: String(firstError),
+                    life: 5000,
+                });
             }
         },
     });
@@ -347,18 +445,18 @@ function submitCommission() {
 // ── Versement ─────────────────────────────────────────────────────────────────
 
 const MODES_PAIEMENT = [
-    { value: 'especes',      label: 'Espèces' },
-    { value: 'virement',     label: 'Virement' },
-    { value: 'cheque',       label: 'Chèque' },
+    { value: 'especes', label: 'Espèces' },
+    { value: 'virement', label: 'Virement' },
+    { value: 'cheque', label: 'Chèque' },
     { value: 'mobile_money', label: 'Mobile Money' },
 ];
 
 const selectedPart = ref<CommissionPart | null>(null);
 
 const versementForm = useForm({
-    montant:       0 as number,
+    montant: 0 as number,
     mode_paiement: 'especes',
-    note:          '',
+    note: '',
 });
 
 function openVersementDialog(part: CommissionPart) {
@@ -370,18 +468,30 @@ function openVersementDialog(part: CommissionPart) {
 
 function submitVersement() {
     if (!selectedPart.value) return;
-    versementForm.post(`/commissions-logistique/parts/${selectedPart.value.id}/versements`, {
-        onSuccess: () => {
-            showVersementDialog.value = false;
-            toast.add({ severity: 'success', summary: 'Versement enregistré', life: 3000 });
+    versementForm.post(
+        `/commissions-logistique/parts/${selectedPart.value.id}/versements`,
+        {
+            onSuccess: () => {
+                showVersementDialog.value = false;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Versement enregistré',
+                    life: 3000,
+                });
+            },
+            onError: (errors) => {
+                const firstError = Object.values(errors)[0];
+                if (firstError && !errors.montant && !errors.mode_paiement) {
+                    toast.add({
+                        severity: 'error',
+                        summary: 'Erreur',
+                        detail: String(firstError),
+                        life: 5000,
+                    });
+                }
+            },
         },
-        onError: (errors) => {
-            const firstError = Object.values(errors)[0];
-            if (firstError && !errors.montant && !errors.mode_paiement) {
-                toast.add({ severity: 'error', summary: 'Erreur', detail: String(firstError), life: 5000 });
-            }
-        },
-    });
+    );
 }
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
@@ -405,62 +515,91 @@ function ecartReception(idx: number): number {
 // Badge couleur statut
 const statutBadgeClass = computed(() => {
     const map: Record<string, string> = {
-        brouillon:  'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
-        chargement: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-        transit:    'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-        reception:  'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
-        cloture:    'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-        annule:     'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+        brouillon:
+            'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
+        chargement:
+            'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+        transit:
+            'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+        reception:
+            'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
+        cloture:
+            'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+        annule: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
     };
     return map[props.transfert.statut] ?? 'bg-zinc-100 text-zinc-700';
 });
 
 // Afficher la section commission ?
-const showCommissionSection = computed(() =>
-    props.transfert.statut === 'reception' ||
-    props.transfert.statut === 'cloture' ||
-    !!props.transfert.commission,
+const showCommissionSection = computed(
+    () =>
+        props.transfert.statut === 'reception' ||
+        props.transfert.statut === 'cloture' ||
+        !!props.transfert.commission,
 );
 
-const livreurParts = computed(() =>
-    props.transfert.commission?.parts.filter((part) => part.type_beneficiaire === 'livreur') ?? [],
+const livreurParts = computed(
+    () =>
+        props.transfert.commission?.parts.filter(
+            (part) => part.type_beneficiaire === 'livreur',
+        ) ?? [],
 );
 
-const proprietaireParts = computed(() =>
-    props.transfert.commission?.parts.filter((part) => part.type_beneficiaire === 'proprietaire') ?? [],
+const proprietaireParts = computed(
+    () =>
+        props.transfert.commission?.parts.filter(
+            (part) => part.type_beneficiaire === 'proprietaire',
+        ) ?? [],
 );
 
 const activeCommissionTab = ref<'livreurs' | 'proprietaires'>('livreurs');
 
-watch([livreurParts, proprietaireParts], ([livreurs, proprietaires]) => {
-    if (activeCommissionTab.value === 'livreurs' && livreurs.length === 0 && proprietaires.length > 0) {
-        activeCommissionTab.value = 'proprietaires';
-    }
+watch(
+    [livreurParts, proprietaireParts],
+    ([livreurs, proprietaires]) => {
+        if (
+            activeCommissionTab.value === 'livreurs' &&
+            livreurs.length === 0 &&
+            proprietaires.length > 0
+        ) {
+            activeCommissionTab.value = 'proprietaires';
+        }
 
-    if (activeCommissionTab.value === 'proprietaires' && proprietaires.length === 0 && livreurs.length > 0) {
-        activeCommissionTab.value = 'livreurs';
-    }
-}, { immediate: true });
+        if (
+            activeCommissionTab.value === 'proprietaires' &&
+            proprietaires.length === 0 &&
+            livreurs.length > 0
+        ) {
+            activeCommissionTab.value = 'livreurs';
+        }
+    },
+    { immediate: true },
+);
 
 function aggregateParts(parts: CommissionPart[]) {
-    return parts.reduce((acc, part) => {
-        acc.brut += part.montant_brut;
-        acc.frais += part.frais_supplementaires;
-        acc.net += part.montant_net;
-        acc.verse += part.montant_verse;
-        acc.restant += part.montant_restant;
-        return acc;
-    }, {
-        brut: 0,
-        frais: 0,
-        net: 0,
-        verse: 0,
-        restant: 0,
-    });
+    return parts.reduce(
+        (acc, part) => {
+            acc.brut += part.montant_brut;
+            acc.frais += part.frais_supplementaires;
+            acc.net += part.montant_net;
+            acc.verse += part.montant_verse;
+            acc.restant += part.montant_restant;
+            return acc;
+        },
+        {
+            brut: 0,
+            frais: 0,
+            net: 0,
+            verse: 0,
+            restant: 0,
+        },
+    );
 }
 
 const livreurTotals = computed(() => aggregateParts(livreurParts.value));
-const proprietaireTotals = computed(() => aggregateParts(proprietaireParts.value));
+const proprietaireTotals = computed(() =>
+    aggregateParts(proprietaireParts.value),
+);
 
 const partLivreurTotal = computed(() => livreurTotals.value.net);
 const partProprietaireTotal = computed(() => proprietaireTotals.value.net);
@@ -489,8 +628,7 @@ function activiteDotClass(action: string): string {
     <Head :title="transfert.reference" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6 sm:px-6 space-y-5">
-
+        <div class="space-y-5 px-4 py-6 sm:px-6">
             <!-- ══ Header ══════════════════════════════════════════════════════ -->
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="flex items-center gap-3">
@@ -502,10 +640,17 @@ function activiteDotClass(action: string): string {
                     </Link>
                     <div>
                         <div class="flex items-center gap-2">
-                            <h1 class="font-mono text-xl font-bold tracking-wide">
+                            <h1
+                                class="font-mono text-xl font-bold tracking-wide"
+                            >
                                 {{ transfert.reference }}
                             </h1>
-                            <span :class="['rounded-full px-2.5 py-0.5 text-xs font-semibold', statutBadgeClass]">
+                            <span
+                                :class="[
+                                    'rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                                    statutBadgeClass,
+                                ]"
+                            >
                                 {{ transfert.statut_label }}
                             </span>
                             <span
@@ -521,7 +666,9 @@ function activiteDotClass(action: string): string {
                         </div>
                         <p class="mt-0.5 text-xs text-muted-foreground">
                             Créé le {{ transfert.created_at }}
-                            <span v-if="transfert.createur"> · {{ transfert.createur }}</span>
+                            <span v-if="transfert.createur">
+                                · {{ transfert.createur }}</span
+                            >
                         </p>
                     </div>
                 </div>
@@ -535,7 +682,9 @@ function activiteDotClass(action: string): string {
                     >
                         <History class="mr-1.5 h-3.5 w-3.5" />
                         Historique
-                        <span class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                        <span
+                            class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
+                        >
                             {{ activites.length }}
                         </span>
                     </Button>
@@ -577,32 +726,52 @@ function activiteDotClass(action: string): string {
             <!-- ══ Progression horizontale ════════════════════════════════════ -->
             <div class="rounded-xl border bg-card px-6 py-4 shadow-sm">
                 <!-- Annulé -->
-                <div v-if="transfert.is_annule" class="flex items-center gap-2 text-red-600 dark:text-red-400">
+                <div
+                    v-if="transfert.is_annule"
+                    class="flex items-center gap-2 text-red-600 dark:text-red-400"
+                >
                     <XCircle class="h-5 w-5" />
-                    <span class="font-semibold">Ce transfert a été annulé.</span>
+                    <span class="font-semibold"
+                        >Ce transfert a été annulé.</span
+                    >
                 </div>
 
                 <!-- Progression normale -->
                 <div v-else class="flex items-center">
                     <template v-for="(step, idx) in STEPS" :key="step.key">
                         <!-- Étape -->
-                        <div class="flex flex-col items-center" style="min-width:80px">
+                        <div
+                            class="flex flex-col items-center"
+                            style="min-width: 80px"
+                        >
                             <div
                                 :class="[
                                     'flex h-9 w-9 items-center justify-center rounded-full transition-all',
-                                    stepState(idx) === 'done'    ? 'bg-emerald-500 text-white shadow-sm' : '',
-                                    stepState(idx) === 'current' ? 'bg-blue-600 text-white shadow-md ring-4 ring-blue-100 dark:ring-blue-900/50' : '',
-                                    stepState(idx) === 'future'  ? 'bg-muted text-muted-foreground' : '',
+                                    stepState(idx) === 'done'
+                                        ? 'bg-emerald-500 text-white shadow-sm'
+                                        : '',
+                                    stepState(idx) === 'current'
+                                        ? 'bg-blue-600 text-white shadow-md ring-4 ring-blue-100 dark:ring-blue-900/50'
+                                        : '',
+                                    stepState(idx) === 'future'
+                                        ? 'bg-muted text-muted-foreground'
+                                        : '',
                                 ]"
                             >
                                 <component :is="step.icon" class="h-4 w-4" />
                             </div>
                             <span
                                 :class="[
-                                    'mt-1.5 text-center text-[11px] font-medium leading-tight',
-                                    stepState(idx) === 'current' ? 'text-blue-600 dark:text-blue-400' : '',
-                                    stepState(idx) === 'done'    ? 'text-emerald-600 dark:text-emerald-400' : '',
-                                    stepState(idx) === 'future'  ? 'text-muted-foreground' : '',
+                                    'mt-1.5 text-center text-[11px] leading-tight font-medium',
+                                    stepState(idx) === 'current'
+                                        ? 'text-blue-600 dark:text-blue-400'
+                                        : '',
+                                    stepState(idx) === 'done'
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : '',
+                                    stepState(idx) === 'future'
+                                        ? 'text-muted-foreground'
+                                        : '',
                                 ]"
                             >
                                 {{ step.shortLabel }}
@@ -613,7 +782,9 @@ function activiteDotClass(action: string): string {
                             v-if="idx < STEPS.length - 1"
                             :class="[
                                 'mb-5 h-0.5 flex-1 transition-all',
-                                idx < currentStepIdx ? 'bg-emerald-400' : 'bg-border',
+                                idx < currentStepIdx
+                                    ? 'bg-emerald-400'
+                                    : 'bg-border',
                             ]"
                         />
                     </template>
@@ -622,72 +793,158 @@ function activiteDotClass(action: string): string {
 
             <!-- ══ Contenu principal (2 colonnes) ═════════════════════════════ -->
             <div class="grid grid-cols-1 gap-5 lg:grid-cols-5">
-
                 <!-- Colonne gauche : Informations ────────────────────────────── -->
-                <div class="lg:col-span-2 rounded-xl border bg-card p-5 shadow-sm space-y-4">
-                    <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <div
+                    class="space-y-4 rounded-xl border bg-card p-5 shadow-sm lg:col-span-2"
+                >
+                    <h2
+                        class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
                         Informations
                     </h2>
 
                     <!-- Trajet -->
-                    <div class="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2.5">
-                        <MapPin class="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span class="font-medium text-sm">{{ transfert.site_source_nom ?? '—' }}</span>
-                        <ChevronRight class="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span class="font-medium text-sm">{{ transfert.site_destination_nom ?? '—' }}</span>
+                    <div
+                        class="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2.5"
+                    >
+                        <MapPin
+                            class="h-4 w-4 shrink-0 text-muted-foreground"
+                        />
+                        <span class="text-sm font-medium">{{
+                            transfert.site_source_nom ?? '—'
+                        }}</span>
+                        <ChevronRight
+                            class="h-4 w-4 shrink-0 text-muted-foreground"
+                        />
+                        <span class="text-sm font-medium">{{
+                            transfert.site_destination_nom ?? '—'
+                        }}</span>
                     </div>
 
                     <div class="grid grid-cols-2 gap-3 text-sm">
                         <div>
-                            <p class="text-xs text-muted-foreground">Véhicule</p>
-                            <p class="mt-0.5 font-medium">{{ transfert.vehicule_nom ?? '—' }}</p>
-                            <p v-if="transfert.immatriculation" class="font-mono text-xs text-muted-foreground">
+                            <p class="text-xs text-muted-foreground">
+                                Véhicule
+                            </p>
+                            <p class="mt-0.5 font-medium">
+                                {{ transfert.vehicule_nom ?? '—' }}
+                            </p>
+                            <p
+                                v-if="transfert.immatriculation"
+                                class="font-mono text-xs text-muted-foreground"
+                            >
                                 {{ transfert.immatriculation }}
                             </p>
                         </div>
                         <div>
                             <p class="text-xs text-muted-foreground">Équipe</p>
-                            <p class="mt-0.5 font-medium">{{ transfert.equipe_nom ?? '—' }}</p>
+                            <p class="mt-0.5 font-medium">
+                                {{ transfert.equipe_nom ?? '—' }}
+                            </p>
                         </div>
                         <div>
-                            <p class="text-xs text-muted-foreground">Départ prévu</p>
-                            <p class="mt-0.5 font-medium">{{ transfert.date_depart_prevue ?? '—' }}</p>
-                            <p v-if="transfert.date_depart_reelle" class="text-xs text-emerald-600 dark:text-emerald-400">
+                            <p class="text-xs text-muted-foreground">
+                                Départ prévu
+                            </p>
+                            <p class="mt-0.5 font-medium">
+                                {{ transfert.date_depart_prevue ?? '—' }}
+                            </p>
+                            <p
+                                v-if="transfert.date_depart_reelle"
+                                class="text-xs text-emerald-600 dark:text-emerald-400"
+                            >
                                 Réel : {{ transfert.date_depart_reelle }}
                             </p>
                         </div>
                         <div>
-                            <p class="text-xs text-muted-foreground">Arrivée prévue</p>
-                            <p class="mt-0.5 font-medium">{{ transfert.date_arrivee_prevue ?? '—' }}</p>
-                            <p v-if="transfert.date_arrivee_reelle" class="text-xs text-emerald-600 dark:text-emerald-400">
+                            <p class="text-xs text-muted-foreground">
+                                Arrivée prévue
+                            </p>
+                            <p class="mt-0.5 font-medium">
+                                {{ transfert.date_arrivee_prevue ?? '—' }}
+                            </p>
+                            <p
+                                v-if="transfert.date_arrivee_reelle"
+                                class="text-xs text-emerald-600 dark:text-emerald-400"
+                            >
                                 Réelle : {{ transfert.date_arrivee_reelle }}
                             </p>
                         </div>
                     </div>
 
-                    <div v-if="transfert.notes" class="rounded-lg bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                    <div
+                        v-if="transfert.notes"
+                        class="rounded-lg bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
+                    >
                         {{ transfert.notes }}
                     </div>
                 </div>
 
                 <!-- Colonne droite : Lignes produits ─────────────────────────── -->
                 <div class="lg:col-span-3">
-                    <div class="rounded-xl border bg-card shadow-sm overflow-hidden">
-                        <div class="flex items-center justify-between px-5 py-3.5 border-b">
-                            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    <div
+                        class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                    >
+                        <div
+                            class="flex items-center justify-between border-b px-5 py-3.5"
+                        >
+                            <h2
+                                class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
                                 Lignes produits
                             </h2>
-                            <span class="text-xs text-muted-foreground">{{ transfert.lignes.length }} article(s)</span>
+                            <span class="text-xs text-muted-foreground"
+                                >{{ transfert.lignes.length }} article(s)</span
+                            >
                         </div>
 
                         <table class="w-full text-sm">
                             <thead>
-                                <tr class="border-b bg-muted/30 text-xs text-muted-foreground">
-                                    <th class="px-4 py-2.5 text-left font-medium">Produit</th>
-                                    <th class="px-4 py-2.5 text-center font-medium">Demandé</th>
-                                    <th v-if="['transit','reception','cloture'].includes(transfert.statut)" class="px-4 py-2.5 text-center font-medium">Chargé</th>
-                                    <th v-if="['reception','cloture'].includes(transfert.statut)" class="px-4 py-2.5 text-center font-medium">Reçu</th>
-                                    <th v-if="['reception','cloture'].includes(transfert.statut)" class="px-4 py-2.5 text-left font-medium">Écart</th>
+                                <tr
+                                    class="border-b bg-muted/30 text-xs text-muted-foreground"
+                                >
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium"
+                                    >
+                                        Produit
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-center font-medium"
+                                    >
+                                        Demandé
+                                    </th>
+                                    <th
+                                        v-if="
+                                            [
+                                                'transit',
+                                                'reception',
+                                                'cloture',
+                                            ].includes(transfert.statut)
+                                        "
+                                        class="px-4 py-2.5 text-center font-medium"
+                                    >
+                                        Chargé
+                                    </th>
+                                    <th
+                                        v-if="
+                                            ['reception', 'cloture'].includes(
+                                                transfert.statut,
+                                            )
+                                        "
+                                        class="px-4 py-2.5 text-center font-medium"
+                                    >
+                                        Reçu
+                                    </th>
+                                    <th
+                                        v-if="
+                                            ['reception', 'cloture'].includes(
+                                                transfert.statut,
+                                            )
+                                        "
+                                        class="px-4 py-2.5 text-left font-medium"
+                                    >
+                                        Écart
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
@@ -696,23 +953,73 @@ function activiteDotClass(action: string): string {
                                     :key="ligne.id"
                                     class="hover:bg-muted/10"
                                 >
-                                    <td class="px-4 py-3 font-medium">{{ ligne.produit_nom }}</td>
-                                    <td class="px-4 py-3 text-center tabular-nums">{{ ligne.quantite_demandee }}</td>
-                                    <td v-if="['transit','reception','cloture'].includes(transfert.statut)" class="px-4 py-3 text-center tabular-nums">
+                                    <td class="px-4 py-3 font-medium">
+                                        {{ ligne.produit_nom }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-center tabular-nums"
+                                    >
+                                        {{ ligne.quantite_demandee }}
+                                    </td>
+                                    <td
+                                        v-if="
+                                            [
+                                                'transit',
+                                                'reception',
+                                                'cloture',
+                                            ].includes(transfert.statut)
+                                        "
+                                        class="px-4 py-3 text-center tabular-nums"
+                                    >
                                         {{ ligne.quantite_chargee ?? '—' }}
                                     </td>
-                                    <td v-if="['reception','cloture'].includes(transfert.statut)" class="px-4 py-3 text-center tabular-nums">
+                                    <td
+                                        v-if="
+                                            ['reception', 'cloture'].includes(
+                                                transfert.statut,
+                                            )
+                                        "
+                                        class="px-4 py-3 text-center tabular-nums"
+                                    >
                                         {{ ligne.quantite_recue ?? '—' }}
                                     </td>
-                                    <td v-if="['reception','cloture'].includes(transfert.statut)" class="px-4 py-3">
-                                        <div v-if="ligne.ecart_type" class="flex items-center gap-1.5">
-                                            <span :class="['inline-block h-2 w-2 rounded-full', ligne.ecart_dot_class]" />
-                                            <span class="text-xs">{{ ligne.ecart_label }}</span>
-                                            <span v-if="ligne.ecart && ligne.ecart !== 0" class="tabular-nums text-xs text-muted-foreground">
-                                                ({{ ligne.ecart > 0 ? '+' : '' }}{{ ligne.ecart }})
+                                    <td
+                                        v-if="
+                                            ['reception', 'cloture'].includes(
+                                                transfert.statut,
+                                            )
+                                        "
+                                        class="px-4 py-3"
+                                    >
+                                        <div
+                                            v-if="ligne.ecart_type"
+                                            class="flex items-center gap-1.5"
+                                        >
+                                            <span
+                                                :class="[
+                                                    'inline-block h-2 w-2 rounded-full',
+                                                    ligne.ecart_dot_class,
+                                                ]"
+                                            />
+                                            <span class="text-xs">{{
+                                                ligne.ecart_label
+                                            }}</span>
+                                            <span
+                                                v-if="
+                                                    ligne.ecart &&
+                                                    ligne.ecart !== 0
+                                                "
+                                                class="text-xs text-muted-foreground tabular-nums"
+                                            >
+                                                ({{ ligne.ecart > 0 ? '+' : ''
+                                                }}{{ ligne.ecart }})
                                             </span>
                                         </div>
-                                        <span v-else class="text-muted-foreground">—</span>
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
+                                            >—</span
+                                        >
                                     </td>
                                 </tr>
                             </tbody>
@@ -722,13 +1029,27 @@ function activiteDotClass(action: string): string {
             </div>
 
             <!-- ══ Commission logistique ═══════════════════════════════════════ -->
-            <div v-if="showCommissionSection" class="rounded-xl border bg-card shadow-sm overflow-hidden">
-                <div class="flex items-center justify-between px-5 py-3.5 border-b">
-                    <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <div
+                v-if="showCommissionSection"
+                class="overflow-hidden rounded-xl border bg-card shadow-sm"
+            >
+                <div
+                    class="flex items-center justify-between border-b px-5 py-3.5"
+                >
+                    <h2
+                        class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
                         Commission logistique
                     </h2>
                     <Button
-                        v-if="can_generer_commission && transfert.statut === 'reception' && !(transfert.commission && transfert.commission.montant_verse > 0)"
+                        v-if="
+                            can_generer_commission &&
+                            transfert.statut === 'reception' &&
+                            !(
+                                transfert.commission &&
+                                transfert.commission.montant_verse > 0
+                            )
+                        "
                         variant="outline"
                         size="sm"
                         @click="showCommissionDialog = true"
@@ -739,57 +1060,95 @@ function activiteDotClass(action: string): string {
                 </div>
 
                 <!-- Pas encore de commission -->
-                <div v-if="!transfert.commission" class="px-5 py-8 text-center text-sm text-muted-foreground">
-                    Aucune commission générée. Cliquez sur "Générer" pour calculer les commissions livreur/propriétaire.
+                <div
+                    v-if="!transfert.commission"
+                    class="px-5 py-8 text-center text-sm text-muted-foreground"
+                >
+                    Aucune commission générée. Cliquez sur "Générer" pour
+                    calculer les commissions livreur/propriétaire.
                 </div>
 
                 <!-- Commission existante -->
                 <div v-else class="space-y-4 px-5 py-4">
                     <!-- Synthese style commission vente -->
                     <div class="rounded-xl border bg-card p-5 shadow-sm">
-                        <div class="flex flex-wrap items-center justify-between gap-4">
+                        <div
+                            class="flex flex-wrap items-center justify-between gap-4"
+                        >
                             <div>
-                                <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Total commission</p>
-                                <p class="mt-1 text-2xl font-bold tabular-nums">{{ formatGNF(transfert.commission.montant_total) }}</p>
+                                <p
+                                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                                >
+                                    Total commission
+                                </p>
+                                <p class="mt-1 text-2xl font-bold tabular-nums">
+                                    {{
+                                        formatGNF(
+                                            transfert.commission.montant_total,
+                                        )
+                                    }}
+                                </p>
                             </div>
                             <div class="text-right">
-                                <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Part Livreur (Total)</p>
-                                <p class="mt-1 text-2xl font-bold tabular-nums">{{ formatGNF(partLivreurTotal) }}</p>
+                                <p
+                                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                                >
+                                    Part Livreur (Total)
+                                </p>
+                                <p class="mt-1 text-2xl font-bold tabular-nums">
+                                    {{ formatGNF(partLivreurTotal) }}
+                                </p>
                             </div>
                             <div class="text-right">
-                                <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Part Proprietaire (Total)</p>
-                                <p class="mt-1 text-2xl font-bold tabular-nums">{{ formatGNF(partProprietaireTotal) }}</p>
+                                <p
+                                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                                >
+                                    Part Proprietaire (Total)
+                                </p>
+                                <p class="mt-1 text-2xl font-bold tabular-nums">
+                                    {{ formatGNF(partProprietaireTotal) }}
+                                </p>
                             </div>
                         </div>
                     </div>
 
                     <div class="flex justify-center">
-                        <div class="inline-flex items-center gap-1 rounded-xl border bg-card p-1 shadow-sm">
+                        <div
+                            class="inline-flex items-center gap-1 rounded-xl border bg-card p-1 shadow-sm"
+                        >
                             <button
                                 class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
-                                :class="activeCommissionTab === 'livreurs'
-                                    ? 'bg-primary/10 text-primary'
-                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
+                                :class="
+                                    activeCommissionTab === 'livreurs'
+                                        ? 'bg-primary/10 text-primary'
+                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                "
                                 :disabled="livreurParts.length === 0"
                                 @click="activeCommissionTab = 'livreurs'"
                             >
                                 <Truck class="h-3.5 w-3.5" />
                                 Livreurs
-                                <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                                <span
+                                    class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
+                                >
                                     {{ livreurParts.length }}
                                 </span>
                             </button>
                             <button
                                 class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
-                                :class="activeCommissionTab === 'proprietaires'
-                                    ? 'bg-primary/10 text-primary'
-                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
+                                :class="
+                                    activeCommissionTab === 'proprietaires'
+                                        ? 'bg-primary/10 text-primary'
+                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                "
                                 :disabled="proprietaireParts.length === 0"
                                 @click="activeCommissionTab = 'proprietaires'"
                             >
                                 <User class="h-3.5 w-3.5" />
                                 Proprietaire
-                                <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                                <span
+                                    class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
+                                >
                                     {{ proprietaireParts.length }}
                                 </span>
                             </button>
@@ -804,13 +1163,41 @@ function activiteDotClass(action: string): string {
                             <table class="w-full text-sm">
                                 <thead>
                                     <tr class="border-b bg-muted/40">
-                                        <th class="px-4 py-3 text-left font-medium text-muted-foreground">Livreur</th>
-                                        <th class="px-4 py-3 text-right font-medium text-muted-foreground">Taux</th>
-                                        <th class="px-4 py-3 text-right font-medium text-muted-foreground">Montant</th>
-                                        <th class="px-4 py-3 text-right font-medium text-muted-foreground">Verse</th>
-                                        <th class="px-4 py-3 text-right font-medium text-muted-foreground">Restant</th>
-                                        <th class="px-4 py-3 text-left font-medium text-muted-foreground">Statut</th>
-                                        <th class="px-4 py-3 text-center font-medium text-muted-foreground">Action</th>
+                                        <th
+                                            class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                        >
+                                            Livreur
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                        >
+                                            Taux
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                        >
+                                            Montant
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                        >
+                                            Verse
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                        >
+                                            Restant
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                        >
+                                            Statut
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-center font-medium text-muted-foreground"
+                                        >
+                                            Action
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y">
@@ -819,58 +1206,131 @@ function activiteDotClass(action: string): string {
                                         :key="part.id"
                                         class="transition-colors hover:bg-muted/10"
                                     >
-                                        <td class="px-4 py-3 font-medium">{{ part.beneficiaire_nom }}</td>
-                                        <td class="px-4 py-3 text-right text-muted-foreground tabular-nums">{{ part.taux_commission }}%</td>
-                                        <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatGNF(part.montant_net) }}</td>
-                                        <td class="px-4 py-3 text-right text-foreground tabular-nums">{{ formatGNF(part.montant_verse) }}</td>
+                                        <td class="px-4 py-3 font-medium">
+                                            {{ part.beneficiaire_nom }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                        >
+                                            {{ part.taux_commission }}%
+                                        </td>
                                         <td
                                             class="px-4 py-3 text-right font-semibold tabular-nums"
-                                            :class="part.montant_restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'"
                                         >
-                                            {{ formatGNF(part.montant_restant) }}
+                                            {{ formatGNF(part.montant_net) }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right text-foreground tabular-nums"
+                                        >
+                                            {{ formatGNF(part.montant_verse) }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right font-semibold tabular-nums"
+                                            :class="
+                                                part.montant_restant > 0
+                                                    ? 'text-amber-600 dark:text-amber-400'
+                                                    : 'text-foreground'
+                                            "
+                                        >
+                                            {{
+                                                formatGNF(part.montant_restant)
+                                            }}
                                         </td>
                                         <td class="px-4 py-3">
                                             <StatusDot
                                                 :label="part.statut_label"
-                                                :dot-class="part.statut_dot_class"
+                                                :dot-class="
+                                                    part.statut_dot_class
+                                                "
                                                 class="text-xs text-muted-foreground"
                                             />
                                         </td>
                                         <td class="px-4 py-3 text-center">
-                                            <div class="flex items-center justify-center gap-2">
+                                            <div
+                                                class="flex items-center justify-center gap-2"
+                                            >
                                                 <Button
-                                                    v-if="part.versements.length > 0"
+                                                    v-if="
+                                                        part.versements.length >
+                                                        0
+                                                    "
                                                     variant="ghost"
                                                     size="sm"
                                                     class="h-8 px-2.5"
-                                                    @click="openHistoriqueDialog(part)"
+                                                    @click="
+                                                        openHistoriqueDialog(
+                                                            part,
+                                                        )
+                                                    "
                                                 >
-                                                    <History class="mr-1.5 h-3.5 w-3.5" />
-                                                    Hist. ({{ part.versements.length }})
+                                                    <History
+                                                        class="mr-1.5 h-3.5 w-3.5"
+                                                    />
+                                                    Hist. ({{
+                                                        part.versements.length
+                                                    }})
                                                 </Button>
                                                 <Button
-                                                    v-if="can_verser_commission && !part.is_versee && transfert.statut === 'reception'"
+                                                    v-if="
+                                                        can_verser_commission &&
+                                                        !part.is_versee &&
+                                                        transfert.statut ===
+                                                            'reception'
+                                                    "
                                                     size="sm"
-                                                    @click="openVersementDialog(part)"
+                                                    @click="
+                                                        openVersementDialog(
+                                                            part,
+                                                        )
+                                                    "
                                                 >
                                                     Verser
                                                 </Button>
-                                                <span v-else-if="part.is_versee" class="text-xs font-medium text-emerald-600">Verse ✓</span>
-                                                <span v-else class="text-xs text-muted-foreground">—</span>
+                                                <span
+                                                    v-else-if="part.is_versee"
+                                                    class="text-xs font-medium text-emerald-600"
+                                                    >Verse ✓</span
+                                                >
+                                                <span
+                                                    v-else
+                                                    class="text-xs text-muted-foreground"
+                                                    >—</span
+                                                >
                                             </div>
                                         </td>
                                     </tr>
                                 </tbody>
                                 <tfoot>
-                                    <tr class="border-t-2 bg-muted/20 text-sm font-semibold">
-                                        <td colspan="2" class="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground">Total</td>
-                                        <td class="px-4 py-2.5 text-right tabular-nums">{{ formatGNF(livreurTotals.net) }}</td>
-                                        <td class="px-4 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{{ formatGNF(livreurTotals.verse) }}</td>
+                                    <tr
+                                        class="border-t-2 bg-muted/20 text-sm font-semibold"
+                                    >
+                                        <td
+                                            colspan="2"
+                                            class="px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase"
+                                        >
+                                            Total
+                                        </td>
                                         <td
                                             class="px-4 py-2.5 text-right tabular-nums"
-                                            :class="livreurTotals.restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
                                         >
-                                            {{ formatGNF(livreurTotals.restant) }}
+                                            {{ formatGNF(livreurTotals.net) }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-2.5 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
+                                        >
+                                            {{ formatGNF(livreurTotals.verse) }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-2.5 text-right tabular-nums"
+                                            :class="
+                                                livreurTotals.restant > 0
+                                                    ? 'text-amber-600 dark:text-amber-400'
+                                                    : 'text-muted-foreground'
+                                            "
+                                        >
+                                            {{
+                                                formatGNF(livreurTotals.restant)
+                                            }}
                                         </td>
                                         <td colspan="2" />
                                     </tr>
@@ -887,15 +1347,51 @@ function activiteDotClass(action: string): string {
                             <table class="w-full text-sm">
                                 <thead>
                                     <tr class="border-b bg-muted/40">
-                                        <th class="px-4 py-3 text-left font-medium text-muted-foreground">Proprietaire</th>
-                                        <th class="px-4 py-3 text-right font-medium text-muted-foreground">Taux</th>
-                                        <th class="px-4 py-3 text-right font-medium text-muted-foreground">Brut</th>
-                                        <th class="px-4 py-3 text-right font-medium text-muted-foreground">Frais</th>
-                                        <th class="px-4 py-3 text-right font-medium text-muted-foreground">Net</th>
-                                        <th class="px-4 py-3 text-right font-medium text-muted-foreground">Verse</th>
-                                        <th class="px-4 py-3 text-right font-medium text-muted-foreground">Restant</th>
-                                        <th class="px-4 py-3 text-left font-medium text-muted-foreground">Statut</th>
-                                        <th class="px-4 py-3 text-center font-medium text-muted-foreground">Action</th>
+                                        <th
+                                            class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                        >
+                                            Proprietaire
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                        >
+                                            Taux
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                        >
+                                            Brut
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                        >
+                                            Frais
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                        >
+                                            Net
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                        >
+                                            Verse
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                        >
+                                            Restant
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                        >
+                                            Statut
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-center font-medium text-muted-foreground"
+                                        >
+                                            Action
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y">
@@ -904,67 +1400,188 @@ function activiteDotClass(action: string): string {
                                         :key="part.id"
                                         class="transition-colors hover:bg-muted/10"
                                     >
-                                        <td class="px-4 py-3 font-medium">{{ part.beneficiaire_nom }}</td>
-                                        <td class="px-4 py-3 text-right text-muted-foreground tabular-nums">{{ part.taux_commission }}%</td>
-                                        <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatGNF(part.montant_brut) }}</td>
-                                        <td class="px-4 py-3 text-right tabular-nums">
-                                            <span v-if="part.frais_supplementaires > 0" class="font-semibold text-destructive">
-                                                - {{ formatGNF(part.frais_supplementaires) }}
-                                            </span>
-                                            <span v-else class="text-muted-foreground">{{ formatGNF(0) }}</span>
+                                        <td class="px-4 py-3 font-medium">
+                                            {{ part.beneficiaire_nom }}
                                         </td>
-                                        <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatGNF(part.montant_net) }}</td>
-                                        <td class="px-4 py-3 text-right text-foreground tabular-nums">{{ formatGNF(part.montant_verse) }}</td>
+                                        <td
+                                            class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                        >
+                                            {{ part.taux_commission }}%
+                                        </td>
                                         <td
                                             class="px-4 py-3 text-right font-semibold tabular-nums"
-                                            :class="part.montant_restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'"
                                         >
-                                            {{ formatGNF(part.montant_restant) }}
+                                            {{ formatGNF(part.montant_brut) }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right tabular-nums"
+                                        >
+                                            <span
+                                                v-if="
+                                                    part.frais_supplementaires >
+                                                    0
+                                                "
+                                                class="font-semibold text-destructive"
+                                            >
+                                                -
+                                                {{
+                                                    formatGNF(
+                                                        part.frais_supplementaires,
+                                                    )
+                                                }}
+                                            </span>
+                                            <span
+                                                v-else
+                                                class="text-muted-foreground"
+                                                >{{ formatGNF(0) }}</span
+                                            >
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right font-semibold tabular-nums"
+                                        >
+                                            {{ formatGNF(part.montant_net) }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right text-foreground tabular-nums"
+                                        >
+                                            {{ formatGNF(part.montant_verse) }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right font-semibold tabular-nums"
+                                            :class="
+                                                part.montant_restant > 0
+                                                    ? 'text-amber-600 dark:text-amber-400'
+                                                    : 'text-foreground'
+                                            "
+                                        >
+                                            {{
+                                                formatGNF(part.montant_restant)
+                                            }}
                                         </td>
                                         <td class="px-4 py-3">
                                             <StatusDot
                                                 :label="part.statut_label"
-                                                :dot-class="part.statut_dot_class"
+                                                :dot-class="
+                                                    part.statut_dot_class
+                                                "
                                                 class="text-xs text-muted-foreground"
                                             />
                                         </td>
                                         <td class="px-4 py-3 text-center">
-                                            <div class="flex items-center justify-center gap-2">
+                                            <div
+                                                class="flex items-center justify-center gap-2"
+                                            >
                                                 <Button
-                                                    v-if="part.versements.length > 0"
+                                                    v-if="
+                                                        part.versements.length >
+                                                        0
+                                                    "
                                                     variant="ghost"
                                                     size="sm"
                                                     class="h-8 px-2.5"
-                                                    @click="openHistoriqueDialog(part)"
+                                                    @click="
+                                                        openHistoriqueDialog(
+                                                            part,
+                                                        )
+                                                    "
                                                 >
-                                                    <History class="mr-1.5 h-3.5 w-3.5" />
-                                                    Hist. ({{ part.versements.length }})
+                                                    <History
+                                                        class="mr-1.5 h-3.5 w-3.5"
+                                                    />
+                                                    Hist. ({{
+                                                        part.versements.length
+                                                    }})
                                                 </Button>
                                                 <Button
-                                                    v-if="can_verser_commission && !part.is_versee && transfert.statut === 'reception'"
+                                                    v-if="
+                                                        can_verser_commission &&
+                                                        !part.is_versee &&
+                                                        transfert.statut ===
+                                                            'reception'
+                                                    "
                                                     size="sm"
-                                                    @click="openVersementDialog(part)"
+                                                    @click="
+                                                        openVersementDialog(
+                                                            part,
+                                                        )
+                                                    "
                                                 >
                                                     Verser
                                                 </Button>
-                                                <span v-else-if="part.is_versee" class="text-xs font-medium text-emerald-600">Verse ✓</span>
-                                                <span v-else class="text-xs text-muted-foreground">—</span>
+                                                <span
+                                                    v-else-if="part.is_versee"
+                                                    class="text-xs font-medium text-emerald-600"
+                                                    >Verse ✓</span
+                                                >
+                                                <span
+                                                    v-else
+                                                    class="text-xs text-muted-foreground"
+                                                    >—</span
+                                                >
                                             </div>
                                         </td>
                                     </tr>
                                 </tbody>
                                 <tfoot>
-                                    <tr class="border-t-2 bg-muted/20 text-sm font-semibold">
-                                        <td colspan="2" class="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground">Total</td>
-                                        <td class="px-4 py-2.5 text-right tabular-nums">{{ formatGNF(proprietaireTotals.brut) }}</td>
-                                        <td class="px-4 py-2.5 text-right tabular-nums text-destructive">- {{ formatGNF(proprietaireTotals.frais) }}</td>
-                                        <td class="px-4 py-2.5 text-right tabular-nums">{{ formatGNF(proprietaireTotals.net) }}</td>
-                                        <td class="px-4 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{{ formatGNF(proprietaireTotals.verse) }}</td>
+                                    <tr
+                                        class="border-t-2 bg-muted/20 text-sm font-semibold"
+                                    >
+                                        <td
+                                            colspan="2"
+                                            class="px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase"
+                                        >
+                                            Total
+                                        </td>
                                         <td
                                             class="px-4 py-2.5 text-right tabular-nums"
-                                            :class="proprietaireTotals.restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
                                         >
-                                            {{ formatGNF(proprietaireTotals.restant) }}
+                                            {{
+                                                formatGNF(
+                                                    proprietaireTotals.brut,
+                                                )
+                                            }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-2.5 text-right text-destructive tabular-nums"
+                                        >
+                                            -
+                                            {{
+                                                formatGNF(
+                                                    proprietaireTotals.frais,
+                                                )
+                                            }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-2.5 text-right tabular-nums"
+                                        >
+                                            {{
+                                                formatGNF(
+                                                    proprietaireTotals.net,
+                                                )
+                                            }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-2.5 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
+                                        >
+                                            {{
+                                                formatGNF(
+                                                    proprietaireTotals.verse,
+                                                )
+                                            }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-2.5 text-right tabular-nums"
+                                            :class="
+                                                proprietaireTotals.restant > 0
+                                                    ? 'text-amber-600 dark:text-amber-400'
+                                                    : 'text-muted-foreground'
+                                            "
+                                        >
+                                            {{
+                                                formatGNF(
+                                                    proprietaireTotals.restant,
+                                                )
+                                            }}
                                         </td>
                                         <td colspan="2" />
                                     </tr>
@@ -974,7 +1591,6 @@ function activiteDotClass(action: string): string {
                     </div>
                 </div>
             </div>
-
         </div>
 
         <!-- ══ Dialog : Valider le chargement ═════════════════════════════════ -->
@@ -985,14 +1601,33 @@ function activiteDotClass(action: string): string {
             :header="`Historique — ${historiquePart?.beneficiaire_nom ?? ''}`"
             :style="{ width: 'min(760px, 96vw)' }"
         >
-            <div v-if="historiquePart?.versements.length" class="overflow-x-auto">
+            <div
+                v-if="historiquePart?.versements.length"
+                class="overflow-x-auto"
+            >
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
-                            <th class="px-3 py-2.5 text-left font-medium text-muted-foreground">Date versement</th>
-                            <th class="px-3 py-2.5 text-left font-medium text-muted-foreground">Mode</th>
-                            <th class="px-3 py-2.5 text-right font-medium text-muted-foreground">Montant</th>
-                            <th class="px-3 py-2.5 text-left font-medium text-muted-foreground">Note</th>
+                            <th
+                                class="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Date versement
+                            </th>
+                            <th
+                                class="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Mode
+                            </th>
+                            <th
+                                class="px-3 py-2.5 text-right font-medium text-muted-foreground"
+                            >
+                                Montant
+                            </th>
+                            <th
+                                class="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Note
+                            </th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
@@ -1000,10 +1635,22 @@ function activiteDotClass(action: string): string {
                             v-for="versement in historiquePart.versements"
                             :key="versement.id"
                         >
-                            <td class="px-3 py-2.5 tabular-nums">{{ versement.date_versement }}</td>
-                            <td class="px-3 py-2.5 text-muted-foreground">{{ formatModePaiement(versement.mode_paiement) }}</td>
-                            <td class="px-3 py-2.5 text-right font-semibold tabular-nums">{{ formatGNF(versement.montant) }}</td>
-                            <td class="px-3 py-2.5 text-muted-foreground">{{ versement.note || '—' }}</td>
+                            <td class="px-3 py-2.5 tabular-nums">
+                                {{ versement.date_versement }}
+                            </td>
+                            <td class="px-3 py-2.5 text-muted-foreground">
+                                {{
+                                    formatModePaiement(versement.mode_paiement)
+                                }}
+                            </td>
+                            <td
+                                class="px-3 py-2.5 text-right font-semibold tabular-nums"
+                            >
+                                {{ formatGNF(versement.montant) }}
+                            </td>
+                            <td class="px-3 py-2.5 text-muted-foreground">
+                                {{ versement.note || '—' }}
+                            </td>
                         </tr>
                     </tbody>
                 </table>
@@ -1025,21 +1672,40 @@ function activiteDotClass(action: string): string {
             <p class="mb-4 text-sm text-muted-foreground">
                 Renseignez les quantités réellement chargées dans le véhicule.
             </p>
-            <div v-if="dialogErrors.length" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950">
-                <p v-for="err in dialogErrors" :key="err" class="text-sm text-red-700 dark:text-red-400">{{ err }}</p>
+            <div
+                v-if="dialogErrors.length"
+                class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950"
+            >
+                <p
+                    v-for="err in dialogErrors"
+                    :key="err"
+                    class="text-sm text-red-700 dark:text-red-400"
+                >
+                    {{ err }}
+                </p>
             </div>
             <table class="w-full text-sm">
                 <thead>
                     <tr class="border-b text-xs text-muted-foreground">
                         <th class="pb-2 text-left font-medium">Produit</th>
-                        <th class="pb-2 text-center font-medium">Qté demandée</th>
-                        <th class="pb-2 text-center font-medium">Qté chargée</th>
+                        <th class="pb-2 text-center font-medium">
+                            Qté demandée
+                        </th>
+                        <th class="pb-2 text-center font-medium">
+                            Qté chargée
+                        </th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
                     <tr v-for="(l, idx) in chargementLignes" :key="l.id">
-                        <td class="py-2.5 pr-4 font-medium">{{ l.produit_nom }}</td>
-                        <td class="py-2.5 text-center tabular-nums text-muted-foreground">{{ l.quantite_demandee }}</td>
+                        <td class="py-2.5 pr-4 font-medium">
+                            {{ l.produit_nom }}
+                        </td>
+                        <td
+                            class="py-2.5 text-center text-muted-foreground tabular-nums"
+                        >
+                            {{ l.quantite_demandee }}
+                        </td>
                         <td class="py-2.5">
                             <InputNumber
                                 v-model="chargementLignes[idx].quantite_chargee"
@@ -1053,11 +1719,23 @@ function activiteDotClass(action: string): string {
                 </tbody>
             </table>
             <template #footer>
-                <Button variant="outline" :disabled="processing" @click="showChargementDialog = false">Annuler</Button>
+                <Button
+                    variant="outline"
+                    :disabled="processing"
+                    @click="showChargementDialog = false"
+                    >Annuler</Button
+                >
                 <Button :disabled="processing" @click="submitChargement">
                     <Truck v-if="!processing" class="mr-2 h-4 w-4" />
-                    <span v-if="processing" class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent inline-block" />
-                    {{ processing ? 'Enregistrement…' : 'Valider et partir en livraison' }}
+                    <span
+                        v-if="processing"
+                        class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                    />
+                    {{
+                        processing
+                            ? 'Enregistrement…'
+                            : 'Valider et partir en livraison'
+                    }}
                 </Button>
             </template>
         </Dialog>
@@ -1073,19 +1751,35 @@ function activiteDotClass(action: string): string {
             @hide="dialogErrors = []"
         >
             <p class="mb-4 text-sm text-muted-foreground">
-                Renseignez les quantités reçues et les écarts constatés à destination.
+                Renseignez les quantités reçues et les écarts constatés à
+                destination.
             </p>
-            <div v-if="dialogErrors.length" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950">
-                <p v-for="err in dialogErrors" :key="err" class="text-sm text-red-700 dark:text-red-400">{{ err }}</p>
+            <div
+                v-if="dialogErrors.length"
+                class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950"
+            >
+                <p
+                    v-for="err in dialogErrors"
+                    :key="err"
+                    class="text-sm text-red-700 dark:text-red-400"
+                >
+                    {{ err }}
+                </p>
             </div>
             <table class="w-full text-sm">
                 <colgroup>
-                    <col />                         <!-- Produit : flexible -->
-                    <col style="width: 90px" />     <!-- Chargé -->
-                    <col style="width: 130px" />    <!-- Reçu -->
-                    <col style="width: 70px" />     <!-- Écart -->
-                    <col style="width: 180px" />    <!-- Type -->
-                    <col style="width: 220px" />    <!-- Motif -->
+                    <col />
+                    <!-- Produit : flexible -->
+                    <col style="width: 90px" />
+                    <!-- Chargé -->
+                    <col style="width: 130px" />
+                    <!-- Reçu -->
+                    <col style="width: 70px" />
+                    <!-- Écart -->
+                    <col style="width: 180px" />
+                    <!-- Type -->
+                    <col style="width: 220px" />
+                    <!-- Motif -->
                 </colgroup>
                 <thead>
                     <tr class="border-b text-xs text-muted-foreground">
@@ -1093,32 +1787,68 @@ function activiteDotClass(action: string): string {
                         <th class="pb-3 text-center font-medium">Chargé</th>
                         <th class="pb-3 text-center font-medium">Reçu</th>
                         <th class="pb-3 text-center font-medium">Écart</th>
-                        <th class="pb-3 text-left font-medium px-2">Type</th>
-                        <th class="pb-3 text-left font-medium px-2">Motif</th>
+                        <th class="px-2 pb-3 text-left font-medium">Type</th>
+                        <th class="px-2 pb-3 text-left font-medium">Motif</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
-                    <tr v-for="(l, idx) in receptionLignes" :key="l.id" class="align-middle">
-                        <td class="py-3 pr-4 font-medium">{{ l.produit_nom }}</td>
-                        <td class="py-3 text-center tabular-nums text-muted-foreground">{{ l.quantite_chargee }}</td>
-                        <td class="py-3 px-2">
+                    <tr
+                        v-for="(l, idx) in receptionLignes"
+                        :key="l.id"
+                        class="align-middle"
+                    >
+                        <td class="py-3 pr-4 font-medium">
+                            {{ l.produit_nom }}
+                        </td>
+                        <td
+                            class="py-3 text-center text-muted-foreground tabular-nums"
+                        >
+                            {{ l.quantite_chargee }}
+                        </td>
+                        <td class="px-2 py-3">
                             <InputNumber
                                 v-model="receptionLignes[idx].quantite_recue"
                                 :min="0"
                                 :use-grouping="false"
                                 class="w-full"
                                 input-class="w-full text-center"
-                                @update:model-value="() => {
-                                    if (receptionLignes[idx].quantite_recue === l.quantite_chargee) receptionLignes[idx].ecart_type = 'conforme';
-                                    else if ((receptionLignes[idx].quantite_recue ?? 0) < (l.quantite_chargee ?? 0)) receptionLignes[idx].ecart_type = 'manquant';
-                                    else receptionLignes[idx].ecart_type = 'surplus';
-                                }"
+                                @update:model-value="
+                                    () => {
+                                        if (
+                                            receptionLignes[idx]
+                                                .quantite_recue ===
+                                            l.quantite_chargee
+                                        )
+                                            receptionLignes[idx].ecart_type =
+                                                'conforme';
+                                        else if (
+                                            (receptionLignes[idx]
+                                                .quantite_recue ?? 0) <
+                                            (l.quantite_chargee ?? 0)
+                                        )
+                                            receptionLignes[idx].ecart_type =
+                                                'manquant';
+                                        else
+                                            receptionLignes[idx].ecart_type =
+                                                'surplus';
+                                    }
+                                "
                             />
                         </td>
-                        <td class="py-3 text-center tabular-nums font-semibold" :class="ecartReception(idx) === 0 ? 'text-muted-foreground' : ecartReception(idx) < 0 ? 'text-red-600' : 'text-amber-600'">
-                            {{ ecartReception(idx) > 0 ? '+' : '' }}{{ ecartReception(idx) }}
+                        <td
+                            class="py-3 text-center font-semibold tabular-nums"
+                            :class="
+                                ecartReception(idx) === 0
+                                    ? 'text-muted-foreground'
+                                    : ecartReception(idx) < 0
+                                      ? 'text-red-600'
+                                      : 'text-amber-600'
+                            "
+                        >
+                            {{ ecartReception(idx) > 0 ? '+' : ''
+                            }}{{ ecartReception(idx) }}
                         </td>
-                        <td class="py-3 px-2">
+                        <td class="px-2 py-3">
                             <Dropdown
                                 v-model="receptionLignes[idx].ecart_type"
                                 :options="types_ecart"
@@ -1127,7 +1857,7 @@ function activiteDotClass(action: string): string {
                                 class="w-full"
                             />
                         </td>
-                        <td class="py-3 px-2">
+                        <td class="px-2 py-3">
                             <InputText
                                 v-model="receptionLignes[idx].ecart_motif"
                                 placeholder="Motif (optionnel)…"
@@ -1138,10 +1868,18 @@ function activiteDotClass(action: string): string {
                 </tbody>
             </table>
             <template #footer>
-                <Button variant="outline" :disabled="processing" @click="showReceptionDialog = false">Annuler</Button>
+                <Button
+                    variant="outline"
+                    :disabled="processing"
+                    @click="showReceptionDialog = false"
+                    >Annuler</Button
+                >
                 <Button :disabled="processing" @click="submitReception">
                     <PackageCheck v-if="!processing" class="mr-2 h-4 w-4" />
-                    <span v-if="processing" class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent inline-block" />
+                    <span
+                        v-if="processing"
+                        class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                    />
                     {{ processing ? 'Validation…' : 'Valider la réception' }}
                 </Button>
             </template>
@@ -1165,24 +1903,34 @@ function activiteDotClass(action: string): string {
                         option-value="value"
                         class="w-full"
                     />
-                    <p v-if="commissionForm.errors.base_calcul" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="commissionForm.errors.base_calcul"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ commissionForm.errors.base_calcul }}
                     </p>
                 </div>
                 <div>
-                    <Label class="mb-1.5 block text-sm">Valeur de base (GNF)</Label>
+                    <Label class="mb-1.5 block text-sm"
+                        >Valeur de base (GNF)</Label
+                    >
                     <InputNumber
                         v-model="commissionForm.valeur_base"
                         :min="0"
                         class="w-full"
                         input-class="w-full"
                     />
-                    <p v-if="commissionForm.errors.valeur_base" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="commissionForm.errors.valeur_base"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ commissionForm.errors.valeur_base }}
                     </p>
                 </div>
                 <div v-if="needsQuantite">
-                    <Label class="mb-1.5 block text-sm">Quantité de référence</Label>
+                    <Label class="mb-1.5 block text-sm"
+                        >Quantité de référence</Label
+                    >
                     <InputNumber
                         v-model="commissionForm.quantite_reference"
                         :min="1"
@@ -1190,17 +1938,28 @@ function activiteDotClass(action: string): string {
                         class="w-full"
                         input-class="w-full"
                     />
-                    <p v-if="commissionForm.errors.quantite_reference" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="commissionForm.errors.quantite_reference"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ commissionForm.errors.quantite_reference }}
                     </p>
                 </div>
-                <p v-if="commissionForm.errors.commission" class="text-xs text-destructive">
+                <p
+                    v-if="commissionForm.errors.commission"
+                    class="text-xs text-destructive"
+                >
                     {{ commissionForm.errors.commission }}
                 </p>
             </div>
             <template #footer>
-                <Button variant="outline" @click="showCommissionDialog = false">Annuler</Button>
-                <Button :disabled="commissionForm.processing" @click="submitCommission">
+                <Button variant="outline" @click="showCommissionDialog = false"
+                    >Annuler</Button
+                >
+                <Button
+                    :disabled="commissionForm.processing"
+                    @click="submitCommission"
+                >
                     {{ commissionForm.processing ? 'Calcul…' : 'Générer' }}
                 </Button>
             </template>
@@ -1223,7 +1982,10 @@ function activiteDotClass(action: string): string {
                         class="w-full"
                         input-class="w-full"
                     />
-                    <p v-if="versementForm.errors.montant" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="versementForm.errors.montant"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ versementForm.errors.montant }}
                     </p>
                 </div>
@@ -1239,17 +2001,29 @@ function activiteDotClass(action: string): string {
                 </div>
                 <div>
                     <Label class="mb-1.5 block text-sm">Note (optionnel)</Label>
-                    <InputText v-model="versementForm.note" class="w-full" placeholder="Remarque…" />
+                    <InputText
+                        v-model="versementForm.note"
+                        class="w-full"
+                        placeholder="Remarque…"
+                    />
                 </div>
             </div>
             <template #footer>
-                <Button variant="outline" @click="showVersementDialog = false">Annuler</Button>
-                <Button :disabled="versementForm.processing" @click="submitVersement">
-                    {{ versementForm.processing ? 'Enregistrement…' : 'Enregistrer' }}
+                <Button variant="outline" @click="showVersementDialog = false"
+                    >Annuler</Button
+                >
+                <Button
+                    :disabled="versementForm.processing"
+                    @click="submitVersement"
+                >
+                    {{
+                        versementForm.processing
+                            ? 'Enregistrement…'
+                            : 'Enregistrer'
+                    }}
                 </Button>
             </template>
         </Dialog>
-
 
         <Dialog
             v-model:visible="showActivitesDialog"
@@ -1262,13 +2036,17 @@ function activiteDotClass(action: string): string {
                 <div>
                     <p class="font-semibold">Historique du transfert</p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ transfert.reference }} · {{ activites.length }} activité(s)
+                        {{ transfert.reference }} ·
+                        {{ activites.length }} activité(s)
                     </p>
                 </div>
             </template>
 
             <div class="max-h-[70vh] overflow-y-auto pr-1">
-                <div v-if="activitesTriees.length === 0" class="py-2 text-sm italic text-muted-foreground">
+                <div
+                    v-if="activitesTriees.length === 0"
+                    class="py-2 text-sm text-muted-foreground italic"
+                >
                     Aucune activité enregistrée.
                 </div>
 
@@ -1280,8 +2058,15 @@ function activiteDotClass(action: string): string {
                     >
                         <!-- Colonne timeline : dot + connecteur vertical -->
                         <div class="flex w-5 flex-col items-center">
-                            <span class="mt-1.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-border bg-background">
-                                <span :class="['h-1.5 w-1.5 rounded-full', activiteDotClass(activite.action)]" />
+                            <span
+                                class="mt-1.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-border bg-background"
+                            >
+                                <span
+                                    :class="[
+                                        'h-1.5 w-1.5 rounded-full',
+                                        activiteDotClass(activite.action),
+                                    ]"
+                                />
                             </span>
                             <span
                                 v-if="index < activitesTriees.length - 1"
@@ -1292,25 +2077,49 @@ function activiteDotClass(action: string): string {
                         <!-- Contenu -->
                         <div
                             class="min-w-0 flex-1 rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5"
-                            :class="index < activitesTriees.length - 1 ? 'mb-3' : ''"
+                            :class="
+                                index < activitesTriees.length - 1 ? 'mb-3' : ''
+                            "
                         >
-                            <div class="flex flex-wrap items-baseline gap-x-1.5">
-                                <span class="text-sm font-semibold">{{ activite.user_nom || 'Système' }}</span>
-                                <span class="text-sm text-muted-foreground">{{ activite.action_label }}</span>
+                            <div
+                                class="flex flex-wrap items-baseline gap-x-1.5"
+                            >
+                                <span class="text-sm font-semibold">{{
+                                    activite.user_nom || 'Système'
+                                }}</span>
+                                <span class="text-sm text-muted-foreground">{{
+                                    activite.action_label
+                                }}</span>
                                 <span
-                                    v-if="activite.action === 'versement_effectue' && activite.details"
+                                    v-if="
+                                        activite.action ===
+                                            'versement_effectue' &&
+                                        activite.details
+                                    "
                                     class="text-sm text-muted-foreground"
                                 >
-                                    — {{ Number(activite.details.montant).toLocaleString('fr-FR') }} GNF
-                                    <span v-if="activite.details.beneficiaire">({{ activite.details.beneficiaire }})</span>
+                                    —
+                                    {{
+                                        Number(
+                                            activite.details.montant,
+                                        ).toLocaleString('fr-FR')
+                                    }}
+                                    GNF
+                                    <span v-if="activite.details.beneficiaire"
+                                        >({{
+                                            activite.details.beneficiaire
+                                        }})</span
+                                    >
                                 </span>
                             </div>
-                            <time class="mt-1 block text-xs text-muted-foreground/80">{{ activite.created_at }}</time>
+                            <time
+                                class="mt-1 block text-xs text-muted-foreground/80"
+                                >{{ activite.created_at }}</time
+                            >
                         </div>
                     </li>
                 </ol>
             </div>
         </Dialog>
-
     </AppLayout>
 </template>

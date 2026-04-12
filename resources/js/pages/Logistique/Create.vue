@@ -6,7 +6,6 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Lock, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
-import Calendar from 'primevue/calendar';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import Textarea from 'primevue/textarea';
@@ -92,14 +91,18 @@ const today = new Date();
 const todayStr = `${pad(today.getDate())}/${pad(today.getMonth() + 1)}/${today.getFullYear()}`;
 
 const form = useForm({
-    site_source_id:      props.site_source?.id ?? (null as number | null),
-    site_destination_id: props.transfert?.site_destination_id ?? (null as number | null),
-    vehicule_id:         props.transfert?.vehicule_id ?? (null as number | null),
-    equipe_livraison_id: props.transfert?.equipe_livraison_id ?? (null as number | null),
-    date_depart_prevue:  props.transfert?.date_depart_prevue ?? todayStr,
+    site_source_id: props.site_source?.id ?? (null as number | null),
+    site_destination_id:
+        props.transfert?.site_destination_id ?? (null as number | null),
+    vehicule_id: props.transfert?.vehicule_id ?? (null as number | null),
+    equipe_livraison_id:
+        props.transfert?.equipe_livraison_id ?? (null as number | null),
+    date_depart_prevue: props.transfert?.date_depart_prevue ?? todayStr,
     date_arrivee_prevue: props.transfert?.date_arrivee_prevue ?? todayStr,
-    notes:               props.transfert?.notes ?? '',
-    lignes:              (props.transfert?.lignes ?? [{ produit_id: null, quantite_demandee: 1, notes: '' }]) as LigneForm[],
+    notes: props.transfert?.notes ?? '',
+    lignes: (props.transfert?.lignes ?? [
+        { produit_id: null, quantite_demandee: 1, notes: '' },
+    ]) as LigneForm[],
 });
 
 // ── Véhicule AutoComplete ─────────────────────────────────────────────────────
@@ -124,7 +127,9 @@ function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
     form.equipe_livraison_id = v?.equipe_livraison_id ?? null;
     if (v?.capacite_packs) {
-        form.lignes.forEach((l) => { l.quantite_demandee = v.capacite_packs!; });
+        form.lignes.forEach((l) => {
+            l.quantite_demandee = v.capacite_packs!;
+        });
     }
 }
 
@@ -136,7 +141,10 @@ function onVehiculeClear() {
 
 const equipeNom = computed(() => {
     if (!form.equipe_livraison_id) return null;
-    return props.equipes.find((e) => e.id === form.equipe_livraison_id)?.nom ?? null;
+    return (
+        props.equipes.find((e) => e.id === form.equipe_livraison_id)?.nom ??
+        null
+    );
 });
 
 function vehiculeLabel(v: VehiculeOption): string {
@@ -147,8 +155,8 @@ function vehiculeLabel(v: VehiculeOption): string {
 
 const produitSuggests = ref<ProduitOption[]>([]);
 const produitSelected = ref<Array<ProduitOption | null>>(
-    (props.transfert?.lignes ?? [{ produit_id: null }]).map((l) =>
-        props.produits.find((p) => p.id === l.produit_id) ?? null,
+    (props.transfert?.lignes ?? [{ produit_id: null }]).map(
+        (l) => props.produits.find((p) => p.id === l.produit_id) ?? null,
     ),
 );
 
@@ -184,7 +192,9 @@ const canSubmit = computed(
         form.site_destination_id !== null &&
         form.site_source_id !== form.site_destination_id &&
         form.vehicule_id !== null &&
-        form.lignes.every((l) => l.produit_id !== null && l.quantite_demandee >= 1) &&
+        form.lignes.every(
+            (l) => l.produit_id !== null && l.quantite_demandee >= 1,
+        ) &&
         !form.processing,
 );
 
@@ -204,7 +214,9 @@ function submit() {
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- Mobile sticky header -->
-        <div class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden">
+        <div
+            class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
+        >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
                     href="/logistique"
@@ -212,8 +224,12 @@ function submit() {
                 >
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
-                <h1 class="text-[17px] font-semibold leading-tight">
-                    {{ isEditing ? 'Modifier le transfert' : 'Nouveau transfert' }}
+                <h1 class="text-[17px] leading-tight font-semibold">
+                    {{
+                        isEditing
+                            ? 'Modifier le transfert'
+                            : 'Nouveau transfert'
+                    }}
                 </h1>
             </div>
         </div>
@@ -222,53 +238,95 @@ function submit() {
             <!-- En-tête desktop -->
             <div class="mb-6 hidden sm:block">
                 <h1 class="text-2xl font-semibold tracking-tight">
-                    {{ isEditing ? 'Modifier le transfert' : 'Nouveau transfert logistique' }}
+                    {{
+                        isEditing
+                            ? 'Modifier le transfert'
+                            : 'Nouveau transfert logistique'
+                    }}
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    {{ isEditing ? 'Modifiez les informations du transfert inter-sites.' : 'Planifiez un transfert de produits entre deux sites.' }}
+                    {{
+                        isEditing
+                            ? 'Modifiez les informations du transfert inter-sites.'
+                            : 'Planifiez un transfert de produits entre deux sites.'
+                    }}
                 </p>
             </div>
 
-            <form id="logistique-form" class="space-y-6" @submit.prevent="submit">
+            <form
+                id="logistique-form"
+                class="space-y-6"
+                @submit.prevent="submit"
+            >
                 <!-- ── Section : Informations ── -->
                 <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-                    <h2 class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+                    <h2
+                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
                         Informations du transfert
                     </h2>
 
                     <!-- Sites source / destination -->
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div>
-                            <Label class="mb-1.5 block text-sm">Site source</Label>
+                            <Label class="mb-1.5 block text-sm"
+                                >Site source</Label
+                            >
                             <div
                                 class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 text-sm"
-                                :class="site_source ? 'text-foreground' : 'text-muted-foreground'"
+                                :class="
+                                    site_source
+                                        ? 'text-foreground'
+                                        : 'text-muted-foreground'
+                                "
                             >
-                                <span>{{ site_source?.nom ?? 'Aucun site affecté' }}</span>
-                                <Lock class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                                <span>{{
+                                    site_source?.nom ?? 'Aucun site affecté'
+                                }}</span>
+                                <Lock
+                                    class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                                />
                             </div>
-                            <p v-if="!site_source" class="mt-1 text-xs text-destructive">
-                                Vous n'êtes affecté à aucun site. Contactez un administrateur.
+                            <p
+                                v-if="!site_source"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                Vous n'êtes affecté à aucun site. Contactez un
+                                administrateur.
                             </p>
-                            <p v-if="form.errors.site_source_id" class="mt-1 text-xs text-destructive">
+                            <p
+                                v-if="form.errors.site_source_id"
+                                class="mt-1 text-xs text-destructive"
+                            >
                                 {{ form.errors.site_source_id }}
                             </p>
                         </div>
                         <div>
                             <Label class="mb-1.5 block text-sm">
-                                Site destination <span class="text-destructive">*</span>
+                                Site destination
+                                <span class="text-destructive">*</span>
                             </Label>
                             <Dropdown
                                 v-model="form.site_destination_id"
-                                :options="sites.filter((s) => s.id !== site_source?.id)"
+                                :options="
+                                    sites.filter(
+                                        (s) => s.id !== site_source?.id,
+                                    )
+                                "
                                 option-label="nom"
                                 option-value="id"
                                 placeholder="Sélectionner un site"
                                 class="w-full"
-                                :class="{ 'p-invalid': form.errors.site_destination_id }"
+                                :class="{
+                                    'p-invalid':
+                                        form.errors.site_destination_id,
+                                }"
                                 filter
                             />
-                            <p v-if="form.errors.site_destination_id" class="mt-1 text-xs text-destructive">
+                            <p
+                                v-if="form.errors.site_destination_id"
+                                class="mt-1 text-xs text-destructive"
+                            >
                                 {{ form.errors.site_destination_id }}
                             </p>
                         </div>
@@ -277,7 +335,10 @@ function submit() {
                     <!-- Véhicule -->
                     <div class="mt-4">
                         <div>
-                            <Label class="mb-1.5 block text-sm">Véhicule <span class="text-destructive">*</span></Label>
+                            <Label class="mb-1.5 block text-sm"
+                                >Véhicule
+                                <span class="text-destructive">*</span></Label
+                            >
                             <AutoComplete
                                 v-model="vehiculeSelected"
                                 :suggestions="vehiculeSuggests"
@@ -293,20 +354,38 @@ function submit() {
                             >
                                 <template #option="{ option }">
                                     <div class="py-0.5">
-                                        <div class="font-medium leading-tight">{{ option.nom_vehicule }}</div>
-                                        <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                                            <span class="font-mono">{{ option.immatriculation }}</span>
-                                            <span v-if="option.capacite_packs !== null" class="before:mr-2 before:content-['·']">
-                                                {{ option.capacite_packs }} packs
+                                        <div class="leading-tight font-medium">
+                                            {{ option.nom_vehicule }}
+                                        </div>
+                                        <div
+                                            class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground"
+                                        >
+                                            <span class="font-mono">{{
+                                                option.immatriculation
+                                            }}</span>
+                                            <span
+                                                v-if="
+                                                    option.capacite_packs !==
+                                                    null
+                                                "
+                                                class="before:mr-2 before:content-['·']"
+                                            >
+                                                {{ option.capacite_packs }}
+                                                packs
                                             </span>
-                                            <span v-if="option.equipe_nom" class="before:mr-2 before:content-['·']">
+                                            <span
+                                                v-if="option.equipe_nom"
+                                                class="before:mr-2 before:content-['·']"
+                                            >
                                                 {{ option.equipe_nom }}
                                             </span>
                                         </div>
                                     </div>
                                 </template>
                                 <template #empty>
-                                    <span class="text-sm text-muted-foreground">Aucun véhicule trouvé.</span>
+                                    <span class="text-sm text-muted-foreground"
+                                        >Aucun véhicule trouvé.</span
+                                    >
                                 </template>
                             </AutoComplete>
                         </div>
@@ -329,23 +408,46 @@ function submit() {
 
                 <!-- ── Section : Lignes produits ── -->
                 <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-                    <h2 class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+                    <h2
+                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
                         Lignes produits
                     </h2>
 
-                    <p v-if="form.errors.lignes" class="mb-3 text-xs text-destructive">
+                    <p
+                        v-if="form.errors.lignes"
+                        class="mb-3 text-xs text-destructive"
+                    >
                         {{ form.errors.lignes }}
                     </p>
 
                     <!-- Table desktop -->
-                    <div class="hidden overflow-hidden rounded-lg border sm:block">
+                    <div
+                        class="hidden overflow-hidden rounded-lg border sm:block"
+                    >
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b bg-muted/40">
-                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Produit</th>
-                                    <th class="px-4 py-2.5 text-center font-medium text-muted-foreground" style="width: 120px">Quantité</th>
-                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Note (optionnel)</th>
-                                    <th class="px-4 py-2.5" style="width: 48px"></th>
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Produit
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 120px"
+                                    >
+                                        Quantité
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Note (optionnel)
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5"
+                                        style="width: 48px"
+                                    ></th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
@@ -365,14 +467,34 @@ function submit() {
                                             dropdown
                                             force-selection
                                             @complete="searchProduit"
-                                            @item-select="(e) => onProduitSelect(index, e.value)"
-                                            @clear="() => { ligne.produit_id = null; produitSelected[index] = null; }"
+                                            @item-select="
+                                                (e) =>
+                                                    onProduitSelect(
+                                                        index,
+                                                        e.value,
+                                                    )
+                                            "
+                                            @clear="
+                                                () => {
+                                                    ligne.produit_id = null;
+                                                    produitSelected[index] =
+                                                        null;
+                                                }
+                                            "
                                         />
                                         <p
-                                            v-if="(form.errors as any)[`lignes.${index}.produit_id`]"
+                                            v-if="
+                                                (form.errors as any)[
+                                                    `lignes.${index}.produit_id`
+                                                ]
+                                            "
                                             class="mt-1 text-xs text-destructive"
                                         >
-                                            {{ (form.errors as any)[`lignes.${index}.produit_id`] }}
+                                            {{
+                                                (form.errors as any)[
+                                                    `lignes.${index}.produit_id`
+                                                ]
+                                            }}
                                         </p>
                                     </td>
                                     <td class="px-4 py-3">
@@ -426,12 +548,23 @@ function submit() {
                                 dropdown
                                 force-selection
                                 @complete="searchProduit"
-                                @item-select="(e) => onProduitSelect(index, e.value)"
-                                @clear="() => { ligne.produit_id = null; produitSelected[index] = null; }"
+                                @item-select="
+                                    (e) => onProduitSelect(index, e.value)
+                                "
+                                @clear="
+                                    () => {
+                                        ligne.produit_id = null;
+                                        produitSelected[index] = null;
+                                    }
+                                "
                             />
                             <div class="mt-2.5 grid grid-cols-2 gap-2.5">
                                 <div>
-                                    <p class="mb-1 text-[11px] font-medium text-muted-foreground">Quantité</p>
+                                    <p
+                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
+                                    >
+                                        Quantité
+                                    </p>
                                     <InputNumber
                                         v-model="ligne.quantite_demandee"
                                         :min="1"
@@ -441,7 +574,11 @@ function submit() {
                                     />
                                 </div>
                                 <div>
-                                    <p class="mb-1 text-[11px] font-medium text-muted-foreground">Note</p>
+                                    <p
+                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
+                                    >
+                                        Note
+                                    </p>
                                     <input
                                         v-model="ligne.notes"
                                         type="text"
@@ -467,7 +604,12 @@ function submit() {
 
                     <!-- Ajouter une ligne -->
                     <div class="mt-4">
-                        <Button type="button" variant="outline" size="sm" @click="ajouterLigne">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            @click="ajouterLigne"
+                        >
                             <Plus class="mr-2 h-4 w-4" />
                             Ajouter une ligne
                         </Button>
@@ -484,17 +626,31 @@ function submit() {
                     </Link>
                     <Button type="submit" :disabled="!canSubmit">
                         <Save class="mr-2 h-4 w-4" />
-                        {{ form.processing ? 'Enregistrement…' : (isEditing ? 'Mettre à jour' : 'Créer le transfert') }}
+                        {{
+                            form.processing
+                                ? 'Enregistrement…'
+                                : isEditing
+                                  ? 'Mettre à jour'
+                                  : 'Créer le transfert'
+                        }}
                     </Button>
                 </div>
             </form>
         </div>
 
         <!-- Mobile sticky footer -->
-        <div class="fixed right-0 bottom-0 left-0 z-20 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden">
+        <div
+            class="fixed right-0 bottom-0 left-0 z-20 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden"
+        >
             <Button class="w-full" :disabled="!canSubmit" @click="submit">
                 <Save class="mr-2 h-4 w-4" />
-                {{ form.processing ? 'Enregistrement…' : (isEditing ? 'Mettre à jour' : 'Créer le transfert') }}
+                {{
+                    form.processing
+                        ? 'Enregistrement…'
+                        : isEditing
+                          ? 'Mettre à jour'
+                          : 'Créer le transfert'
+                }}
             </Button>
         </div>
     </AppLayout>

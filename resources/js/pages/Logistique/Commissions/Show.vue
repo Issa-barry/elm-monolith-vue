@@ -100,7 +100,9 @@ const livreurParts = computed(() =>
     props.commission.parts.filter((p) => p.type_beneficiaire === 'livreur'),
 );
 const proprietaireParts = computed(() =>
-    props.commission.parts.filter((p) => p.type_beneficiaire === 'proprietaire'),
+    props.commission.parts.filter(
+        (p) => p.type_beneficiaire === 'proprietaire',
+    ),
 );
 
 const activeTab = ref<'livreurs' | 'proprietaires'>(
@@ -112,17 +114,17 @@ const activeTab = ref<'livreurs' | 'proprietaires'>(
 function aggregate(parts: CommissionPart[]) {
     return parts.reduce(
         (acc, p) => ({
-            brut:    acc.brut + p.montant_brut,
-            frais:   acc.frais + p.frais_supplementaires,
-            net:     acc.net + p.montant_net,
-            verse:   acc.verse + p.montant_verse,
+            brut: acc.brut + p.montant_brut,
+            frais: acc.frais + p.frais_supplementaires,
+            net: acc.net + p.montant_net,
+            verse: acc.verse + p.montant_verse,
             restant: acc.restant + p.montant_restant,
         }),
         { brut: 0, frais: 0, net: 0, verse: 0, restant: 0 },
     );
 }
 
-const livreurTotals     = computed(() => aggregate(livreurParts.value));
+const livreurTotals = computed(() => aggregate(livreurParts.value));
 const proprietaireTotals = computed(() => aggregate(proprietaireParts.value));
 
 // ── Dialog versement ──────────────────────────────────────────────────────────
@@ -148,7 +150,8 @@ const versementForm = reactive<VersementForm>({
 
 function openVersementDialog(part: CommissionPart) {
     selectedPart.value = part;
-    versementForm.montant = part.montant_restant > 0 ? part.montant_restant : null;
+    versementForm.montant =
+        part.montant_restant > 0 ? part.montant_restant : null;
     versementForm.mode_paiement = 'especes';
     versementForm.note = '';
     versementForm.processing = false;
@@ -165,9 +168,9 @@ function submitVersement() {
     router.post(
         `/commissions-logistique/parts/${part.id}/versements`,
         {
-            montant:        versementForm.montant,
-            mode_paiement:  versementForm.mode_paiement,
-            note:           versementForm.note || null,
+            montant: versementForm.montant,
+            mode_paiement: versementForm.mode_paiement,
+            note: versementForm.note || null,
         },
         {
             preserveScroll: true,
@@ -210,7 +213,6 @@ function formatModePaiement(mode: string): string {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-
             <!-- ── En-tête ──────────────────────────────────────────────────── -->
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="flex items-center gap-3">
@@ -221,23 +223,40 @@ function formatModePaiement(mode: string): string {
                         <ArrowLeft class="h-4 w-4" />
                     </Link>
                     <div>
-                        <p class="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        <p
+                            class="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase"
+                        >
                             Commission logistique
                         </p>
-                        <p class="mt-1 font-mono text-xl font-semibold leading-none">
+                        <p
+                            class="mt-1 font-mono text-xl leading-none font-semibold"
+                        >
                             {{ commission.transfert_reference ?? '—' }}
                         </p>
-                        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                        <div
+                            class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground"
+                        >
                             <span class="inline-flex items-center gap-1.5">
                                 <MapPin class="h-3.5 w-3.5 shrink-0" />
-                                <span>{{ commission.site_source_nom ?? '—' }}</span>
+                                <span>{{
+                                    commission.site_source_nom ?? '—'
+                                }}</span>
                                 <ChevronRight class="h-3 w-3 shrink-0" />
-                                <span>{{ commission.site_destination_nom ?? '—' }}</span>
+                                <span>{{
+                                    commission.site_destination_nom ?? '—'
+                                }}</span>
                             </span>
-                            <span v-if="commission.vehicule_nom" class="inline-flex items-center gap-1.5">
+                            <span
+                                v-if="commission.vehicule_nom"
+                                class="inline-flex items-center gap-1.5"
+                            >
                                 <Truck class="h-3.5 w-3.5 shrink-0" />
                                 {{ commission.vehicule_nom }}
-                                <span v-if="commission.immatriculation" class="font-mono text-xs">({{ commission.immatriculation }})</span>
+                                <span
+                                    v-if="commission.immatriculation"
+                                    class="font-mono text-xs"
+                                    >({{ commission.immatriculation }})</span
+                                >
                             </span>
                         </div>
                     </div>
@@ -261,24 +280,50 @@ function formatModePaiement(mode: string): string {
             <!-- ── KPI cards ────────────────────────────────────────────────── -->
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total commission</p>
-                    <p class="mt-1 text-xl font-bold tabular-nums">{{ formatGNF(commission.montant_total) }}</p>
-                    <p class="mt-1 text-xs text-muted-foreground">{{ commission.base_calcul_label }}</p>
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Total commission
+                    </p>
+                    <p class="mt-1 text-xl font-bold tabular-nums">
+                        {{ formatGNF(commission.montant_total) }}
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        {{ commission.base_calcul_label }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Versé</p>
-                    <p class="mt-1 text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Versé
+                    </p>
+                    <p
+                        class="mt-1 text-xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
+                    >
                         {{ formatGNF(commission.montant_verse) }}
                     </p>
                 </div>
                 <div
                     class="rounded-xl border bg-card p-4 shadow-sm"
-                    :class="commission.montant_restant > 0 ? 'border-amber-200 dark:border-amber-900' : ''"
+                    :class="
+                        commission.montant_restant > 0
+                            ? 'border-amber-200 dark:border-amber-900'
+                            : ''
+                    "
                 >
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Restant à verser</p>
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Restant à verser
+                    </p>
                     <p
                         class="mt-1 text-xl font-bold tabular-nums"
-                        :class="commission.montant_restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'"
+                        :class="
+                            commission.montant_restant > 0
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : 'text-foreground'
+                        "
                     >
                         {{ formatGNF(commission.montant_restant) }}
                     </p>
@@ -286,34 +331,42 @@ function formatModePaiement(mode: string): string {
             </div>
 
             <!-- ── Onglets parts ─────────────────────────────────────────────── -->
-            <div class="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
                 <!-- Tabs header -->
                 <div class="flex items-center gap-1 border-b px-4 py-2">
                     <button
                         class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
-                        :class="activeTab === 'livreurs'
-                            ? 'bg-primary/10 text-primary'
-                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
+                        :class="
+                            activeTab === 'livreurs'
+                                ? 'bg-primary/10 text-primary'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        "
                         :disabled="livreurParts.length === 0"
                         @click="activeTab = 'livreurs'"
                     >
                         <Truck class="h-3.5 w-3.5" />
                         Livreurs
-                        <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                        <span
+                            class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
+                        >
                             {{ livreurParts.length }}
                         </span>
                     </button>
                     <button
                         class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
-                        :class="activeTab === 'proprietaires'
-                            ? 'bg-primary/10 text-primary'
-                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
+                        :class="
+                            activeTab === 'proprietaires'
+                                ? 'bg-primary/10 text-primary'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        "
                         :disabled="proprietaireParts.length === 0"
                         @click="activeTab = 'proprietaires'"
                     >
                         <User class="h-3.5 w-3.5" />
                         Propriétaires
-                        <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                        <span
+                            class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
+                        >
                             {{ proprietaireParts.length }}
                         </span>
                     </button>
@@ -321,16 +374,47 @@ function formatModePaiement(mode: string): string {
 
                 <!-- Onglet Livreurs -->
                 <div v-if="activeTab === 'livreurs'" class="overflow-x-auto">
-                    <table v-if="livreurParts.length > 0" class="w-full text-sm">
+                    <table
+                        v-if="livreurParts.length > 0"
+                        class="w-full text-sm"
+                    >
                         <thead>
                             <tr class="border-b bg-muted/40">
-                                <th class="px-4 py-3 text-left font-medium text-muted-foreground">Livreur</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Taux</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Montant</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Versé</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Restant</th>
-                                <th class="px-4 py-3 text-left font-medium text-muted-foreground">Statut</th>
-                                <th class="px-4 py-3 text-center font-medium text-muted-foreground">Actions</th>
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Livreur
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Taux
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Montant
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Versé
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Restant
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Statut
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-center font-medium text-muted-foreground"
+                                >
+                                    Actions
+                                </th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
@@ -339,21 +423,45 @@ function formatModePaiement(mode: string): string {
                                 :key="part.id"
                                 class="transition-colors hover:bg-muted/10"
                             >
-                                <td class="px-4 py-3 font-medium">{{ part.beneficiaire_nom }}</td>
-                                <td class="px-4 py-3 text-right text-muted-foreground tabular-nums">{{ part.taux_commission }}%</td>
-                                <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatGNF(part.montant_net) }}</td>
-                                <td class="px-4 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{{ formatGNF(part.montant_verse) }}</td>
+                                <td class="px-4 py-3 font-medium">
+                                    {{ part.beneficiaire_nom }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ part.taux_commission }}%
+                                </td>
                                 <td
                                     class="px-4 py-3 text-right font-semibold tabular-nums"
-                                    :class="part.montant_restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+                                >
+                                    {{ formatGNF(part.montant_net) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
+                                >
+                                    {{ formatGNF(part.montant_verse) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right font-semibold tabular-nums"
+                                    :class="
+                                        part.montant_restant > 0
+                                            ? 'text-amber-600 dark:text-amber-400'
+                                            : 'text-muted-foreground'
+                                    "
                                 >
                                     {{ formatGNF(part.montant_restant) }}
                                 </td>
                                 <td class="px-4 py-3">
-                                    <StatusDot :label="part.statut_label" :dot-class="part.statut_dot_class" class="text-xs text-muted-foreground" />
+                                    <StatusDot
+                                        :label="part.statut_label"
+                                        :dot-class="part.statut_dot_class"
+                                        class="text-xs text-muted-foreground"
+                                    />
                                 </td>
                                 <td class="px-4 py-3 text-center">
-                                    <div class="flex items-center justify-center gap-2">
+                                    <div
+                                        class="flex items-center justify-center gap-2"
+                                    >
                                         <Button
                                             v-if="part.versements.length > 0"
                                             variant="ghost"
@@ -361,7 +469,9 @@ function formatModePaiement(mode: string): string {
                                             class="h-8 px-2.5"
                                             @click="openHistoriqueDialog(part)"
                                         >
-                                            <History class="mr-1.5 h-3.5 w-3.5" />
+                                            <History
+                                                class="mr-1.5 h-3.5 w-3.5"
+                                            />
                                             Hist. ({{ part.versements.length }})
                                         </Button>
                                         <Button
@@ -371,20 +481,47 @@ function formatModePaiement(mode: string): string {
                                         >
                                             Verser
                                         </Button>
-                                        <span v-else-if="part.is_versee" class="text-xs font-medium text-emerald-600 dark:text-emerald-400">Versé ✓</span>
-                                        <span v-else-if="!can_verser && !part.is_versee" class="text-xs text-muted-foreground">—</span>
+                                        <span
+                                            v-else-if="part.is_versee"
+                                            class="text-xs font-medium text-emerald-600 dark:text-emerald-400"
+                                            >Versé ✓</span
+                                        >
+                                        <span
+                                            v-else-if="
+                                                !can_verser && !part.is_versee
+                                            "
+                                            class="text-xs text-muted-foreground"
+                                            >—</span
+                                        >
                                     </div>
                                 </td>
                             </tr>
                         </tbody>
                         <tfoot>
-                            <tr class="border-t-2 bg-muted/20 text-sm font-semibold">
-                                <td colspan="2" class="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground">Total</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ formatGNF(livreurTotals.net) }}</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{{ formatGNF(livreurTotals.verse) }}</td>
+                            <tr
+                                class="border-t-2 bg-muted/20 text-sm font-semibold"
+                            >
+                                <td
+                                    colspan="2"
+                                    class="px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase"
+                                >
+                                    Total
+                                </td>
+                                <td class="px-4 py-2.5 text-right tabular-nums">
+                                    {{ formatGNF(livreurTotals.net) }}
+                                </td>
+                                <td
+                                    class="px-4 py-2.5 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
+                                >
+                                    {{ formatGNF(livreurTotals.verse) }}
+                                </td>
                                 <td
                                     class="px-4 py-2.5 text-right tabular-nums"
-                                    :class="livreurTotals.restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+                                    :class="
+                                        livreurTotals.restant > 0
+                                            ? 'text-amber-600 dark:text-amber-400'
+                                            : 'text-muted-foreground'
+                                    "
                                 >
                                     {{ formatGNF(livreurTotals.restant) }}
                                 </td>
@@ -392,26 +529,71 @@ function formatModePaiement(mode: string): string {
                             </tr>
                         </tfoot>
                     </table>
-                    <div v-else class="flex flex-col items-center gap-3 py-12 text-muted-foreground">
+                    <div
+                        v-else
+                        class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
+                    >
                         <Truck class="h-10 w-10 opacity-30" />
                         <p class="text-sm">Aucune part livreur.</p>
                     </div>
                 </div>
 
                 <!-- Onglet Propriétaires -->
-                <div v-if="activeTab === 'proprietaires'" class="overflow-x-auto">
-                    <table v-if="proprietaireParts.length > 0" class="w-full text-sm">
+                <div
+                    v-if="activeTab === 'proprietaires'"
+                    class="overflow-x-auto"
+                >
+                    <table
+                        v-if="proprietaireParts.length > 0"
+                        class="w-full text-sm"
+                    >
                         <thead>
                             <tr class="border-b bg-muted/40">
-                                <th class="px-4 py-3 text-left font-medium text-muted-foreground">Propriétaire</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Taux</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Brut</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Frais</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Net</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Versé</th>
-                                <th class="px-4 py-3 text-right font-medium text-muted-foreground">Restant</th>
-                                <th class="px-4 py-3 text-left font-medium text-muted-foreground">Statut</th>
-                                <th class="px-4 py-3 text-center font-medium text-muted-foreground">Actions</th>
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Propriétaire
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Taux
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Brut
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Frais
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Net
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Versé
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Restant
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Statut
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-center font-medium text-muted-foreground"
+                                >
+                                    Actions
+                                </th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
@@ -420,28 +602,66 @@ function formatModePaiement(mode: string): string {
                                 :key="part.id"
                                 class="transition-colors hover:bg-muted/10"
                             >
-                                <td class="px-4 py-3 font-medium">{{ part.beneficiaire_nom }}</td>
-                                <td class="px-4 py-3 text-right text-muted-foreground tabular-nums">{{ part.taux_commission }}%</td>
-                                <td class="px-4 py-3 text-right tabular-nums">{{ formatGNF(part.montant_brut) }}</td>
-                                <td class="px-4 py-3 text-right tabular-nums">
-                                    <span v-if="part.frais_supplementaires > 0" class="font-semibold text-destructive">
-                                        - {{ formatGNF(part.frais_supplementaires) }}
-                                    </span>
-                                    <span v-else class="text-muted-foreground">{{ formatGNF(0) }}</span>
+                                <td class="px-4 py-3 font-medium">
+                                    {{ part.beneficiaire_nom }}
                                 </td>
-                                <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatGNF(part.montant_net) }}</td>
-                                <td class="px-4 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{{ formatGNF(part.montant_verse) }}</td>
+                                <td
+                                    class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ part.taux_commission }}%
+                                </td>
+                                <td class="px-4 py-3 text-right tabular-nums">
+                                    {{ formatGNF(part.montant_brut) }}
+                                </td>
+                                <td class="px-4 py-3 text-right tabular-nums">
+                                    <span
+                                        v-if="part.frais_supplementaires > 0"
+                                        class="font-semibold text-destructive"
+                                    >
+                                        -
+                                        {{
+                                            formatGNF(
+                                                part.frais_supplementaires,
+                                            )
+                                        }}
+                                    </span>
+                                    <span
+                                        v-else
+                                        class="text-muted-foreground"
+                                        >{{ formatGNF(0) }}</span
+                                    >
+                                </td>
                                 <td
                                     class="px-4 py-3 text-right font-semibold tabular-nums"
-                                    :class="part.montant_restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+                                >
+                                    {{ formatGNF(part.montant_net) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
+                                >
+                                    {{ formatGNF(part.montant_verse) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right font-semibold tabular-nums"
+                                    :class="
+                                        part.montant_restant > 0
+                                            ? 'text-amber-600 dark:text-amber-400'
+                                            : 'text-muted-foreground'
+                                    "
                                 >
                                     {{ formatGNF(part.montant_restant) }}
                                 </td>
                                 <td class="px-4 py-3">
-                                    <StatusDot :label="part.statut_label" :dot-class="part.statut_dot_class" class="text-xs text-muted-foreground" />
+                                    <StatusDot
+                                        :label="part.statut_label"
+                                        :dot-class="part.statut_dot_class"
+                                        class="text-xs text-muted-foreground"
+                                    />
                                 </td>
                                 <td class="px-4 py-3 text-center">
-                                    <div class="flex items-center justify-center gap-2">
+                                    <div
+                                        class="flex items-center justify-center gap-2"
+                                    >
                                         <Button
                                             v-if="part.versements.length > 0"
                                             variant="ghost"
@@ -449,7 +669,9 @@ function formatModePaiement(mode: string): string {
                                             class="h-8 px-2.5"
                                             @click="openHistoriqueDialog(part)"
                                         >
-                                            <History class="mr-1.5 h-3.5 w-3.5" />
+                                            <History
+                                                class="mr-1.5 h-3.5 w-3.5"
+                                            />
                                             Hist. ({{ part.versements.length }})
                                         </Button>
                                         <Button
@@ -459,22 +681,55 @@ function formatModePaiement(mode: string): string {
                                         >
                                             Verser
                                         </Button>
-                                        <span v-else-if="part.is_versee" class="text-xs font-medium text-emerald-600 dark:text-emerald-400">Versé ✓</span>
-                                        <span v-else-if="!can_verser && !part.is_versee" class="text-xs text-muted-foreground">—</span>
+                                        <span
+                                            v-else-if="part.is_versee"
+                                            class="text-xs font-medium text-emerald-600 dark:text-emerald-400"
+                                            >Versé ✓</span
+                                        >
+                                        <span
+                                            v-else-if="
+                                                !can_verser && !part.is_versee
+                                            "
+                                            class="text-xs text-muted-foreground"
+                                            >—</span
+                                        >
                                     </div>
                                 </td>
                             </tr>
                         </tbody>
                         <tfoot>
-                            <tr class="border-t-2 bg-muted/20 text-sm font-semibold">
-                                <td colspan="2" class="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground">Total</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ formatGNF(proprietaireTotals.brut) }}</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums text-destructive">- {{ formatGNF(proprietaireTotals.frais) }}</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ formatGNF(proprietaireTotals.net) }}</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{{ formatGNF(proprietaireTotals.verse) }}</td>
+                            <tr
+                                class="border-t-2 bg-muted/20 text-sm font-semibold"
+                            >
+                                <td
+                                    colspan="2"
+                                    class="px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase"
+                                >
+                                    Total
+                                </td>
+                                <td class="px-4 py-2.5 text-right tabular-nums">
+                                    {{ formatGNF(proprietaireTotals.brut) }}
+                                </td>
+                                <td
+                                    class="px-4 py-2.5 text-right text-destructive tabular-nums"
+                                >
+                                    - {{ formatGNF(proprietaireTotals.frais) }}
+                                </td>
+                                <td class="px-4 py-2.5 text-right tabular-nums">
+                                    {{ formatGNF(proprietaireTotals.net) }}
+                                </td>
+                                <td
+                                    class="px-4 py-2.5 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
+                                >
+                                    {{ formatGNF(proprietaireTotals.verse) }}
+                                </td>
                                 <td
                                     class="px-4 py-2.5 text-right tabular-nums"
-                                    :class="proprietaireTotals.restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+                                    :class="
+                                        proprietaireTotals.restant > 0
+                                            ? 'text-amber-600 dark:text-amber-400'
+                                            : 'text-muted-foreground'
+                                    "
                                 >
                                     {{ formatGNF(proprietaireTotals.restant) }}
                                 </td>
@@ -482,13 +737,15 @@ function formatModePaiement(mode: string): string {
                             </tr>
                         </tfoot>
                     </table>
-                    <div v-else class="flex flex-col items-center gap-3 py-12 text-muted-foreground">
+                    <div
+                        v-else
+                        class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
+                    >
                         <User class="h-10 w-10 opacity-30" />
                         <p class="text-sm">Aucune part propriétaire.</p>
                     </div>
                 </div>
             </div>
-
         </div>
 
         <!-- ── Dialog : Enregistrer un versement ─────────────────────────────── -->
@@ -509,7 +766,10 @@ function formatModePaiement(mode: string): string {
                         class="w-full"
                         input-class="w-full"
                     />
-                    <p v-if="versementForm.errors.montant" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="versementForm.errors.montant"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ versementForm.errors.montant }}
                     </p>
                 </div>
@@ -522,7 +782,10 @@ function formatModePaiement(mode: string): string {
                         option-value="value"
                         class="w-full"
                     />
-                    <p v-if="versementForm.errors.mode_paiement" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="versementForm.errors.mode_paiement"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ versementForm.errors.mode_paiement }}
                     </p>
                 </div>
@@ -536,13 +799,32 @@ function formatModePaiement(mode: string): string {
                 </div>
             </div>
             <template #footer>
-                <Button variant="outline" :disabled="versementForm.processing" @click="showVersementDialog = false">
+                <Button
+                    variant="outline"
+                    :disabled="versementForm.processing"
+                    @click="showVersementDialog = false"
+                >
                     Annuler
                 </Button>
-                <Button :disabled="versementForm.processing || !versementForm.montant" @click="submitVersement">
-                    <HandCoins v-if="!versementForm.processing" class="mr-1.5 h-4 w-4" />
-                    <span v-if="versementForm.processing" class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    {{ versementForm.processing ? 'Enregistrement…' : 'Enregistrer' }}
+                <Button
+                    :disabled="
+                        versementForm.processing || !versementForm.montant
+                    "
+                    @click="submitVersement"
+                >
+                    <HandCoins
+                        v-if="!versementForm.processing"
+                        class="mr-1.5 h-4 w-4"
+                    />
+                    <span
+                        v-if="versementForm.processing"
+                        class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                    />
+                    {{
+                        versementForm.processing
+                            ? 'Enregistrement…'
+                            : 'Enregistrer'
+                    }}
                 </Button>
             </template>
         </Dialog>
@@ -556,15 +838,38 @@ function formatModePaiement(mode: string): string {
             :style="{ width: 'min(720px, 96vw)' }"
             :draggable="false"
         >
-            <div v-if="historiquePart?.versements.length" class="overflow-x-auto">
+            <div
+                v-if="historiquePart?.versements.length"
+                class="overflow-x-auto"
+            >
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
-                            <th class="px-3 py-2.5 text-left font-medium text-muted-foreground">Date</th>
-                            <th class="px-3 py-2.5 text-left font-medium text-muted-foreground">Mode</th>
-                            <th class="px-3 py-2.5 text-right font-medium text-muted-foreground">Montant</th>
-                            <th class="px-3 py-2.5 text-left font-medium text-muted-foreground">Note</th>
-                            <th class="px-3 py-2.5 text-left font-medium text-muted-foreground">Enregistré par</th>
+                            <th
+                                class="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Date
+                            </th>
+                            <th
+                                class="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Mode
+                            </th>
+                            <th
+                                class="px-3 py-2.5 text-right font-medium text-muted-foreground"
+                            >
+                                Montant
+                            </th>
+                            <th
+                                class="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Note
+                            </th>
+                            <th
+                                class="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Enregistré par
+                            </th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
@@ -573,11 +878,23 @@ function formatModePaiement(mode: string): string {
                             :key="v.id"
                             class="hover:bg-muted/10"
                         >
-                            <td class="px-3 py-2.5 tabular-nums">{{ v.date_versement ?? '—' }}</td>
-                            <td class="px-3 py-2.5 text-muted-foreground">{{ formatModePaiement(v.mode_paiement) }}</td>
-                            <td class="px-3 py-2.5 text-right font-semibold tabular-nums">{{ formatGNF(v.montant) }}</td>
-                            <td class="px-3 py-2.5 text-muted-foreground">{{ v.note || '—' }}</td>
-                            <td class="px-3 py-2.5 text-muted-foreground">{{ v.created_by ?? '—' }}</td>
+                            <td class="px-3 py-2.5 tabular-nums">
+                                {{ v.date_versement ?? '—' }}
+                            </td>
+                            <td class="px-3 py-2.5 text-muted-foreground">
+                                {{ formatModePaiement(v.mode_paiement) }}
+                            </td>
+                            <td
+                                class="px-3 py-2.5 text-right font-semibold tabular-nums"
+                            >
+                                {{ formatGNF(v.montant) }}
+                            </td>
+                            <td class="px-3 py-2.5 text-muted-foreground">
+                                {{ v.note || '—' }}
+                            </td>
+                            <td class="px-3 py-2.5 text-muted-foreground">
+                                {{ v.created_by ?? '—' }}
+                            </td>
                         </tr>
                     </tbody>
                 </table>
@@ -586,6 +903,5 @@ function formatModePaiement(mode: string): string {
                 Aucun versement enregistré pour ce bénéficiaire.
             </p>
         </Dialog>
-
     </AppLayout>
 </template>

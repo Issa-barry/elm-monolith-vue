@@ -5,7 +5,6 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/composables/usePermissions';
@@ -96,7 +95,10 @@ const breadcrumbs = computed((): BreadcrumbItem[] => [
     { title: 'Logistique', href: '/logistique/transferts' },
     {
         title: props.vue === 'receptions' ? 'Réceptions' : 'Transferts',
-        href: props.vue === 'receptions' ? '/logistique/receptions' : '/logistique/transferts',
+        href:
+            props.vue === 'receptions'
+                ? '/logistique/receptions'
+                : '/logistique/transferts',
     },
 ]);
 
@@ -112,7 +114,10 @@ watch(search, (val) => {
 
 function appliquerFiltreStatut(val: string | null) {
     statutFiltre.value = val;
-    const url = props.vue === 'receptions' ? '/logistique/receptions' : '/logistique/transferts';
+    const url =
+        props.vue === 'receptions'
+            ? '/logistique/receptions'
+            : '/logistique/transferts';
     router.get(
         url,
         { statut: val ?? undefined },
@@ -130,19 +135,19 @@ const mobileFiltered = computed(() => {
     return props.transferts.filter(
         (t) =>
             t.reference.toLowerCase().includes(q) ||
-            (t.site_source_nom && t.site_source_nom.toLowerCase().includes(q)) ||
+            (t.site_source_nom &&
+                t.site_source_nom.toLowerCase().includes(q)) ||
             (t.site_destination_nom &&
                 t.site_destination_nom.toLowerCase().includes(q)),
     );
 });
 
-
 // ── Étiquette prochaine étape ─────────────────────────────────────────────────
 
 const ETAPE_SUIVANTE: Record<string, string> = {
-    brouillon:  'Démarrer le chargement',
+    brouillon: 'Démarrer le chargement',
     chargement: 'Valider le chargement',
-    transit:    'Valider la réception',
+    transit: 'Valider la réception',
 };
 
 function labelSuivant(statut: string): string {
@@ -156,26 +161,49 @@ const avancementEnCours = ref<number | null>(null);
 function avancerDirect(t: Transfert) {
     if (avancementEnCours.value) return;
     avancementEnCours.value = t.id;
-    router.post(`/logistique/${t.id}/statut/avancer`, {}, {
-        preserveScroll: true,
-        onSuccess: () => toast.add({ severity: 'success', summary: 'Statut mis à jour', life: 3000 }),
-        onError: () => toast.add({ severity: 'error', summary: 'Erreur', detail: 'Impossible de mettre à jour le statut.', life: 4000 }),
-        onFinish: () => { avancementEnCours.value = null; },
-    });
+    router.post(
+        `/logistique/${t.id}/statut/avancer`,
+        {},
+        {
+            preserveScroll: true,
+            onSuccess: () =>
+                toast.add({
+                    severity: 'success',
+                    summary: 'Statut mis à jour',
+                    life: 3000,
+                }),
+            onError: () =>
+                toast.add({
+                    severity: 'error',
+                    summary: 'Erreur',
+                    detail: 'Impossible de mettre à jour le statut.',
+                    life: 4000,
+                }),
+            onFinish: () => {
+                avancementEnCours.value = null;
+            },
+        },
+    );
 }
 
 // ── Commission statut dot class ───────────────────────────────────────────────
 
 const commStatutDot: Record<string, string> = {
-    en_attente:            'bg-red-500',
-    partiellement_versee:  'bg-amber-500',
-    versee:                'bg-emerald-500',
-    annulee:               'bg-zinc-400 dark:bg-zinc-500',
+    en_attente: 'bg-red-500',
+    partiellement_versee: 'bg-amber-500',
+    versee: 'bg-emerald-500',
+    annulee: 'bg-zinc-400 dark:bg-zinc-500',
 };
 </script>
 
 <template>
-    <Head :title="vue === 'receptions' ? 'Réceptions — Logistique' : 'Transferts — Logistique'" />
+    <Head
+        :title="
+            vue === 'receptions'
+                ? 'Réceptions — Logistique'
+                : 'Transferts — Logistique'
+        "
+    />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- ── MOBILE VIEW ─────────────────────────────────────────────────── -->
@@ -193,7 +221,10 @@ const commStatutDot: Record<string, string> = {
                 <span class="text-base font-semibold">
                     {{ vue === 'receptions' ? 'Réceptions' : 'Transferts' }}
                 </span>
-                <Link v-if="can_create && vue === 'transferts'" href="/logistique/creer">
+                <Link
+                    v-if="can_create && vue === 'transferts'"
+                    href="/logistique/creer"
+                >
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
                         Nouveau
@@ -246,9 +277,10 @@ const commStatutDot: Record<string, string> = {
                                 :dot-class="t.statut_dot_class"
                                 class="text-xs text-muted-foreground"
                             />
-                            <span class="text-xs text-muted-foreground tabular-nums">{{
-                                t.created_at
-                            }}</span>
+                            <span
+                                class="text-xs text-muted-foreground tabular-nums"
+                                >{{ t.created_at }}</span
+                            >
                         </div>
                         <ChevronRight
                             class="h-4 w-4 shrink-0 text-muted-foreground/50"
@@ -264,9 +296,16 @@ const commStatutDot: Record<string, string> = {
             >
                 <Truck class="h-10 w-10 opacity-30" />
                 <p class="text-sm">
-                    {{ vue === 'receptions' ? 'Aucune réception trouvée.' : 'Aucun transfert trouvé.' }}
+                    {{
+                        vue === 'receptions'
+                            ? 'Aucune réception trouvée.'
+                            : 'Aucun transfert trouvé.'
+                    }}
                 </p>
-                <Link v-if="can_create && vue === 'transferts'" href="/logistique/creer">
+                <Link
+                    v-if="can_create && vue === 'transferts'"
+                    href="/logistique/creer"
+                >
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
                         Créer le premier transfert
@@ -284,10 +323,15 @@ const commStatutDot: Record<string, string> = {
                         {{ vue === 'receptions' ? 'Réceptions' : 'Transferts' }}
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ transferts.length }} {{ vue === 'receptions' ? 'réception' : 'transfert' }}{{ transferts.length !== 1 ? 's' : '' }}
+                        {{ transferts.length }}
+                        {{ vue === 'receptions' ? 'réception' : 'transfert'
+                        }}{{ transferts.length !== 1 ? 's' : '' }}
                     </p>
                 </div>
-                <Link v-if="can_create && vue === 'transferts'" href="/logistique/creer">
+                <Link
+                    v-if="can_create && vue === 'transferts'"
+                    href="/logistique/creer"
+                >
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouveau transfert
@@ -296,37 +340,64 @@ const commStatutDot: Record<string, string> = {
             </div>
 
             <!-- KPI cards — Transferts -->
-            <div v-if="vue === 'transferts'" class="grid grid-cols-2 gap-4 lg:grid-cols-3">
+            <div
+                v-if="vue === 'transferts'"
+                class="grid grid-cols-2 gap-4 lg:grid-cols-3"
+            >
                 <div
                     class="rounded-xl border bg-card p-4 shadow-sm"
-                    :class="(kpis.brouillons ?? 0) > 0 ? 'border-zinc-300 dark:border-zinc-700' : ''"
+                    :class="
+                        (kpis.brouillons ?? 0) > 0
+                            ? 'border-zinc-300 dark:border-zinc-700'
+                            : ''
+                    "
                 >
-                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
                         Brouillons
                     </p>
-                    <p class="mt-1 text-2xl font-bold tabular-nums text-zinc-600 dark:text-zinc-400">
+                    <p
+                        class="mt-1 text-2xl font-bold text-zinc-600 tabular-nums dark:text-zinc-400"
+                    >
                         {{ kpis.brouillons ?? 0 }}
                     </p>
                 </div>
                 <div
                     class="rounded-xl border bg-card p-4 shadow-sm"
-                    :class="(kpis.en_chargement ?? 0) > 0 ? 'border-amber-200 dark:border-amber-900' : ''"
+                    :class="
+                        (kpis.en_chargement ?? 0) > 0
+                            ? 'border-amber-200 dark:border-amber-900'
+                            : ''
+                    "
                 >
-                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
                         En chargement
                     </p>
-                    <p class="mt-1 text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                    <p
+                        class="mt-1 text-2xl font-bold text-amber-600 tabular-nums dark:text-amber-400"
+                    >
                         {{ kpis.en_chargement ?? 0 }}
                     </p>
                 </div>
                 <div
                     class="rounded-xl border bg-card p-4 shadow-sm"
-                    :class="(kpis.en_transit ?? 0) > 0 ? 'border-blue-200 dark:border-blue-900' : ''"
+                    :class="
+                        (kpis.en_transit ?? 0) > 0
+                            ? 'border-blue-200 dark:border-blue-900'
+                            : ''
+                    "
                 >
-                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
                         Livraison en cours
                     </p>
-                    <p class="mt-1 text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400">
+                    <p
+                        class="mt-1 text-2xl font-bold text-blue-600 tabular-nums dark:text-blue-400"
+                    >
                         {{ kpis.en_transit ?? 0 }}
                     </p>
                 </div>
@@ -336,20 +407,32 @@ const commStatutDot: Record<string, string> = {
             <div v-else class="grid grid-cols-2 gap-4">
                 <div
                     class="rounded-xl border bg-card p-4 shadow-sm"
-                    :class="(kpis.en_attente ?? 0) > 0 ? 'border-teal-200 dark:border-teal-900' : ''"
+                    :class="
+                        (kpis.en_attente ?? 0) > 0
+                            ? 'border-teal-200 dark:border-teal-900'
+                            : ''
+                    "
                 >
-                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
                         En cours / à réceptionner
                     </p>
-                    <p class="mt-1 text-2xl font-bold tabular-nums text-teal-600 dark:text-teal-400">
+                    <p
+                        class="mt-1 text-2xl font-bold text-teal-600 tabular-nums dark:text-teal-400"
+                    >
                         {{ kpis.en_attente ?? 0 }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
                         Clôturés ce mois
                     </p>
-                    <p class="mt-1 text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    <p
+                        class="mt-1 text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
+                    >
                         {{ kpis.clotures_mois ?? 0 }}
                     </p>
                 </div>
@@ -395,7 +478,10 @@ const commStatutDot: Record<string, string> = {
                                 />
                             </IconField>
                             <Dropdown
-                                :options="[{ value: null, label: 'Tous les statuts' }, ...statuts]"
+                                :options="[
+                                    { value: null, label: 'Tous les statuts' },
+                                    ...statuts,
+                                ]"
                                 option-label="label"
                                 option-value="value"
                                 :model-value="statutFiltre"
@@ -412,7 +498,12 @@ const commStatutDot: Record<string, string> = {
                     </template>
 
                     <!-- Référence -->
-                    <Column field="reference" header="Référence" sortable style="min-width: 180px">
+                    <Column
+                        field="reference"
+                        header="Référence"
+                        sortable
+                        style="min-width: 180px"
+                    >
                         <template #body="{ data }">
                             <Link
                                 :href="`/logistique/${data.id}`"
@@ -427,25 +518,44 @@ const commStatutDot: Record<string, string> = {
                     <Column header="Trajet" style="min-width: 220px">
                         <template #body="{ data }">
                             <div class="flex items-center gap-1 text-sm">
-                                <span class="font-medium">{{ data.site_source_nom ?? '—' }}</span>
-                                <ChevronRight class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                <span class="font-medium">{{ data.site_destination_nom ?? '—' }}</span>
+                                <span class="font-medium">{{
+                                    data.site_source_nom ?? '—'
+                                }}</span>
+                                <ChevronRight
+                                    class="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                />
+                                <span class="font-medium">{{
+                                    data.site_destination_nom ?? '—'
+                                }}</span>
                             </div>
                         </template>
                     </Column>
 
                     <!-- Véhicule -->
-                    <Column field="vehicule_nom" header="Véhicule" style="min-width: 140px">
+                    <Column
+                        field="vehicule_nom"
+                        header="Véhicule"
+                        style="min-width: 140px"
+                    >
                         <template #body="{ data }">
                             <span class="text-muted-foreground">
                                 {{ data.vehicule_nom ?? '—' }}
-                                <span v-if="data.immatriculation" class="ml-1 font-mono text-xs">({{ data.immatriculation }})</span>
+                                <span
+                                    v-if="data.immatriculation"
+                                    class="ml-1 font-mono text-xs"
+                                    >({{ data.immatriculation }})</span
+                                >
                             </span>
                         </template>
                     </Column>
 
                     <!-- Date départ -->
-                    <Column field="date_depart_prevue" header="Départ prévu" sortable style="width: 130px">
+                    <Column
+                        field="date_depart_prevue"
+                        header="Départ prévu"
+                        sortable
+                        style="width: 130px"
+                    >
                         <template #body="{ data }">
                             <span class="text-muted-foreground tabular-nums">
                                 {{ data.date_depart_prevue ?? '—' }}
@@ -454,7 +564,12 @@ const commStatutDot: Record<string, string> = {
                     </Column>
 
                     <!-- Statut transfert -->
-                    <Column field="statut" header="Statut" sortable style="width: 140px">
+                    <Column
+                        field="statut"
+                        header="Statut"
+                        sortable
+                        style="width: 140px"
+                    >
                         <template #body="{ data }">
                             <StatusDot
                                 :label="data.statut_label"
@@ -470,10 +585,15 @@ const commStatutDot: Record<string, string> = {
                             <StatusDot
                                 v-if="data.commission_statut"
                                 :label="data.commission_statut_label ?? '—'"
-                                :dot-class="commStatutDot[data.commission_statut] ?? 'bg-zinc-400'"
+                                :dot-class="
+                                    commStatutDot[data.commission_statut] ??
+                                    'bg-zinc-400'
+                                "
                                 class="text-muted-foreground"
                             />
-                            <span v-else class="text-xs text-muted-foreground">—</span>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
                         </template>
                     </Column>
 
@@ -483,22 +603,34 @@ const commStatutDot: Record<string, string> = {
                             <div class="flex justify-end">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger as-child>
-                                        <Button variant="ghost" size="icon" class="h-8 w-8">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-8 w-8"
+                                        >
                                             <MoreVertical class="h-4 w-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" class="w-44">
+                                    <DropdownMenuContent
+                                        align="end"
+                                        class="w-44"
+                                    >
                                         <DropdownMenuItem as-child>
                                             <Link
                                                 :href="`/logistique/${data.id}`"
                                                 class="flex w-full cursor-pointer items-center gap-2"
                                             >
-                                                <PackageSearch class="h-4 w-4" />
+                                                <PackageSearch
+                                                    class="h-4 w-4"
+                                                />
                                                 Voir
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            v-if="data.is_editable && can('logistique.update')"
+                                            v-if="
+                                                data.is_editable &&
+                                                can('logistique.update')
+                                            "
                                             as-child
                                         >
                                             <Link
@@ -511,17 +643,29 @@ const commStatutDot: Record<string, string> = {
                                         </DropdownMenuItem>
                                         <!-- Brouillon → Chargement : action directe sans redirection -->
                                         <DropdownMenuItem
-                                            v-if="data.is_brouillon && can('logistique.update')"
+                                            v-if="
+                                                data.is_brouillon &&
+                                                can('logistique.update')
+                                            "
                                             class="cursor-pointer text-blue-600 focus:text-blue-600"
-                                            :disabled="avancementEnCours === data.id"
+                                            :disabled="
+                                                avancementEnCours === data.id
+                                            "
                                             @click="avancerDirect(data)"
                                         >
                                             <Truck class="h-4 w-4" />
-                                            {{ avancementEnCours === data.id ? 'En cours…' : labelSuivant(data.statut) }}
+                                            {{
+                                                avancementEnCours === data.id
+                                                    ? 'En cours…'
+                                                    : labelSuivant(data.statut)
+                                            }}
                                         </DropdownMenuItem>
                                         <!-- CHARGEMENT → TRANSIT : validation chargement (page de détail) -->
                                         <DropdownMenuItem
-                                            v-if="data.statut === 'chargement' && can('logistique.update')"
+                                            v-if="
+                                                data.statut === 'chargement' &&
+                                                can('logistique.update')
+                                            "
                                             class="cursor-pointer text-blue-600 focus:text-blue-600"
                                             as-child
                                         >
@@ -535,7 +679,10 @@ const commStatutDot: Record<string, string> = {
                                         </DropdownMenuItem>
                                         <!-- TRANSIT → RECEPTION : uniquement si utilisateur du site destination -->
                                         <DropdownMenuItem
-                                            v-if="data.statut === 'transit' && data.can_valider_reception"
+                                            v-if="
+                                                data.statut === 'transit' &&
+                                                data.can_valider_reception
+                                            "
                                             class="cursor-pointer text-blue-600 focus:text-blue-600"
                                             as-child
                                         >
@@ -570,12 +717,21 @@ const commStatutDot: Record<string, string> = {
 
                     <!-- État vide -->
                     <template #empty>
-                        <div class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                        <div
+                            class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+                        >
                             <Truck class="h-12 w-12 opacity-30" />
                             <p class="text-sm">
-                                {{ vue === 'receptions' ? 'Aucune réception trouvée.' : 'Aucun transfert trouvé.' }}
+                                {{
+                                    vue === 'receptions'
+                                        ? 'Aucune réception trouvée.'
+                                        : 'Aucun transfert trouvé.'
+                                }}
                             </p>
-                            <Link v-if="can_create && vue === 'transferts'" href="/logistique/creer">
+                            <Link
+                                v-if="can_create && vue === 'transferts'"
+                                href="/logistique/creer"
+                            >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />
                                     Créer le premier transfert

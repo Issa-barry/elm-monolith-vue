@@ -347,24 +347,40 @@ function onTelephoneInput(value: string | null | undefined) {
             </h3>
             <div>
                 <p class="mb-2 text-sm font-medium">Éligible au cashback</p>
-                <div class="inline-flex rounded-lg border bg-muted/40 p-1 gap-1">
+                <div
+                    class="inline-flex gap-1 rounded-lg border bg-muted/40 p-1"
+                >
                     <button
                         type="button"
                         class="rounded-md px-5 py-1.5 text-sm font-medium transition-colors"
-                        :class="form.cashback_eligible
-                            ? 'bg-primary text-primary-foreground shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground'"
-                        @click="$emit('update:form', { ...form, cashback_eligible: true })"
+                        :class="
+                            form.cashback_eligible
+                                ? 'bg-primary text-primary-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground'
+                        "
+                        @click="
+                            $emit('update:form', {
+                                ...form,
+                                cashback_eligible: true,
+                            })
+                        "
                     >
                         Oui
                     </button>
                     <button
                         type="button"
                         class="rounded-md px-5 py-1.5 text-sm font-medium transition-colors"
-                        :class="!form.cashback_eligible
-                            ? 'bg-destructive text-white shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground'"
-                        @click="$emit('update:form', { ...form, cashback_eligible: false })"
+                        :class="
+                            !form.cashback_eligible
+                                ? 'bg-destructive text-white shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground'
+                        "
+                        @click="
+                            $emit('update:form', {
+                                ...form,
+                                cashback_eligible: false,
+                            })
+                        "
                     >
                         Non
                     </button>

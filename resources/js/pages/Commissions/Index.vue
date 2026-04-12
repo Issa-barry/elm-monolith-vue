@@ -125,12 +125,14 @@ const mobileFiltree = computed(() =>
 const kpi = computed(() => {
     const list = listeFiltree.value;
     return {
-        total_brut:    list.reduce((s, b) => s + b.total_brut_cumule, 0),
-        total_verse:   list.reduce((s, b) => s + b.total_verse, 0),
-        solde_total:   list.reduce((s, b) => s + b.solde_restant, 0),
-        nb_total:      list.length,
-        nb_en_attente: list.filter((b) => b.statut_global === 'en_attente').length,
-        nb_partielle:  list.filter((b) => b.statut_global === 'partielle').length,
+        total_brut: list.reduce((s, b) => s + b.total_brut_cumule, 0),
+        total_verse: list.reduce((s, b) => s + b.total_verse, 0),
+        solde_total: list.reduce((s, b) => s + b.solde_restant, 0),
+        nb_total: list.length,
+        nb_en_attente: list.filter((b) => b.statut_global === 'en_attente')
+            .length,
+        nb_partielle: list.filter((b) => b.statut_global === 'partielle')
+            .length,
     };
 });
 
@@ -138,14 +140,14 @@ const kpi = computed(() => {
 
 const statutDotColor: Record<string, string> = {
     en_attente: 'bg-amber-500',
-    partielle:  'bg-blue-500',
-    versee:     'bg-emerald-500',
+    partielle: 'bg-blue-500',
+    versee: 'bg-emerald-500',
 };
 
 const statutLabel: Record<string, string> = {
     en_attente: 'En attente',
-    partielle:  'Partielle',
-    versee:     'Versée',
+    partielle: 'Partielle',
+    versee: 'Versée',
 };
 
 function formatGNF(val: number): string {
@@ -229,7 +231,9 @@ function detailUrl(b: BeneficiaireRow): string {
             <!-- Search mobile -->
             <div class="space-y-2 border-t px-4 py-3">
                 <div class="relative">
-                    <Search class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
                     <input
                         v-model="mobileSearch"
                         type="text"
@@ -256,24 +260,37 @@ function detailUrl(b: BeneficiaireRow): string {
                     class="flex items-start justify-between gap-3 px-4 py-3.5 transition-colors active:bg-muted/40"
                 >
                     <div class="min-w-0 flex-1">
-                        <p class="truncate text-sm font-semibold">{{ b.beneficiaire_nom }}</p>
-                        <p v-if="b.telephone" class="text-xs text-muted-foreground">
+                        <p class="truncate text-sm font-semibold">
+                            {{ b.beneficiaire_nom }}
+                        </p>
+                        <p
+                            v-if="b.telephone"
+                            class="text-xs text-muted-foreground"
+                        >
                             {{ formatPhoneDisplay(b.telephone) }}
                         </p>
                         <p class="mt-1 text-sm font-semibold tabular-nums">
                             Net : {{ formatGNF(b.total_net_cumule) }}
                         </p>
-                        <p class="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                        <p
+                            class="mt-0.5 text-xs text-muted-foreground tabular-nums"
+                        >
                             Brut : {{ formatGNF(b.total_brut_cumule) }}
                         </p>
                     </div>
                     <div class="flex shrink-0 flex-col items-end gap-2">
                         <StatusDot
-                            :label="statutLabel[b.statut_global] ?? b.statut_global"
-                            :dot-class="statutDotColor[b.statut_global] ?? 'bg-zinc-400'"
+                            :label="
+                                statutLabel[b.statut_global] ?? b.statut_global
+                            "
+                            :dot-class="
+                                statutDotColor[b.statut_global] ?? 'bg-zinc-400'
+                            "
                             class="text-xs text-muted-foreground"
                         />
-                        <span class="text-xs text-muted-foreground tabular-nums">
+                        <span
+                            class="text-xs text-muted-foreground tabular-nums"
+                        >
                             {{ b.date_derniere_commande }}
                         </span>
                         <ChevronRight class="h-4 w-4 text-muted-foreground" />
@@ -281,7 +298,10 @@ function detailUrl(b: BeneficiaireRow): string {
                 </Link>
             </div>
 
-            <div v-if="mobileFiltree.length === 0" class="py-16 text-center text-sm text-muted-foreground">
+            <div
+                v-if="mobileFiltree.length === 0"
+                class="py-16 text-center text-sm text-muted-foreground"
+            >
                 Aucun bénéficiaire trouvé.
             </div>
         </div>
@@ -290,8 +310,12 @@ function detailUrl(b: BeneficiaireRow): string {
         <div class="hidden w-full space-y-6 p-6 sm:block">
             <!-- En-tête -->
             <div>
-                <h1 class="text-2xl font-semibold tracking-tight">Commissions — Grand Livre</h1>
-                <p class="mt-1 text-sm text-muted-foreground">Soldes cumulés par bénéficiaire</p>
+                <h1 class="text-2xl font-semibold tracking-tight">
+                    Commissions — Grand Livre
+                </h1>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Soldes cumulés par bénéficiaire
+                </p>
             </div>
 
             <!-- KPI cards — WIDGETS MASQUÉS TEMPORAIREMENT
@@ -325,7 +349,9 @@ function detailUrl(b: BeneficiaireRow): string {
 
             <!-- Tabs -->
             <div class="flex justify-center">
-                <div class="inline-flex items-center gap-1 rounded-xl border bg-card p-1 shadow-sm">
+                <div
+                    class="inline-flex items-center gap-1 rounded-xl border bg-card p-1 shadow-sm"
+                >
                     <button
                         class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
                         :class="
@@ -337,7 +363,9 @@ function detailUrl(b: BeneficiaireRow): string {
                     >
                         <Truck class="h-4 w-4" />
                         Livreurs
-                        <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                        <span
+                            class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
+                        >
                             {{ tab === 'livreurs' ? kpi.nb_total : '' }}
                         </span>
                     </button>
@@ -352,7 +380,9 @@ function detailUrl(b: BeneficiaireRow): string {
                     >
                         <User class="h-4 w-4" />
                         Propriétaires
-                        <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                        <span
+                            class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
+                        >
                             {{ tab === 'proprietaires' ? kpi.nb_total : '' }}
                         </span>
                     </button>
@@ -370,17 +400,21 @@ function detailUrl(b: BeneficiaireRow): string {
                     removable-sort
                     class="text-sm"
                     :pt="{
-                        root:   { class: 'w-full' },
+                        root: { class: 'w-full' },
                         header: { class: 'border-b bg-muted/30 px-4 py-3' },
-                        tbody:  { class: 'divide-y' },
-                        table:  { style: 'table-layout: fixed; min-width: 760px' },
+                        tbody: { class: 'divide-y' },
+                        table: {
+                            style: 'table-layout: fixed; min-width: 760px',
+                        },
                     }"
                 >
                     <template #header>
                         <div class="flex items-center gap-3">
                             <IconField class="max-w-sm flex-1">
                                 <InputIcon class="pointer-events-none">
-                                    <Search class="h-4 w-4 text-muted-foreground" />
+                                    <Search
+                                        class="h-4 w-4 text-muted-foreground"
+                                    />
                                 </InputIcon>
                                 <InputText
                                     v-model="search"
@@ -404,53 +438,106 @@ function detailUrl(b: BeneficiaireRow): string {
                                 @update:model-value="setPeriode($event)"
                             />
                             <span class="text-xs text-muted-foreground">
-                                {{ listeFiltree.length }} bénéficiaire{{ listeFiltree.length !== 1 ? 's' : '' }}
+                                {{ listeFiltree.length }} bénéficiaire{{
+                                    listeFiltree.length !== 1 ? 's' : ''
+                                }}
                             </span>
                         </div>
                     </template>
 
                     <!-- Bénéficiaire (34%) -->
-                    <Column field="beneficiaire_nom" header="Bénéficiaire" sortable style="width: 34%">
+                    <Column
+                        field="beneficiaire_nom"
+                        header="Bénéficiaire"
+                        sortable
+                        style="width: 34%"
+                    >
                         <template #body="{ data }">
-                            <p class="truncate font-semibold">{{ data.beneficiaire_nom }}</p>
-                            <p v-if="data.telephone" class="mt-0.5 truncate text-xs text-muted-foreground">
+                            <p class="truncate font-semibold">
+                                {{ data.beneficiaire_nom }}
+                            </p>
+                            <p
+                                v-if="data.telephone"
+                                class="mt-0.5 truncate text-xs text-muted-foreground"
+                            >
                                 {{ formatPhoneDisplay(data.telephone) }}
                             </p>
                         </template>
                     </Column>
 
                     <!-- Brut (15%) -->
-                    <Column field="total_brut_cumule" header="Brut" sortable style="width: 15%">
+                    <Column
+                        field="total_brut_cumule"
+                        header="Brut"
+                        sortable
+                        style="width: 15%"
+                    >
                         <template #body="{ data }">
-                            <span class="whitespace-nowrap font-semibold tabular-nums">{{ formatGNF(data.total_brut_cumule) }}</span>
+                            <span
+                                class="font-semibold whitespace-nowrap tabular-nums"
+                                >{{ formatGNF(data.total_brut_cumule) }}</span
+                            >
                         </template>
                     </Column>
 
                     <!-- Frais (13%) -->
-                    <Column field="total_frais" header="Frais" sortable style="width: 13%">
+                    <Column
+                        field="total_frais"
+                        header="Frais"
+                        sortable
+                        style="width: 13%"
+                    >
                         <template #body="{ data }">
                             <span
                                 class="whitespace-nowrap tabular-nums"
-                                :class="data.total_frais > 0 ? 'text-destructive' : 'text-muted-foreground'"
+                                :class="
+                                    data.total_frais > 0
+                                        ? 'text-destructive'
+                                        : 'text-muted-foreground'
+                                "
                             >
-                                {{ data.total_frais > 0 ? '−\u202F' + formatGNF(data.total_frais) : '—' }}
+                                {{
+                                    data.total_frais > 0
+                                        ? '−\u202F' +
+                                          formatGNF(data.total_frais)
+                                        : '—'
+                                }}
                             </span>
                         </template>
                     </Column>
 
                     <!-- Total net (15%) -->
-                    <Column field="total_net_cumule" header="Total net" sortable style="width: 15%">
+                    <Column
+                        field="total_net_cumule"
+                        header="Total net"
+                        sortable
+                        style="width: 15%"
+                    >
                         <template #body="{ data }">
-                            <span class="whitespace-nowrap font-semibold tabular-nums">{{ formatGNF(data.total_net_cumule) }}</span>
+                            <span
+                                class="font-semibold whitespace-nowrap tabular-nums"
+                                >{{ formatGNF(data.total_net_cumule) }}</span
+                            >
                         </template>
                     </Column>
 
                     <!-- Statut (13%) -->
-                    <Column field="statut_global" header="Statut" sortable style="width: 13%">
+                    <Column
+                        field="statut_global"
+                        header="Statut"
+                        sortable
+                        style="width: 13%"
+                    >
                         <template #body="{ data }">
                             <StatusDot
-                                :label="statutLabel[data.statut_global] ?? data.statut_global"
-                                :dot-class="statutDotColor[data.statut_global] ?? 'bg-zinc-400'"
+                                :label="
+                                    statutLabel[data.statut_global] ??
+                                    data.statut_global
+                                "
+                                :dot-class="
+                                    statutDotColor[data.statut_global] ??
+                                    'bg-zinc-400'
+                                "
                                 class="text-muted-foreground"
                             />
                         </template>
@@ -461,7 +548,11 @@ function detailUrl(b: BeneficiaireRow): string {
                         <template #body="{ data }">
                             <div class="flex justify-end">
                                 <Link :href="detailUrl(data)">
-                                    <Button size="sm" variant="ghost" class="h-8 gap-1 text-xs">
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        class="h-8 gap-1 text-xs"
+                                    >
                                         Détails
                                         <ChevronRight class="h-3.5 w-3.5" />
                                     </Button>
@@ -471,7 +562,9 @@ function detailUrl(b: BeneficiaireRow): string {
                     </Column>
 
                     <template #empty>
-                        <div class="py-16 text-center text-sm text-muted-foreground">
+                        <div
+                            class="py-16 text-center text-sm text-muted-foreground"
+                        >
                             Aucun bénéficiaire trouvé pour cette période.
                         </div>
                     </template>
