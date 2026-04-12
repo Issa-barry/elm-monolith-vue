@@ -28,7 +28,7 @@ const USER_PAYS = [
 
 class UserController extends Controller
 {
-    private const STAFF_ROLES = ['super_admin', 'admin_entreprise', 'manager', 'commerciale', 'comptable'];
+    public const STAFF_ROLES = ['super_admin', 'admin_entreprise', 'manager', 'commerciale', 'comptable'];
 
     private function getRoleOptions(): \Illuminate\Support\Collection
     {
