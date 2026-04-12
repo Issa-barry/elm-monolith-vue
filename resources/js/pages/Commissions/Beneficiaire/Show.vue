@@ -459,9 +459,16 @@ function closeDetailDialog() {
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-3 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Commandes</p>
-                    <p class="mt-1 text-base font-bold tabular-nums">
-                        {{ resume_global.nb_commandes }}
+                    <p class="text-xs text-muted-foreground">Total restant à payer</p>
+                    <p
+                        class="mt-1 text-base font-bold tabular-nums"
+                        :class="
+                            resume_global.solde_global > 0
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : 'text-muted-foreground'
+                        "
+                    >
+                        {{ formatGNF(resume_global.solde_global) }}
                     </p>
                 </div>
             </div>
@@ -653,9 +660,12 @@ function closeDetailDialog() {
             <!-- Cards KPI (5 cards — sans Disponible maintenant) -->
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Commandes</p>
-                    <p class="mt-2 text-2xl font-bold tabular-nums">
-                        {{ resume_global.nb_commandes }}
+                    <p class="text-sm text-muted-foreground">Total restant à payer</p>
+                    <p
+                        class="mt-2 text-2xl font-bold tabular-nums"
+                        :class="resume_global.solde_global > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+                    >
+                        {{ formatGNF(resume_global.solde_global) }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
@@ -1137,7 +1147,7 @@ function closeDetailDialog() {
             v-model:visible="historyVisible"
             header="Historique des paiements versés"
             modal
-            :style="{ width: '560px' }"
+            :style="{ width: 'min(860px, 96vw)' }"
         >
             <div class="pt-2">
                 <table
@@ -1145,29 +1155,29 @@ function closeDetailDialog() {
                     class="w-full text-sm"
                 >
                     <thead>
-                        <tr class="border-b">
+                        <tr class="border-b bg-muted/30">
                             <th
-                                class="pb-2 text-left font-medium text-muted-foreground"
+                                class="px-3 py-2.5 text-left font-medium text-muted-foreground"
                             >
                                 Date
                             </th>
                             <th
-                                class="pb-2 text-right font-medium text-muted-foreground"
+                                class="px-3 py-2.5 text-right font-medium text-muted-foreground"
                             >
                                 Montant
                             </th>
                             <th
-                                class="pb-2 text-left font-medium text-muted-foreground"
+                                class="px-3 py-2.5 text-left font-medium text-muted-foreground"
                             >
                                 Mode
                             </th>
                             <th
-                                class="pb-2 text-left font-medium text-muted-foreground"
+                                class="px-3 py-2.5 text-left font-medium text-muted-foreground"
                             >
                                 Note
                             </th>
                             <th
-                                class="pb-2 text-left font-medium text-muted-foreground"
+                                class="px-3 py-2.5 text-left font-medium text-muted-foreground"
                             >
                                 Par
                             </th>
@@ -1179,21 +1189,21 @@ function closeDetailDialog() {
                             :key="p.id"
                             class="hover:bg-muted/20"
                         >
-                            <td class="py-2.5 pr-3 text-muted-foreground">
+                            <td class="px-3 py-2.5 text-muted-foreground tabular-nums">
                                 {{ p.paid_at ?? '—' }}
                             </td>
                             <td
-                                class="py-2.5 pr-3 text-right font-semibold text-emerald-700 tabular-nums dark:text-emerald-400"
+                                class="px-3 py-2.5 text-right font-semibold text-emerald-700 tabular-nums dark:text-emerald-400"
                             >
                                 {{ formatGNF(p.montant) }}
                             </td>
-                            <td class="py-2.5 pr-3">{{ p.mode_paiement }}</td>
+                            <td class="px-3 py-2.5">{{ p.mode_paiement }}</td>
                             <td
-                                class="py-2.5 pr-3 text-xs text-muted-foreground italic"
+                                class="px-3 py-2.5 text-xs text-muted-foreground italic"
                             >
                                 {{ p.note ?? '—' }}
                             </td>
-                            <td class="py-2.5 text-xs text-muted-foreground">
+                            <td class="px-3 py-2.5 text-xs text-muted-foreground">
                                 {{ p.created_by ?? '—' }}
                             </td>
                         </tr>
