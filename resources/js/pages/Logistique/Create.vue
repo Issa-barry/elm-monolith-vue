@@ -139,14 +139,6 @@ function onVehiculeClear() {
     vehiculeSelected.value = null;
 }
 
-const equipeNom = computed(() => {
-    if (!form.equipe_livraison_id) return null;
-    return (
-        props.equipes.find((e) => e.id === form.equipe_livraison_id)?.nom ??
-        null
-    );
-});
-
 function vehiculeLabel(v: VehiculeOption): string {
     return `${v.nom_vehicule} — ${v.immatriculation}`;
 }

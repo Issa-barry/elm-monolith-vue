@@ -217,15 +217,6 @@ const commandesFiltrees = computed(() => {
 
 // ── Totaux ligne DataTable (recalculés sur le dataset local filtré) ────────────
 
-const totauxFiltres = computed(() => {
-    const list = commandesFiltrees.value;
-    return {
-        nb: list.length,
-        brut: list.reduce((s, c) => s + c.montant_brut, 0),
-        frais: list.reduce((s, c) => s + c.frais, 0),
-        net: list.reduce((s, c) => s + c.montant_net, 0),
-    };
-});
 
 // ── Dialog paiement groupé ─────────────────────────────────────────────────────
 

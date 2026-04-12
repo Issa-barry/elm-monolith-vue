@@ -154,10 +154,6 @@ function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
 
-const tabLabel = computed(() =>
-    props.tab === 'livreurs' ? 'Livreurs' : 'Propriétaires',
-);
-
 function detailUrl(b: BeneficiaireRow): string {
     return `/commissions/beneficiaires/${b.type_beneficiaire}/${b.beneficiaire_id}`;
 }
