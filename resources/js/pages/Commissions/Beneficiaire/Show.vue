@@ -217,7 +217,6 @@ const commandesFiltrees = computed(() => {
 
 // ── Totaux ligne DataTable (recalculés sur le dataset local filtré) ────────────
 
-
 // ── Dialog paiement groupé ─────────────────────────────────────────────────────
 
 const paiementVisible = ref(false);
