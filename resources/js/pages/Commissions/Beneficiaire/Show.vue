@@ -246,7 +246,9 @@ function openPaiementDialog() {
     paiementForm.montant =
         props.resume_global.disponible_maintenant > 0
             ? props.resume_global.disponible_maintenant
-            : null;
+            : props.resume_global.solde_global > 0
+              ? props.resume_global.solde_global
+              : null;
     paiementForm.mode_paiement = 'especes';
     // Date de paiement forcée au jour courant (champ non affiché pour l'instant).
     paiementForm.paid_at = currentDateYmd();
@@ -292,7 +294,7 @@ const montantDepasse = computed(
     () =>
         paiementForm.montant !== null &&
         paiementForm.montant >
-            props.resume_global.disponible_maintenant + 0.009,
+            props.resume_global.solde_global + 0.009,
 );
 
 // ── Dialog historique paiements ────────────────────────────────────────────────
@@ -1056,7 +1058,7 @@ function closeDetailDialog() {
                     <label class="text-sm font-medium">Montant (GNF)</label>
                     <InputNumber
                         v-model="paiementForm.montant"
-                        :max="resume_global.disponible_maintenant"
+                        :max="resume_global.solde_global"
                         :min="1"
                         class="w-full"
                         :use-grouping="true"
@@ -1067,8 +1069,8 @@ function closeDetailDialog() {
                         }"
                     />
                     <p v-if="montantDepasse" class="text-xs text-destructive">
-                        Le montant dépasse le disponible ({{
-                            formatGNF(resume_global.disponible_maintenant)
+                        Le montant dépasse le solde restant ({{
+                            formatGNF(resume_global.solde_global)
                         }}).
                     </p>
                     <p

@@ -108,8 +108,6 @@ class CommissionVentePaiementService
         string $type,
         int $beneficiaireId
     ): Collection {
-        $now = now();
-
         $query = CommissionPart::with('commission')
             ->join('commissions_ventes AS cv_fifo', 'cv_fifo.id', '=', 'commission_parts.commission_vente_id')
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $organizationId))
@@ -126,23 +124,12 @@ class CommissionVentePaiementService
             $query->where('commission_parts.proprietaire_id', $beneficiaireId);
         }
 
-        $allParts = $query->get();
-
-        // Filtre règle d'éligibilité : livreur +14j, propriétaire 1er du mois suivant
-        return $allParts->filter(function (CommissionPart $part) use ($now, $type) {
-            $earnedAt = $part->commission?->created_at;
-            if (! $earnedAt) {
-                return true;
-            }
-
-            $disponibleAt = match ($type) {
-                'livreur' => $earnedAt->clone()->addDays(14),
-                'proprietaire' => $earnedAt->clone()->addMonthNoOverflow()->startOfMonth(),
-                default => null,
-            };
-
-            return ! $disponibleAt || $now->greaterThanOrEqualTo($disponibleAt);
-        })->values();
+        // Toutes les parts non soldées sont éligibles au paiement.
+        // La date d'éligibilité (+14j livreur, 1er mois suivant propriétaire) est
+        // affichée à titre indicatif dans l'UI ("Disponible maintenant") mais ne
+        // bloque plus le paiement : l'admin conserve la flexibilité de payer à
+        // tout moment.
+        return $query->get()->values();
     }
 
     /**
