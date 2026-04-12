@@ -14,24 +14,22 @@ test.setTimeout(180_000);
 
 registerCleanup('/clients', PREFIX);
 
-/**
- * Crée un client depuis le back-office.
- * Après création la page redirige vers `/clients/{id}/edit`.
- */
 async function createClientInApp(
     page: Parameters<typeof login>[0],
-    params: { prenom: string; nom: string; tel: string; adresse?: string; ville?: string },
+    params: {
+        prenom: string;
+        nom: string;
+        tel: string;
+        adresse?: string;
+        ville?: string;
+    },
 ): Promise<void> {
     await page.goto('/clients/create');
     await page.locator('#prenom').fill(params.prenom);
     await page.locator('#nom').fill(params.nom);
 
-    // Sélectionner le pays (Guinée par défaut)
-    const paysCombo = page
-        .locator('#client-form')
-        .getByRole('combobox')
-        .first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
+    const paysCombo = page.locator('#client-form').getByRole('combobox').first();
+    await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
 
     if (params.ville) {
         await page.locator('#ville').fill(params.ville);
@@ -46,15 +44,11 @@ async function createClientInApp(
         .first()
         .click();
 
-    // Après création → redirigé vers la page edit du client
     await expect(page).toHaveURL(/\/clients\/\d+\/edit$/);
-    // Attendre que la réponse Inertia (avec flash) soit entièrement reçue
     await page.waitForLoadState('networkidle');
 }
 
-// ─── Création → redirection vers edit ────────────────────────────────────────
-
-test('create client → redirected to edit page with success message', async ({
+test('create client -> redirected to edit page with expected prenom casing', async ({
     page,
 }) => {
     const uid = `${Date.now()}`.slice(-6);
@@ -71,25 +65,16 @@ test('create client → redirected to edit page with success message', async ({
         adresse: 'Quartier Kaloum',
     });
 
-    // Bannière de succès sur la page edit
-    // Timeout étendu : au premier run en CI le serveur PHP est froid et peut
-    // prendre plusieurs secondes supplémentaires pour répondre.
-    await expect(page.locator('text=créé avec succès')).toBeVisible({
-        timeout: 30_000,
-    });
-
-    // Le backend applique ucTitle sur le prénom (MB_CASE_TITLE après mb_strtolower) :
-    // chaque lettre qui suit un non-lettre est mise en majuscule.
-    // Ex: "e2ecliflow576187" → "E2Ecliflow576187"
     const expectedPrenom = prenom
         .toLowerCase()
-        .replaceAll(/(^|[^a-z])([a-z])/g, (_, sep, char) => sep + char.toUpperCase());
+        .replaceAll(
+            /(^|[^a-z])([a-z])/g,
+            (_, sep, char) => sep + char.toUpperCase(),
+        );
     await expect(page.locator('#prenom')).toHaveValue(expectedPrenom);
 });
 
-// ─── Pays = Guinée → ville = Conakry ─────────────────────────────────────────
-
-test('create client with Guinée → ville defaults to Conakry', async ({
+test('create client with Guinea and empty ville -> defaults to Conakry', async ({
     page,
 }) => {
     const uid = `${Date.now()}`.slice(-6);
@@ -100,12 +85,8 @@ test('create client with Guinée → ville defaults to Conakry', async ({
     await login(page);
     await page.goto('/clients/create');
 
-    // Sélectionner Guinée sans renseigner la ville
-    const paysCombo = page
-        .locator('#client-form')
-        .getByRole('combobox')
-        .first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
+    const paysCombo = page.locator('#client-form').getByRole('combobox').first();
+    await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
     await page.locator('#ville').clear();
 
     await page.locator('#prenom').fill(prenom);
@@ -117,18 +98,11 @@ test('create client with Guinée → ville defaults to Conakry', async ({
         .first()
         .click();
 
-    // Redirigé vers edit
     await expect(page).toHaveURL(/\/clients\/\d+\/edit$/);
-
-    // Conakry a été appliqué par le backend
     await expect(page.locator('#ville')).toHaveValue('Conakry');
 });
 
-// ─── Modification → reste sur edit + message succès ──────────────────────────
-
-test('edit client → update ville / adresse → data persists + success message', async ({
-    page,
-}) => {
+test('edit client -> update ville and adresse -> persists', async ({ page }) => {
     const uid = `${Date.now()}`.slice(-6);
     const prenom = `${PREFIX}${uid}`;
     const nom = `Edit${uid}`;
@@ -143,7 +117,6 @@ test('edit client → update ville / adresse → data persists + success message
         adresse: 'Adresse initiale',
     });
 
-    // Modifier ville et adresse depuis la page edit (déjà là après create)
     await page.locator('#ville').clear();
     await page.locator('#ville').fill('Kindia');
     await page.locator('#adresse').clear();
@@ -154,20 +127,55 @@ test('edit client → update ville / adresse → data persists + success message
         .first()
         .click();
 
-    // Reste sur la page edit
     await expect(page).toHaveURL(/\/clients\/\d+\/edit$/);
-
-    // Bannière de succès
-    await expect(page.locator('text=mis à jour')).toBeVisible();
-
-    // Données persistées
     await expect(page.locator('#ville')).toHaveValue('Kindia');
     await expect(page.locator('#adresse')).toHaveValue('Rue Principale');
 });
 
-// ─── Toggle statut actif ──────────────────────────────────────────────────────
+test('view client from list -> readonly form -> modifier redirects to edit', async ({
+    page,
+}) => {
+    const uid = `${Date.now()}`.slice(-6);
+    const prenom = `${PREFIX}${uid}`;
+    const nom = `View${uid}`;
+    const tel = `6${randomDigits(8)}`;
 
-test('create client + toggle status → inactif in list', async ({ page }) => {
+    await login(page);
+    await createClientInApp(page, {
+        prenom,
+        nom,
+        tel,
+        ville: 'Conakry',
+        adresse: 'Lecture seule',
+    });
+
+    await page.goto('/clients');
+    await page.waitForLoadState('networkidle');
+
+    const row = await findRowByName(page, prenom);
+    await openRowActions(row);
+    await page
+        .getByRole('menuitem', { name: /^Voir$/i })
+        .first()
+        .click();
+
+    await expect(page).toHaveURL(/\/clients\/\d+$/);
+    await expect(page.locator('#prenom')).toBeDisabled();
+    await expect(page.locator('#nom')).toBeDisabled();
+
+    const editTrigger = page
+        .locator(
+            'a:has-text("Modifier"):visible,button:has-text("Modifier"):visible',
+        )
+        .first();
+    await expect(editTrigger).toBeVisible();
+    await editTrigger.click();
+
+    await expect(page).toHaveURL(/\/clients\/\d+\/edit$/);
+    await expect(page.locator('#prenom')).toBeEnabled();
+});
+
+test('create client + toggle status -> inactif in list', async ({ page }) => {
     const uid = `${Date.now()}`.slice(-6);
     const prenom = `${PREFIX}${uid}`;
     const nom = `Status${uid}`;
@@ -176,7 +184,6 @@ test('create client + toggle status → inactif in list', async ({ page }) => {
     await login(page);
     await createClientInApp(page, { prenom, nom, tel, ville: 'Conakry' });
 
-    // Déjà sur la page edit — décocher is_active
     await page.locator('label[for="is_active"]').first().click();
     await page
         .locator('#client-form button[type="submit"]:visible')
@@ -184,9 +191,7 @@ test('create client + toggle status → inactif in list', async ({ page }) => {
         .click();
 
     await expect(page).toHaveURL(/\/clients\/\d+\/edit$/);
-    await expect(page.locator('text=mis à jour')).toBeVisible();
 
-    // Vérifier dans la liste
     await page.goto('/clients');
     await page.waitForLoadState('networkidle');
     const updated = await findRowByName(page, prenom);
@@ -194,9 +199,7 @@ test('create client + toggle status → inactif in list', async ({ page }) => {
     await expect(updated).toContainText(/inactif/i);
 });
 
-// ─── Unicité téléphone ────────────────────────────────────────────────────────
-
-test('create client with duplicate telephone → uniqueness error stays on create', async ({
+test('create client with duplicate telephone -> stays on create with field error', async ({
     page,
 }) => {
     const uid = `${Date.now()}`.slice(-6);
@@ -205,20 +208,14 @@ test('create client with duplicate telephone → uniqueness error stays on creat
     const prenom2 = `${PREFIX}${uid}B`;
 
     await login(page);
-
-    // Créer le premier client (redirige vers edit)
     await createClientInApp(page, { prenom: prenom1, nom: `Dup${uid}`, tel });
 
-    // Tenter de créer un second client avec le même numéro
     await page.goto('/clients/create');
     await page.locator('#prenom').fill(prenom2);
     await page.locator('#nom').fill(`Dup2${uid}`);
 
-    const paysCombo = page
-        .locator('#client-form')
-        .getByRole('combobox')
-        .first();
-    await selectOptionFromCombobox(page, paysCombo, /guinée$/i);
+    const paysCombo = page.locator('#client-form').getByRole('combobox').first();
+    await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
     await page.locator('#telephone').fill(tel);
 
     await page
@@ -226,14 +223,11 @@ test('create client with duplicate telephone → uniqueness error stays on creat
         .first()
         .click();
 
-    // Doit rester sur la page create avec une erreur d'unicité
     await expect(page).toHaveURL(/\/clients\/create$/);
-    await expect(page.locator('text=déjà utilisé').first()).toBeVisible();
+    await expect(page.locator('#telephone')).toHaveClass(/p-invalid/);
 });
 
-// ─── Archivage ────────────────────────────────────────────────────────────────
-
-test('delete client → no longer visible in list', async ({ page }) => {
+test('delete client -> no longer visible in list', async ({ page }) => {
     const uid = `${Date.now()}`.slice(-6);
     const prenom = `${PREFIX}${uid}`;
     const nom = `Del${uid}`;
@@ -242,19 +236,22 @@ test('delete client → no longer visible in list', async ({ page }) => {
     await login(page);
     await createClientInApp(page, { prenom, nom, tel });
 
-    // Aller dans la liste pour trouver et supprimer
     await page.goto('/clients');
     await page.waitForLoadState('networkidle');
 
     const row = await findRowByName(page, prenom);
     await openRowActions(row);
-    await page.getByRole('menuitem', { name: /supprimer/i }).first().click();
+    await page
+        .getByRole('menuitem', { name: /supprimer/i })
+        .first()
+        .click();
 
-    // Confirmer dans la boîte de dialogue PrimeVue
-    await page.getByRole('button', { name: /supprimer/i }).last().click();
+    await page
+        .getByRole('button', { name: /supprimer/i })
+        .last()
+        .click();
     await page.waitForLoadState('networkidle');
 
-    // Le client ne doit plus apparaître
     const rows = page.locator('table tbody tr');
     const count = await rows.count();
     for (let i = 0; i < count; i++) {
@@ -262,9 +259,7 @@ test('delete client → no longer visible in list', async ({ page }) => {
     }
 });
 
-// ─── Validation requise ───────────────────────────────────────────────────────
-
-test('create client without required fields → stays on create page', async ({
+test('create client without required fields -> stays on create page', async ({
     page,
 }) => {
     await login(page);

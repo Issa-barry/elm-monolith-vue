@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay, phoneToTelHref } from '@/lib/utils';
@@ -19,6 +20,7 @@ import {
     ArrowLeft,
     Building2,
     ChevronRight,
+    Info,
     MailOpen,
     MoreVertical,
     Navigation,
@@ -114,6 +116,8 @@ const props = defineProps<{
 const { can } = usePermissions();
 const toast = useToast();
 const page = usePage();
+
+const activeTab = ref<'infos' | 'membres'>('infos');
 
 const flashSuccess = computed(
     () => (page.props as any).flash?.success as string | undefined,
@@ -332,580 +336,670 @@ function revokeInvitation(invitationId: number) {
             <div v-else class="w-8 shrink-0" />
         </div>
 
-        <div class="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 sm:p-6">
-            <!-- ── Informations du site ──────────────────────────────────────── -->
-            <div class="overflow-hidden rounded-xl border bg-card">
-                <!-- En-tête section -->
-                <div
-                    class="flex items-center justify-between gap-4 border-b px-5 py-4"
-                >
-                    <div class="flex items-center gap-3">
-                        <div
-                            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/40"
-                        >
-                            <Building2 class="h-4 w-4 text-muted-foreground" />
-                        </div>
-                        <div>
-                            <h1 class="text-base leading-tight font-semibold">
-                                {{ site.nom }}
-                            </h1>
-                            <p class="text-xs text-muted-foreground">
-                                Informations du site
-                            </p>
-                        </div>
-                    </div>
-                    <Link
-                        v-if="can('sites.update')"
-                        :href="`/sites/${site.id}/edit`"
-                    >
-                        <Button variant="outline" size="sm">
-                            <Pencil class="mr-1.5 h-3.5 w-3.5" />
-                            Modifier
-                        </Button>
-                    </Link>
-                </div>
-
-                <!-- Table d'informations -->
-                <div class="divide-y text-sm">
-                    <!-- Nom -->
-                    <div
-                        class="grid grid-cols-[160px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[200px_1fr]"
-                    >
-                        <span class="text-muted-foreground">Nom</span>
-                        <span class="font-medium">{{ site.nom }}</span>
-                    </div>
-
-                    <!-- Code -->
-                    <div
-                        class="grid grid-cols-[160px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[200px_1fr]"
-                    >
-                        <span class="text-muted-foreground">Code</span>
-                        <span class="font-mono font-medium">{{
-                            site.code
-                        }}</span>
-                    </div>
-
-                    <!-- Type -->
-                    <div
-                        class="grid grid-cols-[160px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[200px_1fr]"
-                    >
-                        <span class="text-muted-foreground">Type</span>
-                        <span class="font-medium">{{ site.type_label }}</span>
-                    </div>
-
-                    <!-- Statut -->
-                    <div
-                        class="grid grid-cols-[160px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[200px_1fr]"
-                    >
-                        <span class="text-muted-foreground">Statut</span>
-                        <StatusDot
-                            :label="site.statut_label"
-                            :dot-class="
-                                site.statut === 'active'
-                                    ? 'bg-emerald-500'
-                                    : 'bg-zinc-400'
-                            "
-                        />
-                    </div>
-
-                    <!-- Téléphone -->
-                    <div
-                        v-if="site.telephone"
-                        class="grid grid-cols-[160px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[200px_1fr]"
-                    >
-                        <span class="text-muted-foreground">Téléphone</span>
-                        <a
-                            :href="phoneToTelHref(site.telephone)"
-                            class="font-medium text-primary hover:underline"
-                        >
-                            {{ formatPhoneDisplay(site.telephone) }}
-                        </a>
-                    </div>
-
-                    <!-- Email -->
-                    <div
-                        v-if="site.email"
-                        class="grid grid-cols-[160px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[200px_1fr]"
-                    >
-                        <span class="text-muted-foreground">Email</span>
-                        <a
-                            :href="`mailto:${site.email}`"
-                            class="font-medium text-primary hover:underline"
-                        >
-                            {{ site.email }}
-                        </a>
-                    </div>
-
-                    <!-- Pays -->
-                    <div
-                        v-if="site.pays"
-                        class="grid grid-cols-[160px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[200px_1fr]"
-                    >
-                        <span class="text-muted-foreground">Pays</span>
-                        <span class="flex items-center gap-2 font-medium">
-                            <img
-                                v-if="flagUrl(site.pays)"
-                                :src="flagUrl(site.pays)!"
-                                class="h-3.5 w-auto rounded-sm"
-                            />
-                            {{ site.pays }}
-                        </span>
-                    </div>
-
-                    <!-- Ville -->
-                    <div
-                        v-if="site.ville"
-                        class="grid grid-cols-[160px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[200px_1fr]"
-                    >
-                        <span class="text-muted-foreground">Ville</span>
-                        <span class="font-medium">{{ site.ville }}</span>
-                    </div>
-
-                    <!-- Quartier -->
-                    <div
-                        v-if="site.quartier"
-                        class="grid grid-cols-[160px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[200px_1fr]"
-                    >
-                        <span class="text-muted-foreground">Quartier</span>
-                        <span class="font-medium">{{ site.quartier }}</span>
-                    </div>
-
-                    <!-- Adresse -->
-                    <div
-                        v-if="site.localisation"
-                        class="grid grid-cols-[160px_1fr] items-start gap-4 px-5 py-3 sm:grid-cols-[200px_1fr]"
-                    >
-                        <span class="text-muted-foreground">Adresse</span>
-                        <span class="leading-relaxed font-medium">{{
-                            site.localisation
-                        }}</span>
-                    </div>
-
-                    <!-- Coordonnées GPS -->
-                    <div
-                        v-if="site.latitude && site.longitude"
-                        class="grid grid-cols-[160px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[200px_1fr]"
-                    >
-                        <span class="text-muted-foreground">Coordonnées</span>
-                        <a
-                            :href="mapsUrl(site.latitude, site.longitude)"
-                            target="_blank"
-                            rel="noopener"
-                            class="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline"
-                        >
-                            <Navigation class="h-3 w-3" />
-                            {{ site.latitude }}, {{ site.longitude }}
-                        </a>
-                    </div>
-
-                    <!-- Site parent -->
-                    <div
-                        v-if="site.parent_nom"
-                        class="grid grid-cols-[160px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[200px_1fr]"
-                    >
-                        <span class="text-muted-foreground">Site parent</span>
-                        <Link
-                            :href="`/sites/${site.parent_id}`"
-                            class="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
-                        >
-                            <Building2 class="h-3.5 w-3.5 shrink-0" />
-                            {{ site.parent_nom }}
-                            <ChevronRight
-                                class="h-3.5 w-3.5 text-muted-foreground"
-                            />
-                        </Link>
-                    </div>
-
-                    <!-- Description -->
-                    <div
-                        v-if="site.description"
-                        class="grid grid-cols-[160px_1fr] items-start gap-4 px-5 py-3 sm:grid-cols-[200px_1fr]"
-                    >
-                        <span class="text-muted-foreground">Description</span>
-                        <span
-                            class="leading-relaxed whitespace-pre-line text-foreground/80"
-                            >{{ site.description }}</span
-                        >
-                    </div>
-                </div>
+        <!-- Page content -->
+        <div class="mx-auto w-full max-w-5xl p-4 sm:p-6">
+            <!-- Desktop heading -->
+            <div class="mb-8 hidden space-y-0.5 sm:block">
+                <h2 class="text-xl font-semibold tracking-tight">
+                    {{ site.nom }}
+                </h2>
+                <p class="text-sm text-muted-foreground">
+                    Code&nbsp;:&nbsp;<span class="font-mono">{{
+                        site.code
+                    }}</span>
+                    &nbsp;·&nbsp;{{ site.type_label }}
+                </p>
             </div>
 
-            <!-- ── Sites enfants ─────────────────────────────────────────────── -->
-            <div
-                v-if="site.enfants.length > 0"
-                class="overflow-hidden rounded-xl border bg-card"
-            >
-                <!-- En-tête -->
-                <div class="flex items-center gap-2 border-b px-5 py-4">
-                    <h2
-                        class="flex items-center gap-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+            <!-- Tab layout (Settings-style) -->
+            <div class="flex flex-col lg:flex-row lg:space-x-12">
+                <!-- ── Left sidebar nav ──────────────────────────────────── -->
+                <aside class="w-full lg:w-48">
+                    <nav
+                        class="flex gap-1 overflow-x-auto pb-2 sm:flex-col sm:space-y-1 sm:overflow-x-visible sm:pb-0"
                     >
-                        <Building2 class="h-4 w-4" />
-                        Sites enfants
-                        <span
-                            class="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground"
-                            >{{ site.enfants.length }}</span
-                        >
-                    </h2>
-                </div>
-
-                <!-- Lignes enfants -->
-                <div class="divide-y">
-                    <Link
-                        v-for="enfant in site.enfants"
-                        :key="enfant.id"
-                        :href="`/sites/${enfant.id}`"
-                        class="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-muted/40"
-                    >
-                        <div
-                            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-muted/50"
-                        >
-                            <Building2
-                                class="h-3.5 w-3.5 text-muted-foreground"
-                            />
-                        </div>
-                        <div class="min-w-0 flex-1">
-                            <span class="text-sm font-medium">{{
-                                enfant.nom
-                            }}</span>
-                            <span
-                                class="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
-                            >
-                                {{ enfant.code }}
-                            </span>
-                        </div>
-                        <span
-                            class="hidden text-xs text-muted-foreground sm:inline"
-                            >{{ enfant.type_label }}</span
-                        >
-                        <StatusDot
-                            :label="enfant.statut_label"
-                            :dot-class="
-                                enfant.statut === 'active'
-                                    ? 'bg-emerald-500'
-                                    : 'bg-zinc-400'
-                            "
-                            class="shrink-0"
-                        />
-                        <ChevronRight
-                            class="h-4 w-4 shrink-0 text-muted-foreground"
-                        />
-                    </Link>
-                </div>
-            </div>
-
-            <!-- ── Membres du site ─────────────────────────────────────────── -->
-            <div class="overflow-hidden rounded-xl border bg-card">
-                <!-- En-tête section -->
-                <div
-                    class="flex items-center justify-between gap-4 border-b px-5 py-4"
-                >
-                    <h2
-                        class="flex items-center gap-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                    >
-                        <Users class="h-4 w-4" />
-                        Membres du site
-                        <span
-                            class="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground"
-                            >{{ membres.length }}</span
-                        >
-                    </h2>
-                    <Button
-                        v-if="can_invite"
-                        size="sm"
-                        @click="openInviteDialog"
-                    >
-                        <UserPlus class="mr-2 h-4 w-4" />
-                        Inviter un membre
-                    </Button>
-                </div>
-
-                <!-- Barre de filtres -->
-                <div
-                    class="flex flex-wrap items-center gap-3 border-b bg-muted/20 px-5 py-3"
-                >
-                    <!-- Recherche -->
-                    <IconField class="max-w-xs flex-1">
-                        <InputIcon class="pointer-events-none">
-                            <svg
-                                class="h-4 w-4 text-muted-foreground"
-                                xmlns="http://www.w3.org/2000/svg"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                                />
-                            </svg>
-                        </InputIcon>
-                        <InputText
-                            v-model="search"
-                            placeholder="Nom, email…"
-                            class="w-full text-sm"
-                        />
-                    </IconField>
-
-                    <!-- Filtre statut -->
-                    <div class="flex flex-wrap gap-1">
-                        <button
-                            v-for="s in [
-                                { value: 'tous', label: 'Tous' },
-                                { value: 'actif', label: 'Actif' },
-                                {
-                                    value: 'en_attente',
-                                    label: 'En attente',
-                                },
-                                {
-                                    value: 'expire',
-                                    label: 'Expirée/Révoquée',
-                                },
+                        <Button
+                            variant="ghost"
+                            :class="[
+                                'shrink-0 justify-start sm:w-full',
+                                activeTab === 'infos' ? 'bg-muted' : '',
                             ]"
-                            :key="s.value"
-                            type="button"
-                            class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                            :class="
-                                statutFilter === s.value
-                                    ? 'bg-primary text-primary-foreground'
-                                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                            "
-                            @click="statutFilter = s.value"
+                            @click="activeTab = 'infos'"
                         >
-                            {{ s.label }}
-                        </button>
+                            <Info class="mr-2 h-4 w-4 shrink-0" />
+                            Informations
+                        </Button>
+
+                        <Button
+                            variant="ghost"
+                            :class="[
+                                'shrink-0 justify-start sm:w-full',
+                                activeTab === 'membres' ? 'bg-muted' : '',
+                            ]"
+                            @click="activeTab = 'membres'"
+                        >
+                            <Users class="mr-2 h-4 w-4 shrink-0" />
+                            Membres
+                            <span
+                                class="ml-auto rounded-full bg-muted px-1.5 py-0.5 font-mono text-xs leading-none"
+                            >
+                                {{ membres.length }}
+                            </span>
+                        </Button>
+                    </nav>
+                </aside>
+
+                <Separator class="my-4 lg:hidden" />
+
+                <!-- ── Tab content ──────────────────────────────────────── -->
+                <div class="min-w-0 flex-1">
+                    <!-- ── Tab : Informations ──────────────────────────── -->
+                    <div v-if="activeTab === 'infos'" class="space-y-6">
+                        <!-- Carte principale -->
+                        <div class="overflow-hidden rounded-xl border bg-card">
+                            <!-- En-tête carte -->
+                            <div
+                                class="flex items-center justify-between gap-4 border-b px-5 py-4"
+                            >
+                                <h3
+                                    class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                                >
+                                    Informations du site
+                                </h3>
+                                <Link
+                                    v-if="can('sites.update')"
+                                    :href="`/sites/${site.id}/edit`"
+                                >
+                                    <Button variant="outline" size="sm">
+                                        <Pencil class="mr-1.5 h-3.5 w-3.5" />
+                                        Modifier
+                                    </Button>
+                                </Link>
+                            </div>
+
+                            <!-- Lignes info -->
+                            <div class="divide-y text-sm">
+                                <div
+                                    class="grid grid-cols-[140px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Nom</span
+                                    >
+                                    <span class="font-medium">{{
+                                        site.nom
+                                    }}</span>
+                                </div>
+
+                                <div
+                                    class="grid grid-cols-[140px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Code</span
+                                    >
+                                    <span class="font-mono font-medium">{{
+                                        site.code
+                                    }}</span>
+                                </div>
+
+                                <div
+                                    class="grid grid-cols-[140px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Type</span
+                                    >
+                                    <span class="font-medium">{{
+                                        site.type_label
+                                    }}</span>
+                                </div>
+
+                                <div
+                                    class="grid grid-cols-[140px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Statut</span
+                                    >
+                                    <StatusDot
+                                        :label="site.statut_label"
+                                        :dot-class="
+                                            site.statut === 'active'
+                                                ? 'bg-emerald-500'
+                                                : 'bg-zinc-400'
+                                        "
+                                    />
+                                </div>
+
+                                <div
+                                    v-if="site.telephone"
+                                    class="grid grid-cols-[140px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Téléphone</span
+                                    >
+                                    <a
+                                        :href="phoneToTelHref(site.telephone)"
+                                        class="font-medium text-primary hover:underline"
+                                    >
+                                        {{ formatPhoneDisplay(site.telephone) }}
+                                    </a>
+                                </div>
+
+                                <div
+                                    v-if="site.email"
+                                    class="grid grid-cols-[140px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Email</span
+                                    >
+                                    <a
+                                        :href="`mailto:${site.email}`"
+                                        class="font-medium text-primary hover:underline"
+                                    >
+                                        {{ site.email }}
+                                    </a>
+                                </div>
+
+                                <div
+                                    v-if="site.pays"
+                                    class="grid grid-cols-[140px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Pays</span
+                                    >
+                                    <span
+                                        class="flex items-center gap-2 font-medium"
+                                    >
+                                        <img
+                                            v-if="flagUrl(site.pays)"
+                                            :src="flagUrl(site.pays)!"
+                                            class="h-3.5 w-auto rounded-sm"
+                                        />
+                                        {{ site.pays }}
+                                    </span>
+                                </div>
+
+                                <div
+                                    v-if="site.ville"
+                                    class="grid grid-cols-[140px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Ville</span
+                                    >
+                                    <span class="font-medium">{{
+                                        site.ville
+                                    }}</span>
+                                </div>
+
+                                <div
+                                    v-if="site.quartier"
+                                    class="grid grid-cols-[140px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Quartier</span
+                                    >
+                                    <span class="font-medium">{{
+                                        site.quartier
+                                    }}</span>
+                                </div>
+
+                                <div
+                                    v-if="site.localisation"
+                                    class="grid grid-cols-[140px_1fr] items-start gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Adresse</span
+                                    >
+                                    <span class="leading-relaxed font-medium">{{
+                                        site.localisation
+                                    }}</span>
+                                </div>
+
+                                <div
+                                    v-if="site.latitude && site.longitude"
+                                    class="grid grid-cols-[140px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Coordonnées</span
+                                    >
+                                    <a
+                                        :href="
+                                            mapsUrl(
+                                                site.latitude,
+                                                site.longitude,
+                                            )
+                                        "
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline"
+                                    >
+                                        <Navigation class="h-3 w-3" />
+                                        {{ site.latitude }},
+                                        {{ site.longitude }}
+                                    </a>
+                                </div>
+
+                                <div
+                                    v-if="site.parent_nom"
+                                    class="grid grid-cols-[140px_1fr] items-center gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Site parent</span
+                                    >
+                                    <Link
+                                        :href="`/sites/${site.parent_id}`"
+                                        class="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
+                                    >
+                                        <Building2
+                                            class="h-3.5 w-3.5 shrink-0"
+                                        />
+                                        {{ site.parent_nom }}
+                                        <ChevronRight
+                                            class="h-3.5 w-3.5 text-muted-foreground"
+                                        />
+                                    </Link>
+                                </div>
+
+                                <div
+                                    v-if="site.description"
+                                    class="grid grid-cols-[140px_1fr] items-start gap-4 px-5 py-3 sm:grid-cols-[180px_1fr]"
+                                >
+                                    <span class="text-muted-foreground"
+                                        >Description</span
+                                    >
+                                    <span
+                                        class="leading-relaxed whitespace-pre-line text-foreground/80"
+                                        >{{ site.description }}</span
+                                    >
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sites enfants -->
+                        <div
+                            v-if="site.enfants.length > 0"
+                            class="overflow-hidden rounded-xl border bg-card"
+                        >
+                            <div class="border-b px-5 py-4">
+                                <h3
+                                    class="flex items-center gap-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                                >
+                                    <Building2 class="h-4 w-4" />
+                                    Sites enfants
+                                    <span
+                                        class="rounded-full bg-muted px-2 py-0.5 text-xs font-normal"
+                                        >{{ site.enfants.length }}</span
+                                    >
+                                </h3>
+                            </div>
+                            <div class="divide-y">
+                                <Link
+                                    v-for="enfant in site.enfants"
+                                    :key="enfant.id"
+                                    :href="`/sites/${enfant.id}`"
+                                    class="flex items-center gap-3 px-5 py-3 text-sm transition-colors hover:bg-muted/40"
+                                >
+                                    <div
+                                        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-muted/50"
+                                    >
+                                        <Building2
+                                            class="h-3.5 w-3.5 text-muted-foreground"
+                                        />
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <span class="font-medium">{{
+                                            enfant.nom
+                                        }}</span>
+                                        <span
+                                            class="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                                            >{{ enfant.code }}</span
+                                        >
+                                    </div>
+                                    <span
+                                        class="hidden text-xs text-muted-foreground sm:inline"
+                                        >{{ enfant.type_label }}</span
+                                    >
+                                    <StatusDot
+                                        :label="enfant.statut_label"
+                                        :dot-class="
+                                            enfant.statut === 'active'
+                                                ? 'bg-emerald-500'
+                                                : 'bg-zinc-400'
+                                        "
+                                        class="shrink-0"
+                                    />
+                                    <ChevronRight
+                                        class="h-4 w-4 shrink-0 text-muted-foreground"
+                                    />
+                                </Link>
+                            </div>
+                        </div>
                     </div>
 
-                    <!-- Filtre rôle -->
-                    <Select
-                        v-model="roleFilter"
-                        :options="[
-                            { value: 'tous', label: 'Tous les rôles' },
-                            ...roles_disponibles,
-                        ]"
-                        option-label="label"
-                        option-value="value"
-                        class="text-sm"
-                        :pt="{
-                            root: { class: 'h-9 min-w-[160px]' },
-                            label: {
-                                class: 'flex items-center py-0 text-sm',
-                            },
-                        }"
-                    />
-                </div>
-
-                <!-- DataTable -->
-                <DataTable
-                    :value="filteredMembres"
-                    :paginator="membres.length > 20"
-                    :rows="20"
-                    :global-filter-fields="['nom_complet', 'email', 'role']"
-                    v-model:filters="filters"
-                    data-key="email"
-                    striped-rows
-                    removable-sort
-                    class="text-sm"
-                    table-class="w-full"
-                >
-                    <!-- Membre (nom / email) -->
-                    <Column
-                        field="nom_complet"
-                        header="Membre"
-                        sortable
-                        style="min-width: 200px"
+                    <!-- ── Tab : Membres ───────────────────────────────── -->
+                    <div
+                        v-if="activeTab === 'membres'"
+                        class="overflow-hidden rounded-xl border bg-card"
                     >
-                        <template #body="{ data }">
-                            <div class="flex items-center gap-3">
-                                <div
-                                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
-                                    :class="
-                                        data.type === 'user'
-                                            ? 'bg-primary/10 text-primary'
-                                            : 'bg-muted text-muted-foreground'
-                                    "
-                                >
-                                    {{
-                                        data.type === 'user'
-                                            ? initials(data.nom_complet)
-                                            : data.email.charAt(0).toUpperCase()
-                                    }}
-                                </div>
-                                <div class="min-w-0">
-                                    <div
-                                        class="truncate font-medium"
-                                        :class="
-                                            data.type === 'invitation'
-                                                ? 'text-muted-foreground italic'
-                                                : ''
-                                        "
-                                    >
-                                        {{
-                                            data.nom_complet ??
-                                            'Invitation en attente'
-                                        }}
-                                    </div>
-                                    <div
-                                        class="truncate text-xs text-muted-foreground"
-                                    >
-                                        {{ data.email }}
-                                    </div>
-                                </div>
-                            </div>
-                        </template>
-                    </Column>
-
-                    <!-- Téléphone -->
-                    <Column
-                        field="telephone"
-                        header="Téléphone"
-                        style="width: 160px"
-                    >
-                        <template #body="{ data }">
-                            <span
-                                v-if="data.telephone"
-                                class="text-sm text-muted-foreground"
-                            >
-                                {{ formatPhoneDisplay(data.telephone) }}
-                            </span>
-                            <span v-else class="text-xs text-muted-foreground"
-                                >—</span
-                            >
-                        </template>
-                    </Column>
-
-                    <!-- Rôle -->
-                    <Column
-                        field="role"
-                        header="Rôle"
-                        sortable
-                        style="width: 160px"
-                    >
-                        <template #body="{ data }">
-                            <span
-                                v-if="data.role"
-                                class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="roleColor(data.role)"
-                            >
-                                <Shield class="h-3 w-3" />
-                                {{ roleLabel(data.role) }}
-                            </span>
-                            <span v-else class="text-xs text-muted-foreground"
-                                >—</span
-                            >
-                        </template>
-                    </Column>
-
-                    <!-- Statut -->
-                    <Column
-                        field="statut_label"
-                        header="Statut"
-                        sortable
-                        style="width: 140px"
-                    >
-                        <template #body="{ data }">
-                            <StatusDot
-                                :label="data.statut_label"
-                                :dot-class="statutDotClass(data.statut)"
-                                class="text-muted-foreground"
-                            />
-                        </template>
-                    </Column>
-
-                    <!-- Date -->
-                    <Column
-                        field="date"
-                        header="Date"
-                        sortable
-                        style="width: 110px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-xs text-muted-foreground">{{
-                                data.date ?? '—'
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Actions -->
-                    <Column header="" style="width: 56px">
-                        <template #body="{ data }">
-                            <div
-                                v-if="
-                                    data.type === 'invitation' &&
-                                    (data.can_resend || data.can_revoke)
-                                "
-                                class="flex justify-end"
-                            >
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger as-child>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            class="h-8 w-8"
-                                        >
-                                            <MoreVertical class="h-4 w-4" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                        align="end"
-                                        class="w-44"
-                                    >
-                                        <DropdownMenuItem
-                                            v-if="data.can_resend"
-                                            class="cursor-pointer"
-                                            @click="
-                                                resendInvitation(
-                                                    data.invitation_id,
-                                                )
-                                            "
-                                        >
-                                            <RefreshCw class="h-4 w-4" />
-                                            Renvoyer
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator
-                                            v-if="
-                                                data.can_resend &&
-                                                data.can_revoke
-                                            "
-                                        />
-                                        <DropdownMenuItem
-                                            v-if="data.can_revoke"
-                                            class="cursor-pointer text-destructive focus:text-destructive"
-                                            @click="
-                                                revokeInvitation(
-                                                    data.invitation_id,
-                                                )
-                                            "
-                                        >
-                                            <XCircle class="h-4 w-4" />
-                                            Révoquer
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </div>
-                        </template>
-                    </Column>
-
-                    <template #empty>
+                        <!-- En-tête -->
                         <div
-                            class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
+                            class="flex items-center justify-between gap-4 border-b px-5 py-4"
                         >
-                            <MailOpen class="h-10 w-10 opacity-30" />
-                            <p class="text-sm">Aucun membre trouvé.</p>
+                            <h3
+                                class="flex items-center gap-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                <Users class="h-4 w-4" />
+                                Membres du site
+                                <span
+                                    class="rounded-full bg-muted px-2 py-0.5 text-xs font-normal"
+                                    >{{ membres.length }}</span
+                                >
+                            </h3>
                             <Button
                                 v-if="can_invite"
-                                variant="outline"
                                 size="sm"
                                 @click="openInviteDialog"
                             >
                                 <UserPlus class="mr-2 h-4 w-4" />
-                                Inviter le premier membre
+                                Inviter un membre
                             </Button>
                         </div>
-                    </template>
-                </DataTable>
+
+                        <!-- Barre de filtres -->
+                        <div
+                            class="flex flex-wrap items-center gap-3 border-b bg-muted/20 px-5 py-3"
+                        >
+                            <IconField class="max-w-xs flex-1">
+                                <InputIcon class="pointer-events-none">
+                                    <svg
+                                        class="h-4 w-4 text-muted-foreground"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                        />
+                                    </svg>
+                                </InputIcon>
+                                <InputText
+                                    v-model="search"
+                                    placeholder="Nom, email…"
+                                    class="w-full text-sm"
+                                />
+                            </IconField>
+
+                            <div class="flex flex-wrap gap-1">
+                                <button
+                                    v-for="s in [
+                                        { value: 'tous', label: 'Tous' },
+                                        { value: 'actif', label: 'Actif' },
+                                        {
+                                            value: 'en_attente',
+                                            label: 'En attente',
+                                        },
+                                        {
+                                            value: 'expire',
+                                            label: 'Expirée/Révoquée',
+                                        },
+                                    ]"
+                                    :key="s.value"
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                                    :class="
+                                        statutFilter === s.value
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    "
+                                    @click="statutFilter = s.value"
+                                >
+                                    {{ s.label }}
+                                </button>
+                            </div>
+
+                            <Select
+                                v-model="roleFilter"
+                                :options="[
+                                    {
+                                        value: 'tous',
+                                        label: 'Tous les rôles',
+                                    },
+                                    ...roles_disponibles,
+                                ]"
+                                option-label="label"
+                                option-value="value"
+                                class="text-sm"
+                                :pt="{
+                                    root: { class: 'h-9 min-w-[160px]' },
+                                    label: {
+                                        class: 'flex items-center py-0 text-sm',
+                                    },
+                                }"
+                            />
+                        </div>
+
+                        <!-- DataTable -->
+                        <DataTable
+                            :value="filteredMembres"
+                            :paginator="membres.length > 20"
+                            :rows="20"
+                            :global-filter-fields="[
+                                'nom_complet',
+                                'email',
+                                'role',
+                            ]"
+                            v-model:filters="filters"
+                            data-key="email"
+                            striped-rows
+                            removable-sort
+                            class="text-sm"
+                            table-class="w-full"
+                        >
+                            <Column
+                                field="nom_complet"
+                                header="Membre"
+                                sortable
+                                style="min-width: 200px"
+                            >
+                                <template #body="{ data }">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+                                            :class="
+                                                data.type === 'user'
+                                                    ? 'bg-primary/10 text-primary'
+                                                    : 'bg-muted text-muted-foreground'
+                                            "
+                                        >
+                                            {{
+                                                data.type === 'user'
+                                                    ? initials(data.nom_complet)
+                                                    : data.email
+                                                          .charAt(0)
+                                                          .toUpperCase()
+                                            }}
+                                        </div>
+                                        <div class="min-w-0">
+                                            <div
+                                                class="truncate font-medium"
+                                                :class="
+                                                    data.type === 'invitation'
+                                                        ? 'text-muted-foreground italic'
+                                                        : ''
+                                                "
+                                            >
+                                                {{
+                                                    data.nom_complet ??
+                                                    'Invitation en attente'
+                                                }}
+                                            </div>
+                                            <div
+                                                class="truncate text-xs text-muted-foreground"
+                                            >
+                                                {{ data.email }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </Column>
+
+                            <Column
+                                field="telephone"
+                                header="Téléphone"
+                                style="width: 160px"
+                            >
+                                <template #body="{ data }">
+                                    <span
+                                        v-if="data.telephone"
+                                        class="text-sm text-muted-foreground"
+                                    >
+                                        {{ formatPhoneDisplay(data.telephone) }}
+                                    </span>
+                                    <span
+                                        v-else
+                                        class="text-xs text-muted-foreground"
+                                        >—</span
+                                    >
+                                </template>
+                            </Column>
+
+                            <Column
+                                field="role"
+                                header="Rôle"
+                                sortable
+                                style="width: 160px"
+                            >
+                                <template #body="{ data }">
+                                    <span
+                                        v-if="data.role"
+                                        class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                        :class="roleColor(data.role)"
+                                    >
+                                        <Shield class="h-3 w-3" />
+                                        {{ roleLabel(data.role) }}
+                                    </span>
+                                    <span
+                                        v-else
+                                        class="text-xs text-muted-foreground"
+                                        >—</span
+                                    >
+                                </template>
+                            </Column>
+
+                            <Column
+                                field="statut_label"
+                                header="Statut"
+                                sortable
+                                style="width: 140px"
+                            >
+                                <template #body="{ data }">
+                                    <StatusDot
+                                        :label="data.statut_label"
+                                        :dot-class="statutDotClass(data.statut)"
+                                        class="text-muted-foreground"
+                                    />
+                                </template>
+                            </Column>
+
+                            <Column
+                                field="date"
+                                header="Date"
+                                sortable
+                                style="width: 110px"
+                            >
+                                <template #body="{ data }">
+                                    <span
+                                        class="text-xs text-muted-foreground"
+                                        >{{ data.date ?? '—' }}</span
+                                    >
+                                </template>
+                            </Column>
+
+                            <Column header="" style="width: 56px">
+                                <template #body="{ data }">
+                                    <div
+                                        v-if="
+                                            data.type === 'invitation' &&
+                                            (data.can_resend || data.can_revoke)
+                                        "
+                                        class="flex justify-end"
+                                    >
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger as-child>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    class="h-8 w-8"
+                                                >
+                                                    <MoreVertical
+                                                        class="h-4 w-4"
+                                                    />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent
+                                                align="end"
+                                                class="w-44"
+                                            >
+                                                <DropdownMenuItem
+                                                    v-if="data.can_resend"
+                                                    class="cursor-pointer"
+                                                    @click="
+                                                        resendInvitation(
+                                                            data.invitation_id,
+                                                        )
+                                                    "
+                                                >
+                                                    <RefreshCw
+                                                        class="h-4 w-4"
+                                                    />
+                                                    Renvoyer
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator
+                                                    v-if="
+                                                        data.can_resend &&
+                                                        data.can_revoke
+                                                    "
+                                                />
+                                                <DropdownMenuItem
+                                                    v-if="data.can_revoke"
+                                                    class="cursor-pointer text-destructive focus:text-destructive"
+                                                    @click="
+                                                        revokeInvitation(
+                                                            data.invitation_id,
+                                                        )
+                                                    "
+                                                >
+                                                    <XCircle class="h-4 w-4" />
+                                                    Révoquer
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
+                                </template>
+                            </Column>
+
+                            <template #empty>
+                                <div
+                                    class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
+                                >
+                                    <MailOpen class="h-10 w-10 opacity-30" />
+                                    <p class="text-sm">Aucun membre trouvé.</p>
+                                    <Button
+                                        v-if="can_invite"
+                                        variant="outline"
+                                        size="sm"
+                                        @click="openInviteDialog"
+                                    >
+                                        <UserPlus class="mr-2 h-4 w-4" />
+                                        Inviter le premier membre
+                                    </Button>
+                                </div>
+                            </template>
+                        </DataTable>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -918,7 +1012,6 @@ function revokeInvitation(invitationId: number) {
             :style="{ width: '480px' }"
         >
             <form class="flex flex-col gap-5" @submit.prevent="submitInvite">
-                <!-- Email -->
                 <div class="grid gap-2">
                     <Label for="invite-email">
                         Adresse email <span class="text-destructive">*</span>
@@ -939,7 +1032,6 @@ function revokeInvitation(invitationId: number) {
                     </p>
                 </div>
 
-                <!-- Rôle -->
                 <div class="grid gap-2">
                     <Label for="invite-role">
                         Rôle <span class="text-destructive">*</span>

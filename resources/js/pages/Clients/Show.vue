@@ -1,53 +1,231 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ArrowLeft, Gift, Pencil, TrendingUp } from 'lucide-vue-next';
+import { watch } from 'vue';
+import ClientForm from './partials/ClientForm.vue';
 
-interface Client {
+interface ClientData {
     id: number;
     nom: string;
-    prenom: string | null;
+    prenom: string;
     email: string | null;
     telephone: string | null;
     adresse: string | null;
+    ville: string | null;
+    pays: string | null;
+    code_pays: string | null;
+    code_phone_pays: string | null;
     is_active: boolean;
+    cashback_eligible: boolean;
 }
 
-const props = defineProps<{ client: Client }>();
+interface CashbackSolde {
+    cumul_achats: number;
+    cashback_en_attente: number;
+    total_cashback_gagne: number;
+    total_cashback_verse: number;
+}
+
+const props = defineProps<{
+    client: ClientData;
+    cashback_solde: CashbackSolde | null;
+}>();
+
+const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Clients', href: '/clients' },
-    { title: `${props.client.nom}`, href: '#' },
+    {
+        title: `${props.client.prenom} ${props.client.nom}`,
+        href: '#',
+    },
 ];
+
+const form = useForm({
+    nom: props.client.nom,
+    prenom: props.client.prenom,
+    email: props.client.email,
+    telephone: props.client.telephone,
+    adresse: props.client.adresse,
+    ville: props.client.ville,
+    pays: props.client.pays,
+    code_pays: props.client.code_pays,
+    code_phone_pays: props.client.code_phone_pays,
+    is_active: Boolean(props.client.is_active),
+    cashback_eligible: Boolean(props.client.cashback_eligible),
+});
+
+watch(
+    () => props.client,
+    (c) => {
+        form.defaults({
+            nom: c.nom,
+            prenom: c.prenom,
+            email: c.email,
+            telephone: c.telephone,
+            adresse: c.adresse,
+            ville: c.ville,
+            pays: c.pays,
+            code_pays: c.code_pays,
+            code_phone_pays: c.code_phone_pays,
+            is_active: Boolean(c.is_active),
+            cashback_eligible: Boolean(c.cashback_eligible),
+        }).reset();
+    },
+);
+
+function formatMontant(v: number): string {
+    return new Intl.NumberFormat('fr-GN').format(v) + ' GNF';
+}
 </script>
 
 <template>
-    <Head>
-        <title>{{ client.nom }} {{ client.prenom ?? '' }}</title>
-    </Head>
+    <Head :title="`Voir — ${client.prenom} ${client.nom}`" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto max-w-2xl p-4 sm:p-6">
-            <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-                <h1 class="mb-4 text-xl font-semibold">
-                    {{ client.nom }} {{ client.prenom }}
-                </h1>
-                <dl class="space-y-2 text-sm">
-                    <div v-if="client.email" class="flex gap-4">
-                        <dt class="w-28 text-muted-foreground">Email</dt>
-                        <dd>{{ client.email }}</dd>
-                    </div>
-                    <div v-if="client.telephone" class="flex gap-4">
-                        <dt class="w-28 text-muted-foreground">Téléphone</dt>
-                        <dd>{{ client.telephone }}</dd>
-                    </div>
-                    <div v-if="client.adresse" class="flex gap-4">
-                        <dt class="w-28 text-muted-foreground">Adresse</dt>
-                        <dd>{{ client.adresse }}</dd>
-                    </div>
-                </dl>
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+        <!-- Header mobile -->
+        <div
+            class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
+        >
+            <div class="relative flex items-center justify-center px-4 py-3">
+                <Link
+                    href="/clients"
+                    class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
+                >
+                    <ArrowLeft class="h-4 w-4" />
+                </Link>
+                <div class="text-center">
+                    <h1 class="text-[17px] leading-tight font-semibold">
+                        Voir
+                    </h1>
+                    <p class="text-[11px] text-muted-foreground">
+                        {{ client.prenom }} {{ client.nom }}
+                    </p>
+                </div>
+                <Link
+                    v-if="can('clients.update')"
+                    :href="`/clients/${client.id}/edit`"
+                    class="absolute right-4 inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-xs font-medium text-foreground"
+                >
+                    <Pencil class="h-3.5 w-3.5" />
+                    Modifier
+                </Link>
             </div>
+        </div>
+
+        <div class="mx-auto max-w-2xl pb-6 sm:p-6">
+            <div class="mx-auto hidden max-w-2xl px-6 pt-6 pb-0 sm:block">
+                <div class="mb-8 flex items-start justify-between gap-3">
+                    <div>
+                        <h1 class="text-2xl font-semibold tracking-tight">
+                            Voir le client
+                        </h1>
+                        <p
+                            class="mt-1 text-sm font-medium text-muted-foreground"
+                        >
+                            {{ client.prenom }} {{ client.nom }}
+                        </p>
+                    </div>
+                    <Link
+                        v-if="can('clients.update')"
+                        :href="`/clients/${client.id}/edit`"
+                    >
+                        <Button type="button" variant="outline" class="gap-2">
+                            <Pencil class="h-4 w-4" />
+                            Modifier
+                        </Button>
+                    </Link>
+                </div>
+            </div>
+
+            <!-- Widget cashback (affiché uniquement si le module est actif) -->
+            <div
+                v-if="cashback_solde !== null"
+                class="mx-6 mb-6 overflow-hidden rounded-xl border bg-card"
+            >
+                <div
+                    class="flex items-center gap-2 border-b bg-muted/30 px-4 py-2.5"
+                >
+                    <Gift class="h-4 w-4 text-primary" />
+                    <span class="text-sm font-semibold">Cashback</span>
+                </div>
+                <div class="grid grid-cols-2 divide-x sm:grid-cols-4">
+                    <div class="px-4 py-3 text-center">
+                        <p class="text-xs text-muted-foreground">
+                            Cumul achats
+                        </p>
+                        <p class="mt-0.5 text-sm font-semibold">
+                            {{ formatMontant(cashback_solde.cumul_achats) }}
+                        </p>
+                    </div>
+                    <div class="px-4 py-3 text-center">
+                        <p class="text-xs text-muted-foreground">En attente</p>
+                        <p
+                            class="mt-0.5 text-sm font-semibold"
+                            :class="
+                                cashback_solde.cashback_en_attente > 0
+                                    ? 'text-amber-600'
+                                    : ''
+                            "
+                        >
+                            {{
+                                formatMontant(
+                                    cashback_solde.cashback_en_attente,
+                                )
+                            }}
+                        </p>
+                    </div>
+                    <div class="px-4 py-3 text-center">
+                        <p class="text-xs text-muted-foreground">Total gagné</p>
+                        <p class="mt-0.5 text-sm font-semibold text-primary">
+                            {{
+                                formatMontant(
+                                    cashback_solde.total_cashback_gagne,
+                                )
+                            }}
+                        </p>
+                    </div>
+                    <div class="px-4 py-3 text-center">
+                        <p class="text-xs text-muted-foreground">Total versé</p>
+                        <p class="mt-0.5 text-sm font-semibold text-green-600">
+                            {{
+                                formatMontant(
+                                    cashback_solde.total_cashback_verse,
+                                )
+                            }}
+                        </p>
+                    </div>
+                </div>
+                <div
+                    v-if="cashback_solde.cashback_en_attente > 0"
+                    class="border-t bg-amber-50 px-4 py-2 text-xs text-amber-700"
+                >
+                    <TrendingUp class="mr-1 inline h-3 w-3" />
+                    Ce client a un cashback de
+                    <strong>{{
+                        formatMontant(cashback_solde.cashback_en_attente)
+                    }}</strong>
+                    à verser.
+                    <a
+                        href="/cashback"
+                        class="ml-1 underline hover:no-underline"
+                        >Gérer →</a
+                    >
+                </div>
+            </div>
+
+            <ClientForm
+                :form="form"
+                :errors="{}"
+                :processing="false"
+                :readonly="true"
+                @update:form="Object.assign(form, $event)"
+            />
         </div>
     </AppLayout>
 </template>

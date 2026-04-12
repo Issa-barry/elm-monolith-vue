@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -8,11 +7,10 @@ import {
     ArrowLeft,
     CheckCircle,
     Gift,
-    Pencil,
     Save,
     TrendingUp,
 } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { computed, watch } from 'vue';
 import ClientForm from './partials/ClientForm.vue';
 
 interface ClientData {
@@ -93,19 +91,13 @@ function submit() {
     form.put(`/clients/${props.client.id}`);
 }
 
-const isReadOnly = ref(true);
-
-function enableEditing() {
-    isReadOnly.value = false;
-}
-
 function formatMontant(v: number): string {
     return new Intl.NumberFormat('fr-GN').format(v) + ' GNF';
 }
 </script>
 
 <template>
-    <Head :title="`Voir — ${client.prenom} ${client.nom}`" />
+    <Head :title="`Modifier — ${client.prenom} ${client.nom}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- Header mobile -->
@@ -121,47 +113,24 @@ function formatMontant(v: number): string {
                 </Link>
                 <div class="text-center">
                     <h1 class="text-[17px] leading-tight font-semibold">
-                        Voir
+                        Modifier
                     </h1>
                     <p class="text-[11px] text-muted-foreground">
                         {{ client.prenom }} {{ client.nom }}
                     </p>
                 </div>
-                <button
-                    v-if="isReadOnly"
-                    type="button"
-                    class="absolute right-4 inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-xs font-medium text-foreground"
-                    @click="enableEditing"
-                >
-                    <Pencil class="h-3.5 w-3.5" />
-                    Modifier
-                </button>
             </div>
         </div>
 
         <div class="mx-auto max-w-2xl pb-6 sm:p-6">
             <div class="mx-auto hidden max-w-2xl px-6 pt-6 pb-0 sm:block">
-                <div class="mb-8 flex items-start justify-between gap-3">
-                    <div>
-                        <h1 class="text-2xl font-semibold tracking-tight">
-                            Voir le client
-                        </h1>
-                        <p
-                            class="mt-1 text-sm font-medium text-muted-foreground"
-                        >
-                            {{ client.prenom }} {{ client.nom }}
-                        </p>
-                    </div>
-                    <Button
-                        v-if="isReadOnly"
-                        type="button"
-                        variant="outline"
-                        class="gap-2"
-                        @click="enableEditing"
-                    >
-                        <Pencil class="h-4 w-4" />
-                        Modifier
-                    </Button>
+                <div class="mb-8">
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Modifier le client
+                    </h1>
+                    <p class="mt-1 text-sm font-medium text-muted-foreground">
+                        {{ client.prenom }} {{ client.nom }}
+                    </p>
                 </div>
             </div>
 
@@ -253,7 +222,6 @@ function formatMontant(v: number): string {
                 :form="form"
                 :errors="form.errors"
                 :processing="form.processing"
-                :readonly="isReadOnly"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />
@@ -261,7 +229,6 @@ function formatMontant(v: number): string {
 
         <!-- Footer sticky mobile -->
         <div
-            v-if="!isReadOnly"
             class="fixed right-0 bottom-0 left-0 z-30 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden"
         >
             <button

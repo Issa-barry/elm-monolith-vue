@@ -169,6 +169,25 @@ class ClientTest extends TestCase
 
     // ── edit ──────────────────────────────────────────────────────────────────
 
+    public function test_show_returns_200_for_authorized_user(): void
+    {
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->get(route('clients.show', $client))
+            ->assertStatus(200);
+    }
+
+    public function test_show_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $client = Client::factory()->create(['organization_id' => $otherOrg->id]);
+
+        $this->actingAs($this->user)
+            ->get(route('clients.show', $client))
+            ->assertStatus(403);
+    }
+
     public function test_edit_returns_200_for_authorized_user(): void
     {
         $client = Client::factory()->create(['organization_id' => $this->org->id]);
