@@ -25,6 +25,7 @@ interface ClientData {
     code_pays: string | null;
     code_phone_pays: string | null;
     is_active: boolean;
+    cashback_eligible: boolean;
 }
 
 interface CashbackSolde {
@@ -64,6 +65,7 @@ const form = useForm({
     code_pays: props.client.code_pays,
     code_phone_pays: props.client.code_phone_pays,
     is_active: Boolean(props.client.is_active),
+    cashback_eligible: Boolean(props.client.cashback_eligible),
 });
 
 watch(
@@ -80,6 +82,7 @@ watch(
             code_pays: c.code_pays,
             code_phone_pays: c.code_phone_pays,
             is_active: Boolean(c.is_active),
+            cashback_eligible: Boolean(c.cashback_eligible),
         }).reset();
     },
 );

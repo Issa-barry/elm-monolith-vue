@@ -23,6 +23,7 @@ import {
     Package,
     PackageCheck,
     ShoppingCart,
+    Truck,
     UserCog,
     UserRoundCheck,
     Users,
@@ -39,6 +40,9 @@ const moduleFlags = computed(
     () => ((page.props as any).module_flags as Record<string, boolean>) ?? {},
 );
 const moduleActive = (key: string): boolean => moduleFlags.value[key] !== false;
+const transfertsAReceptionner = computed(
+    () => ((page.props as any).transferts_a_receptionner as number) ?? 0,
+);
 
 /** Guard combiné permission + module actif */
 const canSee = (permission: string, module: string): boolean =>
@@ -120,6 +124,27 @@ const mainNavItems = computed((): NavItem[] => {
 
     if (canSee('sites.read', 'sites'))
         items.push({ title: 'Sites', href: '/sites', icon: Building2 });
+
+    if (moduleActive('logistique') && can('logistique.read')) {
+        items.push({
+            title: 'Logistique',
+            href: '/logistique/transferts',
+            icon: Truck,
+            items: [
+                { title: 'Transferts', href: '/logistique/transferts' },
+                {
+                    title: 'Réceptions',
+                    href: '/logistique/receptions',
+                    badge:
+                        transfertsAReceptionner.value > 0
+                            ? transfertsAReceptionner.value
+                            : undefined,
+                },
+                { title: 'Commissions', href: '/logistique/commissions' },
+            ],
+        });
+    }
+
     if (canSee('users.read', 'utilisateurs'))
         items.push({ title: 'Utilisateurs', href: '/users', icon: UserCog });
 
