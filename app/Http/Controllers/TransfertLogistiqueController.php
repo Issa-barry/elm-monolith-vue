@@ -191,6 +191,7 @@ class TransfertLogistiqueController extends Controller
                 ->get(),
             'vehicules' => Vehicule::where('organization_id', $orgId)
                 ->where('is_active', true)
+                ->where('categorie', 'interne')
                 ->with('equipe:id,nom,vehicule_id')
                 ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs')
                 ->get()
@@ -233,7 +234,7 @@ class TransfertLogistiqueController extends Controller
 
         $data = $request->validate([
             'site_destination_id' => ['required', 'integer', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
-            'vehicule_id' => ['required', 'integer', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)],
+            'vehicule_id' => ['required', 'integer', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->where('categorie', 'interne')],
             'equipe_livraison_id' => ['nullable', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
             'date_depart_prevue' => ['nullable', 'date'],
             'date_arrivee_prevue' => ['nullable', 'date', 'after_or_equal:date_depart_prevue'],
@@ -244,6 +245,7 @@ class TransfertLogistiqueController extends Controller
             'lignes.*.notes' => ['nullable', 'string', 'max:250'],
         ], [
             'vehicule_id.required' => 'Le véhicule est obligatoire.',
+            'vehicule_id.exists' => 'Seuls les véhicules internes sont autorisés pour un transfert.',
             'date_arrivee_prevue.after_or_equal' => 'La date d\'arrivée doit être postérieure ou égale à la date de départ.',
             'lignes.required' => 'Au moins une ligne produit est requise.',
             'lignes.*.produit_id.required' => 'Chaque ligne doit avoir un produit.',
@@ -370,6 +372,7 @@ class TransfertLogistiqueController extends Controller
             'site_source' => $siteSourceModel ? ['id' => $siteSourceModel->id, 'nom' => $siteSourceModel->nom] : null,
             'sites' => Site::where('organization_id', $orgId)->select('id', 'nom')->orderBy('nom')->get(),
             'vehicules' => Vehicule::where('organization_id', $orgId)->where('is_active', true)
+                ->where('categorie', 'interne')
                 ->with('equipe:id,nom,vehicule_id')
                 ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs')
                 ->get()
@@ -396,7 +399,7 @@ class TransfertLogistiqueController extends Controller
 
         $data = $request->validate([
             'site_destination_id' => ['required', 'integer', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
-            'vehicule_id' => ['required', 'integer', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)],
+            'vehicule_id' => ['required', 'integer', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->where('categorie', 'interne')],
             'equipe_livraison_id' => ['nullable', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
             'date_depart_prevue' => ['nullable', 'date'],
             'date_arrivee_prevue' => ['nullable', 'date', 'after_or_equal:date_depart_prevue'],
@@ -407,6 +410,7 @@ class TransfertLogistiqueController extends Controller
             'lignes.*.notes' => ['nullable', 'string', 'max:250'],
         ], [
             'vehicule_id.required' => 'Le véhicule est obligatoire.',
+            'vehicule_id.exists' => 'Seuls les véhicules internes sont autorisés pour un transfert.',
             'lignes.*.produit_id.required' => 'Chaque ligne doit avoir un produit.',
             'lignes.*.quantite_demandee.min' => 'La quantité doit être supérieure à 0.',
         ]);
