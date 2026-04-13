@@ -104,7 +104,13 @@ jobs:
           HOSTINGER_USER: ${{ secrets.HOSTINGER_SSH_USER }}
           HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
         run: |
-          ssh -i ~/.ssh/hostinger_key -o StrictHostKeyChecking=yes -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" \
+          ssh -i ~/.ssh/hostinger_key \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=30 \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=10 \
+            -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" \
             "cd '$HOSTINGER_DEPLOY_PATH' && php artisan down --retry=10 || true"
 
       - name: Sync files to server
@@ -122,7 +128,7 @@ jobs:
             --exclude 'test-results/' \
             --exclude 'storage/' \
             --exclude '.env' \
-            -e "ssh -i ~/.ssh/hostinger_key -o StrictHostKeyChecking=yes -p ${{ secrets.HOSTINGER_SSH_PORT }}" \
+            -e "ssh -i ~/.ssh/hostinger_key -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -p ${{ secrets.HOSTINGER_SSH_PORT }}" \
             ./ "${{ secrets.HOSTINGER_SSH_USER }}@${{ secrets.HOSTINGER_HOST }}:${{ secrets.HOSTINGER_DEPLOY_PATH }}/"
 
       - name: Run remote Laravel commands
@@ -132,7 +138,13 @@ jobs:
           HOSTINGER_USER: ${{ secrets.HOSTINGER_SSH_USER }}
           HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
         run: |
-          ssh -i ~/.ssh/hostinger_key -o StrictHostKeyChecking=yes -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash --noprofile --norc -s" <<'EOF'
+          ssh -i ~/.ssh/hostinger_key \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=30 \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=10 \
+            -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash --noprofile --norc -s" <<'EOF'
           set -euo pipefail
 
           cd "$DEPLOY_PATH"
@@ -180,6 +192,7 @@ jobs:
 
           "$PHP_BIN" "$COMPOSER_PATH" install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
           "$PHP_BIN" artisan migrate --force
+          "$PHP_BIN" artisan db:seed --class=RolesAndPermissionsSeeder --force
           "$PHP_BIN" artisan optimize:clear
           "$PHP_BIN" artisan optimize
           STORAGE_SOURCE_PATH="$DEPLOY_PATH/storage/app/public"
@@ -214,16 +227,31 @@ jobs:
           fi
           # Supprime les fichiers legacy qui ne doivent plus exister
           rm -f resources/views/welcome.blade.php
-          "$PHP_BIN" artisan up
           EOF
 
-      - name: Restore site if deploy failed
-        if: failure()
+      # Runs whether the deploy succeeded or failed — guarantees the app never
+      # stays in maintenance mode.  Three SSH attempts with 20 s back-off cover
+      # transient firewall blocks after a long deployment session.
+      - name: Take site out of maintenance mode
+        if: always()
         env:
           HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
           HOSTINGER_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
           HOSTINGER_USER: ${{ secrets.HOSTINGER_SSH_USER }}
           HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
         run: |
-          ssh -i ~/.ssh/hostinger_key -o StrictHostKeyChecking=yes -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" \
-            "cd '$HOSTINGER_DEPLOY_PATH' && php artisan up || true"
+          for attempt in 1 2 3; do
+            ssh -i ~/.ssh/hostinger_key \
+              -o StrictHostKeyChecking=yes \
+              -o BatchMode=yes \
+              -o ConnectTimeout=30 \
+              -o ServerAliveInterval=60 \
+              -o ServerAliveCountMax=5 \
+              -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" \
+              "cd '$HOSTINGER_DEPLOY_PATH' && {
+                for bin in php8.4 php84 php; do
+                  if command -v \"\$bin\" >/dev/null 2>&1; then \"\$bin\" artisan up || true; break; fi
+                done
+              }" && break \
+              || { echo "SSH attempt $attempt/3 failed — waiting 20 s…"; sleep 20; }
+          done || echo "Warning: artisan up could not run — check the server manually."

@@ -3,13 +3,14 @@
 
 # magic 
 cd ~/domains/eau-la-maman.fr/public_html
+export PHP=/opt/alt/php84/usr/bin/php
 composer2 update
-php artisan migrate:fresh --seed
-php artisan optimize:clear
-php artisan optimize
+$PHP artisan migrate:fresh --seed
+$PHP artisan optimize:clear
+$PHP artisan optimize
  
 VF
-
+ 
 # Sur ton PC
 npm run build
 git add public/build
@@ -41,12 +42,12 @@ Guide complet:
  
 # Sur le serveur
 
-
 cd ~/domains/eau-la-maman.fr/public_html
+export PHP=/opt/alt/php84/usr/bin/php
 composer2 install --no-dev --prefer-dist --optimize-autoloader
-php artisan migrate --force
-php artisan optimize:clear
-php artisan optimize
+$PHP artisan migrate --force
+$PHP artisan optimize:clear
+$PHP artisan optimize
 
 ln -s "$PWD/storage/app/public" "$PWD/public/storage" || true
 
@@ -120,10 +121,11 @@ E2E_EMAIL=superadmin@admin.com
 php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text
 
 # magic 
+export PHP=/opt/alt/php84/usr/bin/php
 composer2 update
-php artisan migrate:fresh --seed
-php artisan optimize:clear
-php artisan optimize
+$PHP artisan migrate:fresh --seed
+$PHP artisan optimize:clear
+$PHP artisan optimize
 
 brache feature
 
