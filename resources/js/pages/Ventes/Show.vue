@@ -1,17 +1,10 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import {
-    ArrowLeft,
-    CheckCircle,
-    Lock,
-    Pencil,
-    XCircle,
-} from 'lucide-vue-next';
+import { ArrowLeft, CheckCircle, Lock, Pencil, XCircle } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
@@ -57,7 +50,6 @@ const props = defineProps<{
     commande: CommandeData;
 }>();
 
-const { can } = usePermissions();
 const toast = useToast();
 
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
@@ -122,7 +114,6 @@ function submitAnnuler() {
         },
     });
 }
-
 </script>
 
 <template>
@@ -375,7 +366,6 @@ function submitAnnuler() {
                     </table>
                 </div>
             </div>
-
         </div>
 
         <!-- Dialog Annulation -->

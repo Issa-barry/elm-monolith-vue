@@ -411,17 +411,21 @@ function handleSubmit() {
                     :disabled="form.categorie === 'interne'"
                     @update:model-value="
                         form.categorie !== 'interne' &&
-                            $emit('update:form', {
-                                ...form,
-                                pris_en_charge_par_usine: $event === true,
-                            })
+                        $emit('update:form', {
+                            ...form,
+                            pris_en_charge_par_usine: $event === true,
+                        })
                     "
                 />
                 <div>
                     <Label
                         for="pris_en_charge_par_usine"
                         class="font-medium"
-                        :class="form.categorie === 'interne' ? 'cursor-not-allowed' : 'cursor-pointer'"
+                        :class="
+                            form.categorie === 'interne'
+                                ? 'cursor-not-allowed'
+                                : 'cursor-pointer'
+                        "
                     >
                         Pris en charge par l'usine
                     </Label>

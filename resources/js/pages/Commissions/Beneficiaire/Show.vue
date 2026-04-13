@@ -1279,11 +1279,7 @@ function closeDetailDialog() {
                     </tbody>
                     <tfoot>
                         <tr class="border-t">
-                            <td
-                                class="px-3 py-2.5 font-medium"
-                            >
-                                Total
-                            </td>
+                            <td class="px-3 py-2.5 font-medium">Total</td>
                             <td
                                 class="px-3 py-2.5 text-right font-bold text-emerald-700 tabular-nums dark:text-emerald-400"
                             >
