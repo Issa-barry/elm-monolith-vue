@@ -971,7 +971,11 @@ function activiteDotClass(action: string): string {
                                 @click="showCommissionDialog = true"
                             >
                                 <HandCoins class="mr-1.5 h-3.5 w-3.5" />
-                                {{ transfert.commission ? 'Recalculer' : 'Générer' }}
+                                {{
+                                    transfert.commission
+                                        ? 'Recalculer'
+                                        : 'Générer'
+                                }}
                             </Button>
                         </div>
 
@@ -980,14 +984,16 @@ function activiteDotClass(action: string): string {
                             v-if="!transfert.commission"
                             class="px-5 py-8 text-center text-sm text-muted-foreground"
                         >
-                            Aucune commission générée. Cliquez sur "Générer" pour
-                            calculer les commissions livreur/propriétaire.
+                            Aucune commission générée. Cliquez sur "Générer"
+                            pour calculer les commissions livreur/propriétaire.
                         </div>
 
                         <!-- Commission existante -->
                         <div v-else class="space-y-4 px-5 py-4">
                             <!-- Synthese style commission vente -->
-                            <div class="rounded-xl border bg-card p-5 shadow-sm">
+                            <div
+                                class="rounded-xl border bg-card p-5 shadow-sm"
+                            >
                                 <div
                                     class="flex flex-wrap items-center justify-between gap-4"
                                 >
@@ -997,10 +1003,13 @@ function activiteDotClass(action: string): string {
                                         >
                                             Total commission
                                         </p>
-                                        <p class="mt-1 text-2xl font-bold tabular-nums">
+                                        <p
+                                            class="mt-1 text-2xl font-bold tabular-nums"
+                                        >
                                             {{
                                                 formatGNF(
-                                                    transfert.commission.montant_total,
+                                                    transfert.commission
+                                                        .montant_total,
                                                 )
                                             }}
                                         </p>
@@ -1011,7 +1020,9 @@ function activiteDotClass(action: string): string {
                                         >
                                             Part livreurs (total)
                                         </p>
-                                        <p class="mt-1 text-2xl font-bold tabular-nums">
+                                        <p
+                                            class="mt-1 text-2xl font-bold tabular-nums"
+                                        >
                                             {{ formatGNF(partLivreurTotal) }}
                                         </p>
                                     </div>
@@ -1053,7 +1064,9 @@ function activiteDotClass(action: string): string {
                                                 :key="part.id"
                                                 class="transition-colors hover:bg-muted/10"
                                             >
-                                                <td class="px-4 py-3 font-medium">
+                                                <td
+                                                    class="px-4 py-3 font-medium"
+                                                >
                                                     {{ part.beneficiaire_nom }}
                                                 </td>
                                                 <td
@@ -1064,11 +1077,17 @@ function activiteDotClass(action: string): string {
                                                 <td
                                                     class="px-4 py-3 text-right font-semibold tabular-nums"
                                                 >
-                                                    {{ formatGNF(part.montant_net) }}
+                                                    {{
+                                                        formatGNF(
+                                                            part.montant_net,
+                                                        )
+                                                    }}
                                                 </td>
                                                 <td class="px-4 py-3">
                                                     <StatusDot
-                                                        :label="part.statut_label"
+                                                        :label="
+                                                            part.statut_label
+                                                        "
                                                         :dot-class="
                                                             part.statut_dot_class
                                                         "
@@ -1090,7 +1109,11 @@ function activiteDotClass(action: string): string {
                                                 <td
                                                     class="px-4 py-2.5 text-right tabular-nums"
                                                 >
-                                                    {{ formatGNF(livreurTotals.net) }}
+                                                    {{
+                                                        formatGNF(
+                                                            livreurTotals.net,
+                                                        )
+                                                    }}
                                                 </td>
                                             </tr>
                                         </tfoot>

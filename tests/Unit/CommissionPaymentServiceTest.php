@@ -95,12 +95,10 @@ class CommissionPaymentServiceTest extends TestCase
         $partAncienne = $this->makePart($commission, $livreur, [
             'montant_net' => 1000,
             'earned_at' => now()->subDays(20)->toDateString(),
-            'unlock_at' => now()->subDays(6)->toDateString(),
         ]);
         $partRecente = $this->makePart($commission, $livreur, [
             'montant_net' => 2000,
             'earned_at' => now()->subDays(10)->toDateString(),
-            'unlock_at' => now()->subDays(1)->toDateString(),
         ]);
 
         $this->actingAs($this->makeUser($org));
@@ -121,9 +119,9 @@ class CommissionPaymentServiceTest extends TestCase
         $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
         $commission = $this->makeCommission($org, $vehicule);
 
-        $part1 = $this->makePart($commission, $livreur, ['montant_net' => 1000, 'earned_at' => now()->subDays(20)->toDateString(), 'unlock_at' => now()->subDays(6)->toDateString()]);
-        $part2 = $this->makePart($commission, $livreur, ['montant_net' => 2000, 'earned_at' => now()->subDays(10)->toDateString(), 'unlock_at' => now()->subDays(1)->toDateString()]);
-        $part3 = $this->makePart($commission, $livreur, ['montant_net' => 500,  'earned_at' => now()->subDays(5)->toDateString(),  'unlock_at' => now()->subDays(1)->toDateString()]);
+        $part1 = $this->makePart($commission, $livreur, ['montant_net' => 1000, 'earned_at' => now()->subDays(20)->toDateString()]);
+        $part2 = $this->makePart($commission, $livreur, ['montant_net' => 2000, 'earned_at' => now()->subDays(10)->toDateString()]);
+        $part3 = $this->makePart($commission, $livreur, ['montant_net' => 500,  'earned_at' => now()->subDays(5)->toDateString()]);
 
         $this->actingAs($this->makeUser($org));
         CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 3500, 'especes', now()->toDateString());
@@ -145,7 +143,6 @@ class CommissionPaymentServiceTest extends TestCase
         // Part PENDING (pas encore déblocable)
         $this->makePart($commission, $livreur, [
             'statut' => StatutPartCommission::PENDING,
-            'unlock_at' => now()->addDays(5)->toDateString(),
         ]);
 
         $parts = CommissionPaymentService::partsDisponibles($vehicule, 'livreur', $livreur->id);
@@ -160,9 +157,9 @@ class CommissionPaymentServiceTest extends TestCase
         $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
         $commission = $this->makeCommission($org, $vehicule);
 
-        $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::AVAILABLE, 'unlock_at' => now()->subDay()->toDateString()]);
-        $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::PARTIAL,   'unlock_at' => now()->subDay()->toDateString()]);
-        $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::PAID,      'unlock_at' => now()->subDay()->toDateString()]);
+        $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::AVAILABLE]);
+        $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::PARTIAL]);
+        $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::PAID]);
 
         $parts = CommissionPaymentService::partsDisponibles($vehicule, 'livreur', $livreur->id);
 
@@ -277,7 +274,6 @@ class CommissionPaymentServiceTest extends TestCase
             'montant_verse' => 0,
             'statut' => StatutPartCommission::AVAILABLE,
             'earned_at' => now()->subDays(15)->toDateString(),
-            'unlock_at' => now()->subDays(1)->toDateString(),
         ], $overrides));
     }
 

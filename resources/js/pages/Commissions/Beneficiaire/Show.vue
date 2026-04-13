@@ -14,7 +14,6 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
-    CalendarDays,
     CreditCard,
     Filter,
     History,
@@ -48,10 +47,8 @@ interface ResumeGlobal {
     total_frais: number;
     total_net_cumule: number;
     total_verse: number;
-    disponible_maintenant: number;
-    en_attente: number;
     solde_global: number;
-    statut_global: 'en_attente' | 'a_verser' | 'partielle' | 'solde';
+    statut_global: 'a_verser' | 'partielle' | 'solde';
 }
 
 interface CommandeRow {
@@ -138,7 +135,6 @@ const typeLabel = computed(() =>
 
 const statutGlobalConfig: Record<string, { label: string; dotClass: string }> =
     {
-        en_attente: { label: 'En attente', dotClass: 'bg-zinc-400' },
         a_verser: { label: 'À verser', dotClass: 'bg-amber-500' },
         partielle: { label: 'Partiel', dotClass: 'bg-blue-500' },
         solde: { label: 'Soldé', dotClass: 'bg-emerald-500' },
@@ -147,7 +143,7 @@ const statutGlobalConfig: Record<string, { label: string; dotClass: string }> =
 const statutCfg = computed(
     () =>
         statutGlobalConfig[props.resume_global.statut_global] ??
-        statutGlobalConfig.en_attente,
+        statutGlobalConfig.a_verser,
 );
 
 // ── Flash ─────────────────────────────────────────────────────────────────────
@@ -238,12 +234,13 @@ const localSearch = ref('');
 const commandesFiltrees = computed(() => {
     const q = localSearch.value.toLowerCase().trim();
     if (!q) return props.historique_commandes;
-    return props.historique_commandes.filter((c) =>
-        (c.commande_reference ?? '').toLowerCase().includes(q) ||
-        (c.date_commande ?? '').toLowerCase().includes(q) ||
-        String(c.montant_brut).includes(q) ||
-        String(c.montant_net).includes(q) ||
-        String(c.frais).includes(q),
+    return props.historique_commandes.filter(
+        (c) =>
+            (c.commande_reference ?? '').toLowerCase().includes(q) ||
+            (c.date_commande ?? '').toLowerCase().includes(q) ||
+            String(c.montant_brut).includes(q) ||
+            String(c.montant_net).includes(q) ||
+            String(c.frais).includes(q),
     );
 });
 
@@ -292,11 +289,9 @@ const paiementErrors = ref<Record<string, string>>({});
 
 function openPaiementDialog() {
     paiementForm.montant =
-        props.resume_global.disponible_maintenant > 0
-            ? props.resume_global.disponible_maintenant
-            : props.resume_global.solde_global > 0
-              ? props.resume_global.solde_global
-              : null;
+        props.resume_global.solde_global > 0
+            ? props.resume_global.solde_global
+            : null;
     paiementForm.mode_paiement = 'especes';
     // Date de paiement forcée au jour courant (champ non affiché pour l'instant).
     paiementForm.paid_at = currentDateYmd();
@@ -341,8 +336,7 @@ function submitPaiement() {
 const montantDepasse = computed(
     () =>
         paiementForm.montant !== null &&
-        paiementForm.montant >
-            props.resume_global.solde_global + 0.009,
+        paiementForm.montant > props.resume_global.solde_global + 0.009,
 );
 
 // ── Dialog historique paiements ────────────────────────────────────────────────
@@ -507,7 +501,9 @@ function closeDetailDialog() {
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-3 shadow-sm">
-                    <p class="text-xs text-muted-foreground">Total restant à payer</p>
+                    <p class="text-xs text-muted-foreground">
+                        Total restant à payer
+                    </p>
                     <p
                         class="mt-1 text-base font-bold tabular-nums"
                         :class="
@@ -707,20 +703,19 @@ function closeDetailDialog() {
                 </div>
             </div>
 
-            <!-- Cards KPI (6 cards — réactifs au filtre courant) -->
-            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-                <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Commandes</p>
-                    <p class="mt-2 text-2xl font-bold tabular-nums">
-                        {{ kpis.nb_commandes }}
-                    </p>
-                </div>
+            <!-- Cards KPI (5 cards — réactifs au filtre courant) -->
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">
                         Total brut cumulé
                     </p>
                     <p class="mt-2 text-2xl font-bold tabular-nums">
                         {{ formatGNF(kpis.total_brut) }}
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        {{ kpis.nb_commandes }} commande{{
+                            kpis.nb_commandes !== 1 ? 's' : ''
+                        }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
@@ -755,26 +750,20 @@ function closeDetailDialog() {
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Total restant à payer</p>
+                    <p class="text-sm text-muted-foreground">
+                        Total restant à payer
+                    </p>
                     <p
                         class="mt-2 text-2xl font-bold tabular-nums"
-                        :class="kpis.total_restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+                        :class="
+                            kpis.total_restant > 0
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : 'text-muted-foreground'
+                        "
                     >
                         {{ formatGNF(kpis.total_restant) }}
                     </p>
                 </div>
-            </div>
-
-            <!-- Badge période courante (livreur uniquement) -->
-            <div
-                v-if="isLivreur && periode_courante"
-                class="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm dark:border-blue-800 dark:bg-blue-950"
-            >
-                <CalendarDays class="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
-                <span class="text-blue-800 dark:text-blue-200">
-                    Période courante :
-                    <span class="font-semibold">{{ periode_courante_label }}</span>
-                </span>
             </div>
 
             <!-- Tableau DataTable (style Factures) -->
@@ -991,10 +980,11 @@ function closeDetailDialog() {
                             >
                                 {{ data.periode.slice(-2) }}
                             </span>
-                            <span v-else class="text-xs text-muted-foreground">—</span>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
                         </template>
                     </Column>
-
 
                     <!-- ─ Colonne : Actions (4%) ──────────────────────────── -->
                     <Column
@@ -1082,7 +1072,10 @@ function closeDetailDialog() {
                     <label class="text-sm font-medium">Période comptable</label>
                     <Dropdown
                         v-model="filtresServeur.periode"
-                        :options="[{ code: '', label: 'Toutes les périodes' }, ...periodes_disponibles]"
+                        :options="[
+                            { code: '', label: 'Toutes les périodes' },
+                            ...periodes_disponibles,
+                        ]"
                         option-label="label"
                         option-value="code"
                         class="w-full"
@@ -1133,21 +1126,13 @@ function closeDetailDialog() {
                 <div class="space-y-1 rounded-lg bg-muted/40 p-3 text-sm">
                     <div class="flex justify-between">
                         <span class="text-muted-foreground"
-                            >Disponible maintenant :</span
+                            >Solde restant :</span
                         >
                         <span
                             class="font-semibold text-emerald-700 tabular-nums dark:text-emerald-400"
                         >
-                            {{ formatGNF(resume_global.disponible_maintenant) }}
+                            {{ formatGNF(resume_global.solde_global) }}
                         </span>
-                    </div>
-                    <div class="flex justify-between text-xs">
-                        <span class="text-muted-foreground"
-                            >Solde restant :</span
-                        >
-                        <span class="tabular-nums">{{
-                            formatGNF(resume_global.solde_global)
-                        }}</span>
                     </div>
                 </div>
 
@@ -1276,7 +1261,9 @@ function closeDetailDialog() {
                             :key="p.id"
                             class="hover:bg-muted/20"
                         >
-                            <td class="px-3 py-2.5 text-muted-foreground tabular-nums">
+                            <td
+                                class="px-3 py-2.5 text-muted-foreground tabular-nums"
+                            >
                                 {{ p.paid_at ?? '—' }}
                             </td>
                             <td
@@ -1290,7 +1277,9 @@ function closeDetailDialog() {
                             >
                                 {{ p.note ?? '—' }}
                             </td>
-                            <td class="px-3 py-2.5 text-xs text-muted-foreground">
+                            <td
+                                class="px-3 py-2.5 text-xs text-muted-foreground"
+                            >
                                 {{ p.created_by ?? '—' }}
                             </td>
                         </tr>

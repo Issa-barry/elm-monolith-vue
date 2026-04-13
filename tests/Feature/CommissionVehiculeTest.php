@@ -121,7 +121,6 @@ class CommissionVehiculeTest extends TestCase
             'montant_verse' => 0,
             'statut' => StatutPartCommission::AVAILABLE,
             'earned_at' => now()->subDays(15)->toDateString(),
-            'unlock_at' => now()->subDays(1)->toDateString(),
         ], $overrides));
     }
 
@@ -419,12 +418,10 @@ class CommissionVehiculeTest extends TestCase
         $partA = $this->makePart($commission, $livreur, [
             'montant_net' => 1000,
             'earned_at' => now()->subDays(20)->toDateString(),
-            'unlock_at' => now()->subDays(6)->toDateString(),
         ]);
         $partB = $this->makePart($commission, $livreur, [
             'montant_net' => 2000,
             'earned_at' => now()->subDays(10)->toDateString(),
-            'unlock_at' => now()->subDays(1)->toDateString(),
         ]);
 
         $this->actingAs($user)

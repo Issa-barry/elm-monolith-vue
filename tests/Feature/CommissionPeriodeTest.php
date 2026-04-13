@@ -118,7 +118,6 @@ class CommissionPeriodeTest extends TestCase
             'montant_verse' => 0,
             'statut' => StatutPartCommission::AVAILABLE,
             'earned_at' => $earnedAt,
-            'unlock_at' => $earnedAt,
             'periode' => $periode,
         ]);
     }

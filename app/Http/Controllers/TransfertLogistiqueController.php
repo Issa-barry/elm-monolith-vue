@@ -289,7 +289,7 @@ class TransfertLogistiqueController extends Controller
 
         TransfertActiviteService::log($transfert, 'creation');
 
-        return redirect()->route('logistique.index')
+        return redirect()->route('logistique.edit', $transfert)
             ->with('success', 'Transfert créé avec succès.');
     }
 

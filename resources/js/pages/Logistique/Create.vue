@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Lock, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
@@ -196,7 +196,14 @@ function submit() {
     if (isEditing.value) {
         form.put(`/logistique/${props.transfert!.id}`);
     } else {
-        form.post('/logistique');
+        form.post('/logistique', {
+            onSuccess: (page) => {
+                const url = page.url;
+                if (url && url !== '/logistique/creer') {
+                    router.visit(url, { replace: true });
+                }
+            },
+        });
     }
 }
 </script>

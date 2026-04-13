@@ -195,25 +195,11 @@ class CommissionVenteController extends Controller
         $totalVerse = (float) $allParts->sum('montant_verse');
         $solde = max(0.0, $totalNet - $totalVerse);
 
-        $disponible = 0.0;
-        foreach ($allParts as $p) {
-            $restantPart = max(0.0, (float) $p->montant_net - (float) $p->montant_verse);
-            if ($restantPart <= 0) {
-                continue;
-            }
-            $da = $this->disponibleAt($type, $p->commission?->created_at);
-            if (! $da || now()->greaterThanOrEqualTo($da)) {
-                $disponible += $restantPart;
-            }
-        }
-        $enAttente = max(0.0, $solde - $disponible);
-
         // Statut global bénéficiaire
         $statutGlobal = match (true) {
             $solde <= 0 && $totalVerse > 0 => 'solde',
             $totalVerse > 0 => 'partielle',
-            $disponible > 0 => 'a_verser',
-            default => 'en_attente',
+            default => 'a_verser',
         };
 
         $resumeGlobal = [
@@ -226,8 +212,6 @@ class CommissionVenteController extends Controller
             'total_frais' => $totalFrais,
             'total_net_cumule' => $totalNet,
             'total_verse' => $totalVerse,
-            'disponible_maintenant' => $disponible,
-            'en_attente' => $enAttente,
             'solde_global' => $solde,
             'statut_global' => $statutGlobal,
         ];
@@ -461,16 +445,4 @@ class CommissionVenteController extends Controller
         return $data;
     }
 
-    /**
-     * Calcule la date à partir de laquelle une commission devient payable.
-     * Livreur : earned_at + 14 jours. Propriétaire : 1er du mois suivant earned_at.
-     */
-    private function disponibleAt(string $type, ?Carbon $earnedAt): ?Carbon
-    {
-        return match ($type) {
-            'livreur' => $earnedAt?->clone()->addDays(14),
-            'proprietaire' => $earnedAt?->clone()->addMonthNoOverflow()->startOfMonth(),
-            default => null,
-        };
-    }
 }

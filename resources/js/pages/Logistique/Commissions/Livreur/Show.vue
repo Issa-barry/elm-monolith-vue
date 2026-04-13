@@ -35,7 +35,6 @@ interface PartRow {
     montant_verse: number;
     montant_restant: number;
     earned_at: string | null;
-    unlock_at: string | null;
     periode: string | null;
     periode_label: string | null;
     statut: string | null;

@@ -156,7 +156,6 @@ class CommissionLogistiqueService
                     'montant_verse' => 0,
                     'statut' => StatutPartCommission::AVAILABLE,
                     'earned_at' => $earnedAt->toDateString(),
-                    'unlock_at' => $earnedAt->toDateString(),
                     'periode' => PeriodeComptableService::codeForLivreur($earnedAt),
                 ]);
             }
