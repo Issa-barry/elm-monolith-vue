@@ -7,6 +7,20 @@ import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/vue3';
 
+interface StatsFactures {
+    total_count: number;
+    total_montant: number;
+    payees_count: number;
+    payees_montant: number;
+    impayees_count: number;
+    annulees_count: number;
+    reste_a_encaisser: number;
+}
+
+defineProps<{
+    stats_factures: StatsFactures;
+}>();
+
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Tableau de bord',
@@ -23,7 +37,7 @@ const breadcrumbs: BreadcrumbItem[] = [
             <HeaderWidget />
 
             <div class="mt-4 grid grid-cols-12 gap-8">
-                <StatsBankingWidget />
+                <StatsBankingWidget :stats="stats_factures" />
             </div>
 
             <MobileQuickMenu />

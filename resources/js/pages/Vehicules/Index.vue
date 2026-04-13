@@ -55,6 +55,7 @@ interface Vehicule {
     equipe_membres: EquipeMembre[];
     photo_url: string | null;
     is_active: boolean;
+    categorie: 'interne' | 'externe' | null;
 }
 
 const props = defineProps<{ vehicules: Vehicule[] }>();
@@ -66,6 +67,7 @@ const toast = useToast();
 const search = ref('');
 const filterType = ref('');
 const filterStatut = ref('');
+const filterCategorie = ref('');
 
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => {
@@ -95,7 +97,9 @@ const filteredVehicules = computed(() => {
                 : filterStatut.value === 'actif'
                   ? v.is_active
                   : !v.is_active;
-        return matchSearch && matchType && matchStatut;
+        const matchCategorie =
+            !filterCategorie.value || v.categorie === filterCategorie.value;
+        return matchSearch && matchType && matchStatut && matchCategorie;
     });
 });
 
@@ -199,6 +203,14 @@ function confirmDelete(v: Vehicule) {
                         <option v-for="t in typeOptions" :key="t" :value="t">
                             {{ t }}
                         </option>
+                    </select>
+                    <select
+                        v-model="filterCategorie"
+                        class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    >
+                        <option value="">Toutes catégories</option>
+                        <option value="interne">Interne</option>
+                        <option value="externe">Externe</option>
                     </select>
                     <select
                         v-model="filterStatut"
@@ -394,6 +406,16 @@ function confirmDelete(v: Vehicule) {
                                 >
                                     {{ t }}
                                 </option>
+                            </select>
+
+                            <!-- Filtre Catégorie -->
+                            <select
+                                v-model="filterCategorie"
+                                class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm focus:ring-2 focus:ring-ring focus:outline-none"
+                            >
+                                <option value="">Toutes catégories</option>
+                                <option value="interne">Interne</option>
+                                <option value="externe">Externe</option>
                             </select>
 
                             <!-- Filtre Statut -->

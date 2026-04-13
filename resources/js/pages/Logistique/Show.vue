@@ -553,10 +553,8 @@ function activiteDotClass(action: string): string {
                     </Link>
                     <div>
                         <div class="flex items-center gap-2">
-                            <h1
-                                class="font-mono text-xl font-bold tracking-wide"
-                            >
-                                {{ transfert.reference }}
+                            <h1 class="text-xl font-bold tracking-tight">
+                                Transferts
                             </h1>
                             <span
                                 :class="[
@@ -566,22 +564,9 @@ function activiteDotClass(action: string): string {
                             >
                                 {{ transfert.statut_label }}
                             </span>
-                            <span
-                                :class="[
-                                    'rounded-full border px-2 py-0.5 text-[11px] font-medium',
-                                    contexte === 'receptions'
-                                        ? 'border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-300'
-                                        : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300',
-                                ]"
-                            >
-                                {{ contexteLabel }}
-                            </span>
                         </div>
                         <p class="mt-0.5 text-xs text-muted-foreground">
-                            Créé le {{ transfert.created_at }}
-                            <span v-if="transfert.createur">
-                                · {{ transfert.createur }}</span
-                            >
+                            N° transfert : {{ transfert.reference }}
                         </p>
                     </div>
                 </div>

@@ -76,6 +76,8 @@ function onCategorieChange(value: string | null) {
         categorie: value,
         proprietaire_id:
             value === 'interne' ? null : props.form.proprietaire_id,
+        pris_en_charge_par_usine:
+            value === 'interne' ? true : props.form.pris_en_charge_par_usine,
     });
 }
 
@@ -399,26 +401,35 @@ function handleSubmit() {
             >
                 Commission & Charges
             </h3>
-            <div class="flex items-start gap-3">
+            <div
+                class="flex items-start gap-3"
+                :class="{ 'opacity-60': form.categorie === 'interne' }"
+            >
                 <Checkbox
                     id="pris_en_charge_par_usine"
                     :model-value="Boolean(form.pris_en_charge_par_usine)"
+                    :disabled="form.categorie === 'interne'"
                     @update:model-value="
-                        $emit('update:form', {
-                            ...form,
-                            pris_en_charge_par_usine: $event === true,
-                        })
+                        form.categorie !== 'interne' &&
+                            $emit('update:form', {
+                                ...form,
+                                pris_en_charge_par_usine: $event === true,
+                            })
                     "
                 />
                 <div>
                     <Label
                         for="pris_en_charge_par_usine"
-                        class="cursor-pointer font-medium"
+                        class="font-medium"
+                        :class="form.categorie === 'interne' ? 'cursor-not-allowed' : 'cursor-pointer'"
                     >
                         Pris en charge par l'usine
                     </Label>
                     <p class="text-xs text-muted-foreground">
                         Les frais du véhicule sont supportés par l'organisation
+                        <template v-if="form.categorie === 'interne'">
+                            — obligatoire pour un véhicule interne
+                        </template>
                     </p>
                 </div>
             </div>

@@ -746,7 +746,7 @@ function closeDetailDialog() {
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Total versé</p>
                     <p class="mt-2 text-2xl font-bold tabular-nums">
-                        {{ formatGNF(kpis.total_verse) }}
+                        {{ formatGNF(resume_global.total_verse) }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
@@ -756,12 +756,12 @@ function closeDetailDialog() {
                     <p
                         class="mt-2 text-2xl font-bold tabular-nums"
                         :class="
-                            kpis.total_restant > 0
+                            resume_global.solde_global > 0
                                 ? 'text-amber-600 dark:text-amber-400'
                                 : 'text-muted-foreground'
                         "
                     >
-                        {{ formatGNF(kpis.total_restant) }}
+                        {{ formatGNF(resume_global.solde_global) }}
                     </p>
                 </div>
             </div>
@@ -1052,16 +1052,7 @@ function closeDetailDialog() {
             :style="{ width: 'min(420px, 95vw)' }"
         >
             <template #header>
-                <div class="flex w-full items-center justify-between">
-                    <span class="text-base font-semibold">Filtres</span>
-                    <button
-                        type="button"
-                        class="text-sm font-medium text-destructive hover:underline"
-                        @click="resetFiltresServeur"
-                    >
-                        Reset
-                    </button>
-                </div>
+                <span class="text-base font-semibold">Filtres</span>
             </template>
 
             <div class="space-y-4 pt-1">
@@ -1100,12 +1091,14 @@ function closeDetailDialog() {
                     />
                 </div>
 
-                <div class="flex justify-end gap-2 pt-1">
+                <div class="flex items-center justify-between gap-2 pt-1">
                     <Button
-                        variant="outline"
-                        @click="filtresDialogVisible = false"
+                        variant="ghost"
+                        size="sm"
+                        class="text-destructive hover:text-destructive"
+                        @click="resetFiltresServeur"
                     >
-                        Annuler
+                        Réinitialiser
                     </Button>
                     <Button @click="applyFiltresServeur">
                         Appliquer filtres
@@ -1286,9 +1279,13 @@ function closeDetailDialog() {
                     </tbody>
                     <tfoot>
                         <tr class="border-t">
-                            <td class="pt-2 font-medium">Total</td>
                             <td
-                                class="pt-2 text-right font-bold text-emerald-700 tabular-nums dark:text-emerald-400"
+                                class="px-3 py-2.5 font-medium"
+                            >
+                                Total
+                            </td>
+                            <td
+                                class="px-3 py-2.5 text-right font-bold text-emerald-700 tabular-nums dark:text-emerald-400"
                             >
                                 {{
                                     formatGNF(

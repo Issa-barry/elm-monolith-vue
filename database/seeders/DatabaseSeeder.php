@@ -22,10 +22,10 @@ class DatabaseSeeder extends Seeder
             ParametreSeeder::class,             // Paramètres applicatifs
 
             // ── Module Véhicules ──────────────────────────────────────────────
-            LivreursSeeder::class,              // 10 livreurs
+            LivreursSeeder::class,              // 16 livreurs (10 externes + 6 internes)
             ProprietairesSeeder::class,         // 4 propriétaires
-            EquipesLivraisonSeeder::class,      // 3 equipes (membres + taux)
-            VehiculesSeeder::class,             // 3 vehicules (avec equipe assignee)
+            EquipesLivraisonSeeder::class,      // 7 equipes : 4 externes + 3 internes (elm)
+            VehiculesSeeder::class,             // 6 vehicules : 3 externes + 3 internes (elm-1/2/3)
 
             // ── Module Commissions ────────────────────────────────────────────
             // CommissionsSeeder::class,           // 6 commissions : EN_ATTENTE / PARTIELLE / VERSÉE
