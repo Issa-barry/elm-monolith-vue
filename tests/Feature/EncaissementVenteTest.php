@@ -44,7 +44,6 @@ class EncaissementVenteTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
-            'taux_commission_proprietaire' => 40,
         ]);
         $commande = CommandeVente::factory()->create([
             'organization_id' => $org->id,

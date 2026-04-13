@@ -4,10 +4,10 @@ namespace App\Enums;
 
 enum StatutPartCommission: string
 {
-    /** Commission gagnée mais unlock_at non encore atteint */
+    /** Commission en attente de traitement */
     case PENDING = 'pending';
 
-    /** unlock_at atteint, versement autorisé */
+    /** Versement autorisé */
     case AVAILABLE = 'available';
 
     /** Versement partiel effectué */

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Vehicule extends Model
@@ -20,10 +21,9 @@ class Vehicule extends Model
         'modele',
         'immatriculation',
         'type_vehicule',
+        'categorie',
         'capacite_packs',
         'proprietaire_id',
-        'equipe_livraison_id',
-        'taux_commission_proprietaire',
         'pris_en_charge_par_usine',
         'photo_path',
         'is_active',
@@ -36,7 +36,6 @@ class Vehicule extends Model
             'pris_en_charge_par_usine' => 'boolean',
             'type_vehicule' => TypeVehicule::class,
             'capacite_packs' => 'integer',
-            'taux_commission_proprietaire' => 'decimal:2',
         ];
     }
 
@@ -66,9 +65,9 @@ class Vehicule extends Model
         return $this->belongsTo(Proprietaire::class);
     }
 
-    public function equipe(): BelongsTo
+    public function equipe(): HasOne
     {
-        return $this->belongsTo(EquipeLivraison::class, 'equipe_livraison_id');
+        return $this->hasOne(EquipeLivraison::class, 'vehicule_id');
     }
 
     public function frais(): HasMany
@@ -90,9 +89,9 @@ class Vehicule extends Model
     public function sommeTauxTotale(): float
     {
         if (! $this->equipe) {
-            return (float) $this->taux_commission_proprietaire;
+            return 0.0;
         }
 
-        return (float) $this->taux_commission_proprietaire + $this->equipe->sommeTaux();
+        return (float) $this->equipe->taux_commission_proprietaire + $this->equipe->sommeTaux();
     }
 }

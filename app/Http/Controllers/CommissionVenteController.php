@@ -9,6 +9,7 @@ use App\Models\CommissionVente;
 use App\Models\Livreur;
 use App\Models\PaiementCommissionVente;
 use App\Models\Proprietaire;
+use App\Services\PeriodeComptableService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -194,25 +195,11 @@ class CommissionVenteController extends Controller
         $totalVerse = (float) $allParts->sum('montant_verse');
         $solde = max(0.0, $totalNet - $totalVerse);
 
-        $disponible = 0.0;
-        foreach ($allParts as $p) {
-            $restantPart = max(0.0, (float) $p->montant_net - (float) $p->montant_verse);
-            if ($restantPart <= 0) {
-                continue;
-            }
-            $da = $this->disponibleAt($type, $p->commission?->created_at);
-            if (! $da || now()->greaterThanOrEqualTo($da)) {
-                $disponible += $restantPart;
-            }
-        }
-        $enAttente = max(0.0, $solde - $disponible);
-
         // Statut global bénéficiaire
         $statutGlobal = match (true) {
             $solde <= 0 && $totalVerse > 0 => 'solde',
             $totalVerse > 0 => 'partielle',
-            $disponible > 0 => 'a_verser',
-            default => 'en_attente',
+            default => 'a_verser',
         };
 
         $resumeGlobal = [
@@ -225,17 +212,31 @@ class CommissionVenteController extends Controller
             'total_frais' => $totalFrais,
             'total_net_cumule' => $totalNet,
             'total_verse' => $totalVerse,
-            'disponible_maintenant' => $disponible,
-            'en_attente' => $enAttente,
             'solde_global' => $solde,
             'statut_global' => $statutGlobal,
         ];
+
+        // ── Périodes comptables ─────────────────────────────────────────────────
+        // Calcul de la période courante
+        $periodeCourante = $type === 'livreur'
+            ? PeriodeComptableService::periodeCouranteLivreur()
+            : PeriodeComptableService::periodeCouranteProprietaire();
+
+        // Liste des périodes disponibles (depuis la 1re commission du bénéficiaire)
+        $earliestCommission = $allParts
+            ->filter(fn ($p) => $p->commission?->created_at !== null)
+            ->sortBy(fn ($p) => $p->commission->created_at)
+            ->first();
+        $earliestDate = $earliestCommission?->commission?->created_at ?? now();
+        $periodesDisponibles = $type === 'livreur'
+            ? PeriodeComptableService::periodesDisponibles(Carbon::instance($earliestDate))
+            : [];
 
         // ── Filtres sur l'historique commandes ──────────────────────────────────
         $dateFrom = $request->input('date_from');
         $dateTo = $request->input('date_to');
         $commandeSearch = $request->input('commande');
-        $disponibleFilter = $request->input('disponible'); // disponible | en_attente
+        $periodeFilter = $request->input('periode', $type === 'livreur' ? $periodeCourante : '');
 
         $filteredParts = $allParts;
 
@@ -261,18 +262,14 @@ class CommissionVenteController extends Controller
             );
         }
 
-        if (in_array($disponibleFilter, ['disponible', 'en_attente'], true)) {
-            $filteredParts = $filteredParts->filter(function ($p) use ($type, $disponibleFilter) {
-                $da = $this->disponibleAt($type, $p->commission?->created_at);
-                if (! $da) {
-                    return $disponibleFilter === 'en_attente';
+        if ($periodeFilter !== '' && $type === 'livreur') {
+            $filteredParts = $filteredParts->filter(function ($p) use ($periodeFilter) {
+                $createdAt = $p->commission?->created_at;
+                if (! $createdAt) {
+                    return false;
                 }
 
-                $isDisponible = now()->greaterThanOrEqualTo($da);
-
-                return $disponibleFilter === 'disponible'
-                    ? $isDisponible
-                    : ! $isDisponible;
+                return PeriodeComptableService::codeForLivreur(Carbon::instance($createdAt)) === $periodeFilter;
             });
         }
 
@@ -282,7 +279,9 @@ class CommissionVenteController extends Controller
             ->map(function ($partsGroup) use ($type) {
                 $first = $partsGroup->first();
                 $commission = $first->commission;
-                $disponibleAt = $this->disponibleAt($type, $commission->created_at);
+                $periodeCode = $commission->created_at
+                    ? PeriodeComptableService::codeFor($type, Carbon::instance($commission->created_at))
+                    : null;
 
                 return [
                     'commission_id' => $commission->id,
@@ -297,7 +296,8 @@ class CommissionVenteController extends Controller
                     'frais' => (float) $partsGroup->sum('frais_supplementaires'),
                     'montant_net' => (float) $partsGroup->sum('montant_net'),
                     'montant_verse' => (float) $partsGroup->sum('montant_verse'),
-                    'unlock_at' => $disponibleAt?->format(self::DATE_DISPLAY_FORMAT),
+                    'periode' => $periodeCode,
+                    'periode_label' => $periodeCode ? PeriodeComptableService::labelForCode($periodeCode) : null,
                     // Pour la saisie de frais côté livreur
                     'part_id' => $first->id,
                     'type_frais' => $first->type_frais,
@@ -341,8 +341,12 @@ class CommissionVenteController extends Controller
                 'date_from' => $dateFrom,
                 'date_to' => $dateTo,
                 'commande' => $commandeSearch,
-                'disponible' => $disponibleFilter,
+                'periode' => $periodeFilter,
             ],
+            'selected_periode' => $periodeFilter,
+            'periode_courante' => $periodeCourante,
+            'periode_courante_label' => PeriodeComptableService::labelForCode($periodeCourante),
+            'periodes_disponibles' => $periodesDisponibles,
         ]);
     }
 
@@ -439,18 +443,5 @@ class CommissionVenteController extends Controller
         }
 
         return $data;
-    }
-
-    /**
-     * Calcule la date à partir de laquelle une commission devient payable.
-     * Livreur : earned_at + 14 jours. Propriétaire : 1er du mois suivant earned_at.
-     */
-    private function disponibleAt(string $type, ?Carbon $earnedAt): ?Carbon
-    {
-        return match ($type) {
-            'livreur' => $earnedAt?->clone()->addDays(14),
-            'proprietaire' => $earnedAt?->clone()->addMonthNoOverflow()->startOfMonth(),
-            default => null,
-        };
     }
 }

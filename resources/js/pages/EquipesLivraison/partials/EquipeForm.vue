@@ -10,6 +10,14 @@ import { useConfirm } from 'primevue/useconfirm';
 import { computed, ref } from 'vue';
 import MembreModal, { type MembreFormData } from './MembreModal.vue';
 
+interface VehiculeOption {
+    value: number;
+    label: string;
+    immatriculation: string;
+    categorie: string;
+    type_label: string;
+}
+
 type Membre = MembreFormData;
 
 interface ProprietaireOption {
@@ -21,6 +29,7 @@ interface ProprietaireOption {
 interface FormData {
     nom: string;
     is_active: boolean;
+    vehicule_id: number | null;
     proprietaire_id: number | null;
     taux_commission_proprietaire: number | null;
     membres: Membre[];
@@ -31,11 +40,41 @@ interface FormData {
 const props = defineProps<{
     form: FormData;
     proprietaires: ProprietaireOption[];
+    vehicules: VehiculeOption[];
     tauxProprietaireDefaut: number;
 }>();
 const emit = defineEmits<{ submit: [] }>();
 
 const confirm = useConfirm();
+
+// ── AutoComplete : Véhicule ───────────────────────────────────────────────────
+
+const vehiculeSelected = ref<VehiculeOption | null>(
+    props.vehicules.find((v) => v.value === props.form.vehicule_id) ?? null,
+);
+const vehiculeSuggests = ref<VehiculeOption[]>([]);
+
+function searchVehicule(event: { query: string }) {
+    const q = event.query.toLowerCase().trim();
+    vehiculeSuggests.value = q
+        ? props.vehicules.filter(
+              (v) =>
+                  v.label.toLowerCase().includes(q) ||
+                  v.immatriculation.toLowerCase().includes(q),
+          )
+        : [...props.vehicules];
+}
+
+function onVehiculeSelect(v: VehiculeOption | null) {
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.vehicule_id = v ? v.value : null;
+}
+
+function onVehiculeClear() {
+    vehiculeSelected.value = null;
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.vehicule_id = null;
+}
 
 // ── AutoComplete : Propriétaire ───────────────────────────────────────────────
 
@@ -97,6 +136,13 @@ const principalIndex = computed(() =>
 );
 
 const hasPrincipal = computed(() => principalIndex.value >= 0);
+
+const vehiculeWarning = computed(() => {
+    if (!props.form.vehicule_id) {
+        return 'Le véhicule est obligatoire.';
+    }
+    return null;
+});
 
 const proprietaireWarning = computed(() => {
     if (!props.form.proprietaire_id) {
@@ -223,6 +269,7 @@ function setIsActive(val: boolean | string) {
 
 function handleSubmit() {
     if (
+        vehiculeWarning.value ||
         proprietaireWarning.value ||
         principalWarning.value ||
         tauxWarning.value
@@ -234,6 +281,75 @@ function handleSubmit() {
 
 <template>
     <form class="space-y-4 sm:space-y-6" @submit.prevent="handleSubmit">
+        <!-- Véhicule -->
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3
+                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+            >
+                Véhicule
+            </h3>
+            <div>
+                <Label for="vehicule_id" class="mb-1.5 block">
+                    Véhicule affecté
+                    <span class="text-destructive">*</span>
+                </Label>
+                <AutoComplete
+                    v-model="vehiculeSelected"
+                    input-id="vehicule_id"
+                    :suggestions="vehiculeSuggests"
+                    option-label="label"
+                    @complete="searchVehicule"
+                    @item-select="onVehiculeSelect(vehiculeSelected)"
+                    @clear="onVehiculeClear"
+                    placeholder="Nom ou immatriculation…"
+                    class="w-full"
+                    input-class="w-full"
+                    :class="{ 'p-invalid': form.errors?.vehicule_id }"
+                    dropdown
+                    force-selection
+                >
+                    <template #option="{ option }">
+                        <div class="py-0.5">
+                            <div class="leading-tight font-medium">
+                                {{ option.label }}
+                            </div>
+                            <div
+                                class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground"
+                            >
+                                <span class="font-mono">{{
+                                    option.immatriculation
+                                }}</span>
+                                <span>·</span>
+                                <span>{{ option.type_label }}</span>
+                                <span>·</span>
+                                <span class="capitalize">{{
+                                    option.categorie
+                                }}</span>
+                            </div>
+                        </div>
+                    </template>
+                    <template #empty>
+                        <div class="px-1 py-0.5 text-sm text-muted-foreground">
+                            Aucun véhicule disponible
+                        </div>
+                    </template>
+                </AutoComplete>
+                <p
+                    v-if="vehiculeWarning && form.errors?.vehicule_id"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ form.errors.vehicule_id }}
+                </p>
+                <div
+                    v-if="vehiculeWarning && !form.errors?.vehicule_id"
+                    class="mt-2 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                >
+                    <AlertTriangle class="h-3.5 w-3.5 shrink-0" />
+                    {{ vehiculeWarning }}
+                </div>
+            </div>
+        </div>
+
         <!-- Nom de l'équipe -->
         <div class="sm:col-span-2">
             <Label for="nom" class="mb-1.5 block">
@@ -571,6 +687,7 @@ function handleSubmit() {
                 type="submit"
                 :disabled="
                     form.processing ||
+                    !!vehiculeWarning ||
                     !!proprietaireWarning ||
                     !!principalWarning ||
                     !!tauxWarning

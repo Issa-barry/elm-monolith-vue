@@ -52,10 +52,10 @@ const canSee = (permission: string, module: string): boolean =>
 const vehiculesItems = computed((): NavItem[] => {
     if (!moduleActive('vehicules')) return [];
     const sub: NavItem[] = [];
-    if (can('vehicules.read'))
-        sub.push({ title: 'Liste de véhicules', href: '/vehicules' });
     if (can('proprietaires.read'))
         sub.push({ title: 'Propriétaires', href: '/proprietaires' });
+    if (can('vehicules.read'))
+        sub.push({ title: 'Liste de véhicules', href: '/vehicules' });
     if (can('equipes-livraison.read'))
         sub.push({ title: 'Équipes de livraison', href: '/equipes-livraison' });
     return sub;
@@ -122,9 +122,6 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (canSee('sites.read', 'sites'))
-        items.push({ title: 'Sites', href: '/sites', icon: Building2 });
-
     if (moduleActive('logistique') && can('logistique.read')) {
         items.push({
             title: 'Logistique',
@@ -144,6 +141,9 @@ const mainNavItems = computed((): NavItem[] => {
             ],
         });
     }
+
+    if (canSee('sites.read', 'sites'))
+        items.push({ title: 'Sites', href: '/sites', icon: Building2 });
 
     if (canSee('users.read', 'utilisateurs'))
         items.push({ title: 'Utilisateurs', href: '/users', icon: UserCog });

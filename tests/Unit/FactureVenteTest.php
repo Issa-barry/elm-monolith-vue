@@ -93,10 +93,18 @@ class FactureVenteTest extends TestCase
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
         $produit = $this->makeProduit($org);
 
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'categorie' => 'externe',
+        ]);
+
         $equipe = EquipeLivraison::create([
             'organization_id' => $org->id,
+            'vehicule_id' => $vehicule->id,
             'nom' => 'Équipe Test',
             'is_active' => true,
+            'taux_commission_proprietaire' => 40,
         ]);
         EquipeLivreur::create([
             'equipe_id' => $equipe->id,
@@ -104,13 +112,6 @@ class FactureVenteTest extends TestCase
             'taux_commission' => 60,
             'role' => 'principal',
             'ordre' => 0,
-        ]);
-
-        $vehicule = Vehicule::factory()->create([
-            'organization_id' => $org->id,
-            'proprietaire_id' => $proprietaire->id,
-            'equipe_livraison_id' => $equipe->id,
-            'taux_commission_proprietaire' => 40,
         ]);
 
         $commande = CommandeVente::factory()->create([
@@ -147,7 +148,6 @@ class FactureVenteTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
-            'equipe_livraison_id' => null,
         ]);
 
         $commande = CommandeVente::factory()->create([
@@ -168,10 +168,18 @@ class FactureVenteTest extends TestCase
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
         $produit = $this->makeProduit($org);
 
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'categorie' => 'externe',
+        ]);
+
         $equipe = EquipeLivraison::create([
             'organization_id' => $org->id,
+            'vehicule_id' => $vehicule->id,
             'nom' => 'Équipe Test',
             'is_active' => true,
+            'taux_commission_proprietaire' => 40,
         ]);
         EquipeLivreur::create([
             'equipe_id' => $equipe->id,
@@ -179,13 +187,6 @@ class FactureVenteTest extends TestCase
             'taux_commission' => 60,
             'role' => 'principal',
             'ordre' => 0,
-        ]);
-
-        $vehicule = Vehicule::factory()->create([
-            'organization_id' => $org->id,
-            'proprietaire_id' => $proprietaire->id,
-            'equipe_livraison_id' => $equipe->id,
-            'taux_commission_proprietaire' => 40,
         ]);
 
         $commande = CommandeVente::factory()->create([

@@ -121,7 +121,6 @@ class CommissionVehiculeTest extends TestCase
             'montant_verse' => 0,
             'statut' => StatutPartCommission::AVAILABLE,
             'earned_at' => now()->subDays(15)->toDateString(),
-            'unlock_at' => now()->subDays(1)->toDateString(),
         ], $overrides));
     }
 
@@ -143,7 +142,7 @@ class CommissionVehiculeTest extends TestCase
             ->assertRedirect(route('login'));
     }
 
-    public function test_index_renvoie_les_vehicules_avec_commissions(): void
+    public function test_index_renvoie_les_livreurs_avec_commissions(): void
     {
         $org = $this->makeOrg();
         $user = $this->makeUser($org);
@@ -156,13 +155,13 @@ class CommissionVehiculeTest extends TestCase
             ->get('/logistique/commissions')
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Logistique/Commissions/Index')
-                ->has('vehicules', 1)
-                ->where('vehicules.0.vehicule_id', $vehicule->id)
-                ->where('kpis.nb_vehicules', 1)
+                ->has('livreurs', 1)
+                ->where('livreurs.0.livreur_id', $livreur->id)
+                ->where('kpis.nb_livreurs', 1)
             );
     }
 
-    public function test_index_naffiche_pas_vehicules_dautres_organisations(): void
+    public function test_index_naffiche_pas_livreurs_dautres_organisations(): void
     {
         $org1 = $this->makeOrg();
         $org2 = $this->makeOrg();
@@ -176,7 +175,7 @@ class CommissionVehiculeTest extends TestCase
         $this->actingAs($user1)
             ->get('/logistique/commissions')
             ->assertInertia(fn (Assert $page) => $page
-                ->has('vehicules', 0)
+                ->has('livreurs', 0)
             );
     }
 
@@ -419,12 +418,10 @@ class CommissionVehiculeTest extends TestCase
         $partA = $this->makePart($commission, $livreur, [
             'montant_net' => 1000,
             'earned_at' => now()->subDays(20)->toDateString(),
-            'unlock_at' => now()->subDays(6)->toDateString(),
         ]);
         $partB = $this->makePart($commission, $livreur, [
             'montant_net' => 2000,
             'earned_at' => now()->subDays(10)->toDateString(),
-            'unlock_at' => now()->subDays(1)->toDateString(),
         ]);
 
         $this->actingAs($user)

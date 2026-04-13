@@ -13,7 +13,7 @@ use InvalidArgumentException;
  * Règles métier :
  *  - commission_totale = max(prix_vente - prix_usine, 0) sur toutes les lignes
  *  - Chaque membre de l'équipe a son propre taux (snapshot depuis equipe_livreurs)
- *  - Le propriétaire a son taux depuis vehicule.taux_commission_proprietaire
+ *  - Le propriétaire a son taux depuis equipes_livraison.taux_commission_proprietaire
  *  - Validation : taux_proprietaire + SUM(taux membres) = 100 (± 0.01)
  *  - Frais supplémentaires déductibles uniquement de la part propriétaire
  */
@@ -79,7 +79,7 @@ class CommissionCalculator
             throw new InvalidArgumentException('Aucune équipe assignée au véhicule.');
         }
 
-        $tauxProprietaire = (float) $vehicule->taux_commission_proprietaire;
+        $tauxProprietaire = (float) $equipe->taux_commission_proprietaire;
         $proprietaire = $vehicule->relationLoaded('proprietaire')
             ? $vehicule->proprietaire
             : $vehicule->load('proprietaire')->proprietaire;

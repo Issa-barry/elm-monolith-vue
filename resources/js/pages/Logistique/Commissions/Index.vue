@@ -1,44 +1,41 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ChevronRight, HandCoins, Truck } from 'lucide-vue-next';
+import { ChevronRight, HandCoins, User } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
+import InputText from 'primevue/inputtext';
 import { ref, watch } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface VehiculeRow {
-    vehicule_id: number;
+interface LivreurRow {
+    livreur_id: number;
     nom: string;
-    immatriculation: string | null;
     pending: number;
     available: number;
     paid: number;
-    nb_transferts: number;
 }
 
 interface Kpis {
-    nb_vehicules: number;
+    nb_livreurs: number;
     total_pending: number;
     total_available: number;
     total_paid: number;
 }
 
 interface SelectOption {
-    value: string | number | null;
+    value: string | null;
     label: string;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 const props = defineProps<{
-    vehicules: VehiculeRow[];
+    livreurs: LivreurRow[];
     kpis: Kpis;
-    vehicule_options: SelectOption[];
-    filtre_vehicule: number | null;
-    filtre_statut: string | null;
+    search: string;
+    filtre_statut: string;
 }>();
 
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
@@ -50,8 +47,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Filtres ───────────────────────────────────────────────────────────────────
 
-const vehiculeFiltre = ref<number | null>(props.filtre_vehicule ?? null);
-const statutFiltre = ref<string | null>(props.filtre_statut ?? null);
+const searchVal = ref(props.search ?? '');
+const statutFiltre = ref<string | null>(props.filtre_statut || null);
 
 const STATUT_OPTIONS: SelectOption[] = [
     { value: null, label: 'Tous les statuts' },
@@ -64,14 +61,19 @@ function appliquerFiltres() {
     router.get(
         '/logistique/commissions',
         {
-            vehicule_id: vehiculeFiltre.value ?? undefined,
+            search: searchVal.value || undefined,
             statut: statutFiltre.value ?? undefined,
         },
         { preserveState: true, replace: true },
     );
 }
 
-watch([vehiculeFiltre, statutFiltre], appliquerFiltres);
+let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+watch(searchVal, () => {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(appliquerFiltres, 300);
+});
+watch(statutFiltre, appliquerFiltres);
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
 
@@ -81,7 +83,7 @@ function formatGNF(val: number): string {
 </script>
 
 <template>
-    <Head title="Commissions — par véhicule" />
+    <Head title="Commissions logistiques" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="space-y-6 p-6">
@@ -92,8 +94,8 @@ function formatGNF(val: number): string {
                         Commissions logistiques
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ kpis.nb_vehicules }} véhicule{{
-                            kpis.nb_vehicules !== 1 ? 's' : ''
+                        {{ kpis.nb_livreurs }} livreur{{
+                            kpis.nb_livreurs !== 1 ? 's' : ''
                         }}
                         avec commissions
                     </p>
@@ -154,17 +156,10 @@ function formatGNF(val: number): string {
 
             <!-- ── Filtres ────────────────────────────────────────────────────── -->
             <div class="flex flex-wrap items-center gap-3">
-                <Dropdown
-                    :options="[
-                        { value: null, label: 'Tous les véhicules' },
-                        ...vehicule_options,
-                    ]"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="vehiculeFiltre"
-                    placeholder="Tous les véhicules"
+                <InputText
+                    v-model="searchVal"
+                    placeholder="Rechercher un livreur…"
                     class="w-64 text-sm"
-                    @change="(e) => (vehiculeFiltre = e.value)"
                 />
                 <Dropdown
                     :options="STATUT_OPTIONS"
@@ -176,21 +171,21 @@ function formatGNF(val: number): string {
                     @change="(e) => (statutFiltre = e.value)"
                 />
                 <span class="text-xs text-muted-foreground"
-                    >{{ vehicules.length }} résultat{{
-                        vehicules.length !== 1 ? 's' : ''
+                    >{{ livreurs.length }} résultat{{
+                        livreurs.length !== 1 ? 's' : ''
                     }}</span
                 >
             </div>
 
-            <!-- ── Tableau véhicules ──────────────────────────────────────────── -->
+            <!-- ── Tableau livreurs ──────────────────────────────────────────── -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
-                <table v-if="vehicules.length > 0" class="w-full text-sm">
+                <table v-if="livreurs.length > 0" class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
                             <th
                                 class="px-4 py-3 text-left font-medium text-muted-foreground"
                             >
-                                Véhicule
+                                Livreur
                             </th>
                             <th
                                 class="px-4 py-3 text-right font-medium text-muted-foreground"
@@ -207,73 +202,53 @@ function formatGNF(val: number): string {
                             >
                                 Versé
                             </th>
-                            <th
-                                class="px-4 py-3 text-center font-medium text-muted-foreground"
-                            >
-                                Transferts
-                            </th>
                             <th class="px-4 py-3" />
                         </tr>
                     </thead>
                     <tbody class="divide-y">
                         <tr
-                            v-for="v in vehicules"
-                            :key="v.vehicule_id"
+                            v-for="l in livreurs"
+                            :key="l.livreur_id"
                             class="transition-colors hover:bg-muted/10"
                         >
                             <td class="px-4 py-3">
                                 <div class="flex items-center gap-2">
-                                    <Truck
+                                    <User
                                         class="h-4 w-4 shrink-0 text-muted-foreground"
                                     />
-                                    <div>
-                                        <p class="font-medium">{{ v.nom }}</p>
-                                        <p
-                                            v-if="v.immatriculation"
-                                            class="font-mono text-xs text-muted-foreground"
-                                        >
-                                            {{ v.immatriculation }}
-                                        </p>
-                                    </div>
+                                    <span class="font-medium">{{ l.nom }}</span>
                                 </div>
                             </td>
                             <td
                                 class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                             >
-                                {{ formatGNF(v.pending) }}
+                                {{ formatGNF(l.pending) }}
                             </td>
                             <td
                                 class="px-4 py-3 text-right font-semibold tabular-nums"
                                 :class="
-                                    v.available > 0
+                                    l.available > 0
                                         ? 'text-amber-600 dark:text-amber-400'
                                         : 'text-muted-foreground'
                                 "
                             >
-                                {{ formatGNF(v.available) }}
+                                {{ formatGNF(l.available) }}
                             </td>
                             <td
                                 class="px-4 py-3 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
                             >
-                                {{ formatGNF(v.paid) }}
-                            </td>
-                            <td
-                                class="px-4 py-3 text-center text-muted-foreground tabular-nums"
-                            >
-                                {{ v.nb_transferts }}
+                                {{ formatGNF(l.paid) }}
                             </td>
                             <td class="px-4 py-3 text-right">
                                 <Link
-                                    :href="`/logistique/commissions/vehicules/${v.vehicule_id}`"
+                                    :href="`/logistique/commissions/livreurs/${l.livreur_id}`"
                                 >
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        class="gap-1"
+                                    <button
+                                        class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                     >
                                         Détail
                                         <ChevronRight class="h-3.5 w-3.5" />
-                                    </Button>
+                                    </button>
                                 </Link>
                             </td>
                         </tr>

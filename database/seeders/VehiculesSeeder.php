@@ -9,15 +9,13 @@ use App\Models\Vehicule;
 use Illuminate\Database\Seeder;
 
 /**
- * Cree 3 vehicules.
+ * Crée 3 véhicules et les associe à leurs équipes (equipes_livraison.vehicule_id).
  *
- * proprietaire_id et taux_commission_proprietaire sont derives de l'equipe assignee.
- *
- * | Vehicule         | Type        | Equipe       | Taux prop | Somme equipe |
- * |------------------|-------------|--------------|-----------|--------------|
- * | Nen Dow          | camion      | Nen Dow      | 60 %      | 40 %         |
- * | Kata Kata de Ali | tricycle    | Auto Dogomet | 60 %      | 40 %         |
- * | Baba Ousou       | camionnette | Baba Ousou   | 60 %      | 40 %         |
+ * | Véhicule         | Type        | Équipe       | Catégorie | Taux prop |
+ * |------------------|-------------|--------------|-----------|-----------|
+ * | Nen Dow          | camion      | Nen Dow      | externe   | 60 %      |
+ * | Kata Kata de Ali | tricycle    | Auto Dogomet | externe   | 60 %      |
+ * | Baba Ousou       | camionnette | Baba Ousou   | externe   | 60 %      |
  */
 class VehiculesSeeder extends Seeder
 {
@@ -42,11 +40,11 @@ class VehiculesSeeder extends Seeder
                 'immatriculation' => 'RC-001-GN',
                 'type_vehicule' => TypeVehicule::CAMION->value,
                 'capacite_packs' => 500,
-                'equipe_livraison_id' => $eqNenDow->id,
+                'categorie' => 'externe',
                 'proprietaire_id' => $eqNenDow->proprietaire_id,
-                'taux_commission_proprietaire' => 100 - $eqNenDow->sommeTaux(),
                 'pris_en_charge_par_usine' => false,
                 'is_active' => true,
+                'equipe' => $eqNenDow,
             ],
             [
                 'nom_vehicule' => 'Kata Kata de Ali',
@@ -55,11 +53,11 @@ class VehiculesSeeder extends Seeder
                 'immatriculation' => 'TC-001-GN',
                 'type_vehicule' => TypeVehicule::TRICYCLE->value,
                 'capacite_packs' => 80,
-                'equipe_livraison_id' => $eqAutoDogomet->id,
+                'categorie' => 'externe',
                 'proprietaire_id' => $eqAutoDogomet->proprietaire_id,
-                'taux_commission_proprietaire' => 100 - $eqAutoDogomet->sommeTaux(),
                 'pris_en_charge_par_usine' => false,
                 'is_active' => true,
+                'equipe' => $eqAutoDogomet,
             ],
             [
                 'nom_vehicule' => 'Baba Ousou',
@@ -68,19 +66,25 @@ class VehiculesSeeder extends Seeder
                 'immatriculation' => 'VN-001-GN',
                 'type_vehicule' => TypeVehicule::CAMIONNETTE->value,
                 'capacite_packs' => 150,
-                'equipe_livraison_id' => $eqBabaOusou->id,
+                'categorie' => 'externe',
                 'proprietaire_id' => $eqBabaOusou->proprietaire_id,
-                'taux_commission_proprietaire' => 100 - $eqBabaOusou->sommeTaux(),
                 'pris_en_charge_par_usine' => false,
                 'is_active' => true,
+                'equipe' => $eqBabaOusou,
             ],
         ];
 
         foreach ($vehicules as $data) {
-            Vehicule::updateOrCreate(
+            $equipeModel = $data['equipe'];
+            unset($data['equipe']);
+
+            $vehicule = Vehicule::updateOrCreate(
                 ['immatriculation' => $data['immatriculation'], 'organization_id' => $org->id],
                 [...$data, 'organization_id' => $org->id]
             );
+
+            // Associer l'équipe au véhicule (nouvelle relation : equipes_livraison.vehicule_id)
+            $equipeModel->update(['vehicule_id' => $vehicule->id]);
         }
     }
 }

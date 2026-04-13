@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CashbackSolde;
 use App\Models\CashbackTransaction;
 use App\Models\CashbackVersement;
+use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\Parametre;
 use App\Models\User;
@@ -19,6 +20,12 @@ class CashbackService
     public function processVente(CommandeVente $vente): void
     {
         if (! $vente->client_id || ! $vente->organization_id) {
+            return;
+        }
+
+        $client = $vente->relationLoaded('client') ? $vente->client : Client::find($vente->client_id);
+
+        if (! $client || ! $client->cashback_eligible) {
             return;
         }
 

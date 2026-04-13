@@ -11,8 +11,17 @@ interface ProprietaireOption {
     telephone?: string | null;
 }
 
+interface VehiculeOption {
+    value: number;
+    label: string;
+    immatriculation: string;
+    categorie: string;
+    type_label: string;
+}
+
 const props = defineProps<{
     proprietaires: ProprietaireOption[];
+    vehicules: VehiculeOption[];
     tauxProprietaireDefaut: number;
 }>();
 
@@ -25,6 +34,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: '',
     is_active: true,
+    vehicule_id: null as number | null,
     proprietaire_id: null as number | null,
     taux_commission_proprietaire: props.tauxProprietaireDefaut as number | null,
     membres: [] as {
@@ -60,12 +70,13 @@ function submit() {
                     Nouvelle équipe
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Définissez les membres et leurs taux.
+                    Définissez le véhicule, les membres et leurs taux.
                 </p>
             </div>
             <EquipeForm
                 :form="form"
                 :proprietaires="proprietaires"
+                :vehicules="vehicules"
                 :taux-proprietaire-defaut="tauxProprietaireDefaut"
                 @submit="submit"
             />

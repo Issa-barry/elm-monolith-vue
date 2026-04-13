@@ -37,13 +37,10 @@ test('login + create vehicule + update status + verify list', async ({
 
     const comboboxes = page.locator('#vehicule-form').getByRole('combobox');
 
-    // Ordre DOM actuel: type (Dropdown), equipe (AutoComplete)
-    await selectOptionFromCombobox(page, comboboxes.nth(0));
-    await selectOptionFromCombobox(page, comboboxes.nth(1));
-    await expect(page.locator('#proprietaire_id')).toHaveAttribute(
-        'readonly',
-        '',
-    );
+    // Ordre DOM actuel: catégorie (Dropdown), type (Dropdown)
+    // Sélectionner catégorie "interne" puis type — pas de propriétaire requis en interne
+    await selectOptionFromCombobox(page, comboboxes.nth(0)); // catégorie
+    await selectOptionFromCombobox(page, comboboxes.nth(1)); // type
     await expect(submitBtn).toBeEnabled();
 
     await submitBtn.click();

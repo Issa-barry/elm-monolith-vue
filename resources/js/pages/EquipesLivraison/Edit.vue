@@ -20,6 +20,7 @@ interface EquipeData {
     id: number;
     nom: string;
     is_active: boolean;
+    vehicule_id: number | null;
     proprietaire_id: number | null;
     taux_commission_proprietaire: number | null;
     membres: MembreData[];
@@ -31,9 +32,18 @@ interface ProprietaireOption {
     telephone?: string | null;
 }
 
+interface VehiculeOption {
+    value: number;
+    label: string;
+    immatriculation: string;
+    categorie: string;
+    type_label: string;
+}
+
 const props = defineProps<{
     equipe: EquipeData;
     proprietaires: ProprietaireOption[];
+    vehicules: VehiculeOption[];
     tauxProprietaireDefaut: number;
 }>();
 
@@ -51,6 +61,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: props.equipe.nom,
     is_active: Boolean(props.equipe.is_active),
+    vehicule_id: props.equipe.vehicule_id,
     proprietaire_id: props.equipe.proprietaire_id,
     taux_commission_proprietaire:
         props.equipe.taux_commission_proprietaire ??
@@ -88,7 +99,7 @@ function submit() {
                     {{ equipe.nom }}
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Modifier les membres et taux.
+                    Modifier le véhicule, les membres et taux.
                 </p>
             </div>
             <div
@@ -102,6 +113,7 @@ function submit() {
             <EquipeForm
                 :form="form"
                 :proprietaires="proprietaires"
+                :vehicules="vehicules"
                 :taux-proprietaire-defaut="tauxProprietaireDefaut"
                 @submit="submit"
             />

@@ -88,7 +88,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const today = new Date();
-const todayStr = `${pad(today.getDate())}/${pad(today.getMonth() + 1)}/${today.getFullYear()}`;
+// ISO 8601 (YYYY-MM-DD) — format attendu par la validation Laravel `date`
+const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
 
 const form = useForm({
     site_source_id: props.site_source?.id ?? (null as number | null),
@@ -245,6 +246,14 @@ function submit() {
                 </p>
             </div>
 
+            <!-- Bandeau erreur global (ex: permission refusée) -->
+            <div
+                v-if="Object.keys(form.errors).length && !form.processing"
+                class="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+            >
+                Veuillez corriger les erreurs ci-dessous avant de soumettre.
+            </div>
+
             <form
                 id="logistique-form"
                 class="space-y-6"
@@ -381,6 +390,12 @@ function submit() {
                                 </template>
                             </AutoComplete>
                         </div>
+                        <p
+                            v-if="form.errors.vehicule_id"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ form.errors.vehicule_id }}
+                        </p>
                         <!-- Équipe masquée — alimentée automatiquement par le véhicule -->
                     </div>
 
