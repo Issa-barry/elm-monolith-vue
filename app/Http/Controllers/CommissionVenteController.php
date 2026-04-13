@@ -444,5 +444,4 @@ class CommissionVenteController extends Controller
 
         return $data;
     }
-
 }

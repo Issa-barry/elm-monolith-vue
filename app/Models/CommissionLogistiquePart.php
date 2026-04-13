@@ -185,5 +185,4 @@ class CommissionLogistiquePart extends Model
 
         return $this->save();
     }
-
 }
