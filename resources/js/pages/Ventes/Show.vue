@@ -495,8 +495,6 @@ const progressPercent = computed(() => {
                 </div>
             </div>
 
-            <!-- Section facture masquée — utiliser v-if="false" pour éviter les commentaires imbriqués -->
-            <template v-if="false">
             <div
                 v-if="facture"
                 class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
@@ -806,7 +804,6 @@ const progressPercent = computed(() => {
                     </form>
                 </div>
             </div>
-            </template>
 
             <!-- Brouillon : message informatif -->
             <div
