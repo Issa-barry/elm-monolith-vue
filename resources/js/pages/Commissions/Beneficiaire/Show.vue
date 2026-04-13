@@ -14,6 +14,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    CalendarDays,
     CreditCard,
     Filter,
     History,
@@ -66,10 +67,16 @@ interface CommandeRow {
     frais: number;
     montant_net: number;
     montant_verse: number;
-    unlock_at: string | null;
+    periode: string | null;
+    periode_label: string | null;
     part_id: number;
     type_frais: string | null;
     commentaire_frais: string | null;
+}
+
+interface PeriodeOption {
+    code: string;
+    label: string;
 }
 
 interface PaiementRow {
@@ -90,7 +97,7 @@ interface Filtres {
     date_from: string | null;
     date_to: string | null;
     commande: string | null;
-    disponible: '' | 'disponible' | 'en_attente' | null;
+    periode: string | null;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -101,6 +108,10 @@ const props = defineProps<{
     historique_paiements_globaux: PaiementRow[];
     modes_paiement: ModePaiementOption[];
     filtres: Filtres;
+    periode_courante: string;
+    periode_courante_label: string;
+    selected_periode: string;
+    periodes_disponibles: PeriodeOption[];
 }>();
 
 const { can } = usePermissions();
@@ -152,24 +163,15 @@ const filtresDialogVisible = ref(false);
 const filtresServeur = reactive({
     date_from: props.filtres.date_from ?? '',
     date_to: props.filtres.date_to ?? '',
-    disponible: (props.filtres.disponible ?? '') as
-        | ''
-        | 'disponible'
-        | 'en_attente',
+    periode: props.filtres.periode ?? '',
 });
-
-const disponibiliteOptions = [
-    { value: '', label: 'Tous' },
-    { value: 'disponible', label: 'Disponible maintenant' },
-    { value: 'en_attente', label: 'En attente' },
-];
 
 const nbFiltresActifs = computed(
     () =>
         [
             filtresServeur.date_from,
             filtresServeur.date_to,
-            filtresServeur.disponible,
+            filtresServeur.periode,
         ].filter((v) => !!v).length,
 );
 
@@ -183,13 +185,12 @@ function applyFiltresServeur() {
             ...(filtresServeur.date_to
                 ? { date_to: filtresServeur.date_to }
                 : {}),
-            ...(filtresServeur.disponible
-                ? { disponible: filtresServeur.disponible }
+            ...(filtresServeur.periode
+                ? { periode: filtresServeur.periode }
                 : {}),
         },
         {
             preserveScroll: true,
-            preserveState: true,
             onSuccess: () => {
                 filtresDialogVisible.value = false;
             },
@@ -200,7 +201,34 @@ function applyFiltresServeur() {
 function resetFiltresServeur() {
     filtresServeur.date_from = '';
     filtresServeur.date_to = '';
-    filtresServeur.disponible = '';
+    filtresServeur.periode = '';
+}
+
+const periodeSelectionnee = ref<string>(props.selected_periode);
+
+watch(
+    () => props.selected_periode,
+    (val) => {
+        periodeSelectionnee.value = val;
+        filtresServeur.periode = val;
+    },
+);
+
+const periodeOptions = [
+    { code: '', label: 'Toutes les périodes' },
+    ...props.periodes_disponibles,
+];
+
+function onPeriodeChange(value: string) {
+    const params: Record<string, string> = {};
+    if (value) params.periode = value;
+    if (filtresServeur.date_from) params.date_from = filtresServeur.date_from;
+    if (filtresServeur.date_to) params.date_to = filtresServeur.date_to;
+    router.get(
+        `/commissions/beneficiaires/${props.resume_global.type}/${props.resume_global.id}`,
+        params,
+        { preserveScroll: true, replace: true },
+    );
 }
 
 // ── Recherche locale (DataTable) ───────────────────────────────────────────────
@@ -481,7 +509,7 @@ function closeDetailDialog() {
                     @click="openPaiementDialog"
                 >
                     <Plus class="h-4 w-4" />
-                    Nouveau versement
+                    Nouveau paiement
                 </Button>
                 <Button
                     v-if="historique_paiements_globaux.length > 0"
@@ -556,12 +584,14 @@ function closeDetailDialog() {
                         </div>
                     </div>
                     <div class="mt-1 flex items-center justify-between">
-                        <p
-                            v-if="c.unlock_at"
-                            class="text-xs text-muted-foreground"
-                        >
-                            Dès {{ c.unlock_at }}
-                        </p>
+                        <div class="flex items-center gap-2">
+                            <span
+                                v-if="isLivreur && c.periode"
+                                class="inline-flex items-center rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                            >
+                                {{ c.periode.slice(-2) }}
+                            </span>
+                        </div>
                         <div class="flex gap-1">
                             <Button
                                 v-if="isLivreur && can('ventes.update')"
@@ -652,22 +682,13 @@ function closeDetailDialog() {
                         @click="openPaiementDialog"
                     >
                         <Plus class="h-4 w-4" />
-                        Nouveau versement
+                        Nouveau paiement
                     </Button>
                 </div>
             </div>
 
-            <!-- Cards KPI (5 cards — sans Disponible maintenant) -->
+            <!-- Cards KPI (5 cards) -->
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Total restant à payer</p>
-                    <p
-                        class="mt-2 text-2xl font-bold tabular-nums"
-                        :class="resume_global.solde_global > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
-                    >
-                        {{ formatGNF(resume_global.solde_global) }}
-                    </p>
-                </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">
                         Total brut cumulé
@@ -707,6 +728,27 @@ function closeDetailDialog() {
                         {{ formatGNF(resume_global.total_verse) }}
                     </p>
                 </div>
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Total restant à payer</p>
+                    <p
+                        class="mt-2 text-2xl font-bold tabular-nums"
+                        :class="resume_global.solde_global > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+                    >
+                        {{ formatGNF(resume_global.solde_global) }}
+                    </p>
+                </div>
+            </div>
+
+            <!-- Badge période courante (livreur uniquement) -->
+            <div
+                v-if="isLivreur && periode_courante"
+                class="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm dark:border-blue-800 dark:bg-blue-950"
+            >
+                <CalendarDays class="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                <span class="text-blue-800 dark:text-blue-200">
+                    Période courante :
+                    <span class="font-semibold">{{ periode_courante_label }}</span>
+                </span>
             </div>
 
             <!-- Tableau DataTable (style Factures) -->
@@ -744,6 +786,18 @@ function closeDetailDialog() {
                                     class="w-full text-sm"
                                 />
                             </IconField>
+
+                            <!-- Filtre période (livreur uniquement) -->
+                            <Dropdown
+                                v-if="isLivreur && periodeOptions.length > 1"
+                                v-model="periodeSelectionnee"
+                                :options="periodeOptions"
+                                option-label="label"
+                                option-value="code"
+                                placeholder="Toutes les périodes"
+                                class="w-72 text-sm"
+                                @change="onPeriodeChange(periodeSelectionnee)"
+                            />
 
                             <div class="ml-auto flex items-center gap-2">
                                 <Button
@@ -894,10 +948,11 @@ function closeDetailDialog() {
                         </template>
                     </Column>
 
-                    <!-- ─ Colonne : Disponible dès (10%) ─────────────────── -->
+                    <!-- ─ Colonne : Période (livreur) ────────────────────── -->
                     <Column
-                        field="unlock_at"
-                        header="Disponible dès"
+                        v-if="isLivreur"
+                        field="periode"
+                        header="Période"
                         sortable
                         style="width: 130px"
                         header-class="py-3 align-middle text-left"
@@ -905,12 +960,15 @@ function closeDetailDialog() {
                     >
                         <template #body="{ data }">
                             <span
-                                class="block text-left text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+                                v-if="data.periode"
+                                class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-300"
                             >
-                                {{ data.unlock_at ?? '—' }}
+                                {{ data.periode.slice(-2) }}
                             </span>
+                            <span v-else class="text-xs text-muted-foreground">—</span>
                         </template>
                     </Column>
+
 
                     <!-- ─ Colonne : Actions (4%) ──────────────────────────── -->
                     <Column
@@ -991,13 +1049,16 @@ function closeDetailDialog() {
             </template>
 
             <div class="space-y-4 pt-1">
-                <div class="space-y-1.5">
-                    <label class="text-sm font-medium">Disponibilité</label>
+                <div
+                    v-if="isLivreur && periodes_disponibles.length > 0"
+                    class="space-y-1.5"
+                >
+                    <label class="text-sm font-medium">Période comptable</label>
                     <Dropdown
-                        v-model="filtresServeur.disponible"
-                        :options="disponibiliteOptions"
+                        v-model="filtresServeur.periode"
+                        :options="[{ code: '', label: 'Toutes les périodes' }, ...periodes_disponibles]"
                         option-label="label"
-                        option-value="value"
+                        option-value="code"
                         class="w-full"
                     />
                 </div>
@@ -1472,14 +1533,6 @@ function closeDetailDialog() {
                                 )
                             }}
                         </span>
-                    </div>
-                    <div class="flex items-center justify-between">
-                        <span class="text-muted-foreground"
-                            >Disponible dès</span
-                        >
-                        <span class="text-xs tabular-nums">{{
-                            detailCommande.unlock_at ?? '—'
-                        }}</span>
                     </div>
                 </div>
 

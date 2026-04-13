@@ -6,6 +6,7 @@ use App\Enums\StatutPartCommission;
 use App\Models\CommissionPayment;
 use App\Models\Vehicule;
 use App\Services\CommissionPaymentService;
+use App\Services\PeriodeComptableService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -81,25 +82,42 @@ class CommissionVehiculeController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $parts = CommissionPaymentService::releveLivreur($livreurId, $orgId);
+        // ── Toutes les parts du livreur (tri FIFO earned_at) ─────────────────
+        $allParts = CommissionPaymentService::releveLivreur($livreurId, $orgId);
 
-        $livreurNom = $parts->first()?->beneficiaire_nom ?? '—';
+        $livreurNom = $allParts->first()?->beneficiaire_nom ?? '—';
 
-        $totalPending = (float) $parts
+        // ── KPIs globaux (toutes périodes confondues) ─────────────────────────
+        $totalPending = (float) $allParts
             ->filter(fn ($p) => $p->statut === StatutPartCommission::PENDING)
             ->sum('montant_net');
 
-        $totalAvailable = (float) $parts
+        $totalAvailable = (float) $allParts
             ->filter(fn ($p) => in_array($p->statut, [
                 StatutPartCommission::AVAILABLE,
                 StatutPartCommission::PARTIAL,
             ], true))
             ->sum('montant_restant');
 
-        $totalPaid = (float) $parts
+        $totalPaid = (float) $allParts
             ->filter(fn ($p) => $p->statut === StatutPartCommission::PAID)
             ->sum('montant_net');
 
+        // ── Périodes disponibles (depuis la 1re commission jusqu'à aujourd'hui) ─
+        $earliestPart = $allParts->whereNotNull('periode')->sortBy('earned_at')->first();
+        $earliestDate = $earliestPart?->earned_at ?? now();
+        $periodesDisponibles = PeriodeComptableService::periodesDisponibles($earliestDate);
+
+        // Période sélectionnée (filtre URL ?periode=2026-04-P1)
+        $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
+        $selectedPeriode = $request->input('periode', '');
+
+        // ── Parts filtrées pour l'affichage ───────────────────────────────────
+        $filteredParts = $selectedPeriode !== ''
+            ? $allParts->filter(fn ($p) => $p->periode === $selectedPeriode)
+            : $allParts;
+
+        // ── Historique des paiements ──────────────────────────────────────────
         $payments = CommissionPayment::with('createur:id,prenom,nom')
             ->where('organization_id', $orgId)
             ->where('livreur_id', $livreurId)
@@ -128,7 +146,7 @@ class CommissionVehiculeController extends Controller
                 'available' => $totalAvailable,
                 'paid' => $totalPaid,
             ],
-            'parts' => $parts->map(fn ($p) => [
+            'parts' => $filteredParts->map(fn ($p) => [
                 'id' => $p->id,
                 'transfert_reference' => $p->commission?->transfert?->reference,
                 'taux_commission' => (float) $p->taux_commission,
@@ -138,6 +156,8 @@ class CommissionVehiculeController extends Controller
                 'montant_restant' => (float) $p->montant_restant,
                 'earned_at' => $p->earned_at?->format(self::DATE_FORMAT),
                 'unlock_at' => $p->unlock_at?->format(self::DATE_FORMAT),
+                'periode' => $p->periode,
+                'periode_label' => $p->periode ? PeriodeComptableService::labelForCode($p->periode) : null,
                 'statut' => $p->statut?->value,
                 'statut_label' => $p->statut_label,
                 'statut_dot_class' => $p->statut_dot_class,
@@ -148,6 +168,10 @@ class CommissionVehiculeController extends Controller
                 ])->values()->all(),
             ])->values(),
             'payments' => $payments,
+            'periode_courante' => $periodeCourante,
+            'periode_courante_label' => PeriodeComptableService::labelForCode($periodeCourante),
+            'selected_periode' => $selectedPeriode,
+            'periodes_disponibles' => $periodesDisponibles,
             'modes_paiement' => [
                 ['value' => 'especes',      'label' => 'Espèces'],
                 ['value' => 'virement',     'label' => 'Virement'],

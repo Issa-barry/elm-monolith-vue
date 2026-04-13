@@ -8,6 +8,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     CalendarClock,
+    CalendarDays,
     CheckCircle2,
     HandCoins,
     History,
@@ -15,7 +16,6 @@ import {
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
-import InputText from 'primevue/inputtext';
 import { reactive, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -36,6 +36,8 @@ interface PartRow {
     montant_restant: number;
     earned_at: string | null;
     unlock_at: string | null;
+    periode: string | null;
+    periode_label: string | null;
     statut: string | null;
     statut_label: string;
     statut_dot_class: string;
@@ -56,6 +58,11 @@ interface ModePaiement {
     label: string;
 }
 
+interface PeriodeOption {
+    code: string;
+    label: string;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 const props = defineProps<{
@@ -65,6 +72,10 @@ const props = defineProps<{
     payments: PaymentRow[];
     modes_paiement: ModePaiement[];
     can_payer: boolean;
+    periode_courante: string;
+    periode_courante_label: string;
+    selected_periode: string;
+    periodes_disponibles: PeriodeOption[];
 }>();
 
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
@@ -74,6 +85,24 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Commissions', href: '/logistique/commissions' },
     { title: props.livreur.nom, href: '' },
 ];
+
+// ── Filtre période ────────────────────────────────────────────────────────────
+
+const selectedPeriode = ref<string>(props.selected_periode);
+
+const periodeOptions: PeriodeOption[] = [
+    { code: '', label: 'Toutes les périodes' },
+    ...props.periodes_disponibles,
+];
+
+function onPeriodeChange(value: string) {
+    const params: Record<string, string> = {};
+    if (value) params.periode = value;
+    router.get(`/logistique/commissions/livreurs/${props.livreur.id}`, params, {
+        preserveScroll: true,
+        replace: true,
+    });
+}
 
 // ── Dialog paiement ───────────────────────────────────────────────────────────
 
@@ -197,7 +226,20 @@ function formatMode(mode: string): string {
                 </div>
             </div>
 
-            <!-- ── KPIs ──────────────────────────────────────────────────────── -->
+            <!-- ── Badge période courante ─────────────────────────────────────── -->
+            <div
+                class="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 dark:border-blue-800 dark:bg-blue-950/30"
+            >
+                <CalendarDays
+                    class="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400"
+                />
+                <span class="text-sm text-blue-800 dark:text-blue-300">
+                    Période courante :
+                    <strong>{{ periode_courante_label }}</strong>
+                </span>
+            </div>
+
+            <!-- ── KPIs (totaux toutes périodes) ─────────────────────────────── -->
             <div class="grid grid-cols-3 gap-3">
                 <div class="rounded-lg border bg-card px-4 py-3 text-center">
                     <p
@@ -251,12 +293,43 @@ function formatMode(mode: string): string {
 
             <!-- ── Relevé par transfert ───────────────────────────────────────── -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
-                <div class="border-b px-5 py-3.5">
-                    <h2
-                        class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                    >
-                        Détail par transfert ({{ parts.length }})
-                    </h2>
+                <!-- En-tête section + filtre période -->
+                <div
+                    class="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3.5"
+                >
+                    <div class="flex items-center gap-2">
+                        <h2
+                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
+                            Détail par transfert
+                        </h2>
+                        <span
+                            class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums"
+                            >{{ parts.length }}</span
+                        >
+                        <!-- Badge période filtrée -->
+                        <span
+                            v-if="selected_periode"
+                            class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                        >
+                            <CalendarDays class="h-3 w-3" />
+                            {{
+                                periodes_disponibles.find(
+                                    (p) => p.code === selected_periode,
+                                )?.label ?? selected_periode
+                            }}
+                        </span>
+                    </div>
+                    <!-- Filtre période -->
+                    <Dropdown
+                        v-model="selectedPeriode"
+                        :options="periodeOptions"
+                        option-label="label"
+                        option-value="code"
+                        placeholder="Toutes les périodes"
+                        class="w-52 text-sm"
+                        @change="onPeriodeChange(selectedPeriode)"
+                    />
                 </div>
 
                 <div v-if="parts.length > 0" class="overflow-x-auto">
@@ -271,12 +344,12 @@ function formatMode(mode: string): string {
                                 <th
                                     class="px-4 py-3 text-left font-medium text-muted-foreground"
                                 >
-                                    Acquis le
+                                    Période
                                 </th>
                                 <th
                                     class="px-4 py-3 text-left font-medium text-muted-foreground"
                                 >
-                                    Disponible le
+                                    Acquis le
                                 </th>
                                 <th
                                     class="px-4 py-3 text-right font-medium text-muted-foreground"
@@ -311,25 +384,28 @@ function formatMode(mode: string): string {
                                     >
                                         {{ part.transfert_reference ?? '—' }}
                                     </td>
+                                    <td class="px-4 py-3">
+                                        <span
+                                            v-if="part.periode"
+                                            class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                                        >
+                                            <CalendarDays class="h-3 w-3" />
+                                            {{ part.periode }}
+                                        </span>
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
+                                            >—</span
+                                        >
+                                    </td>
                                     <td
                                         class="px-4 py-3 text-muted-foreground tabular-nums"
                                     >
-                                        {{ part.earned_at ?? '—' }}
-                                    </td>
-                                    <td class="px-4 py-3 tabular-nums">
                                         <div class="flex items-center gap-1.5">
                                             <CalendarClock
                                                 class="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                                             />
-                                            <span
-                                                :class="
-                                                    part.statut === 'pending'
-                                                        ? 'text-muted-foreground'
-                                                        : ''
-                                                "
-                                            >
-                                                {{ part.unlock_at ?? '—' }}
-                                            </span>
+                                            {{ part.earned_at ?? '—' }}
                                         </div>
                                     </td>
                                     <td
@@ -399,6 +475,17 @@ function formatMode(mode: string): string {
                                     class="px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase"
                                 >
                                     Total
+                                    <span
+                                        v-if="selected_periode"
+                                        class="ml-1 font-normal text-muted-foreground/70 normal-case"
+                                    >
+                                        ({{
+                                            periodes_disponibles.find(
+                                                (p) =>
+                                                    p.code === selected_periode,
+                                            )?.label ?? selected_periode
+                                        }})
+                                    </span>
                                 </td>
                                 <td class="px-4 py-2.5 text-right tabular-nums">
                                     {{
@@ -452,7 +539,18 @@ function formatMode(mode: string): string {
                     v-else
                     class="py-12 text-center text-sm text-muted-foreground"
                 >
-                    Aucune commission enregistrée pour ce livreur.
+                    <span v-if="selected_periode">
+                        Aucune commission pour la période
+                        <strong>{{
+                            periodes_disponibles.find(
+                                (p) => p.code === selected_periode,
+                            )?.label ?? selected_periode
+                        }}</strong
+                        >.
+                    </span>
+                    <span v-else>
+                        Aucune commission enregistrée pour ce livreur.
+                    </span>
                 </div>
             </div>
         </div>
@@ -462,14 +560,24 @@ function formatMode(mode: string): string {
             v-model:visible="showPaiementDialog"
             modal
             :header="`Payer — ${livreur.nom}`"
-            :style="{ width: '420px' }"
+            :style="{ width: '440px' }"
             :draggable="false"
         >
             <div class="space-y-4 py-2">
+                <!-- Info période courante -->
+                <div
+                    class="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300"
+                >
+                    <CalendarDays class="h-4 w-4 shrink-0 text-blue-500" />
+                    <span>
+                        Période courante :
+                        <strong>{{ periode_courante_label }}</strong>
+                    </span>
+                </div>
                 <div
                     class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
                 >
-                    Solde disponible :
+                    Solde disponible (toutes périodes) :
                     <strong>{{ formatGNF(kpis.available) }}</strong>
                 </div>
                 <div>

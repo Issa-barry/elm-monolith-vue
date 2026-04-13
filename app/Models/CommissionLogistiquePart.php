@@ -28,6 +28,7 @@ class CommissionLogistiquePart extends Model
         'statut',
         'earned_at',
         'unlock_at',
+        'periode',
     ];
 
     protected $appends = ['montant_restant', 'statut_label', 'statut_dot_class'];
