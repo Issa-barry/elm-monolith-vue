@@ -17,7 +17,7 @@ interface TypeOption {
     capacite_defaut: number;
 }
 
-const props = defineProps<{
+defineProps<{
     proprietaires: Option[];
     types: TypeOption[];
     currentSiteName: string;

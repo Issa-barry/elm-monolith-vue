@@ -525,11 +525,6 @@ const partLivreurTotal = computed(() => livreurTotals.value.net);
 const showHistoriqueDialog = ref(false);
 const historiquePart = ref<CommissionPart | null>(null);
 
-function openHistoriqueDialog(part: CommissionPart) {
-    historiquePart.value = part;
-    showHistoriqueDialog.value = true;
-}
-
 const showActivitesDialog = ref(false);
 const activitesTriees = computed(() => [...props.activites].reverse());
 
