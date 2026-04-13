@@ -12,7 +12,7 @@ return new class extends Migration
         DB::table('commission_logistique_parts')
             ->where('statut', 'pending')
             ->update([
-                'statut'    => 'available',
+                'statut' => 'available',
                 'unlock_at' => DB::raw('earned_at'),
             ]);
     }

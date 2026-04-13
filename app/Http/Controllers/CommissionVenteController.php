@@ -349,20 +349,20 @@ class CommissionVenteController extends Controller
             ]);
 
         return Inertia::render('Commissions/Beneficiaire/Show', [
-            'resume_global'              => $resumeGlobal,
-            'historique_commandes'       => $historiqueCommandes,
+            'resume_global' => $resumeGlobal,
+            'historique_commandes' => $historiqueCommandes,
             'historique_paiements_globaux' => $historiquePaiements,
-            'modes_paiement'             => ModePaiement::options(),
+            'modes_paiement' => ModePaiement::options(),
             'filtres' => [
                 'date_from' => $dateFrom,
-                'date_to'   => $dateTo,
-                'commande'  => $commandeSearch,
-                'periode'   => $periodeFilter,
+                'date_to' => $dateTo,
+                'commande' => $commandeSearch,
+                'periode' => $periodeFilter,
             ],
-            'selected_periode'       => $periodeFilter,
-            'periode_courante'       => $periodeCourante,
+            'selected_periode' => $periodeFilter,
+            'periode_courante' => $periodeCourante,
             'periode_courante_label' => PeriodeComptableService::labelForCode($periodeCourante),
-            'periodes_disponibles'   => $periodesDisponibles,
+            'periodes_disponibles' => $periodesDisponibles,
         ]);
     }
 

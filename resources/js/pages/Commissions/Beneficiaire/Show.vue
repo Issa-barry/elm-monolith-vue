@@ -239,11 +239,31 @@ const commandesFiltrees = computed(() => {
     const q = localSearch.value.toLowerCase().trim();
     if (!q) return props.historique_commandes;
     return props.historique_commandes.filter((c) =>
-        (c.commande_reference ?? '').toLowerCase().includes(q),
+        (c.commande_reference ?? '').toLowerCase().includes(q) ||
+        (c.date_commande ?? '').toLowerCase().includes(q) ||
+        String(c.montant_brut).includes(q) ||
+        String(c.montant_net).includes(q) ||
+        String(c.frais).includes(q),
     );
 });
 
-// ── Totaux ligne DataTable (recalculés sur le dataset local filtré) ────────────
+// ── KPI filtrés (adaptés à la recherche locale + filtre période) ──────────────
+
+const kpis = computed(() => {
+    const rows = commandesFiltrees.value;
+    const brut = rows.reduce((s, c) => s + c.montant_brut, 0);
+    const frais = rows.reduce((s, c) => s + c.frais, 0);
+    const net = rows.reduce((s, c) => s + c.montant_net, 0);
+    const verse = rows.reduce((s, c) => s + c.montant_verse, 0);
+    return {
+        nb_commandes: rows.length,
+        total_brut: brut,
+        total_frais: frais,
+        total_net: net,
+        total_verse: verse,
+        total_restant: Math.max(0, net - verse),
+    };
+});
 
 // ── Dialog paiement groupé ─────────────────────────────────────────────────────
 
@@ -687,14 +707,20 @@ function closeDetailDialog() {
                 </div>
             </div>
 
-            <!-- Cards KPI (5 cards) -->
-            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <!-- Cards KPI (6 cards — réactifs au filtre courant) -->
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Commandes</p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">
+                        {{ kpis.nb_commandes }}
+                    </p>
+                </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">
                         Total brut cumulé
                     </p>
                     <p class="mt-2 text-2xl font-bold tabular-nums">
-                        {{ formatGNF(resume_global.total_brut_cumule) }}
+                        {{ formatGNF(kpis.total_brut) }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
@@ -702,7 +728,7 @@ function closeDetailDialog() {
                         Total net cumulé
                     </p>
                     <p class="mt-2 text-2xl font-bold tabular-nums">
-                        {{ formatGNF(resume_global.total_net_cumule) }}
+                        {{ formatGNF(kpis.total_net) }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
@@ -710,14 +736,14 @@ function closeDetailDialog() {
                     <p
                         class="mt-2 text-2xl font-bold tabular-nums"
                         :class="
-                            resume_global.total_frais > 0
+                            kpis.total_frais > 0
                                 ? 'text-destructive'
                                 : 'text-muted-foreground'
                         "
                     >
                         {{
-                            resume_global.total_frais > 0
-                                ? '− ' + formatGNF(resume_global.total_frais)
+                            kpis.total_frais > 0
+                                ? '− ' + formatGNF(kpis.total_frais)
                                 : '—'
                         }}
                     </p>
@@ -725,16 +751,16 @@ function closeDetailDialog() {
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Total versé</p>
                     <p class="mt-2 text-2xl font-bold tabular-nums">
-                        {{ formatGNF(resume_global.total_verse) }}
+                        {{ formatGNF(kpis.total_verse) }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Total restant à payer</p>
                     <p
                         class="mt-2 text-2xl font-bold tabular-nums"
-                        :class="resume_global.solde_global > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+                        :class="kpis.total_restant > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
                     >
-                        {{ formatGNF(resume_global.solde_global) }}
+                        {{ formatGNF(kpis.total_restant) }}
                     </p>
                 </div>
             </div>

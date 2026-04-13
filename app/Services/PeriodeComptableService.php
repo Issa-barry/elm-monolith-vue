@@ -142,7 +142,7 @@ class PeriodeComptableService
         return match ($part) {
             self::PART_P1 => "P1 du 01 au 15 {$monthName} {$year}",
             self::PART_P2 => "P2 du 16 au {$lastDay} {$monthName} {$year}",
-            self::PART_M  => "{$monthName} {$year}",
+            self::PART_M => "{$monthName} {$year}",
         };
     }
 
