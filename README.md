@@ -9,7 +9,7 @@ php artisan optimize:clear
 php artisan optimize
  
 VF
-
+ 
 # Sur ton PC
 npm run build
 git add public/build
