@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+    cleanupRowsByPrefix,
     escapeRegExp,
     login,
     openRowActions,
@@ -8,8 +9,66 @@ import {
 } from './helpers';
 
 const E2E_EQUIPE_NOM_PREFIX = 'E2EEQ-';
+/** Préfixes pour les données prérequises créées dans beforeAll */
+const SETUP_VH_PREFIX = 'E2EEQVH-';
+const SETUP_PROP_PREFIX = 'e2eeqprop';
 
 test.setTimeout(120_000);
+
+/**
+ * Crée un véhicule interne et un propriétaire dédiés aux tests equipe.
+ * Ces données sont nécessaires car equipe-flow tourne avant vehicule-flow
+ * et proprietaire-flow alphabétiquement, donc aucune donnée n'existe encore.
+ */
+test.beforeAll(async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+        await login(page);
+        const unique = randomDigits(6);
+
+        // ── Véhicule interne ──────────────────────────────────────────────────
+        await page.goto('/vehicules/create');
+        await page.locator('#nom_vehicule').fill(`E2E Equipe Vehicule ${unique}`);
+        await page.locator('#immatriculation').fill(`${SETUP_VH_PREFIX}${unique}`);
+        const vhCombos = page.locator('#vehicule-form').getByRole('combobox');
+        await selectOptionFromCombobox(page, vhCombos.nth(0), /interne/i); // catégorie
+        await selectOptionFromCombobox(page, vhCombos.nth(1));             // type
+        await page
+            .locator('#vehicule-form button[type="submit"]:visible')
+            .first()
+            .click();
+        await page.waitForURL(/\/vehicules$/, { timeout: 20_000 });
+
+        // ── Propriétaire ──────────────────────────────────────────────────────
+        await page.goto('/proprietaires/create');
+        await page.locator('#prenom').fill(`${SETUP_PROP_PREFIX}${unique}`);
+        await page.locator('#nom').fill('E2ETest');
+        await page.locator('#telephone').fill(`620${unique}`);
+        await page
+            .locator('#proprietaire-form button[type="submit"]:visible')
+            .first()
+            .click();
+        await page.waitForURL(/\/proprietaires$/, { timeout: 20_000 });
+    } finally {
+        await context.close();
+    }
+});
+
+/** Nettoyage du véhicule et du propriétaire créés dans beforeAll. */
+test.afterAll(async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+        await login(page);
+        await cleanupRowsByPrefix(page, '/vehicules', SETUP_VH_PREFIX);
+        await cleanupRowsByPrefix(page, '/proprietaires', SETUP_PROP_PREFIX);
+    } catch (e) {
+        console.warn('E2E equipe beforeAll cleanup warning:', e);
+    } finally {
+        await context.close();
+    }
+});
 
 // Nettoyage après chaque test (placeholder equipes = "recherche")
 test.afterEach(async ({ browser }) => {

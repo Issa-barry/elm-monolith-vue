@@ -249,12 +249,21 @@ export async function selectOptionFromCombobox(
             break;
         }
 
-        // Strategy 3: PrimeVue AutoComplete — the input won't open the panel by
-        // itself; click the adjacent dropdown button (following-sibling <button>).
+        // Strategy 3: PrimeVue AutoComplete — close the panel first (the input
+        // click in Strategy 1 may have opened it; the dropdown button TOGGLES, so
+        // clicking it while the panel is open would close it instead of loading
+        // options). Escape first, then click the dropdown button to reliably open
+        // the panel and fire @complete.
+        await page.keyboard.press('Escape').catch(() => undefined);
+        await page
+            .locator('[role="listbox"]')
+            .first()
+            .waitFor({ state: 'hidden', timeout: 1_000 })
+            .catch(() => undefined);
         await combobox
             .locator('xpath=following-sibling::button')
             .first()
-            .click({ timeout: 1_000, force: true })
+            .click({ timeout: 2_000, force: true })
             .catch(() => undefined);
         const hasOptionsAfterDropdownBtn = await visibleOptions
             .first()
@@ -264,8 +273,8 @@ export async function selectOptionFromCombobox(
             break;
         }
 
+        // Close panel before next attempt
         await page.keyboard.press('Escape').catch(() => undefined);
-        // Wait for any open overlay to fully close before the next attempt
         await page
             .locator('[role="listbox"]')
             .first()
