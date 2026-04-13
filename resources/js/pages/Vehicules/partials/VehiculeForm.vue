@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Link } from '@inertiajs/vue3';
-import { Lock, Plus, Save, Upload, X } from 'lucide-vue-next';
+import { Building2, Save, Upload, X } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
@@ -16,29 +16,24 @@ interface Option {
     telephone?: string | null;
 }
 
-interface EquipeOption {
-    value: number;
-    label: string;
-    proprietaire_id: number | null;
-    proprietaire_label?: string | null;
-    somme_taux: number;
-    livreur_principal?: { nom_complet: string; telephone: string } | null;
-}
-
 interface TypeOption {
     value: string;
     label: string;
     capacite_defaut: number;
 }
 
+const CATEGORIES = [
+    { value: 'interne', label: 'Interne (appartient au site)' },
+    { value: 'externe', label: 'Externe (propriétaire privé)' },
+];
+
 interface FormData {
     nom_vehicule: string;
     immatriculation: string;
     type_vehicule: string | null;
+    categorie: string | null;
     capacite_packs: number | null;
     proprietaire_id: number | null;
-    equipe_livraison_id: number | null;
-    taux_commission_proprietaire: number | null;
     pris_en_charge_par_usine: boolean;
     photo: File | null;
     is_active: boolean;
@@ -49,9 +44,9 @@ const props = defineProps<{
     errors: Partial<Record<keyof FormData, string>>;
     processing: boolean;
     proprietaires: Option[];
-    equipes: EquipeOption[];
     types: TypeOption[];
     photoUrl?: string | null;
+    currentSiteName: string;
 }>();
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
@@ -75,13 +70,12 @@ function onTypeChange(value: string) {
     });
 }
 
-function onEquipeChange(value: number | null) {
-    const equipe = props.equipes.find((item) => item.value === value);
+function onCategorieChange(value: string | null) {
     emit('update:form', {
         ...props.form,
-        equipe_livraison_id: value,
-        proprietaire_id: equipe?.proprietaire_id ?? null,
-        nom_vehicule: equipe ? equipe.label : props.form.nom_vehicule,
+        categorie: value,
+        proprietaire_id:
+            value === 'interne' ? null : props.form.proprietaire_id,
     });
 }
 
@@ -99,71 +93,55 @@ function removePhoto() {
     if (fileInput.value) fileInput.value.value = '';
 }
 
+const isExterne = computed(() => props.form.categorie === 'externe');
+
 const selectedType = computed(() =>
     props.types.find((t) => t.value === props.form.type_vehicule),
 );
 
-const selectedEquipe = computed(() =>
-    props.equipes.find((e) => e.value === props.form.equipe_livraison_id),
-);
-
-const selectedProprietaireLabel = computed(() => {
-    if (selectedEquipe.value?.proprietaire_label) {
-        return selectedEquipe.value.proprietaire_label;
-    }
-    const proprietaire = props.proprietaires.find(
-        (p) => p.value === props.form.proprietaire_id,
-    );
-    return proprietaire?.label ?? '';
-});
-
-// ── AutoComplete : Équipe ────────────────────────────────────────────────────
-const equipeSelected = ref<EquipeOption | null>(
-    props.equipes.find((e) => e.value === props.form.equipe_livraison_id) ??
+// ── AutoComplete : Propriétaire ───────────────────────────────────────────────
+const proprietaireSelected = ref<Option | null>(
+    props.proprietaires.find((p) => p.value === props.form.proprietaire_id) ??
         null,
 );
-const equipeSuggests = ref<EquipeOption[]>([]);
+const proprietaireSuggests = ref<Option[]>([]);
 
-function searchEquipe(event: { query: string }) {
+watch(
+    () => props.form.proprietaire_id,
+    (id) => {
+        proprietaireSelected.value =
+            props.proprietaires.find((p) => p.value === id) ?? null;
+    },
+);
+
+function searchProprietaire(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
-    equipeSuggests.value = q
-        ? props.equipes.filter((e) => {
-              if (e.label.toLowerCase().includes(q)) return true;
-              const lp = e.livreur_principal;
-              return lp
-                  ? lp.nom_complet.toLowerCase().includes(q) ||
-                        lp.telephone.includes(q)
-                  : false;
-          })
-        : [...props.equipes];
+    proprietaireSuggests.value = q
+        ? props.proprietaires.filter(
+              (p) =>
+                  p.label.toLowerCase().includes(q) ||
+                  (p.telephone && p.telephone.includes(q)),
+          )
+        : [...props.proprietaires];
 }
 
-function onEquipeACSelect(
-    payload: { value: EquipeOption } | EquipeOption | null,
-) {
-    if (!payload) {
-        onEquipeChange(null);
-        return;
-    }
-    const selected = 'label' in payload ? payload : payload.value;
-    onEquipeChange(selected?.value ?? null);
+function onProprietaireSelect(p: Option | null) {
+    emit('update:form', {
+        ...props.form,
+        proprietaire_id: p ? (p.value as number) : null,
+    });
 }
 
-function onEquipeACClear() {
-    equipeSelected.value = null;
-    onEquipeChange(null);
+function onProprietaireClear() {
+    proprietaireSelected.value = null;
+    emit('update:form', { ...props.form, proprietaire_id: null });
 }
-
-// Taux propriétaire = 100 - somme taux membres équipe (lecture seule)
-const tauxProprietaire = computed(() => {
-    if (!selectedEquipe.value) return null;
-    return Math.max(0, 100 - selectedEquipe.value.somme_taux);
-});
 
 const canSubmit = computed(
     () =>
         !props.processing &&
-        !!props.form.equipe_livraison_id &&
+        !!props.form.categorie &&
+        (props.form.categorie === 'interne' || !!props.form.proprietaire_id) &&
         props.form.nom_vehicule.trim().length > 0 &&
         props.form.immatriculation.trim().length > 0 &&
         !!props.form.type_vehicule,
@@ -181,112 +159,125 @@ function handleSubmit() {
         class="flex flex-col gap-4 sm:gap-6"
         @submit.prevent="handleSubmit"
     >
-        <!-- Affectation (toujours en premier) -->
+        <!-- Catégorie & Propriétaire -->
         <div class="order-1 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
-                Affectation
+                Appartenance
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
+                <!-- Catégorie -->
                 <div>
-                    <Label for="equipe_livraison_id" class="mb-1.5 block">
-                        Équipe de livraison
+                    <Label for="categorie" class="mb-1.5 block">
+                        Catégorie
                         <span class="text-destructive">*</span>
                     </Label>
-                    <AutoComplete
-                        v-model="equipeSelected"
-                        input-id="equipe_livraison_id"
-                        :suggestions="equipeSuggests"
+                    <Dropdown
+                        input-id="categorie"
+                        :model-value="form.categorie"
+                        @update:model-value="onCategorieChange($event)"
+                        :options="CATEGORIES"
                         option-label="label"
-                        @complete="searchEquipe"
-                        @item-select="onEquipeACSelect"
-                        @clear="onEquipeACClear"
-                        placeholder="Équipe, livreur ou téléphone…"
+                        option-value="value"
+                        placeholder="Sélectionner…"
                         class="w-full"
-                        input-class="w-full"
-                        :class="{ 'p-invalid': errors.equipe_livraison_id }"
-                        dropdown
-                        force-selection
-                    >
-                        <template #option="{ option }">
-                            <div class="py-0.5">
-                                <div class="leading-tight font-medium">
-                                    {{ option.label }}
-                                </div>
-                                <div
-                                    v-if="option.livreur_principal"
-                                    class="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground"
-                                >
-                                    <span>{{
-                                        option.livreur_principal.nom_complet
-                                    }}</span>
-                                    <span class="font-mono">
-                                        ·
-                                        {{ option.livreur_principal.telephone }}
-                                    </span>
-                                </div>
-                            </div>
-                        </template>
-                        <template #empty>
-                            <div
-                                class="flex items-center justify-between gap-2 px-1 py-0.5"
-                            >
-                                <span class="text-sm text-muted-foreground">
-                                    Aucun résultat
-                                </span>
-                                <Link
-                                    href="/equipes-livraison/create"
-                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-                                >
-                                    <Plus class="h-3 w-3" /> Créer
-                                </Link>
-                            </div>
-                        </template>
-                    </AutoComplete>
+                        :class="{ 'p-invalid': errors.categorie }"
+                    />
                     <p
-                        v-if="errors.equipe_livraison_id"
+                        v-if="errors.categorie"
                         class="mt-1 text-xs text-destructive"
                     >
-                        {{ errors.equipe_livraison_id }}
-                    </p>
-                    <p
-                        v-if="selectedEquipe"
-                        class="mt-1 text-xs text-muted-foreground"
-                    >
-                        Σ taux livreurs :
-                        <span class="font-semibold"
-                            >{{ selectedEquipe.somme_taux }}%</span
-                        >
+                        {{ errors.categorie }}
                     </p>
                 </div>
 
+                <!-- Propriétaire : externe = sélecteur, interne = texte readonly -->
                 <div>
-                    <Label for="proprietaire_id" class="mb-1.5 block">
+                    <Label class="mb-1.5 block">
                         Propriétaire
+                        <span v-if="isExterne" class="text-destructive">*</span>
                     </Label>
-                    <div class="relative">
-                        <InputText
-                            id="proprietaire_id"
-                            :model-value="selectedProprietaireLabel"
-                            readonly
-                            class="w-full cursor-not-allowed bg-muted/60 pr-10 text-muted-foreground"
-                            :class="{ 'p-invalid': errors.proprietaire_id }"
-                            placeholder="Sélectionnez une équipe"
-                        />
-                        <Lock
-                            class="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-muted-foreground/80"
-                        />
-                    </div>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        Géré automatiquement depuis l'équipe.
-                    </p>
-                    <p
-                        v-if="errors.proprietaire_id"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ errors.proprietaire_id }}
-                    </p>
+
+                    <!-- Externe : AutoComplete -->
+                    <template v-if="isExterne">
+                        <AutoComplete
+                            v-model="proprietaireSelected"
+                            input-id="proprietaire_id"
+                            :suggestions="proprietaireSuggests"
+                            option-label="label"
+                            @complete="searchProprietaire"
+                            @item-select="
+                                onProprietaireSelect(proprietaireSelected)
+                            "
+                            @clear="onProprietaireClear"
+                            placeholder="Nom ou téléphone…"
+                            class="w-full"
+                            input-class="w-full"
+                            :class="{
+                                'p-invalid': errors.proprietaire_id,
+                            }"
+                            dropdown
+                            force-selection
+                        >
+                            <template #option="{ option }">
+                                <div class="py-0.5">
+                                    <div class="leading-tight font-medium">
+                                        {{ option.label }}
+                                    </div>
+                                    <div
+                                        v-if="option.telephone"
+                                        class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                    >
+                                        {{ option.telephone }}
+                                    </div>
+                                </div>
+                            </template>
+                            <template #empty>
+                                <div
+                                    class="flex items-center justify-between gap-2 px-1 py-0.5"
+                                >
+                                    <span class="text-sm text-muted-foreground">
+                                        Aucun résultat
+                                    </span>
+                                    <Link
+                                        href="/proprietaires/create"
+                                        class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                                    >
+                                        + Créer
+                                    </Link>
+                                </div>
+                            </template>
+                        </AutoComplete>
+                        <p
+                            v-if="errors.proprietaire_id"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ errors.proprietaire_id }}
+                        </p>
+                    </template>
+
+                    <!-- Interne : site courant en lecture seule -->
+                    <template v-else-if="form.categorie === 'interne'">
+                        <div
+                            class="flex h-10 items-center gap-2 rounded-md border border-input bg-muted/60 px-3 text-sm text-muted-foreground"
+                        >
+                            <Building2 class="h-4 w-4 shrink-0" />
+                            <span class="truncate">{{ currentSiteName }}</span>
+                        </div>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Appartient au site courant.
+                        </p>
+                    </template>
+
+                    <!-- Pas encore de catégorie sélectionnée -->
+                    <template v-else>
+                        <div
+                            class="flex h-10 items-center rounded-md border border-dashed bg-muted/30 px-3 text-sm text-muted-foreground"
+                        >
+                            Sélectionnez d'abord une catégorie
+                        </div>
+                    </template>
                 </div>
             </div>
         </div>
@@ -304,36 +295,18 @@ function handleSubmit() {
                         Nom du véhicule
                         <span class="text-destructive">*</span>
                     </Label>
-                    <div class="relative">
-                        <InputText
-                            id="nom_vehicule"
-                            :model-value="form.nom_vehicule"
-                            @update:model-value="
-                                $emit('update:form', {
-                                    ...form,
-                                    nom_vehicule: String($event ?? ''),
-                                })
-                            "
-                            :readonly="Boolean(selectedEquipe)"
-                            class="w-full"
-                            :class="[
-                                { 'p-invalid': errors.nom_vehicule },
-                                selectedEquipe
-                                    ? 'cursor-not-allowed bg-muted/60 pr-10 text-muted-foreground'
-                                    : '',
-                            ]"
-                        />
-                        <Lock
-                            v-if="selectedEquipe"
-                            class="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-muted-foreground/80"
-                        />
-                    </div>
-                    <p
-                        v-if="selectedEquipe"
-                        class="mt-1 text-xs text-muted-foreground"
-                    >
-                        Nom du véhicule = Nom de l'équipe.
-                    </p>
+                    <InputText
+                        id="nom_vehicule"
+                        :model-value="form.nom_vehicule"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                nom_vehicule: String($event ?? ''),
+                            })
+                        "
+                        class="w-full"
+                        :class="{ 'p-invalid': errors.nom_vehicule }"
+                    />
                     <p
                         v-if="errors.nom_vehicule"
                         class="mt-1 text-xs text-destructive"
@@ -426,49 +399,26 @@ function handleSubmit() {
             >
                 Commission & Charges
             </h3>
-            <div class="grid gap-5 sm:grid-cols-2">
-                <div class="flex items-start gap-3">
-                    <Checkbox
-                        id="pris_en_charge_par_usine"
-                        :model-value="Boolean(form.pris_en_charge_par_usine)"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                pris_en_charge_par_usine: $event === true,
-                            })
-                        "
-                    />
-                    <div>
-                        <Label
-                            for="pris_en_charge_par_usine"
-                            class="cursor-pointer font-medium"
-                        >
-                            Pris en charge par l'usine
-                        </Label>
-                        <p class="text-xs text-muted-foreground">
-                            Les frais du véhicule sont supportés par
-                            l'organisation
-                        </p>
-                    </div>
-                </div>
-
+            <div class="flex items-start gap-3">
+                <Checkbox
+                    id="pris_en_charge_par_usine"
+                    :model-value="Boolean(form.pris_en_charge_par_usine)"
+                    @update:model-value="
+                        $emit('update:form', {
+                            ...form,
+                            pris_en_charge_par_usine: $event === true,
+                        })
+                    "
+                />
                 <div>
-                    <Label class="mb-1.5 block">Taux propriétaire (%)</Label>
-                    <div
-                        class="flex h-10 cursor-not-allowed items-center rounded-md border border-input bg-muted/60 px-3 text-sm"
+                    <Label
+                        for="pris_en_charge_par_usine"
+                        class="cursor-pointer font-medium"
                     >
-                        <Lock
-                            class="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground/80"
-                        />
-                        <span v-if="selectedEquipe" class="font-medium">
-                            {{ tauxProprietaire }} %
-                        </span>
-                        <span v-else class="text-muted-foreground/60">
-                            — sélectionnez une équipe
-                        </span>
-                    </div>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        Calculé automatiquement depuis l'équipe.
+                        Pris en charge par l'usine
+                    </Label>
+                    <p class="text-xs text-muted-foreground">
+                        Les frais du véhicule sont supportés par l'organisation
                     </p>
                 </div>
             </div>

@@ -3,9 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\TypeVehicule;
-use App\Models\EquipeLivraison;
-use App\Models\Livreur;
-use App\Models\Parametre;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Models\VehiculeFrais;
@@ -14,7 +11,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -33,12 +29,12 @@ class VehiculeController extends Controller
             'immatriculation' => $v->immatriculation,
             'type_vehicule' => $v->type_vehicule?->value,
             'type_label' => $v->type_label,
+            'categorie' => $v->categorie,
             'capacite_packs' => $v->capacite_packs,
             'proprietaire_id' => $v->proprietaire_id,
             'proprietaire_nom' => $v->proprietaire ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom) : null,
             'proprietaire_telephone' => $v->proprietaire?->telephone,
             'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
-            'equipe_livraison_id' => $v->equipe_livraison_id,
             'equipe_nom' => $equipe?->nom,
             'livreur_principal_nom' => $membres->first()?->livreur
                 ? trim($membres->first()->livreur->prenom.' '.$membres->first()->livreur->nom)
@@ -48,7 +44,6 @@ class VehiculeController extends Controller
                 'role' => $m->role,
                 'taux_commission' => (float) $m->taux_commission,
             ])->values()->all(),
-            'taux_commission_proprietaire' => (float) $v->taux_commission_proprietaire,
             'frais' => $v->relationLoaded('frais')
                 ? $v->frais->map(fn (VehiculeFrais $f) => [
                     'id' => $f->id,
@@ -85,11 +80,15 @@ class VehiculeController extends Controller
     {
         $this->authorize('create', Vehicule::class);
 
+        $user = auth()->user();
+
         return Inertia::render('Vehicules/Create', [
             'proprietaires' => $this->proprietairesOptions(),
-            'equipes' => $this->equipesOptions(),
             'types' => TypeVehicule::options(),
-            'tauxProprietaireDefaut' => Parametre::getTauxProprietaireDefaut(auth()->user()->organization_id),
+            'currentSiteName' => ($user->sites()->wherePivot('is_default', true)->first()
+                ?? $user->sites()->first())?->nom
+                ?? $user->organization?->nom
+                ?? '',
         ]);
     }
 
@@ -107,21 +106,25 @@ class VehiculeController extends Controller
                 Rule::unique('vehicules', 'immatriculation')->where('organization_id', $orgId),
             ],
             'type_vehicule' => ['required', Rule::in(TypeVehicule::allowedValues())],
+            'categorie' => ['required', 'in:interne,externe'],
             'capacite_packs' => 'nullable|integer|min:1|max:99999',
-            'equipe_livraison_id' => [
-                'required', 'integer',
-                Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId),
-                Rule::unique('vehicules', 'equipe_livraison_id')->whereNull('deleted_at'),
+            'proprietaire_id' => [
+                Rule::requiredIf(fn () => $request->input('categorie') === 'externe'),
+                'nullable',
+                'integer',
+                Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
-            'taux_commission_proprietaire' => 'nullable|numeric|min:0|max:100',
             'pris_en_charge_par_usine' => 'boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
-        $data['proprietaire_id'] = $this->resolveProprietaireIdFromEquipe((int) $data['equipe_livraison_id'], $orgId);
-        $this->applyTauxProprietaireFromEquipe($data, $orgId);
+
+        // Interne : pas de propriétaire externe
+        if ($data['categorie'] === 'interne') {
+            $data['proprietaire_id'] = null;
+        }
 
         if ($request->hasFile('photo')) {
             $data['photo_path'] = (new ImageService)->storeAsWebp($request->file('photo'), 'vehicules');
@@ -240,14 +243,17 @@ class VehiculeController extends Controller
     {
         $this->authorize('update', $vehicule);
 
+        $user = auth()->user();
         $vehicule->load(['proprietaire', 'equipe.membres.livreur']);
 
         return Inertia::render('Vehicules/Edit', [
             'vehicule' => $this->vehiculeData($vehicule),
             'proprietaires' => $this->proprietairesOptions(),
-            'equipes' => $this->equipesOptions($vehicule->id),
             'types' => TypeVehicule::options(),
-            'tauxProprietaireDefaut' => Parametre::getTauxProprietaireDefaut(auth()->user()->organization_id),
+            'currentSiteName' => ($user->sites()->wherePivot('is_default', true)->first()
+                ?? $user->sites()->first())?->nom
+                ?? $user->organization?->nom
+                ?? '',
         ]);
     }
 
@@ -266,21 +272,24 @@ class VehiculeController extends Controller
                     ->ignore($vehicule->id),
             ],
             'type_vehicule' => ['required', Rule::in(TypeVehicule::allowedValues())],
+            'categorie' => ['required', 'in:interne,externe'],
             'capacite_packs' => 'nullable|integer|min:1|max:99999',
-            'equipe_livraison_id' => [
-                'required', 'integer',
-                Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId),
-                Rule::unique('vehicules', 'equipe_livraison_id')->whereNull('deleted_at')->ignore($vehicule->id),
+            'proprietaire_id' => [
+                Rule::requiredIf(fn () => $request->input('categorie') === 'externe'),
+                'nullable',
+                'integer',
+                Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
-            'taux_commission_proprietaire' => 'nullable|numeric|min:0|max:100',
             'pris_en_charge_par_usine' => 'boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
-        $data['proprietaire_id'] = $this->resolveProprietaireIdFromEquipe((int) $data['equipe_livraison_id'], $orgId);
-        $this->applyTauxProprietaireFromEquipe($data, $orgId);
+
+        if ($data['categorie'] === 'interne') {
+            $data['proprietaire_id'] = null;
+        }
 
         if ($request->hasFile('photo')) {
             $imageService = new ImageService;
@@ -303,9 +312,10 @@ class VehiculeController extends Controller
             Storage::disk('public')->delete($vehicule->photo_path);
         }
 
-        // Libérer l'équipe pour qu'elle puisse être réaffectée
-        $vehicule->equipe_livraison_id = null;
-        $vehicule->save();
+        // Libérer l'équipe si elle pointe vers ce véhicule
+        if ($vehicule->equipe) {
+            $vehicule->equipe->update(['vehicule_id' => null]);
+        }
         $vehicule->delete();
 
         return redirect()->route('vehicules.index')
@@ -328,81 +338,6 @@ class VehiculeController extends Controller
             ->toArray();
     }
 
-    private function equipesOptions(?int $currentVehiculeId = null): array
-    {
-        return EquipeLivraison::with(['membres', 'livreurs', 'proprietaire'])
-            ->where('organization_id', auth()->user()->organization_id)
-            ->where('is_active', true)
-            ->where(function ($query) use ($currentVehiculeId) {
-                // Équipes sans véhicule actif (non soft-deleté)
-                $query->whereDoesntHave('vehicules', fn ($q) => $q->whereNull('deleted_at'));
-                // En édition : inclure aussi l'équipe du véhicule courant
-                if ($currentVehiculeId) {
-                    $query->orWhereHas('vehicules', fn ($q) => $q
-                        ->where('id', $currentVehiculeId)
-                        ->whereNull('deleted_at')
-                    );
-                }
-            })
-            ->orderBy('nom')
-            ->get()
-            ->map(fn (EquipeLivraison $e) => [
-                'value' => $e->id,
-                'label' => $e->nom,
-                'proprietaire_id' => $e->proprietaire_id,
-                'proprietaire_label' => $e->proprietaire ? trim($e->proprietaire->prenom.' '.$e->proprietaire->nom) : null,
-                'somme_taux' => (float) $e->membres->sum('taux_commission'),
-                'livreur_principal' => ($lp = $e->livreurs->first(fn (Livreur $l) => $l->pivot->role === 'principal'))
-                    ? ['nom_complet' => trim("{$lp->prenom} {$lp->nom}"), 'telephone' => $lp->telephone]
-                    : null,
-            ])
-            ->toArray();
-    }
-
-    private function resolveProprietaireIdFromEquipe(int $equipeId, int $orgId): int
-    {
-        $equipe = EquipeLivraison::query()
-            ->where('id', $equipeId)
-            ->where('organization_id', $orgId)
-            ->first();
-
-        if (! $equipe) {
-            throw ValidationException::withMessages([
-                'equipe_livraison_id' => "L'équipe sélectionnée est introuvable.",
-            ]);
-        }
-        if (! $equipe->proprietaire_id) {
-            throw ValidationException::withMessages([
-                'proprietaire_id' => "Le propriétaire de l'équipe sélectionnée est introuvable.",
-            ]);
-        }
-
-        return (int) $equipe->proprietaire_id;
-    }
-
-    /**
-     * Toujours recalculer le taux propriétaire depuis l'équipe (100 - somme membres).
-     * On ignore toute valeur soumise par le formulaire.
-     */
-    private function applyTauxProprietaireFromEquipe(array &$data, int $orgId): void
-    {
-        if (empty($data['equipe_livraison_id'])) {
-            return;
-        }
-
-        $equipe = EquipeLivraison::with('membres')
-            ->where('id', $data['equipe_livraison_id'])
-            ->where('organization_id', $orgId)
-            ->first();
-
-        if (! $equipe) {
-            return;
-        }
-
-        $sommeMembres = (float) $equipe->membres->sum('taux_commission');
-        $data['taux_commission_proprietaire'] = round(max(0, 100 - $sommeMembres), 2);
-    }
-
     private function normalizeStrings(array $data): array
     {
         if (! empty($data['nom_vehicule'])) {
@@ -421,11 +356,12 @@ class VehiculeController extends Controller
             'nom_vehicule.required' => 'Le nom du véhicule est obligatoire.',
             'immatriculation.required' => "L'immatriculation est obligatoire.",
             'immatriculation.unique' => 'Ce matricule est déjà utilisé par un autre véhicule.',
-            'equipe_livraison_id.unique' => 'Cette équipe est déjà affectée à un autre véhicule.',
             'type_vehicule.required' => 'Le type de véhicule est obligatoire.',
             'type_vehicule.in' => 'Type de véhicule invalide.',
-            'equipe_livraison_id.required' => "L'équipe de livraison est obligatoire.",
-            'equipe_livraison_id.exists' => "L'équipe sélectionnée est introuvable.",
+            'categorie.required' => 'La catégorie est obligatoire.',
+            'categorie.in' => 'Catégorie invalide (interne ou externe).',
+            'proprietaire_id.required' => 'Le propriétaire est obligatoire pour un véhicule externe.',
+            'proprietaire_id.exists' => 'Le propriétaire sélectionné est introuvable.',
             'photo.image' => 'Le fichier doit être une image.',
             'photo.mimes' => 'La photo doit être au format jpg, jpeg, png ou webp.',
             'photo.max' => 'La photo ne peut pas dépasser 3 Mo.',

@@ -104,6 +104,153 @@ class CommissionPaymentService
         });
     }
 
+    // ── API globale livreur (sans contrainte de véhicule) ────────────────────────
+
+    /**
+     * Soldes agrégés par livreur pour toute une organisation.
+     * Utilisé par CommissionVehiculeController::index().
+     */
+    public static function soldesParLivreur(int $orgId): Collection
+    {
+        return CommissionLogistiquePart::query()
+            ->selectRaw(
+                'livreur_id,
+                 MAX(beneficiaire_nom) AS beneficiaire_nom,
+                 SUM(CASE WHEN statut = ? THEN montant_net ELSE 0 END) AS pending,
+                 SUM(CASE WHEN statut IN (?,?) THEN CASE WHEN montant_net > montant_verse THEN montant_net - montant_verse ELSE 0 END ELSE 0 END) AS available,
+                 SUM(CASE WHEN statut = ? THEN montant_net ELSE 0 END) AS paid',
+                [
+                    StatutPartCommission::PENDING->value,
+                    StatutPartCommission::AVAILABLE->value,
+                    StatutPartCommission::PARTIAL->value,
+                    StatutPartCommission::PAID->value,
+                ]
+            )
+            ->where('type_beneficiaire', 'livreur')
+            ->whereNotNull('livreur_id')
+            ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
+            ->where('statut', '!=', StatutPartCommission::CANCELLED->value)
+            ->groupBy('livreur_id')
+            ->orderByRaw('available DESC, pending DESC')
+            ->get();
+    }
+
+    /**
+     * Parts disponibles (payables) pour un livreur sur toute l'org, triées FIFO.
+     *
+     * @return Collection<CommissionLogistiquePart>
+     */
+    public static function partsDisponiblesLivreur(int $livreurId, int $orgId): Collection
+    {
+        return CommissionLogistiquePart::query()
+            ->whereIn('statut', [
+                StatutPartCommission::AVAILABLE->value,
+                StatutPartCommission::PARTIAL->value,
+            ])
+            ->where('type_beneficiaire', 'livreur')
+            ->where('livreur_id', $livreurId)
+            ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
+            ->orderBy('earned_at')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * Relevé de toutes les parts d'un livreur sur toute l'org.
+     * Utilisé par CommissionVehiculeController::showLivreur().
+     *
+     * @return Collection<CommissionLogistiquePart>
+     */
+    public static function releveLivreur(int $livreurId, int $orgId): Collection
+    {
+        return CommissionLogistiquePart::with([
+            'commission.transfert:id,reference,date_arrivee_reelle',
+            'paymentItems.payment:id,paid_at,mode_paiement,montant',
+        ])
+            ->where('type_beneficiaire', 'livreur')
+            ->where('livreur_id', $livreurId)
+            ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
+            ->where('statut', '!=', StatutPartCommission::CANCELLED->value)
+            ->orderBy('earned_at')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * Enregistre un paiement global pour un livreur (multi-véhicules, FIFO).
+     *
+     * @throws InvalidArgumentException
+     */
+    public static function payerLivreur(
+        int $livreurId,
+        int $orgId,
+        float $montant,
+        string $modePaiement,
+        string $paidAt,
+        ?string $note = null
+    ): CommissionPayment {
+        if ($montant <= 0) {
+            throw new InvalidArgumentException('Le montant doit être supérieur à 0.');
+        }
+
+        $parts = self::partsDisponiblesLivreur($livreurId, $orgId);
+        $totalDisponible = $parts->sum(fn ($p) => $p->montant_restant);
+
+        if ($montant > $totalDisponible + 0.009) {
+            throw new InvalidArgumentException(
+                sprintf(
+                    'Le montant saisi (%.2f GNF) dépasse le solde disponible (%.2f GNF).',
+                    $montant,
+                    $totalDisponible
+                )
+            );
+        }
+
+        $beneficiaryNom = $parts->first()?->beneficiaire_nom ?? 'Inconnu';
+
+        return DB::transaction(function () use (
+            $livreurId, $orgId, $beneficiaryNom, $montant, $modePaiement, $paidAt, $note, $parts
+        ) {
+            $payment = CommissionPayment::create([
+                'organization_id' => $orgId,
+                'vehicule_id' => null,
+                'livreur_id' => $livreurId,
+                'proprietaire_id' => null,
+                'beneficiary_type' => 'livreur',
+                'beneficiary_nom' => $beneficiaryNom,
+                'montant' => $montant,
+                'mode_paiement' => $modePaiement,
+                'note' => $note,
+                'paid_at' => $paidAt,
+                'created_by' => Auth::id(),
+            ]);
+
+            $restant = $montant;
+
+            foreach ($parts as $part) {
+                if ($restant <= 0) {
+                    break;
+                }
+
+                $alloue = min($restant, (float) $part->montant_restant);
+
+                CommissionPaymentItem::create([
+                    'payment_id' => $payment->id,
+                    'part_id' => $part->id,
+                    'amount_allocated' => round($alloue, 2),
+                ]);
+
+                $part->recalculStatut();
+
+                $restant = round($restant - $alloue, 2);
+            }
+
+            return $payment->load('items');
+        });
+    }
+
+    // ── API par véhicule (retro-compat) ──────────────────────────────────────────
+
     /**
      * Parts disponibles (payables) pour un bénéficiaire + véhicule, triées FIFO.
      *

@@ -11,62 +11,11 @@ use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class CommissionLogistiquePartTest extends TestCase
 {
     use RefreshDatabase;
-
-    // ── calculerUnlockAt ──────────────────────────────────────────────────────
-
-    public function test_unlock_at_livreur_est_earned_at_plus_14_jours(): void
-    {
-        $earnedAt = Carbon::parse('2026-01-01');
-
-        $result = CommissionLogistiquePart::calculerUnlockAt('livreur', $earnedAt);
-
-        $this->assertEquals('2026-01-15', $result->toDateString());
-    }
-
-    public function test_unlock_at_proprietaire_est_premier_du_mois_suivant(): void
-    {
-        $earnedAt = Carbon::parse('2026-01-15');
-
-        $result = CommissionLogistiquePart::calculerUnlockAt('proprietaire', $earnedAt);
-
-        $this->assertEquals('2026-02-01', $result->toDateString());
-    }
-
-    public function test_unlock_at_proprietaire_en_fin_de_mois(): void
-    {
-        $earnedAt = Carbon::parse('2026-01-31');
-
-        $result = CommissionLogistiquePart::calculerUnlockAt('proprietaire', $earnedAt);
-
-        $this->assertEquals('2026-02-01', $result->toDateString());
-    }
-
-    public function test_unlock_at_proprietaire_en_debut_de_mois(): void
-    {
-        // Le 1er du mois → unlock_at est le 1er du mois suivant (pas le 1er du même mois)
-        $earnedAt = Carbon::parse('2026-01-01');
-
-        $result = CommissionLogistiquePart::calculerUnlockAt('proprietaire', $earnedAt);
-
-        $this->assertEquals('2026-02-01', $result->toDateString());
-    }
-
-    public function test_unlock_at_livreur_ne_mute_pas_le_carbone_dorigine(): void
-    {
-        $earnedAt = Carbon::parse('2026-03-10');
-        $original = $earnedAt->toDateString();
-
-        CommissionLogistiquePart::calculerUnlockAt('livreur', $earnedAt);
-
-        // earnedAt ne doit pas avoir été modifié
-        $this->assertEquals($original, $earnedAt->toDateString());
-    }
 
     // ── montant_restant (accessor) ────────────────────────────────────────────
 
@@ -86,31 +35,19 @@ class CommissionLogistiquePartTest extends TestCase
 
     // ── isUnlocked ────────────────────────────────────────────────────────────
 
-    public function test_is_unlocked_retourne_true_quand_unlock_at_depasse(): void
+    public function test_is_unlocked_retourne_true_pour_part_pending(): void
     {
         $part = $this->makePart([
             'statut' => StatutPartCommission::PENDING,
-            'unlock_at' => now()->subDay()->toDateString(),
         ]);
 
         $this->assertTrue($part->isUnlocked());
-    }
-
-    public function test_is_unlocked_retourne_false_quand_unlock_at_futur(): void
-    {
-        $part = $this->makePart([
-            'statut' => StatutPartCommission::PENDING,
-            'unlock_at' => now()->addDay()->toDateString(),
-        ]);
-
-        $this->assertFalse($part->isUnlocked());
     }
 
     public function test_is_unlocked_retourne_false_si_annule(): void
     {
         $part = $this->makePart([
             'statut' => StatutPartCommission::CANCELLED,
-            'unlock_at' => now()->subDay()->toDateString(),
         ]);
 
         $this->assertFalse($part->isUnlocked());
@@ -120,7 +57,6 @@ class CommissionLogistiquePartTest extends TestCase
     {
         $part = $this->makePart([
             'statut' => StatutPartCommission::PAID,
-            'unlock_at' => now()->subDay()->toDateString(),
         ]);
 
         $this->assertFalse($part->isUnlocked());
@@ -132,7 +68,6 @@ class CommissionLogistiquePartTest extends TestCase
     {
         $part = $this->makePart([
             'statut' => StatutPartCommission::PENDING,
-            'unlock_at' => now()->subDay()->toDateString(),
             'earned_at' => now()->subDays(15)->toDateString(),
         ]);
 
@@ -146,25 +81,11 @@ class CommissionLogistiquePartTest extends TestCase
     {
         $part = $this->makePart([
             'statut' => StatutPartCommission::AVAILABLE,
-            'unlock_at' => now()->subDay()->toDateString(),
         ]);
 
         $result = $part->tenterDeblocage();
 
         $this->assertFalse($result);
-    }
-
-    public function test_tenter_deblocage_ignore_si_unlock_at_pas_atteint(): void
-    {
-        $part = $this->makePart([
-            'statut' => StatutPartCommission::PENDING,
-            'unlock_at' => now()->addDays(5)->toDateString(),
-        ]);
-
-        $result = $part->tenterDeblocage();
-
-        $this->assertFalse($result);
-        $this->assertEquals(StatutPartCommission::PENDING, $part->fresh()->statut);
     }
 
     // ── recalculStatut ────────────────────────────────────────────────────────
@@ -175,7 +96,6 @@ class CommissionLogistiquePartTest extends TestCase
             'montant_net' => 3000,
             'montant_verse' => 0,
             'statut' => StatutPartCommission::AVAILABLE,
-            'unlock_at' => now()->subDay()->toDateString(),
             'earned_at' => now()->subDays(15)->toDateString(),
         ]);
 
@@ -194,7 +114,6 @@ class CommissionLogistiquePartTest extends TestCase
             'montant_net' => 3000,
             'montant_verse' => 0,
             'statut' => StatutPartCommission::AVAILABLE,
-            'unlock_at' => now()->subDay()->toDateString(),
             'earned_at' => now()->subDays(15)->toDateString(),
         ]);
 
@@ -235,7 +154,6 @@ class CommissionLogistiquePartTest extends TestCase
             'montant_verse' => 0,
             'statut' => StatutPartCommission::PENDING,
             'earned_at' => now()->toDateString(),
-            'unlock_at' => now()->addDays(14)->toDateString(),
         ], $overrides));
     }
 

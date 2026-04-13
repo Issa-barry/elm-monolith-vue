@@ -197,9 +197,15 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::get('logistique/transferts', [TransfertLogistiqueController::class, 'indexTransferts'])->name('logistique.transferts.index');
         Route::get('logistique/receptions', [TransfertLogistiqueController::class, 'indexReceptions'])->name('logistique.receptions.index');
 
-        // Commissions logistiques — par véhicule (nouveau système)
+        // Commissions logistiques — par livreur (système global)
         Route::get('logistique/commissions', [CommissionVehiculeController::class, 'index'])
             ->name('logistique.commissions.index');
+        Route::get('logistique/commissions/livreurs/{livreurId}', [CommissionVehiculeController::class, 'showLivreur'])
+            ->name('logistique.commissions.livreur');
+        Route::post('logistique/commissions/livreurs/{livreurId}/paiements', [CommissionPaymentController::class, 'storeLivreur'])
+            ->name('logistique.commissions.livreur.paiements');
+
+        // Rétro-compat : accès par véhicule (depuis page transfert Show)
         Route::get('logistique/commissions/vehicules/{vehicule}', [CommissionVehiculeController::class, 'show'])
             ->name('logistique.commissions.vehicule');
         Route::get('logistique/commissions/vehicules/{vehicule}/beneficiaires/{type}/{beneficiaireId}', [CommissionVehiculeController::class, 'releve'])

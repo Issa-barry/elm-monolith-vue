@@ -17,6 +17,7 @@ class EquipeLivraison extends Model
 
     protected $fillable = [
         'organization_id',
+        'vehicule_id',
         'proprietaire_id',
         'nom',
         'is_active',
@@ -62,9 +63,9 @@ class EquipeLivraison extends Model
         return $this->hasMany(EquipeLivreur::class, 'equipe_id')->orderBy('ordre');
     }
 
-    public function vehicules(): HasMany
+    public function vehicule(): BelongsTo
     {
-        return $this->hasMany(Vehicule::class, 'equipe_livraison_id');
+        return $this->belongsTo(Vehicule::class, 'vehicule_id');
     }
 
     // ── Métier ────────────────────────────────────────────────────────────────

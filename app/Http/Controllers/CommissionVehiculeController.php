@@ -3,9 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Enums\StatutPartCommission;
-use App\Models\CommissionLogistiquePart;
+use App\Models\CommissionPayment;
 use App\Models\Vehicule;
 use App\Services\CommissionPaymentService;
+use App\Services\PeriodeComptableService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -14,7 +15,7 @@ class CommissionVehiculeController extends Controller
 {
     private const DATE_FORMAT = 'd/m/Y';
 
-    // ── Index : liste des véhicules ayant généré des commissions ─────────────
+    // ── Index : liste des livreurs avec commissions cumulées ─────────────────
 
     /**
      * GET /logistique/commissions
@@ -23,87 +24,160 @@ class CommissionVehiculeController extends Controller
     {
         $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
 
-        $user = auth()->user();
-        $orgId = $user->organization_id;
-        $isAdmin = $user->hasAnyRole(['super_admin', 'admin_entreprise']);
+        $orgId = auth()->user()->organization_id;
+        $search = (string) $request->input('search', '');
+        $filtreStatut = (string) $request->input('statut', '');
 
-        // KPIs globaux + liste véhicules depuis les parts
-        $vehiculesRaw = CommissionLogistiquePart::query()
-            ->select([
-                'vehicules.id          AS vehicule_id',
-                'vehicules.nom_vehicule',
-                'vehicules.immatriculation',
-            ])
-            ->selectRaw(
-                'SUM(CASE WHEN clp.statut = ? THEN clp.montant_net ELSE 0 END)                                                                        AS pending,
-                 SUM(CASE WHEN clp.statut IN (?,?) THEN CASE WHEN clp.montant_net > clp.montant_verse THEN clp.montant_net - clp.montant_verse ELSE 0 END ELSE 0 END) AS available,
-                 SUM(CASE WHEN clp.statut = ? THEN clp.montant_net ELSE 0 END)                                                                        AS paid,
-                 COUNT(DISTINCT cl.transfert_logistique_id)                                                                                            AS nb_transferts',
-                [
-                    StatutPartCommission::PENDING->value,
-                    StatutPartCommission::AVAILABLE->value,
-                    StatutPartCommission::PARTIAL->value,
-                    StatutPartCommission::PAID->value,
-                ]
-            )
-            ->from('commission_logistique_parts AS clp')
-            ->join('commissions_logistiques AS cl', 'cl.id', '=', 'clp.commission_logistique_id')
-            ->join('vehicules', 'vehicules.id', '=', 'cl.vehicule_id')
-            ->where('cl.organization_id', $orgId)
-            ->where('clp.statut', '!=', StatutPartCommission::CANCELLED->value)
-            ->when(! $isAdmin, function ($q) use ($user) {
-                $siteIds = $user->sites()->pluck('sites.id');
-                $q->whereHas('commission.transfert', function ($sub) use ($siteIds) {
-                    $sub->whereIn('site_source_id', $siteIds)
-                        ->orWhereIn('site_destination_id', $siteIds);
-                });
-            })
-            ->when($request->input('vehicule_id'), fn ($q, $v) => $q->where('cl.vehicule_id', $v))
-            ->when($request->input('statut'), function ($q, $statut) {
-                match ($statut) {
-                    'pending' => $q->havingRaw('pending > 0'),
-                    'available' => $q->havingRaw('available > 0'),
-                    'paid' => $q->havingRaw('paid > 0'),
-                    default => null,
-                };
-            })
-            ->groupBy('vehicules.id', 'vehicules.nom_vehicule', 'vehicules.immatriculation')
-            ->orderByRaw('available DESC, pending DESC')
-            ->get();
+        $rows = CommissionPaymentService::soldesParLivreur($orgId);
+
+        if ($search !== '') {
+            $q = mb_strtolower($search);
+            $rows = $rows->filter(
+                fn ($r) => str_contains(mb_strtolower((string) $r->beneficiaire_nom), $q)
+            );
+        }
+
+        if ($filtreStatut !== '') {
+            $rows = match ($filtreStatut) {
+                'pending' => $rows->filter(fn ($r) => $r->pending > 0 && $r->available <= 0),
+                'available' => $rows->filter(fn ($r) => $r->available > 0),
+                'paid' => $rows->filter(fn ($r) => $r->paid > 0),
+                default => $rows,
+            };
+        }
+
+        $list = $rows->values();
 
         $kpis = [
-            'nb_vehicules' => $vehiculesRaw->count(),
-            'total_pending' => (float) $vehiculesRaw->sum('pending'),
-            'total_available' => (float) $vehiculesRaw->sum('available'),
-            'total_paid' => (float) $vehiculesRaw->sum('paid'),
+            'nb_livreurs' => $list->count(),
+            'total_pending' => (float) $list->sum('pending'),
+            'total_available' => (float) $list->sum('available'),
+            'total_paid' => (float) $list->sum('paid'),
         ];
 
-        $vehicules = $vehiculesRaw->map(fn ($row) => [
-            'vehicule_id' => $row->vehicule_id,
-            'nom' => $row->nom_vehicule,
-            'immatriculation' => $row->immatriculation,
+        $livreurs = $list->map(fn ($row) => [
+            'livreur_id' => (int) $row->livreur_id,
+            'nom' => $row->beneficiaire_nom,
             'pending' => (float) $row->pending,
             'available' => (float) $row->available,
             'paid' => (float) $row->paid,
-            'nb_transferts' => (int) $row->nb_transferts,
         ])->values();
 
-        // Liste véhicules pour le filtre dropdown
-        $vehiculeOptions = Vehicule::where('organization_id', $orgId)
-            ->select('id', 'nom_vehicule', 'immatriculation')
-            ->orderBy('nom_vehicule')
+        return Inertia::render('Logistique/Commissions/Index', [
+            'livreurs' => $livreurs,
+            'kpis' => $kpis,
+            'search' => $search,
+            'filtre_statut' => $filtreStatut,
+        ]);
+    }
+
+    // ── Show livreur : cumul global + relevé par transfert ───────────────────
+
+    /**
+     * GET /logistique/commissions/livreurs/{livreurId}
+     */
+    public function showLivreur(Request $request, int $livreurId): Response
+    {
+        $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
+
+        $orgId = auth()->user()->organization_id;
+
+        // ── Toutes les parts du livreur (tri FIFO earned_at) ─────────────────
+        $allParts = CommissionPaymentService::releveLivreur($livreurId, $orgId);
+
+        $livreurNom = $allParts->first()?->beneficiaire_nom ?? '—';
+
+        // ── KPIs globaux (toutes périodes confondues) ─────────────────────────
+        $totalPending = (float) $allParts
+            ->filter(fn ($p) => $p->statut === StatutPartCommission::PENDING)
+            ->sum('montant_net');
+
+        $totalAvailable = (float) $allParts
+            ->filter(fn ($p) => in_array($p->statut, [
+                StatutPartCommission::AVAILABLE,
+                StatutPartCommission::PARTIAL,
+            ], true))
+            ->sum('montant_restant');
+
+        $totalPaid = (float) $allParts
+            ->filter(fn ($p) => $p->statut === StatutPartCommission::PAID)
+            ->sum('montant_net');
+
+        // ── Périodes disponibles (depuis la 1re commission jusqu'à aujourd'hui) ─
+        $earliestPart = $allParts->whereNotNull('periode')->sortBy('earned_at')->first();
+        $earliestDate = $earliestPart?->earned_at ?? now();
+        $periodesDisponibles = PeriodeComptableService::periodesDisponibles($earliestDate);
+
+        // Période sélectionnée (filtre URL ?periode=2026-04-P1)
+        $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
+        $selectedPeriode = $request->input('periode', '');
+
+        // ── Parts filtrées pour l'affichage ───────────────────────────────────
+        $filteredParts = $selectedPeriode !== ''
+            ? $allParts->filter(fn ($p) => $p->periode === $selectedPeriode)
+            : $allParts;
+
+        // ── Historique des paiements ──────────────────────────────────────────
+        $payments = CommissionPayment::with('createur:id,prenom,nom')
+            ->where('organization_id', $orgId)
+            ->where('livreur_id', $livreurId)
+            ->where('beneficiary_type', 'livreur')
+            ->orderByDesc('paid_at')
+            ->orderByDesc('id')
             ->get()
-            ->map(fn ($v) => [
-                'value' => $v->id,
-                'label' => $v->nom_vehicule.($v->immatriculation ? " ({$v->immatriculation})" : ''),
+            ->map(fn ($p) => [
+                'id' => $p->id,
+                'montant' => (float) $p->montant,
+                'mode_paiement' => $p->mode_paiement,
+                'note' => $p->note,
+                'paid_at' => $p->paid_at?->format(self::DATE_FORMAT),
+                'created_by' => $p->createur
+                    ? trim("{$p->createur->prenom} {$p->createur->nom}")
+                    : null,
             ]);
 
-        return Inertia::render('Logistique/Commissions/Index', [
-            'vehicules' => $vehicules,
-            'kpis' => $kpis,
-            'vehicule_options' => $vehiculeOptions,
-            'filtre_vehicule' => $request->input('vehicule_id'),
-            'filtre_statut' => $request->input('statut'),
+        return Inertia::render('Logistique/Commissions/Livreur/Show', [
+            'livreur' => [
+                'id' => $livreurId,
+                'nom' => $livreurNom,
+            ],
+            'kpis' => [
+                'pending' => $totalPending,
+                'available' => $totalAvailable,
+                'paid' => $totalPaid,
+            ],
+            'parts' => $filteredParts->map(fn ($p) => [
+                'id' => $p->id,
+                'transfert_reference' => $p->commission?->transfert?->reference,
+                'taux_commission' => (float) $p->taux_commission,
+                'montant_brut' => (float) $p->montant_brut,
+                'montant_net' => (float) $p->montant_net,
+                'montant_verse' => (float) $p->montant_verse,
+                'montant_restant' => (float) $p->montant_restant,
+                'earned_at' => $p->earned_at?->format(self::DATE_FORMAT),
+                'periode' => $p->periode,
+                'periode_label' => $p->periode ? PeriodeComptableService::labelForCode($p->periode) : null,
+                'statut' => $p->statut?->value,
+                'statut_label' => $p->statut_label,
+                'statut_dot_class' => $p->statut_dot_class,
+                'payments' => $p->paymentItems->map(fn ($item) => [
+                    'paid_at' => $item->payment?->paid_at?->format(self::DATE_FORMAT),
+                    'montant' => (float) $item->amount_allocated,
+                    'mode_paiement' => $item->payment?->mode_paiement,
+                ])->values()->all(),
+            ])->values(),
+            'payments' => $payments,
+            'periode_courante' => $periodeCourante,
+            'periode_courante_label' => PeriodeComptableService::labelForCode($periodeCourante),
+            'selected_periode' => $selectedPeriode,
+            'periodes_disponibles' => $periodesDisponibles,
+            'modes_paiement' => [
+                ['value' => 'especes',      'label' => 'Espèces'],
+                ['value' => 'virement',     'label' => 'Virement'],
+                ['value' => 'cheque',       'label' => 'Chèque'],
+                ['value' => 'mobile_money', 'label' => 'Mobile Money'],
+            ],
+            'can_payer' => auth()->user()->can('logistique.commission.verser'),
         ]);
     }
 
@@ -191,7 +265,6 @@ class CommissionVehiculeController extends Controller
                 'montant_verse' => (float) $p->montant_verse,
                 'montant_restant' => (float) $p->montant_restant,
                 'earned_at' => $p->earned_at?->format(self::DATE_FORMAT),
-                'unlock_at' => $p->unlock_at?->format(self::DATE_FORMAT),
                 'statut' => $p->statut?->value,
                 'statut_label' => $p->statut_label,
                 'statut_dot_class' => $p->statut_dot_class,

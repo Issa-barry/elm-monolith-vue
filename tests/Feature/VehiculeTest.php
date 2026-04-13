@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\EquipeLivraison;
 use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
@@ -23,25 +22,12 @@ class VehiculeTest extends TestCase
 
     private function makeVehicule(Organization $org): Vehicule
     {
-        $equipe = $this->makeEquipe($org);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
 
         return Vehicule::factory()->create([
             'organization_id' => $org->id,
-            'proprietaire_id' => $equipe->proprietaire_id,
-            'equipe_livraison_id' => $equipe->id,
-        ]);
-    }
-
-    private function makeEquipe(Organization $org, ?Proprietaire $proprietaire = null): EquipeLivraison
-    {
-        $owner = $proprietaire ?? Proprietaire::factory()->create(['organization_id' => $org->id]);
-
-        return EquipeLivraison::create([
-            'organization_id' => $org->id,
-            'proprietaire_id' => $owner->id,
-            'nom' => 'Équipe Test '.uniqid(),
-            'is_active' => true,
-            'taux_commission_proprietaire' => 60,
+            'proprietaire_id' => $proprietaire->id,
+            'categorie' => 'externe',
         ]);
     }
 
@@ -82,14 +68,14 @@ class VehiculeTest extends TestCase
     public function test_store_creates_vehicule_and_redirects(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $equipe = $this->makeEquipe($this->org, $proprietaire);
 
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion 01',
                 'immatriculation' => 'RC-001-GN',
                 'type_vehicule' => 'camion',
-                'equipe_livraison_id' => $equipe->id,
+                'categorie' => 'externe',
+                'proprietaire_id' => $proprietaire->id,
                 'capacite_packs' => 200,
                 'is_active' => true,
                 'pris_en_charge_par_usine' => false,
@@ -99,7 +85,28 @@ class VehiculeTest extends TestCase
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'equipe_livraison_id' => $equipe->id,
+            'categorie' => 'externe',
+        ]);
+    }
+
+    public function test_store_creates_vehicule_interne(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Moto 01',
+                'immatriculation' => 'MO-001-GN',
+                'type_vehicule' => 'moto',
+                'categorie' => 'interne',
+                'capacite_packs' => 50,
+                'is_active' => true,
+                'pris_en_charge_par_usine' => false,
+            ])
+            ->assertRedirect(route('vehicules.index'));
+
+        $this->assertDatabaseHas('vehicules', [
+            'organization_id' => $this->org->id,
+            'categorie' => 'interne',
+            'proprietaire_id' => null,
         ]);
     }
 
@@ -107,38 +114,50 @@ class VehiculeTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [])
-            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule', 'equipe_livraison_id']);
+            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule', 'categorie']);
     }
 
     public function test_store_fails_with_invalid_type_vehicule(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $equipe = $this->makeEquipe($this->org, $proprietaire);
 
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion Test',
                 'immatriculation' => 'RC-002-GN',
                 'type_vehicule' => 'avion',
-                'equipe_livraison_id' => $equipe->id,
+                'categorie' => 'externe',
+                'proprietaire_id' => $proprietaire->id,
             ])
             ->assertSessionHasErrors('type_vehicule');
     }
 
-    public function test_store_fails_with_equipe_from_other_org(): void
+    public function test_store_fails_with_proprietaire_from_other_org(): void
     {
         $otherOrg = Organization::factory()->create();
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $otherOrg->id]);
-        $equipe = $this->makeEquipe($otherOrg, $proprietaire);
 
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion Test',
                 'immatriculation' => 'RC-003-GN',
                 'type_vehicule' => 'camion',
-                'equipe_livraison_id' => $equipe->id,
+                'categorie' => 'externe',
+                'proprietaire_id' => $proprietaire->id,
             ])
-            ->assertSessionHasErrors('equipe_livraison_id');
+            ->assertSessionHasErrors('proprietaire_id');
+    }
+
+    public function test_store_fails_externe_sans_proprietaire(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Test',
+                'immatriculation' => 'RC-004-GN',
+                'type_vehicule' => 'camion',
+                'categorie' => 'externe',
+            ])
+            ->assertSessionHasErrors('proprietaire_id');
     }
 
     // ── edit ──────────────────────────────────────────────────────────────────
@@ -167,15 +186,15 @@ class VehiculeTest extends TestCase
     public function test_update_modifies_vehicule_and_redirects(): void
     {
         $vehicule = $this->makeVehicule($this->org);
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $equipe = $this->makeEquipe($this->org, $proprietaire);
+        $nouveauProprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
 
         $this->actingAs($this->user)
             ->put(route('vehicules.update', $vehicule), [
                 'nom_vehicule' => 'Camion modifie',
                 'immatriculation' => $vehicule->immatriculation,
                 'type_vehicule' => 'camion',
-                'equipe_livraison_id' => $equipe->id,
+                'categorie' => 'externe',
+                'proprietaire_id' => $nouveauProprietaire->id,
                 'is_active' => true,
                 'pris_en_charge_par_usine' => false,
             ])
@@ -183,8 +202,8 @@ class VehiculeTest extends TestCase
 
         $this->assertDatabaseHas('vehicules', [
             'id' => $vehicule->id,
-            'proprietaire_id' => $proprietaire->id,
-            'equipe_livraison_id' => $equipe->id,
+            'proprietaire_id' => $nouveauProprietaire->id,
+            'categorie' => 'externe',
         ]);
     }
 
@@ -194,7 +213,24 @@ class VehiculeTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('vehicules.update', $vehicule), [])
-            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule', 'equipe_livraison_id']);
+            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule', 'categorie']);
+    }
+
+    public function test_update_autorise_meme_categorie_et_immatriculation(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+
+        $this->actingAs($this->user)
+            ->put(route('vehicules.update', $vehicule), [
+                'nom_vehicule' => $vehicule->nom_vehicule,
+                'immatriculation' => $vehicule->immatriculation,
+                'type_vehicule' => $vehicule->type_vehicule->value,
+                'categorie' => $vehicule->categorie,
+                'proprietaire_id' => $vehicule->proprietaire_id,
+                'is_active' => true,
+                'pris_en_charge_par_usine' => false,
+            ])
+            ->assertRedirect(route('vehicules.edit', $vehicule));
     }
 
     // ── destroy ───────────────────────────────────────────────────────────────
@@ -220,68 +256,12 @@ class VehiculeTest extends TestCase
             ->assertStatus(403);
     }
 
-    // ── equipe assignment ─────────────────────────────────────────────────────
-
-    public function test_store_can_assign_equipe_from_same_org(): void
-    {
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $equipe = EquipeLivraison::create([
-            'organization_id' => $this->org->id,
-            'proprietaire_id' => $proprietaire->id,
-            'nom' => 'Équipe Test',
-            'is_active' => true,
-            'taux_commission_proprietaire' => 60,
-        ]);
-
-        $this->actingAs($this->user)
-            ->post(route('vehicules.store'), [
-                'nom_vehicule' => 'Moto 01',
-                'immatriculation' => 'MO-001-GN',
-                'type_vehicule' => 'moto',
-                'equipe_livraison_id' => $equipe->id,
-                'taux_commission_proprietaire' => 100,
-                'is_active' => true,
-                'pris_en_charge_par_usine' => false,
-            ])
-            ->assertRedirect(route('vehicules.index'));
-
-        $this->assertDatabaseHas('vehicules', [
-            'equipe_livraison_id' => $equipe->id,
-            'proprietaire_id' => $proprietaire->id,
-            'organization_id' => $this->org->id,
-        ]);
-    }
-    // ── unicité équipe ────────────────────────────────────────────────────────
-
-    public function test_store_fails_si_equipe_deja_affectee(): void
-    {
-        $equipe = $this->makeEquipe($this->org);
-
-        Vehicule::factory()->create([
-            'organization_id' => $this->org->id,
-            'equipe_livraison_id' => $equipe->id,
-            'proprietaire_id' => $equipe->proprietaire_id,
-        ]);
-
-        $this->actingAs($this->user)
-            ->post(route('vehicules.store'), [
-                'nom_vehicule' => 'Camion Doublon',
-                'immatriculation' => 'RC-099-GN',
-                'type_vehicule' => 'camion',
-                'equipe_livraison_id' => $equipe->id,
-            ])
-            ->assertSessionHasErrors('equipe_livraison_id');
-    }
+    // ── unicité immatriculation ───────────────────────────────────────────────
 
     public function test_store_fails_si_immatriculation_deja_utilisee(): void
     {
-        $equipe1 = $this->makeEquipe($this->org);
-        $equipe2 = $this->makeEquipe($this->org);
-
         Vehicule::factory()->create([
             'organization_id' => $this->org->id,
-            'equipe_livraison_id' => $equipe1->id,
-            'proprietaire_id' => $equipe1->proprietaire_id,
             'immatriculation' => 'RC-100-GN',
         ]);
 
@@ -290,57 +270,17 @@ class VehiculeTest extends TestCase
                 'nom_vehicule' => 'Camion Doublon',
                 'immatriculation' => 'RC-100-GN',
                 'type_vehicule' => 'camion',
-                'equipe_livraison_id' => $equipe2->id,
+                'categorie' => 'interne',
             ])
             ->assertSessionHasErrors('immatriculation');
-    }
-
-    public function test_update_autorise_meme_equipe_et_meme_immatriculation(): void
-    {
-        $vehicule = $this->makeVehicule($this->org);
-
-        $this->actingAs($this->user)
-            ->put(route('vehicules.update', $vehicule), [
-                'nom_vehicule' => $vehicule->nom_vehicule,
-                'immatriculation' => $vehicule->immatriculation,
-                'type_vehicule' => $vehicule->type_vehicule->value,
-                'equipe_livraison_id' => $vehicule->equipe_livraison_id,
-                'is_active' => true,
-                'pris_en_charge_par_usine' => false,
-            ])
-            ->assertRedirect(route('vehicules.edit', $vehicule));
-    }
-
-    public function test_update_fails_si_equipe_affectee_a_autre_vehicule(): void
-    {
-        $vehicule = $this->makeVehicule($this->org);
-        $autreEquipe = $this->makeEquipe($this->org);
-
-        Vehicule::factory()->create([
-            'organization_id' => $this->org->id,
-            'equipe_livraison_id' => $autreEquipe->id,
-            'proprietaire_id' => $autreEquipe->proprietaire_id,
-        ]);
-
-        $this->actingAs($this->user)
-            ->put(route('vehicules.update', $vehicule), [
-                'nom_vehicule' => $vehicule->nom_vehicule,
-                'immatriculation' => $vehicule->immatriculation,
-                'type_vehicule' => $vehicule->type_vehicule->value,
-                'equipe_livraison_id' => $autreEquipe->id,
-            ])
-            ->assertSessionHasErrors('equipe_livraison_id');
     }
 
     public function test_update_fails_si_immatriculation_utilisee_par_autre_vehicule(): void
     {
         $vehicule = $this->makeVehicule($this->org);
-        $autreEquipe = $this->makeEquipe($this->org);
 
         Vehicule::factory()->create([
             'organization_id' => $this->org->id,
-            'equipe_livraison_id' => $autreEquipe->id,
-            'proprietaire_id' => $autreEquipe->proprietaire_id,
             'immatriculation' => 'RC-999-GN',
         ]);
 
@@ -349,7 +289,8 @@ class VehiculeTest extends TestCase
                 'nom_vehicule' => $vehicule->nom_vehicule,
                 'immatriculation' => 'RC-999-GN',
                 'type_vehicule' => $vehicule->type_vehicule->value,
-                'equipe_livraison_id' => $vehicule->equipe_livraison_id,
+                'categorie' => $vehicule->categorie,
+                'proprietaire_id' => $vehicule->proprietaire_id,
             ])
             ->assertSessionHasErrors('immatriculation');
     }

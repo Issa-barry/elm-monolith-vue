@@ -19,17 +19,9 @@ class VehiculeFactory extends Factory
             'type_vehicule' => 'camion',
             'capacite_packs' => 200,
             'proprietaire_id' => Proprietaire::factory()->create(['organization_id' => $org->id])->id,
-            'equipe_livraison_id' => null,
-            'taux_commission_proprietaire' => 40.00,
+            'categorie' => 'externe',
             'pris_en_charge_par_usine' => false,
             'is_active' => true,
         ];
-    }
-
-    public function sansCommission(): static
-    {
-        return $this->state(fn () => [
-            'taux_commission_proprietaire' => 0,
-        ]);
     }
 }

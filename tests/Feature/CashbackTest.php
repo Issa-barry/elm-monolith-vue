@@ -101,7 +101,7 @@ class CashbackTest extends TestCase
     public function test_process_vente_increments_cumul_achats(): void
     {
         $org = $this->createOrgWithCashback(seuil: 500000, gain: 25000);
-        $client = Client::factory()->create(['organization_id' => $org->id]);
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true]);
 
         $vente = $this->makeVenteSilently($org, $client, 200000);
         (new CashbackService)->processVente($vente);
@@ -115,7 +115,7 @@ class CashbackTest extends TestCase
     public function test_gain_cree_quand_seuil_atteint(): void
     {
         $org = $this->createOrgWithCashback(seuil: 100000, gain: 10000);
-        $client = Client::factory()->create(['organization_id' => $org->id]);
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true]);
 
         $vente = $this->makeVenteSilently($org, $client, 100000);
         (new CashbackService)->processVente($vente);
@@ -138,7 +138,7 @@ class CashbackTest extends TestCase
     public function test_cumul_entre_plusieurs_ventes_avant_seuil(): void
     {
         $org = $this->createOrgWithCashback(seuil: 300000, gain: 15000);
-        $client = Client::factory()->create(['organization_id' => $org->id]);
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true]);
         $service = new CashbackService;
 
         $service->processVente($this->makeVenteSilently($org, $client, 100000));
@@ -158,7 +158,7 @@ class CashbackTest extends TestCase
     public function test_pas_de_doublon_gain_pour_meme_vente(): void
     {
         $org = $this->createOrgWithCashback(seuil: 100000, gain: 10000);
-        $client = Client::factory()->create(['organization_id' => $org->id]);
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true]);
         $service = new CashbackService;
 
         $vente = $this->makeVenteSilently($org, $client, 100000);
@@ -182,6 +182,18 @@ class CashbackTest extends TestCase
         (new CashbackService)->processVente($vente);
 
         $this->assertDatabaseCount('cashback_soldes', 0);
+    }
+
+    public function test_client_non_eligible_ne_recoit_pas_cashback(): void
+    {
+        $org = $this->createOrgWithCashback(seuil: 100000, gain: 10000);
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => false]);
+
+        $vente = $this->makeVenteSilently($org, $client, 200000);
+        (new CashbackService)->processVente($vente);
+
+        $this->assertDatabaseCount('cashback_soldes', 0);
+        $this->assertDatabaseCount('cashback_transactions', 0);
     }
 
     // ── valider ────────────────────────────────────────────────────────────────

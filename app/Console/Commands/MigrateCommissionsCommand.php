@@ -11,24 +11,22 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Migre les données existantes vers le nouveau système :
- *  1. Calcule earned_at / unlock_at sur toutes les parts existantes.
- *  2. Convertit les versements legacy (versements_commission_logistique)
+ *  1. Convertit les versements legacy (versements_commission_logistique)
  *     en CommissionPayment + CommissionPaymentItem.
- *  3. Recalcule les statuts.
- *  4. Vérifie la cohérence des totaux.
+ *  2. Recalcule les statuts.
+ *  3. Vérifie la cohérence des totaux.
  *
  * Usage :
  *   php artisan commissions:migrate [--dry-run]
  *
- * Idempotent : les parts déjà migrées (unlock_at renseigné) sont ignorées.
- * Les versements déjà convertis (marqués migrated) sont ignorés.
+ * Idempotent : les versements déjà convertis (marqués migrated) sont ignorés.
  */
 class MigrateCommissionsCommand extends Command
 {
     protected $signature = 'commissions:migrate
                             {--dry-run : Affiche ce qui serait fait, sans modifier la base}';
 
-    protected $description = 'Migre les commissions logistiques existantes vers le nouveau système (unlock_at + CommissionPayment)';
+    protected $description = 'Migre les commissions logistiques existantes vers le nouveau système (CommissionPayment)';
 
     public function handle(): int
     {
@@ -39,22 +37,17 @@ class MigrateCommissionsCommand extends Command
         }
 
         $this->line('');
-        $this->info('Étape 1 — Calcul earned_at / unlock_at sur les parts existantes');
-        $nbPartsUpdated = $this->migrerUnlockAt($dryRun);
-        $this->line("  → {$nbPartsUpdated} part(s) mise(s) à jour");
-
-        $this->line('');
-        $this->info('Étape 2 — Conversion des versements legacy en paiements groupés');
+        $this->info('Étape 1 — Conversion des versements legacy en paiements groupés');
         [$nbPayments, $nbItems] = $this->migrerVersements($dryRun);
         $this->line("  → {$nbPayments} paiement(s) créé(s), {$nbItems} allocation(s)");
 
         $this->line('');
-        $this->info('Étape 3 — Recalcul des statuts');
+        $this->info('Étape 2 — Recalcul des statuts');
         $nbStatuts = $this->recalculerStatuts($dryRun);
         $this->line("  → {$nbStatuts} part(s) recalculée(s)");
 
         $this->line('');
-        $this->info('Étape 4 — Vérification de cohérence');
+        $this->info('Étape 3 — Vérification de cohérence');
         $ok = $this->verifierCoherence();
         if ($ok) {
             $this->info('  ✓ Totaux cohérents');
@@ -68,44 +61,7 @@ class MigrateCommissionsCommand extends Command
         return $ok ? self::SUCCESS : self::FAILURE;
     }
 
-    // ── Étape 1 : earned_at / unlock_at ──────────────────────────────────────
-
-    private function migrerUnlockAt(bool $dryRun): int
-    {
-        $parts = CommissionLogistiquePart::whereNull('unlock_at')
-            ->with('commission.transfert')
-            ->get();
-
-        $nb = 0;
-
-        foreach ($parts as $part) {
-            $transfert = $part->commission?->transfert;
-
-            // earned_at = date réception réelle, sinon created_at de la commission
-            $earnedAt = $transfert?->date_arrivee_reelle
-                ? \Illuminate\Support\Carbon::instance($transfert->date_arrivee_reelle)
-                : ($part->commission?->created_at ?? now());
-
-            $unlockAt = CommissionLogistiquePart::calculerUnlockAt(
-                $part->type_beneficiaire,
-                $earnedAt
-            );
-
-            if ($dryRun) {
-                $this->line("  [dry] Part #{$part->id} : earned_at={$earnedAt->toDateString()} unlock_at={$unlockAt->toDateString()}");
-            } else {
-                $part->earned_at = $earnedAt->toDateString();
-                $part->unlock_at = $unlockAt->toDateString();
-                $part->saveQuietly();
-            }
-
-            $nb++;
-        }
-
-        return $nb;
-    }
-
-    // ── Étape 2 : versements legacy → CommissionPayment ──────────────────────
+    // ── Étape 1 : versements legacy → CommissionPayment ──────────────────────
 
     private function migrerVersements(bool $dryRun): array
     {
@@ -178,7 +134,7 @@ class MigrateCommissionsCommand extends Command
         return [$nbPayments, $nbItems];
     }
 
-    // ── Étape 3 : recalcul statuts ────────────────────────────────────────────
+    // ── Étape 2 : recalcul statuts ────────────────────────────────────────────
 
     private function recalculerStatuts(bool $dryRun): int
     {
@@ -197,7 +153,7 @@ class MigrateCommissionsCommand extends Command
         return $nb;
     }
 
-    // ── Étape 4 : vérification ────────────────────────────────────────────────
+    // ── Étape 3 : vérification ────────────────────────────────────────────────
 
     private function verifierCoherence(): bool
     {

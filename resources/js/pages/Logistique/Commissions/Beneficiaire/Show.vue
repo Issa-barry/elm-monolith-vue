@@ -3,7 +3,7 @@ import StatusDot from '@/components/StatusDot.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
-import { ArrowLeft, CalendarClock, CheckCircle2 } from 'lucide-vue-next';
+import { ArrowLeft, CheckCircle2 } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -24,7 +24,6 @@ interface PartRow {
     montant_verse: number;
     montant_restant: number;
     earned_at: string | null;
-    unlock_at: string | null;
     statut: string | null;
     statut_label: string;
     statut_dot_class: string;
@@ -188,11 +187,6 @@ function formatGNF(val: number): string {
                                     Acquis le
                                 </th>
                                 <th
-                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
-                                >
-                                    Disponible le
-                                </th>
-                                <th
                                     class="px-4 py-3 text-right font-medium text-muted-foreground"
                                 >
                                     Net
@@ -229,22 +223,6 @@ function formatGNF(val: number): string {
                                         class="px-4 py-3 text-muted-foreground tabular-nums"
                                     >
                                         {{ part.earned_at ?? '—' }}
-                                    </td>
-                                    <td class="px-4 py-3 tabular-nums">
-                                        <div class="flex items-center gap-1.5">
-                                            <CalendarClock
-                                                class="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                                            />
-                                            <span
-                                                :class="
-                                                    part.statut === 'pending'
-                                                        ? 'text-muted-foreground'
-                                                        : ''
-                                                "
-                                            >
-                                                {{ part.unlock_at ?? '—' }}
-                                            </span>
-                                        </div>
                                     </td>
                                     <td
                                         class="px-4 py-3 text-right font-semibold tabular-nums"

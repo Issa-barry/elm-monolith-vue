@@ -212,6 +212,13 @@ const search = ref('');
 const statutFilter = ref<string>('tous');
 const roleFilter = ref<string>('tous');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
+const statutOptions = [
+    { value: 'tous', label: 'Tous statuts' },
+    { value: 'actif', label: 'Actif' },
+    { value: 'en_attente', label: 'En attente' },
+    { value: 'inactif', label: 'Inactif' },
+    { value: 'expire', label: 'Expirée/Révoquée' },
+];
 
 watch(search, (val) => {
     filters.value.global.value = val;
@@ -337,7 +344,7 @@ function revokeInvitation(invitationId: number) {
         </div>
 
         <!-- Page content -->
-        <div class="mx-auto w-full max-w-5xl p-4 sm:p-6">
+        <div class="w-full p-4 sm:p-6">
             <!-- Desktop heading -->
             <div class="mb-8 hidden space-y-0.5 sm:block">
                 <h2 class="text-xl font-semibold tracking-tight">
@@ -352,9 +359,11 @@ function revokeInvitation(invitationId: number) {
             </div>
 
             <!-- Tab layout (Settings-style) -->
-            <div class="flex flex-col lg:flex-row lg:space-x-12">
+            <div
+                class="grid grid-cols-1 gap-6 lg:grid-cols-[12rem_minmax(0,1fr)] lg:gap-12"
+            >
                 <!-- ── Left sidebar nav ──────────────────────────────────── -->
-                <aside class="w-full lg:w-48">
+                <aside class="w-full lg:w-48 lg:shrink-0">
                     <nav
                         class="flex gap-1 overflow-x-auto pb-2 sm:flex-col sm:space-y-1 sm:overflow-x-visible sm:pb-0"
                     >
@@ -392,7 +401,7 @@ function revokeInvitation(invitationId: number) {
                 <Separator class="my-4 lg:hidden" />
 
                 <!-- ── Tab content ──────────────────────────────────────── -->
-                <div class="min-w-0 flex-1">
+                <div class="w-full min-w-0">
                     <!-- ── Tab : Informations ──────────────────────────── -->
                     <div v-if="activeTab === 'infos'" class="space-y-6">
                         <!-- Carte principale -->
@@ -731,33 +740,19 @@ function revokeInvitation(invitationId: number) {
                                 />
                             </IconField>
 
-                            <div class="flex flex-wrap gap-1">
-                                <button
-                                    v-for="s in [
-                                        { value: 'tous', label: 'Tous' },
-                                        { value: 'actif', label: 'Actif' },
-                                        {
-                                            value: 'en_attente',
-                                            label: 'En attente',
-                                        },
-                                        {
-                                            value: 'expire',
-                                            label: 'Expirée/Révoquée',
-                                        },
-                                    ]"
-                                    :key="s.value"
-                                    type="button"
-                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                                    :class="
-                                        statutFilter === s.value
-                                            ? 'bg-primary text-primary-foreground'
-                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                    "
-                                    @click="statutFilter = s.value"
-                                >
-                                    {{ s.label }}
-                                </button>
-                            </div>
+                            <Select
+                                v-model="statutFilter"
+                                :options="statutOptions"
+                                option-label="label"
+                                option-value="value"
+                                class="text-sm"
+                                :pt="{
+                                    root: { class: 'h-9 min-w-[180px]' },
+                                    label: {
+                                        class: 'flex items-center py-0 text-sm',
+                                    },
+                                }"
+                            />
 
                             <Select
                                 v-model="roleFilter"
@@ -781,223 +776,241 @@ function revokeInvitation(invitationId: number) {
                         </div>
 
                         <!-- DataTable -->
-                        <DataTable
-                            :value="filteredMembres"
-                            :paginator="membres.length > 20"
-                            :rows="20"
-                            :global-filter-fields="[
-                                'nom_complet',
-                                'email',
-                                'role',
-                            ]"
-                            v-model:filters="filters"
-                            data-key="email"
-                            striped-rows
-                            removable-sort
-                            class="text-sm"
-                            table-class="w-full"
-                        >
-                            <Column
-                                field="nom_complet"
-                                header="Membre"
-                                sortable
-                                style="min-width: 200px"
+                        <div class="overflow-x-auto">
+                            <DataTable
+                                :value="filteredMembres"
+                                :paginator="membres.length > 20"
+                                :rows="20"
+                                :global-filter-fields="[
+                                    'nom_complet',
+                                    'email',
+                                    'role',
+                                ]"
+                                v-model:filters="filters"
+                                data-key="email"
+                                striped-rows
+                                removable-sort
+                                class="min-w-[860px] text-sm lg:min-w-0"
+                                table-class="w-full"
                             >
-                                <template #body="{ data }">
-                                    <div class="flex items-center gap-3">
-                                        <div
-                                            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
-                                            :class="
-                                                data.type === 'user'
-                                                    ? 'bg-primary/10 text-primary'
-                                                    : 'bg-muted text-muted-foreground'
-                                            "
-                                        >
-                                            {{
-                                                data.type === 'user'
-                                                    ? initials(data.nom_complet)
-                                                    : data.email
-                                                          .charAt(0)
-                                                          .toUpperCase()
-                                            }}
-                                        </div>
-                                        <div class="min-w-0">
+                                <Column
+                                    field="nom_complet"
+                                    header="Membre"
+                                    sortable
+                                    style="min-width: 200px"
+                                >
+                                    <template #body="{ data }">
+                                        <div class="flex items-center gap-3">
                                             <div
-                                                class="truncate font-medium"
+                                                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
                                                 :class="
-                                                    data.type === 'invitation'
-                                                        ? 'text-muted-foreground italic'
-                                                        : ''
+                                                    data.type === 'user'
+                                                        ? 'bg-primary/10 text-primary'
+                                                        : 'bg-muted text-muted-foreground'
                                                 "
                                             >
                                                 {{
-                                                    data.nom_complet ??
-                                                    'Invitation en attente'
+                                                    data.type === 'user'
+                                                        ? initials(
+                                                              data.nom_complet,
+                                                          )
+                                                        : data.email
+                                                              .charAt(0)
+                                                              .toUpperCase()
                                                 }}
                                             </div>
-                                            <div
-                                                class="truncate text-xs text-muted-foreground"
-                                            >
-                                                {{ data.email }}
+                                            <div class="min-w-0">
+                                                <div
+                                                    class="truncate font-medium"
+                                                    :class="
+                                                        data.type ===
+                                                        'invitation'
+                                                            ? 'text-muted-foreground italic'
+                                                            : ''
+                                                    "
+                                                >
+                                                    {{
+                                                        data.nom_complet ??
+                                                        'Invitation en attente'
+                                                    }}
+                                                </div>
+                                                <div
+                                                    class="truncate text-xs text-muted-foreground"
+                                                >
+                                                    {{ data.email }}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </template>
-                            </Column>
+                                    </template>
+                                </Column>
 
-                            <Column
-                                field="telephone"
-                                header="Téléphone"
-                                style="width: 160px"
-                            >
-                                <template #body="{ data }">
-                                    <span
-                                        v-if="data.telephone"
-                                        class="text-sm text-muted-foreground"
-                                    >
-                                        {{ formatPhoneDisplay(data.telephone) }}
-                                    </span>
-                                    <span
-                                        v-else
-                                        class="text-xs text-muted-foreground"
-                                        >—</span
-                                    >
-                                </template>
-                            </Column>
-
-                            <Column
-                                field="role"
-                                header="Rôle"
-                                sortable
-                                style="width: 160px"
-                            >
-                                <template #body="{ data }">
-                                    <span
-                                        v-if="data.role"
-                                        class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                        :class="roleColor(data.role)"
-                                    >
-                                        <Shield class="h-3 w-3" />
-                                        {{ roleLabel(data.role) }}
-                                    </span>
-                                    <span
-                                        v-else
-                                        class="text-xs text-muted-foreground"
-                                        >—</span
-                                    >
-                                </template>
-                            </Column>
-
-                            <Column
-                                field="statut_label"
-                                header="Statut"
-                                sortable
-                                style="width: 140px"
-                            >
-                                <template #body="{ data }">
-                                    <StatusDot
-                                        :label="data.statut_label"
-                                        :dot-class="statutDotClass(data.statut)"
-                                        class="text-muted-foreground"
-                                    />
-                                </template>
-                            </Column>
-
-                            <Column
-                                field="date"
-                                header="Date"
-                                sortable
-                                style="width: 110px"
-                            >
-                                <template #body="{ data }">
-                                    <span
-                                        class="text-xs text-muted-foreground"
-                                        >{{ data.date ?? '—' }}</span
-                                    >
-                                </template>
-                            </Column>
-
-                            <Column header="" style="width: 56px">
-                                <template #body="{ data }">
-                                    <div
-                                        v-if="
-                                            data.type === 'invitation' &&
-                                            (data.can_resend || data.can_revoke)
-                                        "
-                                        class="flex justify-end"
-                                    >
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger as-child>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    class="h-8 w-8"
-                                                >
-                                                    <MoreVertical
-                                                        class="h-4 w-4"
-                                                    />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent
-                                                align="end"
-                                                class="w-44"
-                                            >
-                                                <DropdownMenuItem
-                                                    v-if="data.can_resend"
-                                                    class="cursor-pointer"
-                                                    @click="
-                                                        resendInvitation(
-                                                            data.invitation_id,
-                                                        )
-                                                    "
-                                                >
-                                                    <RefreshCw
-                                                        class="h-4 w-4"
-                                                    />
-                                                    Renvoyer
-                                                </DropdownMenuItem>
-                                                <DropdownMenuSeparator
-                                                    v-if="
-                                                        data.can_resend &&
-                                                        data.can_revoke
-                                                    "
-                                                />
-                                                <DropdownMenuItem
-                                                    v-if="data.can_revoke"
-                                                    class="cursor-pointer text-destructive focus:text-destructive"
-                                                    @click="
-                                                        revokeInvitation(
-                                                            data.invitation_id,
-                                                        )
-                                                    "
-                                                >
-                                                    <XCircle class="h-4 w-4" />
-                                                    Révoquer
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </div>
-                                </template>
-                            </Column>
-
-                            <template #empty>
-                                <div
-                                    class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
+                                <Column
+                                    field="telephone"
+                                    header="Téléphone"
+                                    style="width: 160px"
                                 >
-                                    <MailOpen class="h-10 w-10 opacity-30" />
-                                    <p class="text-sm">Aucun membre trouvé.</p>
-                                    <Button
-                                        v-if="can_invite"
-                                        variant="outline"
-                                        size="sm"
-                                        @click="openInviteDialog"
+                                    <template #body="{ data }">
+                                        <span
+                                            v-if="data.telephone"
+                                            class="text-sm text-muted-foreground"
+                                        >
+                                            {{
+                                                formatPhoneDisplay(
+                                                    data.telephone,
+                                                )
+                                            }}
+                                        </span>
+                                        <span
+                                            v-else
+                                            class="text-xs text-muted-foreground"
+                                            >—</span
+                                        >
+                                    </template>
+                                </Column>
+
+                                <Column
+                                    field="role"
+                                    header="Rôle"
+                                    sortable
+                                    style="width: 160px"
+                                >
+                                    <template #body="{ data }">
+                                        <span
+                                            v-if="data.role"
+                                            class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                            :class="roleColor(data.role)"
+                                        >
+                                            <Shield class="h-3 w-3" />
+                                            {{ roleLabel(data.role) }}
+                                        </span>
+                                        <span
+                                            v-else
+                                            class="text-xs text-muted-foreground"
+                                            >—</span
+                                        >
+                                    </template>
+                                </Column>
+
+                                <Column
+                                    field="statut_label"
+                                    header="Statut"
+                                    sortable
+                                    style="width: 140px"
+                                >
+                                    <template #body="{ data }">
+                                        <StatusDot
+                                            :label="data.statut_label"
+                                            :dot-class="
+                                                statutDotClass(data.statut)
+                                            "
+                                            class="text-muted-foreground"
+                                        />
+                                    </template>
+                                </Column>
+
+                                <Column
+                                    field="date"
+                                    header="Date"
+                                    sortable
+                                    style="width: 110px"
+                                >
+                                    <template #body="{ data }">
+                                        <span
+                                            class="text-xs text-muted-foreground"
+                                            >{{ data.date ?? '—' }}</span
+                                        >
+                                    </template>
+                                </Column>
+
+                                <Column header="" style="width: 56px">
+                                    <template #body="{ data }">
+                                        <div
+                                            v-if="
+                                                data.type === 'invitation' &&
+                                                (data.can_resend ||
+                                                    data.can_revoke)
+                                            "
+                                            class="flex justify-end"
+                                        >
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger as-child>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        class="h-8 w-8"
+                                                    >
+                                                        <MoreVertical
+                                                            class="h-4 w-4"
+                                                        />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent
+                                                    align="end"
+                                                    class="w-44"
+                                                >
+                                                    <DropdownMenuItem
+                                                        v-if="data.can_resend"
+                                                        class="cursor-pointer"
+                                                        @click="
+                                                            resendInvitation(
+                                                                data.invitation_id,
+                                                            )
+                                                        "
+                                                    >
+                                                        <RefreshCw
+                                                            class="h-4 w-4"
+                                                        />
+                                                        Renvoyer
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator
+                                                        v-if="
+                                                            data.can_resend &&
+                                                            data.can_revoke
+                                                        "
+                                                    />
+                                                    <DropdownMenuItem
+                                                        v-if="data.can_revoke"
+                                                        class="cursor-pointer text-destructive focus:text-destructive"
+                                                        @click="
+                                                            revokeInvitation(
+                                                                data.invitation_id,
+                                                            )
+                                                        "
+                                                    >
+                                                        <XCircle
+                                                            class="h-4 w-4"
+                                                        />
+                                                        Révoquer
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </div>
+                                    </template>
+                                </Column>
+
+                                <template #empty>
+                                    <div
+                                        class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
                                     >
-                                        <UserPlus class="mr-2 h-4 w-4" />
-                                        Inviter le premier membre
-                                    </Button>
-                                </div>
-                            </template>
-                        </DataTable>
+                                        <MailOpen
+                                            class="h-10 w-10 opacity-30"
+                                        />
+                                        <p class="text-sm">
+                                            Aucun membre trouvé.
+                                        </p>
+                                        <Button
+                                            v-if="can_invite"
+                                            variant="outline"
+                                            size="sm"
+                                            @click="openInviteDialog"
+                                        >
+                                            <UserPlus class="mr-2 h-4 w-4" />
+                                            Inviter le premier membre
+                                        </Button>
+                                    </div>
+                                </template>
+                            </DataTable>
+                        </div>
                     </div>
                 </div>
             </div>

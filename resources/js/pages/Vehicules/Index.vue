@@ -64,23 +64,42 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const search = ref('');
+const filterType = ref('');
+const filterStatut = ref('');
+
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => {
     filters.value.global.value = val;
 });
 
-const mobileFiltered = computed(() => {
-    const q = search.value.trim().toLowerCase();
-    if (!q) return props.vehicules;
-    return props.vehicules.filter(
-        (v) =>
+const typeOptions = computed(() => {
+    const types = [...new Set(props.vehicules.map((v) => v.type_label))].sort();
+    return types;
+});
+
+const filteredVehicules = computed(() => {
+    return props.vehicules.filter((v) => {
+        const q = search.value.trim().toLowerCase();
+        const matchSearch =
+            !q ||
             v.nom_vehicule.toLowerCase().includes(q) ||
             v.immatriculation.toLowerCase().includes(q) ||
             v.type_label.toLowerCase().includes(q) ||
             (v.proprietaire_nom ?? '').toLowerCase().includes(q) ||
-            (v.equipe_nom ?? '').toLowerCase().includes(q),
-    );
+            (v.equipe_nom ?? '').toLowerCase().includes(q);
+        const matchType =
+            !filterType.value || v.type_label === filterType.value;
+        const matchStatut =
+            filterStatut.value === ''
+                ? true
+                : filterStatut.value === 'actif'
+                  ? v.is_active
+                  : !v.is_active;
+        return matchSearch && matchType && matchStatut;
+    });
 });
+
+const mobileFiltered = filteredVehicules;
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -158,8 +177,8 @@ function confirmDelete(v: Vehicule) {
                 <div v-else class="h-8 w-[72px]" />
             </div>
 
-            <!-- Search -->
-            <div class="px-3 py-2">
+            <!-- Search + filtres mobile -->
+            <div class="space-y-2 px-3 py-2">
                 <div class="relative">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -170,6 +189,25 @@ function confirmDelete(v: Vehicule) {
                         placeholder="Rechercher..."
                         class="w-full rounded-lg border bg-background py-2 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
                     />
+                </div>
+                <div class="flex gap-2">
+                    <select
+                        v-model="filterType"
+                        class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    >
+                        <option value="">Tous les types</option>
+                        <option v-for="t in typeOptions" :key="t" :value="t">
+                            {{ t }}
+                        </option>
+                    </select>
+                    <select
+                        v-model="filterStatut"
+                        class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    >
+                        <option value="">Tous les statuts</option>
+                        <option value="actif">Actif</option>
+                        <option value="inactif">Inactif</option>
+                    </select>
                 </div>
             </div>
 
@@ -314,17 +352,9 @@ function confirmDelete(v: Vehicule) {
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="vehicules"
-                    :paginator="vehicules.length > 20"
+                    :value="filteredVehicules"
+                    :paginator="filteredVehicules.length > 20"
                     :rows="20"
-                    :global-filter-fields="[
-                        'nom_vehicule',
-                        'immatriculation',
-                        'type_label',
-                        'proprietaire_nom',
-                        'equipe_nom',
-                    ]"
-                    v-model:filters="filters"
                     data-key="id"
                     striped-rows
                     removable-sort
@@ -337,7 +367,7 @@ function confirmDelete(v: Vehicule) {
                     }"
                 >
                     <template #header>
-                        <div class="flex items-center gap-3">
+                        <div class="flex flex-wrap items-center gap-2">
                             <IconField class="max-w-sm flex-1">
                                 <InputIcon class="pointer-events-none">
                                     <Search
@@ -350,9 +380,35 @@ function confirmDelete(v: Vehicule) {
                                     class="w-full text-sm"
                                 />
                             </IconField>
+
+                            <!-- Filtre Type -->
+                            <select
+                                v-model="filterType"
+                                class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm focus:ring-2 focus:ring-ring focus:outline-none"
+                            >
+                                <option value="">Tous les types</option>
+                                <option
+                                    v-for="t in typeOptions"
+                                    :key="t"
+                                    :value="t"
+                                >
+                                    {{ t }}
+                                </option>
+                            </select>
+
+                            <!-- Filtre Statut -->
+                            <select
+                                v-model="filterStatut"
+                                class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm focus:ring-2 focus:ring-ring focus:outline-none"
+                            >
+                                <option value="">Tous les statuts</option>
+                                <option value="actif">Actif</option>
+                                <option value="inactif">Inactif</option>
+                            </select>
+
                             <span class="text-xs text-muted-foreground"
-                                >{{ vehicules.length }} résultat{{
-                                    vehicules.length !== 1 ? 's' : ''
+                                >{{ filteredVehicules.length }} résultat{{
+                                    filteredVehicules.length !== 1 ? 's' : ''
                                 }}</span
                             >
                         </div>

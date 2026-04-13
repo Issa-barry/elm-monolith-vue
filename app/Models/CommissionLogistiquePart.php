@@ -6,7 +6,6 @@ use App\Enums\StatutPartCommission;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Carbon;
 
 class CommissionLogistiquePart extends Model
 {
@@ -27,7 +26,7 @@ class CommissionLogistiquePart extends Model
         'montant_verse',
         'statut',
         'earned_at',
-        'unlock_at',
+        'periode',
     ];
 
     protected $appends = ['montant_restant', 'statut_label', 'statut_dot_class'];
@@ -42,7 +41,6 @@ class CommissionLogistiquePart extends Model
             'montant_verse' => 'decimal:2',
             'statut' => StatutPartCommission::class,
             'earned_at' => 'date',
-            'unlock_at' => 'date',
         ];
     }
 
@@ -119,14 +117,10 @@ class CommissionLogistiquePart extends Model
         return $this->statut === StatutPartCommission::CANCELLED;
     }
 
-    /** La commission est disponible si unlock_at est passé ET qu'elle n'est pas annulée/payée. */
+    /** La commission est disponible dès qu'elle n'est pas annulée/payée. */
     public function isUnlocked(): bool
     {
-        if ($this->isCancelled() || $this->isVersee()) {
-            return false;
-        }
-
-        return $this->unlock_at !== null && $this->unlock_at->isPast();
+        return ! $this->isCancelled() && ! $this->isVersee();
     }
 
     // ── Métier ────────────────────────────────────────────────────────────────
@@ -162,7 +156,7 @@ class CommissionLogistiquePart extends Model
     }
 
     /**
-     * Passe la part de PENDING → AVAILABLE si unlock_at est atteint.
+     * Passe la part de PENDING → AVAILABLE.
      * Appelé par le job UnlockAvailableCommissionsJob.
      */
     public function tenterDeblocage(): bool
@@ -190,22 +184,5 @@ class CommissionLogistiquePart extends Model
         $this->commentaire_frais = ($frais > 0 && $typeFrais === 'autre') ? $commentaireFrais : null;
 
         return $this->save();
-    }
-
-    // ── Calcul unlock_at ──────────────────────────────────────────────────────
-
-    /**
-     * Calcule unlock_at selon le type de bénéficiaire.
-     *  - livreur       : earned_at + 14 jours
-     *  - propriétaire  : 1er jour du mois suivant earned_at
-     */
-    public static function calculerUnlockAt(string $typeBeneficiaire, Carbon $earnedAt): Carbon
-    {
-        if ($typeBeneficiaire === 'livreur') {
-            return $earnedAt->copy()->addDays(14);
-        }
-
-        // proprietaire : premier jour du mois suivant
-        return $earnedAt->copy()->startOfMonth()->addMonth();
     }
 }
