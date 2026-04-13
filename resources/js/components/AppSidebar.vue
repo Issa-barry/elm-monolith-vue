@@ -52,7 +52,7 @@ const canSee = (permission: string, module: string): boolean =>
 const vehiculesItems = computed((): NavItem[] => {
     if (!moduleActive('vehicules')) return [];
     const sub: NavItem[] = [];
-     if (can('proprietaires.read'))
+    if (can('proprietaires.read'))
         sub.push({ title: 'Propriétaires', href: '/proprietaires' });
     if (can('vehicules.read'))
         sub.push({ title: 'Liste de véhicules', href: '/vehicules' });

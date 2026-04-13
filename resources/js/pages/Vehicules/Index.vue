@@ -87,7 +87,8 @@ const filteredVehicules = computed(() => {
             v.type_label.toLowerCase().includes(q) ||
             (v.proprietaire_nom ?? '').toLowerCase().includes(q) ||
             (v.equipe_nom ?? '').toLowerCase().includes(q);
-        const matchType = !filterType.value || v.type_label === filterType.value;
+        const matchType =
+            !filterType.value || v.type_label === filterType.value;
         const matchStatut =
             filterStatut.value === ''
                 ? true
@@ -339,7 +340,6 @@ function confirmDelete(v: Vehicule) {
                             vehicules.length !== 1 ? 's' : ''
                         }}
                     </p>
-
                 </div>
                 <Link v-if="can('vehicules.create')" href="/vehicules/create">
                     <Button>
@@ -384,7 +384,7 @@ function confirmDelete(v: Vehicule) {
                             <!-- Filtre Type -->
                             <select
                                 v-model="filterType"
-                                class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm focus:ring-2 focus:ring-ring focus:outline-none"
                             >
                                 <option value="">Tous les types</option>
                                 <option
@@ -399,7 +399,7 @@ function confirmDelete(v: Vehicule) {
                             <!-- Filtre Statut -->
                             <select
                                 v-model="filterStatut"
-                                class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm focus:ring-2 focus:ring-ring focus:outline-none"
                             >
                                 <option value="">Tous les statuts</option>
                                 <option value="actif">Actif</option>

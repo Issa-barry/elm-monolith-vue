@@ -63,7 +63,7 @@ function matchesOptionText(
 }
 function visibleComboboxOptions(page: Page): Locator {
     return page.locator(
-        '[role="listbox"]:visible [role="option"], [role="option"]:visible',
+        '[role="listbox"]:visible [role="option"]:not([data-pc-section="emptymessage"]), [role="option"]:visible:not([data-pc-section="emptymessage"])',
     );
 }
 
