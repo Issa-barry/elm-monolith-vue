@@ -44,7 +44,7 @@ class DashboardController extends Controller
 
         // ── Évolution mensuelle (année courante) ───────────────────────────────
         // MONTH() n'existe pas sous SQLite (tests CI) → strftime('%m', ...) à la place
-        $year      = now()->year;
+        $year = now()->year;
         $monthExpr = DB::connection()->getDriverName() === 'sqlite'
             ? "CAST(strftime('%m', created_at) AS INTEGER)"
             : 'MONTH(created_at)';
