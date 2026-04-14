@@ -43,23 +43,28 @@ class DashboardController extends Controller
         $resteAEncaisser = max(0, (float) $row->montant_actif - (float) $encaisseActif);
 
         // ── Évolution mensuelle (année courante) ───────────────────────────────
-        $year = now()->year;
+        // MONTH() n'existe pas sous SQLite (tests CI) → strftime('%m', ...) à la place
+        $year      = now()->year;
+        $monthExpr = DB::connection()->getDriverName() === 'sqlite'
+            ? "CAST(strftime('%m', created_at) AS INTEGER)"
+            : 'MONTH(created_at)';
+
         $monthly = FactureVente::where('organization_id', $orgId)
             ->whereYear('created_at', $year)
             ->selectRaw("
-                MONTH(created_at) as mois,
+                {$monthExpr} as mois,
                 COALESCE(SUM(CASE WHEN statut_facture = 'payee'   THEN montant_net ELSE 0 END), 0) as payees,
                 COALESCE(SUM(CASE WHEN statut_facture = 'partiel' THEN montant_net ELSE 0 END), 0) as partielles,
                 COALESCE(SUM(CASE WHEN statut_facture = 'impayee' THEN montant_net ELSE 0 END), 0) as impayees
             ")
-            ->groupBy('mois')
+            ->groupBy(DB::raw($monthExpr))
             ->get()
             ->keyBy('mois');
 
         $evolutionMensuelle = collect(range(1, 12))->map(fn ($m) => [
-            'payees'     => (float) ($monthly->get($m)?->payees    ?? 0),
+            'payees' => (float) ($monthly->get($m)?->payees ?? 0),
             'partielles' => (float) ($monthly->get($m)?->partielles ?? 0),
-            'impayees'   => (float) ($monthly->get($m)?->impayees   ?? 0),
+            'impayees' => (float) ($monthly->get($m)?->impayees ?? 0),
         ])->values()->toArray();
 
         // ── Évolution journalière (60 derniers jours) ─────────────────────────
@@ -79,12 +84,13 @@ class DashboardController extends Controller
         // index 0 = il y a 59 jours, index 59 = aujourd'hui
         $evolutionQuotidienne = collect(range(59, 0))->map(function ($daysAgo) use ($dailyRows) {
             $date = now()->subDays($daysAgo)->toDateString();
-            $row  = $dailyRows->get($date);
+            $row = $dailyRows->get($date);
+
             return [
-                'date'       => $date,
-                'payees'     => (float) ($row?->payees     ?? 0),
+                'date' => $date,
+                'payees' => (float) ($row?->payees ?? 0),
                 'partielles' => (float) ($row?->partielles ?? 0),
-                'impayees'   => (float) ($row?->impayees   ?? 0),
+                'impayees' => (float) ($row?->impayees ?? 0),
             ];
         })->values()->toArray();
 
@@ -94,7 +100,7 @@ class DashboardController extends Controller
             ->whereNotNull('factures_ventes.site_id')
             ->join('sites', function ($join) {
                 $join->on('sites.id', '=', 'factures_ventes.site_id')
-                     ->whereNull('sites.deleted_at');
+                    ->whereNull('sites.deleted_at');
             })
             ->selectRaw('sites.nom, COALESCE(SUM(factures_ventes.montant_net), 0) as montant')
             ->groupBy('sites.id', 'sites.nom')
@@ -110,14 +116,14 @@ class DashboardController extends Controller
             ->whereNotNull('factures_ventes.vehicule_id')
             ->join('vehicules', function ($join) {
                 $join->on('vehicules.id', '=', 'factures_ventes.vehicule_id')
-                     ->whereNull('vehicules.deleted_at');
+                    ->whereNull('vehicules.deleted_at');
             })
             ->selectRaw('vehicules.type_vehicule, COALESCE(SUM(factures_ventes.montant_net), 0) as montant')
             ->groupBy('vehicules.type_vehicule')
             ->orderByDesc('montant')
             ->get()
             ->map(fn ($r) => [
-                'label'   => TypeVehicule::tryFrom($r->type_vehicule)?->label() ?? $r->type_vehicule,
+                'label' => TypeVehicule::tryFrom($r->type_vehicule)?->label() ?? $r->type_vehicule,
                 'montant' => (float) $r->montant,
             ])
             ->values()
@@ -149,11 +155,11 @@ class DashboardController extends Controller
                 'annulees_count' => (int) $row->annulees_count,
                 'reste_a_encaisser' => $resteAEncaisser,
             ],
-            'evolution_mensuelle'    => $evolutionMensuelle,
-            'evolution_quotidienne'  => $evolutionQuotidienne,
-            'ca_par_site'            => $caParSite,
-            'ca_par_type_vehicule'   => $caParTypeVehicule,
-            'ca_par_produit'         => $caParProduit,
+            'evolution_mensuelle' => $evolutionMensuelle,
+            'evolution_quotidienne' => $evolutionQuotidienne,
+            'ca_par_site' => $caParSite,
+            'ca_par_type_vehicule' => $caParTypeVehicule,
+            'ca_par_produit' => $caParProduit,
         ]);
     }
 }
