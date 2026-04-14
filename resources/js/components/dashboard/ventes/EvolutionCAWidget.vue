@@ -117,17 +117,10 @@ function getPeriodeData(): PeriodeResult {
 }
 
 // ── setColorOptions ── copie exacte de RevenueOverviewWidget.vue (Apollo) ─────
-// Seuls ajouts vs Apollo :
-//  1. 3 datasets couleur (vert/orange/rouge) au lieu de 2 (primary)
-//  2. tooltip GNF (métier)
-//  3. callback Y compact (métier)
-//  4. surfaceBorder via --p-content-border-color car dans ce projet
-//     --surface-border vaut "var(...)" (chaîne), pas une couleur résolue.
 function setColorOptions() {
     const documentStyle      = getComputedStyle(document.documentElement);
     const textColor          = documentStyle.getPropertyValue('--text-color');
     const textColorSecondary = documentStyle.getPropertyValue('--text-color-secondary');
-    // Apollo lit --surface-border ; ici c'est un alias var() non résolu → on lit la cible directe
     const surfaceBorder      = documentStyle.getPropertyValue('--p-content-border-color').trim() || '#e2e8f0';
 
     const data = getPeriodeData();
@@ -162,7 +155,6 @@ function setColorOptions() {
         ],
     };
 
-    // Options copiées mot pour mot depuis RevenueOverviewWidget.vue
     barOptions.value = {
         animation: { duration: 0 },
         responsive: true,
@@ -177,7 +169,6 @@ function setColorOptions() {
                 },
                 position: 'bottom',
             },
-            // Ajout métier : tooltip formaté GNF (absent du template Apollo)
             tooltip: {
                 callbacks: {
                     label(ctx: { dataset: { label: string }; parsed: { y: number } }) {
@@ -200,7 +191,6 @@ function setColorOptions() {
             y: {
                 ticks: {
                     color: textColorSecondary,
-                    // Ajout métier : compact GNF (absent du template Apollo)
                     callback: (value: number) =>
                         new Intl.NumberFormat('fr-FR', {
                             notation: 'compact',

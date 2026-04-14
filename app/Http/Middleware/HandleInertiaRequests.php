@@ -120,6 +120,30 @@ class HandleInertiaRequests extends Middleware
             ->count();
     }
 
+    private function defaultSite(Request $request): ?array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return null;
+        }
+
+        $site = $user->sites()
+            ->wherePivot('is_default', true)
+            ->select('sites.id', 'sites.nom', 'sites.type')
+            ->first();
+
+        if (! $site) {
+            return null;
+        }
+
+        return [
+            'id' => $site->id,
+            'nom' => $site->nom,
+            'type' => $site->type instanceof \BackedEnum ? $site->type->value : (string) $site->type,
+            'type_label' => $site->type_label,
+        ];
+    }
+
     public function version(Request $request): ?string
     {
         return parent::version($request);
@@ -146,6 +170,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user()?->loadMissing('organization'),
                 'permissions' => $request->user()?->permissionsMap() ?? [],
                 'roles' => $request->user()?->getRoleNames() ?? [],
+                'default_site' => $this->defaultSite($request),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'stock_alertes' => $this->stockAlertes($request),

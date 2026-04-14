@@ -10,17 +10,8 @@ const page = usePage();
 const selectedPeriod = ref("Aujourd'hui");
 const periodOptions = ["Aujourd'hui", 'Cette semaine', 'Ce mois'];
 
-const ROLE_LABELS: Record<string, string> = {
-    super_admin: 'Super Admin',
-    admin_entreprise: 'Admin entreprise',
-    manager: 'Manager',
-    commerciale: 'Commerciale',
-    comptable: 'Comptable',
-    client: 'Client',
-};
-
 const user = computed(() => page.props.auth.user);
-const roles = computed(() => (page.props.auth.roles as string[]) ?? []);
+const defaultSite = computed(() => page.props.auth.default_site ?? null);
 
 const displayName = computed(() => {
     const firstName = user.value?.prenom?.trim();
@@ -30,9 +21,9 @@ const displayName = computed(() => {
     return fullName || user.value?.name?.trim() || 'Utilisateur';
 });
 
-const displayRole = computed(() => {
-    const firstRole = roles.value[0];
-    return firstRole ? (ROLE_LABELS[firstRole] ?? firstRole) : 'Aucun role';
+const displaySite = computed(() => {
+    if (!defaultSite.value) return 'Aucun site affecte';
+    return `${defaultSite.value.type_label} de ${defaultSite.value.nom}`;
 });
 
 const initials = computed(() =>
@@ -63,7 +54,7 @@ const initials = computed(() =>
                     <p
                         class="mt-0.5 text-xs text-muted-foreground sm:mt-1 sm:text-sm"
                     >
-                        Role : {{ displayRole }}
+                        Site : {{ displaySite }}
                     </p>
                 </div>
             </div>

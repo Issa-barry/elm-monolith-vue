@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
+use App\Enums\TypeVehicule;
 use App\Models\FactureVente;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -86,6 +88,57 @@ class DashboardController extends Controller
             ];
         })->values()->toArray();
 
+        // ── CA par site (factures non annulées, site renseigné) ───────────────
+        $caParSite = FactureVente::where('factures_ventes.organization_id', $orgId)
+            ->where('factures_ventes.statut_facture', '!=', StatutFactureVente::ANNULEE->value)
+            ->whereNotNull('factures_ventes.site_id')
+            ->join('sites', function ($join) {
+                $join->on('sites.id', '=', 'factures_ventes.site_id')
+                     ->whereNull('sites.deleted_at');
+            })
+            ->selectRaw('sites.nom, COALESCE(SUM(factures_ventes.montant_net), 0) as montant')
+            ->groupBy('sites.id', 'sites.nom')
+            ->orderByDesc('montant')
+            ->get()
+            ->map(fn ($r) => ['nom' => $r->nom, 'montant' => (float) $r->montant])
+            ->values()
+            ->toArray();
+
+        // ── CA par type de véhicule (factures non annulées, véhicule renseigné) ─
+        $caParTypeVehicule = FactureVente::where('factures_ventes.organization_id', $orgId)
+            ->where('factures_ventes.statut_facture', '!=', StatutFactureVente::ANNULEE->value)
+            ->whereNotNull('factures_ventes.vehicule_id')
+            ->join('vehicules', function ($join) {
+                $join->on('vehicules.id', '=', 'factures_ventes.vehicule_id')
+                     ->whereNull('vehicules.deleted_at');
+            })
+            ->selectRaw('vehicules.type_vehicule, COALESCE(SUM(factures_ventes.montant_net), 0) as montant')
+            ->groupBy('vehicules.type_vehicule')
+            ->orderByDesc('montant')
+            ->get()
+            ->map(fn ($r) => [
+                'label'   => TypeVehicule::tryFrom($r->type_vehicule)?->label() ?? $r->type_vehicule,
+                'montant' => (float) $r->montant,
+            ])
+            ->values()
+            ->toArray();
+
+        // ── CA par produit (lignes de commandes non annulées) ─────────────────
+        $caParProduit = DB::table('commande_vente_lignes as cvl')
+            ->join('commandes_ventes as cv', 'cv.id', '=', 'cvl.commande_vente_id')
+            ->join('produits as p', 'p.id', '=', 'cvl.produit_id')
+            ->where('cv.organization_id', $orgId)
+            ->whereNull('cv.deleted_at')
+            ->whereNull('p.deleted_at')
+            ->where('cv.statut', '!=', StatutCommandeVente::ANNULEE->value)
+            ->selectRaw('p.nom as nom, COALESCE(SUM(cvl.total_ligne), 0) as total')
+            ->groupBy('p.id', 'p.nom')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn ($r) => ['nom' => $r->nom, 'total' => (float) $r->total])
+            ->values()
+            ->toArray();
+
         return Inertia::render('Dashboard', [
             'stats_factures' => [
                 'total_count' => (int) $row->total_count,
@@ -97,7 +150,10 @@ class DashboardController extends Controller
                 'reste_a_encaisser' => $resteAEncaisser,
             ],
             'evolution_mensuelle'    => $evolutionMensuelle,
-            'evolution_quotidienne' => $evolutionQuotidienne,
+            'evolution_quotidienne'  => $evolutionQuotidienne,
+            'ca_par_site'            => $caParSite,
+            'ca_par_type_vehicule'   => $caParTypeVehicule,
+            'ca_par_produit'         => $caParProduit,
         ]);
     }
 }
