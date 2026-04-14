@@ -55,15 +55,18 @@ test('commande -> validation -> encaissement facture -> visible dans /factures',
     });
 
     // Trouver la ligne de la facture correspondant au véhicule
-    const row = page.locator('tbody tr, [data-testid="facture-row"]', {
+    const row = page.locator('tbody tr', {
         hasText: new RegExp(vehiculeNom, 'i'),
     }).first();
     await expect(row).toBeVisible({ timeout: 20_000 });
 
-    // Cliquer sur le bouton "Encaisser" de la ligne
-    const encaisserBtn = row.getByRole('button', { name: /encaisser/i }).first();
-    await expect(encaisserBtn).toBeVisible({ timeout: 10_000 });
-    await encaisserBtn.click();
+    // Sur desktop le bouton "Encaisser" est dans le dropdown MoreVertical (dernier bouton de la ligne)
+    await row.locator('button').last().click();
+
+    // Attendre le menu contextuel et cliquer sur "Encaisser"
+    const encaisserItem = page.getByRole('menuitem', { name: /encaisser/i }).first();
+    await expect(encaisserItem).toBeVisible({ timeout: 5_000 });
+    await encaisserItem.click();
 
     // ── 4. Remplir le dialog encaissement ─────────────────────────────────────
     const dialog = page.locator('[role="dialog"]').filter({ hasText: /encaissement/i });
