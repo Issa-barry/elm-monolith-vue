@@ -1,27 +1,14 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import {
-    ArrowLeft,
-    CheckCircle,
-    Lock,
-    Pencil,
-    Plus,
-    Trash2,
-    XCircle,
-} from 'lucide-vue-next';
+import { ArrowLeft, CheckCircle, Lock, Pencil, XCircle } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
-import InputNumber from 'primevue/inputnumber';
-import InputText from 'primevue/inputtext';
-import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
-import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface LigneCommande {
@@ -32,31 +19,6 @@ interface LigneCommande {
     prix_usine_snapshot: number;
     prix_vente_snapshot: number;
     total_ligne: number;
-}
-
-interface Encaissement {
-    id: number;
-    montant: number;
-    date_encaissement: string;
-    mode_paiement: string;
-    mode_paiement_label: string;
-    note: string | null;
-    created_by: string | null;
-    created_at: string;
-}
-
-interface FactureData {
-    id: number;
-    reference: string;
-    montant_brut: number;
-    montant_net: number;
-    montant_encaisse: number;
-    montant_restant: number;
-    statut_facture: string;
-    statut_label: string;
-    is_annulee: boolean;
-    is_payee: boolean;
-    encaissements: Encaissement[];
 }
 
 interface CommandeData {
@@ -83,20 +45,11 @@ interface CommandeData {
     lignes: LigneCommande[];
 }
 
-interface ModePaiementOption {
-    value: string;
-    label: string;
-}
-
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
     commande: CommandeData;
-    facture: FactureData | null;
-    modes_paiement: ModePaiementOption[];
 }>();
 
-const { can } = usePermissions();
-const confirm = useConfirm();
 const toast = useToast();
 
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
@@ -115,22 +68,9 @@ const statutCommandeColor: Record<string, string> = {
     annulee: 'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400',
 };
 
-const statutFactureColor: Record<string, string> = {
-    impayee:
-        'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-    partiel: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    payee: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    annulee: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-};
-
 // ── Formatage ─────────────────────────────────────────────────────────────────
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
-}
-
-function formatDateTime(val: string | null): string {
-    if (!val) return '—';
-    return new Date(val).toLocaleString('fr-FR');
 }
 
 // ── Actions de transition ─────────────────────────────────────────────────────
@@ -174,74 +114,6 @@ function submitAnnuler() {
         },
     });
 }
-
-// ── Encaissement ──────────────────────────────────────────────────────────────
-const encaissementForm = useForm({
-    montant: props.facture
-        ? props.facture.montant_restant
-        : (0 as number | null),
-    date_encaissement: new Date().toISOString().slice(0, 10),
-    mode_paiement: 'especes',
-    note: null as string | null,
-});
-
-const canAddEncaissement = computed(
-    () =>
-        props.facture !== null &&
-        !props.facture.is_annulee &&
-        props.facture.montant_restant > 0 &&
-        can('ventes.update'),
-);
-
-function submitEncaissement() {
-    if (!props.facture) return;
-    encaissementForm.post(`/factures/${props.facture.id}/encaissements`, {
-        onSuccess: () => {
-            encaissementForm.reset();
-            encaissementForm.montant = props.facture
-                ? props.facture.montant_restant
-                : 0;
-            encaissementForm.date_encaissement = new Date()
-                .toISOString()
-                .slice(0, 10);
-            encaissementForm.mode_paiement = 'especes';
-        },
-    });
-}
-
-// ── Suppression encaissement ──────────────────────────────────────────────────
-function confirmDeleteEncaissement(e: Encaissement) {
-    confirm.require({
-        message: `Supprimer cet encaissement de ${formatGNF(e.montant)} ?`,
-        header: 'Confirmer la suppression',
-        icon: 'pi pi-exclamation-triangle',
-        rejectLabel: 'Annuler',
-        acceptLabel: 'Supprimer',
-        acceptClass: 'p-button-danger',
-        accept: () => {
-            router.delete(`/encaissements/${e.id}`, {
-                onSuccess: () =>
-                    toast.add({
-                        severity: 'success',
-                        summary: 'Supprimé',
-                        detail: 'Encaissement supprimé.',
-                        life: 3000,
-                    }),
-            });
-        },
-    });
-}
-
-// ── Progression paiement ──────────────────────────────────────────────────────
-const progressPercent = computed(() => {
-    if (!props.facture || props.facture.montant_net <= 0) return 0;
-    return Math.min(
-        100,
-        Math.round(
-            (props.facture.montant_encaisse / props.facture.montant_net) * 100,
-        ),
-    );
-});
 </script>
 
 <template>
@@ -493,325 +365,6 @@ const progressPercent = computed(() => {
                         </tfoot>
                     </table>
                 </div>
-            </div>
-
-            <div
-                v-if="facture"
-                class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
-            >
-                <!-- En-tête facture -->
-                <div class="mb-5 flex items-center justify-between">
-                    <div>
-                        <h3
-                            class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                        >
-                            Facture
-                        </h3>
-                        <div class="mt-1 flex items-center gap-3">
-                            <span class="font-mono text-lg font-bold">{{
-                                facture.reference
-                            }}</span>
-                            <span
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="
-                                    statutFactureColor[
-                                        facture.statut_facture
-                                    ] ?? 'bg-muted text-muted-foreground'
-                                "
-                            >
-                                {{ facture.statut_label }}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Résumé financier -->
-                <div class="mb-6 grid gap-4 sm:grid-cols-3">
-                    <div class="rounded-lg bg-muted/30 p-4">
-                        <p class="text-xs text-muted-foreground">
-                            Montant total
-                        </p>
-                        <p class="mt-0.5 text-lg font-bold tabular-nums">
-                            {{ formatGNF(facture.montant_net) }}
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-lg bg-emerald-50 p-4 dark:bg-emerald-950/30"
-                    >
-                        <p
-                            class="text-xs text-emerald-600 dark:text-emerald-400"
-                        >
-                            Encaissé
-                        </p>
-                        <p
-                            class="mt-0.5 text-lg font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
-                        >
-                            {{ formatGNF(facture.montant_encaisse) }}
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-lg p-4"
-                        :class="
-                            facture.montant_restant > 0
-                                ? 'bg-amber-50 dark:bg-amber-950/30'
-                                : 'bg-emerald-50 dark:bg-emerald-950/30'
-                        "
-                    >
-                        <p
-                            class="text-xs"
-                            :class="
-                                facture.montant_restant > 0
-                                    ? 'text-amber-600 dark:text-amber-400'
-                                    : 'text-emerald-600 dark:text-emerald-400'
-                            "
-                        >
-                            Restant dû
-                        </p>
-                        <p
-                            class="mt-0.5 text-lg font-bold tabular-nums"
-                            :class="
-                                facture.montant_restant > 0
-                                    ? 'text-amber-600 dark:text-amber-400'
-                                    : 'text-emerald-600 dark:text-emerald-400'
-                            "
-                        >
-                            {{ formatGNF(facture.montant_restant) }}
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Barre progression -->
-                <div class="mb-6 space-y-1">
-                    <div
-                        class="flex items-center justify-between text-xs text-muted-foreground"
-                    >
-                        <span>Progression du paiement</span>
-                        <span class="font-semibold"
-                            >{{ progressPercent }}%</span
-                        >
-                    </div>
-                    <div class="h-2 rounded-full bg-muted">
-                        <div
-                            class="h-2 rounded-full bg-emerald-500 transition-all"
-                            :style="{ width: progressPercent + '%' }"
-                        />
-                    </div>
-                </div>
-
-                <!-- Tableau des encaissements -->
-                <div
-                    v-if="facture.encaissements.length > 0"
-                    class="mb-6 overflow-hidden overflow-x-auto rounded-lg border"
-                >
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b bg-muted/40">
-                                <th
-                                    class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                >
-                                    Date
-                                </th>
-                                <th
-                                    class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                >
-                                    Montant
-                                </th>
-                                <th
-                                    class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                >
-                                    Mode
-                                </th>
-                                <th
-                                    class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                >
-                                    Note
-                                </th>
-                                <th
-                                    class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                >
-                                    Enregistré par
-                                </th>
-                                <th
-                                    v-if="can('ventes.update')"
-                                    class="px-4 py-2.5"
-                                    style="width: 48px"
-                                ></th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y">
-                            <tr
-                                v-for="e in facture.encaissements"
-                                :key="e.id"
-                                class="hover:bg-muted/10"
-                            >
-                                <td
-                                    class="px-4 py-3 text-muted-foreground tabular-nums"
-                                >
-                                    {{ e.date_encaissement }}
-                                </td>
-                                <td class="px-4 py-3 font-medium tabular-nums">
-                                    {{ formatGNF(e.montant) }}
-                                </td>
-                                <td class="px-4 py-3 text-muted-foreground">
-                                    {{ e.mode_paiement_label }}
-                                </td>
-                                <td class="px-4 py-3 text-muted-foreground">
-                                    {{ e.note ?? '—' }}
-                                </td>
-                                <td class="px-4 py-3 text-muted-foreground">
-                                    <div>{{ e.created_by ?? '—' }}</div>
-                                    <div
-                                        class="text-xs text-muted-foreground/60"
-                                    >
-                                        {{ formatDateTime(e.created_at) }}
-                                    </div>
-                                </td>
-                                <td
-                                    v-if="can('ventes.update')"
-                                    class="px-4 py-3 text-center"
-                                >
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        class="h-7 w-7 text-destructive hover:text-destructive"
-                                        type="button"
-                                        @click="confirmDeleteEncaissement(e)"
-                                    >
-                                        <Trash2 class="h-4 w-4" />
-                                    </Button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div
-                    v-else-if="!canAddEncaissement"
-                    class="mb-6 rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground"
-                >
-                    Aucun encaissement enregistré.
-                </div>
-
-                <!-- Formulaire ajout encaissement -->
-                <div
-                    v-if="canAddEncaissement"
-                    class="rounded-lg border bg-muted/20 p-4"
-                >
-                    <p class="mb-4 text-sm font-medium">
-                        Ajouter un encaissement
-                    </p>
-                    <form
-                        class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-                        @submit.prevent="submitEncaissement"
-                    >
-                        <!-- Montant -->
-                        <div>
-                            <Label
-                                for="encaissement-montant"
-                                class="mb-1.5 block text-xs"
-                            >
-                                Montant <span class="text-destructive">*</span>
-                            </Label>
-                            <InputNumber
-                                input-id="encaissement-montant"
-                                :model-value="encaissementForm.montant"
-                                @update:model-value="
-                                    encaissementForm.montant = $event
-                                "
-                                :min="0.01"
-                                :max="facture.montant_restant"
-                                :use-grouping="true"
-                                locale="fr-FR"
-                                :min-fraction-digits="0"
-                                :max-fraction-digits="2"
-                                suffix=" GNF"
-                                class="w-full"
-                                input-class="w-full"
-                                :class="{
-                                    'p-invalid':
-                                        encaissementForm.errors.montant,
-                                }"
-                            />
-                            <p
-                                v-if="encaissementForm.errors.montant"
-                                class="mt-1 text-xs text-destructive"
-                            >
-                                {{ encaissementForm.errors.montant }}
-                            </p>
-                        </div>
-
-                        <!-- Mode paiement -->
-                        <div>
-                            <Label
-                                for="encaissement-mode-paiement"
-                                class="mb-1.5 block text-xs"
-                            >
-                                Mode de paiement
-                                <span class="text-destructive">*</span>
-                            </Label>
-                            <Select
-                                v-model="encaissementForm.mode_paiement"
-                                input-id="encaissement-mode-paiement"
-                                :options="modes_paiement"
-                                option-label="label"
-                                option-value="value"
-                                class="w-full"
-                                :class="{
-                                    'p-invalid':
-                                        encaissementForm.errors.mode_paiement,
-                                }"
-                            />
-                            <p
-                                v-if="encaissementForm.errors.mode_paiement"
-                                class="mt-1 text-xs text-destructive"
-                            >
-                                {{ encaissementForm.errors.mode_paiement }}
-                            </p>
-                        </div>
-
-                        <!-- Note -->
-                        <div>
-                            <Label
-                                for="encaissement-note"
-                                class="mb-1.5 block text-xs"
-                                >Note</Label
-                            >
-                            <InputText
-                                id="encaissement-note"
-                                v-model="encaissementForm.note as string"
-                                class="w-full"
-                                placeholder="Optionnel..."
-                            />
-                        </div>
-
-                        <!-- Bouton submit -->
-                        <div
-                            class="flex justify-end sm:col-span-2 lg:col-span-3"
-                        >
-                            <Button
-                                type="submit"
-                                size="sm"
-                                :disabled="encaissementForm.processing"
-                            >
-                                <Plus class="mr-2 h-4 w-4" />
-                                {{
-                                    encaissementForm.processing
-                                        ? 'Enregistrement…'
-                                        : "Ajouter l'encaissement"
-                                }}
-                            </Button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Brouillon : message informatif -->
-            <div
-                v-else-if="commande.is_brouillon"
-                class="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground"
-            >
-                La facture sera créée automatiquement lors de la validation de
-                la commande.
             </div>
         </div>
 

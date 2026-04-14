@@ -84,6 +84,11 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+const defaultProduit =
+    props.produits.find((p) => p.nom.toLowerCase().includes('pack de 6')) ??
+    props.produits[0] ??
+    null;
+
 // ── Form ──────────────────────────────────────────────────────────────────────
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -102,7 +107,11 @@ const form = useForm({
     date_arrivee_prevue: props.transfert?.date_arrivee_prevue ?? todayStr,
     notes: props.transfert?.notes ?? '',
     lignes: (props.transfert?.lignes ?? [
-        { produit_id: null, quantite_demandee: 1, notes: '' },
+        {
+            produit_id: defaultProduit?.id ?? null,
+            quantite_demandee: 1,
+            notes: '',
+        },
     ]) as LigneForm[],
 });
 
@@ -127,11 +136,6 @@ function searchVehicule(event: { query: string }) {
 function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
     form.equipe_livraison_id = v?.equipe_livraison_id ?? null;
-    if (v?.capacite_packs) {
-        form.lignes.forEach((l) => {
-            l.quantite_demandee = v.capacite_packs!;
-        });
-    }
 }
 
 function onVehiculeClear() {
@@ -148,9 +152,9 @@ function vehiculeLabel(v: VehiculeOption): string {
 
 const produitSuggests = ref<ProduitOption[]>([]);
 const produitSelected = ref<Array<ProduitOption | null>>(
-    (props.transfert?.lignes ?? [{ produit_id: null }]).map(
-        (l) => props.produits.find((p) => p.id === l.produit_id) ?? null,
-    ),
+    (
+        props.transfert?.lignes ?? [{ produit_id: defaultProduit?.id ?? null }]
+    ).map((l) => props.produits.find((p) => p.id === l.produit_id) ?? null),
 );
 
 function searchProduit(event: { query: string }) {
