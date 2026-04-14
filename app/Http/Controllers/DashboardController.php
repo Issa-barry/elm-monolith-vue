@@ -40,6 +40,51 @@ class DashboardController extends Controller
 
         $resteAEncaisser = max(0, (float) $row->montant_actif - (float) $encaisseActif);
 
+        // ── Évolution mensuelle (année courante) ───────────────────────────────
+        $year = now()->year;
+        $monthly = FactureVente::where('organization_id', $orgId)
+            ->whereYear('created_at', $year)
+            ->selectRaw("
+                MONTH(created_at) as mois,
+                COALESCE(SUM(CASE WHEN statut_facture = 'payee'   THEN montant_net ELSE 0 END), 0) as payees,
+                COALESCE(SUM(CASE WHEN statut_facture = 'partiel' THEN montant_net ELSE 0 END), 0) as partielles,
+                COALESCE(SUM(CASE WHEN statut_facture = 'impayee' THEN montant_net ELSE 0 END), 0) as impayees
+            ")
+            ->groupBy('mois')
+            ->get()
+            ->keyBy('mois');
+
+        $evolutionMensuelle = collect(range(1, 12))->map(fn ($m) => [
+            'payees'     => (float) ($monthly->get($m)?->payees    ?? 0),
+            'partielles' => (float) ($monthly->get($m)?->partielles ?? 0),
+            'impayees'   => (float) ($monthly->get($m)?->impayees   ?? 0),
+        ])->values()->toArray();
+
+        // ── Évolution journalière (14 derniers jours) ─────────────────────────
+        $dailyRows = FactureVente::where('organization_id', $orgId)
+            ->where('created_at', '>=', now()->subDays(13)->startOfDay())
+            ->selectRaw("
+                DATE(created_at) as date,
+                COALESCE(SUM(CASE WHEN statut_facture = 'payee'   THEN montant_net ELSE 0 END), 0) as payees,
+                COALESCE(SUM(CASE WHEN statut_facture = 'partiel' THEN montant_net ELSE 0 END), 0) as partielles,
+                COALESCE(SUM(CASE WHEN statut_facture = 'impayee' THEN montant_net ELSE 0 END), 0) as impayees
+            ")
+            ->groupBy('date')
+            ->get()
+            ->keyBy('date');
+
+        // index 0 = il y a 13 jours, index 13 = aujourd'hui
+        $evolutionQuotidienne = collect(range(13, 0))->map(function ($daysAgo) use ($dailyRows) {
+            $date = now()->subDays($daysAgo)->toDateString();
+            $row  = $dailyRows->get($date);
+            return [
+                'date'       => $date,
+                'payees'     => (float) ($row?->payees     ?? 0),
+                'partielles' => (float) ($row?->partielles ?? 0),
+                'impayees'   => (float) ($row?->impayees   ?? 0),
+            ];
+        })->values()->toArray();
+
         return Inertia::render('Dashboard', [
             'stats_factures' => [
                 'total_count' => (int) $row->total_count,
@@ -50,6 +95,8 @@ class DashboardController extends Controller
                 'annulees_count' => (int) $row->annulees_count,
                 'reste_a_encaisser' => $resteAEncaisser,
             ],
+            'evolution_mensuelle'    => $evolutionMensuelle,
+            'evolution_quotidienne' => $evolutionQuotidienne,
         ]);
     }
 }

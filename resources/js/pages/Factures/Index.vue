@@ -28,6 +28,7 @@ import InputIcon from 'primevue/inputicon';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
+import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -85,6 +86,7 @@ const props = defineProps<{
 }>();
 
 const { can } = usePermissions();
+const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -219,6 +221,12 @@ function submitEncaissement() {
     encaissementForm.post(`/factures/${factureActive.value.id}/encaissements`, {
         onSuccess: () => {
             dialogVisible.value = false;
+            toast.add({
+                severity: 'success',
+                summary: 'Validé',
+                detail: 'Encaissement enregistré avec succès.',
+                life: 3000,
+            });
         },
     });
 }

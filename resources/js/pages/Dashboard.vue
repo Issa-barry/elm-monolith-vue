@@ -2,6 +2,7 @@
 import HeaderWidget from '@/components/dashboard/banking/HeaderWidget.vue';
 import MobileQuickMenu from '@/components/dashboard/banking/MobileQuickMenu.vue';
 import StatsBankingWidget from '@/components/dashboard/banking/StatsBankingWidget.vue';
+import EvolutionCAWidget from '@/components/dashboard/ventes/EvolutionCAWidget.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
@@ -17,8 +18,23 @@ interface StatsFactures {
     reste_a_encaisser: number;
 }
 
+interface MoisData {
+    payees: number;
+    partielles: number;
+    impayees: number;
+}
+
+interface JourData {
+    date: string;
+    payees: number;
+    partielles: number;
+    impayees: number;
+}
+
 defineProps<{
     stats_factures: StatsFactures;
+    evolution_mensuelle: MoisData[];
+    evolution_quotidienne: JourData[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -38,6 +54,15 @@ const breadcrumbs: BreadcrumbItem[] = [
 
             <div class="mt-4 grid grid-cols-12 gap-8">
                 <StatsBankingWidget :stats="stats_factures" />
+            </div>
+
+            <div class="grid grid-cols-12 gap-8">
+                <div class="col-span-12">
+                    <EvolutionCAWidget
+                        :evolution-mensuelle="evolution_mensuelle"
+                        :evolution-quotidienne="evolution_quotidienne"
+                    />
+                </div>
             </div>
 
             <MobileQuickMenu />
