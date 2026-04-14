@@ -85,7 +85,9 @@ const breadcrumbs: BreadcrumbItem[] = [
                     />
                 </div>
                 <div class="col-span-12 xl:col-span-4">
-                    <VehiculeCategoryWidget :ca-par-type-vehicule="ca_par_type_vehicule" />
+                    <VehiculeCategoryWidget
+                        :ca-par-type-vehicule="ca_par_type_vehicule"
+                    />
                 </div>
             </div>
 
