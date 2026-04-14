@@ -9,13 +9,21 @@ use App\Models\Vehicule;
 use Illuminate\Database\Seeder;
 
 /**
- * Crée 3 véhicules et les associe à leurs équipes (equipes_livraison.vehicule_id).
+ * Crée 6 véhicules (3 externes + 3 internes) et les associe à leurs équipes.
  *
- * | Véhicule         | Type        | Équipe       | Catégorie | Taux prop |
- * |------------------|-------------|--------------|-----------|-----------|
- * | Nen Dow          | camion      | Nen Dow      | externe   | 60 %      |
- * | Kata Kata de Ali | tricycle    | Auto Dogomet | externe   | 60 %      |
- * | Baba Ousou       | camionnette | Baba Ousou   | externe   | 60 %      |
+ * EXTERNES (appartiennent à un propriétaire privé) :
+ * | Véhicule         | Type        | Équipe       | Immat      |
+ * |------------------|-------------|--------------|------------|
+ * | Nen Dow          | camion      | Nen Dow      | RC-001-GN  |
+ * | Kata Kata de Ali | tricycle    | Auto Dogomet | TC-001-GN  |
+ * | Baba Ousou       | camionnette | Baba Ousou   | VN-001-GN  |
+ *
+ * INTERNES (appartiennent à l'organisation — 100 % livreurs) :
+ * | Véhicule | Type        | Équipe           | Immat      |
+ * |----------|-------------|------------------|------------|
+ * | elm-1    | camionnette | ELM Logistique 1 | ELM-001-GN |
+ * | elm-2    | camionnette | ELM Logistique 2 | ELM-002-GN |
+ * | elm-3    | camion      | ELM Logistique 3 | ELM-003-GN |
  */
 class VehiculesSeeder extends Seeder
 {
@@ -32,7 +40,12 @@ class VehiculesSeeder extends Seeder
         $eqAutoDogomet = $equipe('Auto Dogomet');
         $eqBabaOusou = $equipe('Baba Ousou');
 
+        $eqElm1 = $equipe('ELM Logistique 1');
+        $eqElm2 = $equipe('ELM Logistique 2');
+        $eqElm3 = $equipe('ELM Logistique 3');
+
         $vehicules = [
+            // ── Externes ────────────────────────────────────────────────────
             [
                 'nom_vehicule' => 'Nen Dow',
                 'marque' => 'Mercedes',
@@ -71,6 +84,47 @@ class VehiculesSeeder extends Seeder
                 'pris_en_charge_par_usine' => false,
                 'is_active' => true,
                 'equipe' => $eqBabaOusou,
+            ],
+
+            // ── Internes (propriété de l'organisation) ───────────────────────
+            [
+                'nom_vehicule' => 'elm-1',
+                'marque' => 'Toyota',
+                'modele' => 'HiLux',
+                'immatriculation' => 'ELM-001-GN',
+                'type_vehicule' => TypeVehicule::CAMIONNETTE->value,
+                'capacite_packs' => 120,
+                'categorie' => 'interne',
+                'proprietaire_id' => null,
+                'pris_en_charge_par_usine' => true,
+                'is_active' => true,
+                'equipe' => $eqElm1,
+            ],
+            [
+                'nom_vehicule' => 'elm-2',
+                'marque' => 'Renault',
+                'modele' => 'Kangoo',
+                'immatriculation' => 'ELM-002-GN',
+                'type_vehicule' => TypeVehicule::CAMIONNETTE->value,
+                'capacite_packs' => 80,
+                'categorie' => 'interne',
+                'proprietaire_id' => null,
+                'pris_en_charge_par_usine' => true,
+                'is_active' => true,
+                'equipe' => $eqElm2,
+            ],
+            [
+                'nom_vehicule' => 'elm-3',
+                'marque' => 'Mercedes',
+                'modele' => 'Sprinter',
+                'immatriculation' => 'ELM-003-GN',
+                'type_vehicule' => TypeVehicule::CAMION->value,
+                'capacite_packs' => 300,
+                'categorie' => 'interne',
+                'proprietaire_id' => null,
+                'pris_en_charge_par_usine' => true,
+                'is_active' => true,
+                'equipe' => $eqElm3,
             ],
         ];
 

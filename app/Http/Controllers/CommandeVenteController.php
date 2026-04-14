@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\ModePaiement;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Models\Client;
@@ -190,7 +189,7 @@ class CommandeVenteController extends Controller
         $this->authorize('view', $vente);
 
         $commande_vente = $vente;
-        $commande_vente->load(['vehicule', 'client', 'site', 'lignes.produit', 'facture.encaissements.creator', 'createdBy']);
+        $commande_vente->load(['vehicule', 'client', 'site', 'lignes.produit', 'createdBy']);
 
         $user = auth()->user();
 
@@ -203,35 +202,6 @@ class CommandeVenteController extends Controller
             'prix_vente_snapshot' => (float) $l->prix_vente_snapshot,
             'total_ligne' => (float) $l->total_ligne,
         ]);
-
-        $facture = null;
-        if ($commande_vente->facture) {
-            $f = $commande_vente->facture;
-            $encaissements = $f->encaissements->map(fn ($e) => [
-                'id' => $e->id,
-                'montant' => (float) $e->montant,
-                'date_encaissement' => $e->date_encaissement?->toDateString(),
-                'mode_paiement' => $e->mode_paiement?->value,
-                'mode_paiement_label' => $e->mode_paiement?->label(),
-                'note' => $e->note,
-                'created_by' => $e->creator?->name,
-                'created_at' => $e->created_at?->toISOString(),
-            ]);
-
-            $facture = [
-                'id' => $f->id,
-                'reference' => $f->reference,
-                'montant_brut' => (float) $f->montant_brut,
-                'montant_net' => (float) $f->montant_net,
-                'montant_encaisse' => (float) $f->montant_encaisse,
-                'montant_restant' => (float) $f->montant_restant,
-                'statut_facture' => $f->statut_facture?->value,
-                'statut_label' => $f->statut_label,
-                'is_annulee' => $f->isAnnulee(),
-                'is_payee' => $f->isPayee(),
-                'encaissements' => $encaissements,
-            ];
-        }
 
         return Inertia::render('Ventes/Show', [
             'commande' => [
@@ -257,8 +227,6 @@ class CommandeVenteController extends Controller
                 'created_by' => $commande_vente->createdBy?->name,
                 'lignes' => $lignes,
             ],
-            'facture' => $facture,
-            'modes_paiement' => ModePaiement::options(),
         ]);
     }
 

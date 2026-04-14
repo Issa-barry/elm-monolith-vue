@@ -77,9 +77,9 @@ Route::get('/help', function () {
 
 Route::post('contact', [ContactController::class, 'store'])->name('contact.store');
 
-Route::get('dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->name('dashboard');
+Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])
+    ->name('dashboard');
 
 // ── Espace staff ──────────────────────────────────────────────────────────────
 Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->group(function () {
