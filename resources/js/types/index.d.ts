@@ -29,10 +29,18 @@ export type AppRole =
     | 'comptable'
     | 'client';
 
+export interface AuthSite {
+    id: number;
+    nom: string;
+    type: string;
+    type_label: string;
+}
+
 export interface Auth {
     user: User;
     permissions: PermissionsMap;
     roles: AppRole[];
+    default_site: AuthSite | null;
 }
 
 export interface BreadcrumbItem {

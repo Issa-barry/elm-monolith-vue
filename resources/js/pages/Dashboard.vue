@@ -2,6 +2,10 @@
 import HeaderWidget from '@/components/dashboard/banking/HeaderWidget.vue';
 import MobileQuickMenu from '@/components/dashboard/banking/MobileQuickMenu.vue';
 import StatsBankingWidget from '@/components/dashboard/banking/StatsBankingWidget.vue';
+import CaParSiteDoughnutWidget from '@/components/dashboard/ventes/CaParSiteDoughnutWidget.vue';
+import EvolutionCAWidget from '@/components/dashboard/ventes/EvolutionCAWidget.vue';
+import PacksPieWidget from '@/components/dashboard/ventes/PacksPieWidget.vue';
+import VehiculeCategoryWidget from '@/components/dashboard/ventes/VehiculeCategoryWidget.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
@@ -17,8 +21,41 @@ interface StatsFactures {
     reste_a_encaisser: number;
 }
 
+interface MoisData {
+    payees: number;
+    partielles: number;
+    impayees: number;
+}
+
+interface JourData {
+    date: string;
+    payees: number;
+    partielles: number;
+    impayees: number;
+}
+
+interface SiteData {
+    nom: string;
+    montant: number;
+}
+
+interface TypeVehiculeData {
+    label: string;
+    montant: number;
+}
+
+interface ProduitData {
+    nom: string;
+    total: number;
+}
+
 defineProps<{
     stats_factures: StatsFactures;
+    evolution_mensuelle: MoisData[];
+    evolution_quotidienne: JourData[];
+    ca_par_site: SiteData[];
+    ca_par_type_vehicule: TypeVehiculeData[];
+    ca_par_produit: ProduitData[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -38,6 +75,29 @@ const breadcrumbs: BreadcrumbItem[] = [
 
             <div class="mt-4 grid grid-cols-12 gap-8">
                 <StatsBankingWidget :stats="stats_factures" />
+            </div>
+
+            <div class="grid grid-cols-12 gap-8">
+                <div class="col-span-12 xl:col-span-8">
+                    <EvolutionCAWidget
+                        :evolution-mensuelle="evolution_mensuelle"
+                        :evolution-quotidienne="evolution_quotidienne"
+                    />
+                </div>
+                <div class="col-span-12 xl:col-span-4">
+                    <VehiculeCategoryWidget
+                        :ca-par-type-vehicule="ca_par_type_vehicule"
+                    />
+                </div>
+            </div>
+
+            <div class="grid grid-cols-12 gap-8">
+                <div class="col-span-12 xl:col-span-6">
+                    <CaParSiteDoughnutWidget :ca-par-site="ca_par_site" />
+                </div>
+                <div class="col-span-12 xl:col-span-6">
+                    <PacksPieWidget :ca-par-produit="ca_par_produit" />
+                </div>
             </div>
 
             <MobileQuickMenu />
