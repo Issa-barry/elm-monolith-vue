@@ -60,9 +60,10 @@ class DashboardController extends Controller
             'impayees'   => (float) ($monthly->get($m)?->impayees   ?? 0),
         ])->values()->toArray();
 
-        // ── Évolution journalière (14 derniers jours) ─────────────────────────
+        // ── Évolution journalière (60 derniers jours) ─────────────────────────
+        // Couvre aujourd'hui, hier, cette semaine, semaine préc., ce mois, mois préc.
         $dailyRows = FactureVente::where('organization_id', $orgId)
-            ->where('created_at', '>=', now()->subDays(13)->startOfDay())
+            ->where('created_at', '>=', now()->subDays(59)->startOfDay())
             ->selectRaw("
                 DATE(created_at) as date,
                 COALESCE(SUM(CASE WHEN statut_facture = 'payee'   THEN montant_net ELSE 0 END), 0) as payees,
@@ -73,8 +74,8 @@ class DashboardController extends Controller
             ->get()
             ->keyBy('date');
 
-        // index 0 = il y a 13 jours, index 13 = aujourd'hui
-        $evolutionQuotidienne = collect(range(13, 0))->map(function ($daysAgo) use ($dailyRows) {
+        // index 0 = il y a 59 jours, index 59 = aujourd'hui
+        $evolutionQuotidienne = collect(range(59, 0))->map(function ($daysAgo) use ($dailyRows) {
             $date = now()->subDays($daysAgo)->toDateString();
             $row  = $dailyRows->get($date);
             return [

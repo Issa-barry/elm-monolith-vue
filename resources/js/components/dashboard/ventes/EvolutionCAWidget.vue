@@ -76,28 +76,41 @@ function getPeriodeData(): PeriodeResult {
         };
     };
 
-    const now        = new Date();
-    const moisCourant  = now.getMonth();                              // 0-based
-    const moisPrec     = moisCourant === 0 ? 11 : moisCourant - 1;
+    // Filtre les jours du tableau qui appartiennent à un mois donné (ex: "2026-04")
+    const filterMois = (ym: string): PeriodeResult => {
+        const slice = quotidien.filter((d) => d.date.startsWith(ym));
+        return {
+            labels:     slice.map((d) => fmtDate(d.date)),
+            payees:     slice.map((d) => d.payees),
+            partielles: slice.map((d) => d.partielles),
+            impayees:   slice.map((d) => d.impayees),
+        };
+    };
+
+    const now  = new Date();
+    const yr   = now.getFullYear();
+    const mo   = now.getMonth(); // 0-based
+
+    const ymCourant = `${yr}-${String(mo + 1).padStart(2, '0')}`;
+    const prevDate  = new Date(yr, mo - 1, 1);
+    const ymPrec    = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
 
     // ── Calcul des bornes de semaine (lundi = début) ──────────────────────────
-    // index 13 = aujourd'hui, index 0 = il y a 13 jours
-    // JS : 0=Dim, 1=Lun, …, 6=Sam  →  (day+6)%7 = jours depuis lundi (0=Lun)
-    const joursSinceLundi = (now.getDay() + 6) % 7;       // 0 si on est lundi
-    const lundiCetteIdx   = 13 - joursSinceLundi;          // index du lundi courant
-    const lundiPrecIdx    = lundiCetteIdx - 7;             // index du lundi précédent
+    // index 59 = aujourd'hui, index 0 = il y a 59 jours
+    const LAST = quotidien.length - 1;                     // 59
+    const joursSinceLundi = (now.getDay() + 6) % 7;        // 0=Lun … 6=Dim
+    const lundiCetteIdx   = LAST - joursSinceLundi;
+    const lundiPrecIdx    = lundiCetteIdx - 7;
 
     switch (selectedPeriode.value.value) {
         // ── Journalier ────────────────────────────────────────────────────────
-        case 'aujourd_hui':      return sliceJours(13, 14);
-        case 'hier':             return sliceJours(12, 13);
-        // Lundi de cette semaine → aujourd'hui
-        case 'cette_semaine':    return sliceJours(Math.max(0, lundiCetteIdx), 14);
-        // Lundi précédent → dimanche précédent (7 jours)
+        case 'aujourd_hui':      return sliceJours(LAST, LAST + 1);
+        case 'hier':             return sliceJours(LAST - 1, LAST);
+        case 'cette_semaine':    return sliceJours(Math.max(0, lundiCetteIdx), LAST + 1);
         case 'semaine_derniere': return sliceJours(Math.max(0, lundiPrecIdx), Math.max(0, lundiCetteIdx));
-        // ── Mensuel (mois isolé) ──────────────────────────────────────────────
-        case 'ce_mois':          return sliceMois(moisCourant, moisCourant + 1);
-        case 'mois_dernier':     return sliceMois(moisPrec,    moisPrec + 1);
+        // ── Mensuel (tous les jours du mois) ─────────────────────────────────
+        case 'ce_mois':          return filterMois(ymCourant);
+        case 'mois_dernier':     return filterMois(ymPrec);
         // ── Trimestriel ───────────────────────────────────────────────────────
         case 't1':               return sliceMois(0, 3);
         case 't2':               return sliceMois(3, 6);
