@@ -77,7 +77,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                 <StatsBankingWidget :stats="stats_factures" />
             </div>
 
-            <div class="grid grid-cols-12 gap-8">
+            <div class="hidden sm:grid grid-cols-12 gap-8">
                 <div class="col-span-12 xl:col-span-8">
                     <EvolutionCAWidget
                         :evolution-mensuelle="evolution_mensuelle"
@@ -91,7 +91,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                 </div>
             </div>
 
-            <div class="grid grid-cols-12 gap-8">
+            <div class="hidden sm:grid grid-cols-12 gap-8">
                 <div class="col-span-12 xl:col-span-6">
                     <CaParSiteDoughnutWidget :ca-par-site="ca_par_site" />
                 </div>

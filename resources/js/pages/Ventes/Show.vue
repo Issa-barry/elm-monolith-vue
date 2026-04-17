@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, CheckCircle, Lock, Pencil, XCircle } from 'lucide-vue-next';
+import { ArrowLeft, CheckCircle, Lock, MoreVertical, Pencil, XCircle } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
@@ -138,6 +145,48 @@ function submitAnnuler() {
                     <p class="text-[11px] text-muted-foreground">
                         {{ commande.created_at }}
                     </p>
+                </div>
+                <!-- Actions mobile -->
+                <div
+                    v-if="commande.can_modifier || commande.can_valider || commande.can_annuler"
+                    class="absolute right-4"
+                >
+                    <DropdownMenu>
+                        <DropdownMenuTrigger as-child>
+                            <Button variant="ghost" size="icon" class="h-9 w-9">
+                                <MoreVertical class="h-5 w-5" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="w-48">
+                            <DropdownMenuItem v-if="commande.can_modifier" as-child>
+                                <Link
+                                    :href="`/ventes/${commande.id}/edit`"
+                                    class="flex w-full cursor-pointer items-center gap-2"
+                                >
+                                    <Pencil class="h-4 w-4" />
+                                    Modifier
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                v-if="commande.can_valider"
+                                class="cursor-pointer text-blue-600 focus:text-blue-600"
+                                :disabled="actionProcessing"
+                                @click="valider"
+                            >
+                                <CheckCircle class="h-4 w-4" />
+                                Valider la commande
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator v-if="commande.can_annuler && (commande.can_modifier || commande.can_valider)" />
+                            <DropdownMenuItem
+                                v-if="commande.can_annuler"
+                                class="cursor-pointer text-amber-600 focus:text-amber-600"
+                                @click="annulerDialogVisible = true"
+                            >
+                                <XCircle class="h-4 w-4" />
+                                Annuler la commande
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
         </div>
