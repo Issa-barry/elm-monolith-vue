@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Plus, Save, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Lock, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
@@ -53,7 +54,11 @@ const props = defineProps<{
     vehicules: VehiculeOption[];
     clients: ClientOption[];
     user_site: UserSite;
+    can_modifier_qte: boolean;
 }>();
+
+const { can } = usePermissions();
+const canUpdateUnitPrice = computed(() => can('ventes.prix.update'));
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -197,6 +202,10 @@ function onQteChange(index: number, qte: number | null) {
 }
 
 function onPrixChange(index: number, prix: number | null) {
+    if (!canUpdateUnitPrice.value) {
+        return;
+    }
+
     const ligne = form.lignes[index];
     ligne.prix_vente = prix ?? 0;
     ligne.total = ligne.prix_vente * ligne.qte;
@@ -474,6 +483,14 @@ function submit() {
                     </p>
 
                     <p
+                        v-if="!canUpdateUnitPrice"
+                        class="mb-3 flex items-center gap-1 text-xs text-muted-foreground"
+                    >
+                        <Lock class="h-3.5 w-3.5" />
+                        Prix unitaire verrouille pour votre profil.
+                    </p>
+
+                    <p
                         v-if="form.vehicule_id !== null"
                         class="mb-3 text-xs"
                         :class="
@@ -507,13 +524,29 @@ function submit() {
                                         class="px-4 py-2.5 text-center font-medium text-muted-foreground"
                                         style="width: 110px"
                                     >
-                                        Qté
+                                        <span
+                                            class="inline-flex items-center justify-center gap-1"
+                                        >
+                                            Qté
+                                            <Lock
+                                                v-if="!can_modifier_qte"
+                                                class="h-3.5 w-3.5"
+                                            />
+                                        </span>
                                     </th>
                                     <th
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
                                         style="width: 180px"
                                     >
-                                        Prix unit.
+                                        <span
+                                            class="inline-flex items-center justify-end gap-1"
+                                        >
+                                            Prix unit.
+                                            <Lock
+                                                v-if="!canUpdateUnitPrice"
+                                                class="h-3.5 w-3.5"
+                                            />
+                                        </span>
                                     </th>
                                     <th
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
@@ -573,6 +606,12 @@ function submit() {
                                                 onQteChange(index, $event)
                                             "
                                             :min="1"
+                                            :max="
+                                                can_modifier_qte
+                                                    ? undefined
+                                                    : (capaciteVehiculeSelectionne ??
+                                                      undefined)
+                                            "
                                             :use-grouping="false"
                                             class="w-full"
                                             input-class="w-full text-center"
@@ -585,6 +624,7 @@ function submit() {
                                                 onPrixChange(index, $event)
                                             "
                                             :min="0"
+                                            :disabled="!canUpdateUnitPrice"
                                             :use-grouping="false"
                                             suffix=" GNF"
                                             class="w-full"
@@ -649,7 +689,15 @@ function submit() {
                                     <p
                                         class="mb-1 text-[11px] font-medium text-muted-foreground"
                                     >
-                                        Quantité
+                                        <span
+                                            class="inline-flex items-center gap-1"
+                                        >
+                                            Quantité
+                                            <Lock
+                                                v-if="!can_modifier_qte"
+                                                class="h-3.5 w-3.5"
+                                            />
+                                        </span>
                                     </p>
                                     <InputNumber
                                         :model-value="ligne.qte"
@@ -657,6 +705,12 @@ function submit() {
                                             onQteChange(index, $event)
                                         "
                                         :min="1"
+                                        :max="
+                                            can_modifier_qte
+                                                ? undefined
+                                                : (capaciteVehiculeSelectionne ??
+                                                  undefined)
+                                        "
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full text-center"
@@ -666,7 +720,15 @@ function submit() {
                                     <p
                                         class="mb-1 text-[11px] font-medium text-muted-foreground"
                                     >
-                                        Prix unit. (GNF)
+                                        <span
+                                            class="inline-flex items-center gap-1"
+                                        >
+                                            Prix unit. (GNF)
+                                            <Lock
+                                                v-if="!canUpdateUnitPrice"
+                                                class="h-3.5 w-3.5"
+                                            />
+                                        </span>
                                     </p>
                                     <InputNumber
                                         :model-value="ligne.prix_vente"
@@ -674,6 +736,7 @@ function submit() {
                                             onPrixChange(index, $event)
                                         "
                                         :min="0"
+                                        :disabled="!canUpdateUnitPrice"
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full"
