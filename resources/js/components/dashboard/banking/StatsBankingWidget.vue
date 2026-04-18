@@ -11,7 +11,7 @@ interface StatsFactures {
     reste_a_encaisser: number;
 }
 
-const props = defineProps<{ stats: StatsFactures }>();
+defineProps<{ stats: StatsFactures }>();
 
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
