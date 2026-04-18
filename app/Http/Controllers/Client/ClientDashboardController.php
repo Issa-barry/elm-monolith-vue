@@ -195,6 +195,7 @@ class ClientDashboardController extends Controller
                 'immatriculation' => $vehicule->immatriculation,
                 'type_label' => $vehicule->type_label,
                 'capacite_packs' => $vehicule->capacite_packs,
+                'photo_url' => $vehicule->photo_url,
             ])
             ->values()
             ->all();

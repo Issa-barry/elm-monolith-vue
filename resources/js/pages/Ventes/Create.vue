@@ -251,7 +251,7 @@ const capaciteVehiculeConforme = computed(() => {
         return false;
     }
 
-    return quantiteTotale.value <= capaciteVehiculeSelectionne.value;
+    return quantiteTotale.value === capaciteVehiculeSelectionne.value;
 });
 
 // ── Reset au montage (évite la persistance SPA entre navigations) ─────────────
@@ -495,7 +495,7 @@ function submit() {
                         class="mb-3 text-xs"
                         :class="
                             capaciteVehiculeConforme
-                                ? 'text-muted-foreground'
+                                ? 'text-emerald-600 dark:text-emerald-400'
                                 : 'text-amber-600 dark:text-amber-400'
                         "
                     >
@@ -506,6 +506,11 @@ function submit() {
                                 : `${capaciteVehiculeSelectionne} packs`
                         }}
                         · Quantité saisie: {{ quantiteTotale }} packs
+                        <template v-if="capaciteVehiculeSelectionne !== null">
+                            <span v-if="capaciteVehiculeConforme"> — capacité atteinte ✓</span>
+                            <span v-else-if="quantiteTotale < capaciteVehiculeSelectionne"> — {{ capaciteVehiculeSelectionne - quantiteTotale }} pack(s) manquant(s)</span>
+                            <span v-else> — {{ quantiteTotale - capaciteVehiculeSelectionne }} pack(s) en trop</span>
+                        </template>
                     </p>
 
                     <!-- ── Tableau desktop ── -->

@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\SiteType;
 use App\Enums\StatutTransfert;
 use App\Models\TransfertLogistique;
 use App\Models\User;
@@ -125,7 +126,8 @@ class TransfertLogistiquePolicy
     {
         return $user->can('logistique.commission.verser')
             && $this->sameOrganization($user, $transfert)
-            && ($transfert->isReception() || $transfert->isCloture());
+            && ($transfert->isReception() || $transfert->isCloture())
+            && $user->sites()->where('type', SiteType::SIEGE->value)->exists();
     }
 
     public function voirCommission(User $user, TransfertLogistique $transfert): bool

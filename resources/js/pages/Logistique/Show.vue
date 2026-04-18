@@ -401,7 +401,7 @@ function annulerTransfert() {
 // ── Commission ────────────────────────────────────────────────────────────────
 
 const commissionForm = useForm({
-    base_calcul: 'forfait',
+    base_calcul: 'par_pack',
     valeur_base: 0 as number,
     quantite_reference: null as number | null,
 });
@@ -409,6 +409,26 @@ const commissionForm = useForm({
 const needsQuantite = computed(() =>
     ['par_pack', 'par_km'].includes(commissionForm.base_calcul),
 );
+
+const totalQuantiteRecue = computed(() =>
+    props.transfert.lignes.reduce(
+        (sum, l) => sum + (l.quantite_recue ?? 0),
+        0,
+    ),
+);
+
+const gainPreview = computed(() => {
+    const base = commissionForm.valeur_base ?? 0;
+    if (commissionForm.base_calcul === 'forfait') return base;
+    const qte = commissionForm.quantite_reference ?? 0;
+    return base * qte;
+});
+
+watch(showCommissionDialog, (open) => {
+    if (open) {
+        commissionForm.quantite_reference = totalQuantiteRecue.value;
+    }
+});
 
 function submitCommission() {
     commissionForm.post(`/logistique/${props.transfert.id}/commission`, {
@@ -1442,12 +1462,13 @@ function activiteDotClass(action: string): string {
                 </div>
                 <div v-if="needsQuantite">
                     <Label class="mb-1.5 block text-sm"
-                        >Quantité de référence</Label
+                        >Qté réceptionnée</Label
                     >
                     <InputNumber
                         v-model="commissionForm.quantite_reference"
                         :min="1"
                         :use-grouping="false"
+                        :disabled="true"
                         class="w-full"
                         input-class="w-full"
                     />
@@ -1464,6 +1485,24 @@ function activiteDotClass(action: string): string {
                 >
                     {{ commissionForm.errors.commission }}
                 </p>
+
+                <!-- Aperçu du gain total -->
+                <div
+                    v-if="commissionForm.valeur_base > 0"
+                    class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800 dark:bg-emerald-950/30"
+                >
+                    <p class="text-xs text-emerald-700 dark:text-emerald-400">
+                        Commission totale estimée
+                    </p>
+                    <p
+                        class="mt-0.5 text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-400"
+                    >
+                        {{
+                            new Intl.NumberFormat('fr-FR').format(gainPreview)
+                        }}
+                        GNF
+                    </p>
+                </div>
             </div>
             <template #footer>
                 <Button variant="outline" @click="showCommissionDialog = false"
