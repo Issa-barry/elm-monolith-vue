@@ -64,8 +64,8 @@ class TransfertLogistiqueController extends Controller
 
         if ($vue === 'receptions') {
             if ($isAdmin) {
-                // Admins : RECEPTION + CLOTURE, toute l'organisation
-                $statutsVue = [StatutTransfert::RECEPTION->value, StatutTransfert::CLOTURE->value];
+                // Admins : TRANSIT + RECEPTION + CLOTURE, toute l'organisation
+                $statutsVue = [StatutTransfert::TRANSIT->value, StatutTransfert::RECEPTION->value, StatutTransfert::CLOTURE->value];
                 $query->when($statut, fn ($q) => $q->where('statut', $statut))
                     ->when(! $statut, fn ($q) => $q->whereIn('statut', $statutsVue));
             } else {

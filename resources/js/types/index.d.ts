@@ -20,7 +20,8 @@ export type Resource =
 export type CrudAction = 'create' | 'read' | 'update' | 'delete';
 export type StandalonePermission =
     | 'logistique.commission.verser'
-    | 'ventes.qte.update';
+    | 'ventes.qte.update'
+    | 'ventes.prix.update';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 export type AppRole =

@@ -36,6 +36,7 @@ class RolesAndPermissionsSeeder extends Seeder
         // Permissions standalone (hors matrice CRUD standard)
         Permission::firstOrCreate(['name' => 'logistique.commission.verser']);
         Permission::firstOrCreate(['name' => 'ventes.qte.update']);
+        Permission::firstOrCreate(['name' => 'ventes.prix.update']);
 
         // ── 2. Rôles + matrices de permissions ────────────────────────────────
         $superAdmin = Role::firstOrCreate(['name' => 'super_admin']);
@@ -59,6 +60,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'packings.create',          'packings.read',          'packings.update',          'packings.delete',
             'ventes.create',            'ventes.read',            'ventes.update',            'ventes.delete',
             'ventes.qte.update',
+            'ventes.prix.update',
             'achats.create',            'achats.read',            'achats.update',            'achats.delete',
             'users.create',             'users.read',             'users.update',
             'parametres.read',          'parametres.update',
@@ -78,6 +80,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'packings.read',            'packings.create',        'packings.update',
             'ventes.create',            'ventes.read',            'ventes.update',
             'ventes.qte.update',
+            'ventes.prix.update',
             'achats.create',            'achats.read',            'achats.update',
             'users.read',
             'parametres.read',

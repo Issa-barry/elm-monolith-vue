@@ -2,13 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AuditEvent;
 use App\Enums\MotifAnnulation;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
+use App\Enums\StatutCommandeVente;
+use App\Models\AuditLog;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\Produit;
 use App\Models\Vehicule;
+use App\Services\AuditLogService;
 use App\Services\CommandeVenteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,7 +27,12 @@ class CommandeVenteController extends Controller
 
     private const LIGNES_REQUIRED_MESSAGE = 'Au moins une ligne de commande est requise.';
 
-    public function __construct(private readonly CommandeVenteService $service) {}
+    private const UNIT_PRICE_UPDATE_PERMISSION = 'ventes.prix.update';
+
+    public function __construct(
+        private readonly CommandeVenteService $service,
+        private readonly AuditLogService $auditService,
+    ) {}
 
     // ── Index ─────────────────────────────────────────────────────────────────
 
@@ -209,6 +218,7 @@ class CommandeVenteController extends Controller
 
         $this->ensureVehiculeOrClientSelected($data);
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
+        $this->enforcePrixVentePolicy($data, null);
 
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
@@ -225,6 +235,15 @@ class CommandeVenteController extends Controller
         foreach ($lignesData as $ligneDatum) {
             $commande->lignes()->create($ligneDatum);
         }
+
+        $commande->load(['lignes.produit', 'vehicule', 'client']);
+        $this->auditService->record(
+            $commande,
+            AuditEvent::CREATED,
+            auth()->user(),
+            null,
+            $this->commandeSnapshot($commande),
+        );
 
         return redirect()->route('ventes.show', $commande)
             ->with('success', 'Commande créée en brouillon.');
@@ -253,7 +272,23 @@ class CommandeVenteController extends Controller
 
         $facture = $commande_vente->facture;
 
+        $historiques = AuditLog::where('organization_id', $commande_vente->organization_id)
+            ->where('auditable_type', CommandeVente::class)
+            ->where('auditable_id', $commande_vente->id)
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (AuditLog $log) => [
+                'id' => $log->id,
+                'event_code' => $log->event_code,
+                'event_label' => $log->event_label,
+                'actor_name' => $log->actor_name_snapshot ?? 'Système',
+                'old_values' => $log->old_values,
+                'new_values' => $log->new_values,
+                'created_at' => $log->created_at->format('d/m/Y H:i'),
+            ]);
+
         return Inertia::render('Ventes/Show', [
+            'historiques' => $historiques,
             'commande' => [
                 'id' => $commande_vente->id,
                 'reference' => $commande_vente->reference,
@@ -393,6 +428,10 @@ class CommandeVenteController extends Controller
 
         $this->ensureVehiculeOrClientSelected($data);
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
+        $this->enforcePrixVentePolicy($data, $vente);
+
+        $vente->load(['lignes.produit', 'vehicule', 'client']);
+        $oldSnapshot = $this->commandeSnapshot($vente);
 
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
@@ -407,6 +446,14 @@ class CommandeVenteController extends Controller
             $vente->lignes()->create($ligneDatum);
         }
 
+        $vente->refresh()->load(['lignes.produit', 'vehicule', 'client']);
+        $newSnapshot = $this->commandeSnapshot($vente);
+
+        [$oldDiff, $newDiff] = $this->auditService->diff($oldSnapshot, $newSnapshot);
+        if ($oldDiff !== null || $newDiff !== null) {
+            $this->auditService->record($vente, AuditEvent::UPDATED, auth()->user(), $oldDiff, $newDiff);
+        }
+
         return redirect()->route('ventes.show', $vente)
             ->with('success', 'Commande mise à jour.');
     }
@@ -417,7 +464,16 @@ class CommandeVenteController extends Controller
     {
         $this->authorize('update', $commande_vente);
 
+        $oldStatut = $commande_vente->statut->value;
         $this->service->valider($commande_vente);
+
+        $this->auditService->record(
+            $commande_vente,
+            AuditEvent::VALIDATED,
+            auth()->user(),
+            ['statut' => $oldStatut],
+            ['statut' => StatutCommandeVente::EN_COURS->value],
+        );
 
         return back()->with('success', 'Commande validée. Facture créée.');
     }
@@ -443,7 +499,16 @@ class CommandeVenteController extends Controller
         $motif = MotifAnnulation::from($data['motif_annulation_code'])
             ->toMotifString($data['motif_annulation_detail'] ?? '');
 
+        $oldStatut = $commande_vente->statut->value;
         $this->service->annuler($commande_vente, $motif);
+
+        $this->auditService->record(
+            $commande_vente,
+            AuditEvent::CANCELLED,
+            auth()->user(),
+            ['statut' => $oldStatut, 'motif_annulation' => null],
+            ['statut' => StatutCommandeVente::ANNULEE->value, 'motif_annulation' => $motif],
+        );
 
         return back()->with('success', 'Commande et facture annulées.');
     }
@@ -454,6 +519,14 @@ class CommandeVenteController extends Controller
     {
         $this->authorize('delete', $vente);
         abort_unless($vente->isAnnulee(), 403, 'Seules les commandes annulées peuvent être supprimées.');
+
+        $this->auditService->record(
+            $vente,
+            AuditEvent::DELETED,
+            auth()->user(),
+            ['reference' => $vente->reference, 'statut' => $vente->statut->value],
+            null,
+        );
 
         $vente->delete();
 
@@ -531,6 +604,65 @@ class CommandeVenteController extends Controller
         }
     }
 
+    private function enforcePrixVentePolicy(array $data, ?CommandeVente $commande): void
+    {
+        if (auth()->user()->can(self::UNIT_PRICE_UPDATE_PERMISSION)) {
+            return;
+        }
+
+        $lignes = collect($data['lignes'] ?? []);
+        if ($lignes->isEmpty()) {
+            return;
+        }
+
+        $produitIds = $lignes
+            ->pluck('produit_id')
+            ->filter()
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $prixParProduit = Produit::query()
+            ->whereIn('id', $produitIds)
+            ->pluck('prix_vente', 'id')
+            ->map(fn (mixed $prix): float => (float) $prix)
+            ->toArray();
+
+        $existingPrixParProduit = $this->existingPrixVenteByProduit($commande);
+
+        foreach ($data['lignes'] as $index => $ligne) {
+            $produitId = (int) ($ligne['produit_id'] ?? 0);
+            if ($produitId <= 0) {
+                continue;
+            }
+
+            $prixRecu = (float) ($ligne['prix_vente'] ?? 0);
+            $prixAttendu = $existingPrixParProduit[$produitId]
+                ?? ($prixParProduit[$produitId] ?? $prixRecu);
+
+            if (abs($prixRecu - $prixAttendu) > 0.00001) {
+                throw ValidationException::withMessages([
+                    "lignes.{$index}.prix_vente" => 'Vous n etes pas autorise a modifier le prix unitaire.',
+                ]);
+            }
+        }
+    }
+
+    private function existingPrixVenteByProduit(?CommandeVente $commande): array
+    {
+        if (! $commande) {
+            return [];
+        }
+
+        $commande->loadMissing('lignes');
+
+        return $commande->lignes
+            ->groupBy('produit_id')
+            ->map(fn ($lignes): float => (float) $lignes->first()->prix_vente_snapshot)
+            ->toArray();
+    }
+
     private function buildLignesDataAndTotal(array $lignes): array
     {
         $lignesData = [];
@@ -554,5 +686,26 @@ class CommandeVenteController extends Controller
         }
 
         return [$lignesData, $totalCommande];
+    }
+
+    private function commandeSnapshot(CommandeVente $commande): array
+    {
+        return [
+            'vehicule_id' => $commande->vehicule_id,
+            'vehicule_nom' => $commande->vehicule?->nom_vehicule,
+            'client_id' => $commande->client_id,
+            'client_nom' => $commande->client
+                ? trim($commande->client->prenom.' '.$commande->client->nom)
+                : null,
+            'total_commande' => (float) $commande->total_commande,
+            'statut' => $commande->statut?->value,
+            'lignes' => $commande->lignes->map(fn ($l) => [
+                'produit_id' => $l->produit_id,
+                'produit_nom' => $l->produit?->nom,
+                'qte' => (int) $l->qte,
+                'prix_vente_snapshot' => (float) $l->prix_vente_snapshot,
+                'total_ligne' => (float) $l->total_ligne,
+            ])->values()->all(),
+        ];
     }
 }

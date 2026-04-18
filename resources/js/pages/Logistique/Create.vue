@@ -451,11 +451,6 @@ function submit() {
                                         Quantité
                                     </th>
                                     <th
-                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                    >
-                                        Note (optionnel)
-                                    </th>
-                                    <th
                                         class="px-4 py-2.5"
                                         style="width: 48px"
                                     ></th>
@@ -517,14 +512,6 @@ function submit() {
                                             input-class="w-full text-center"
                                         />
                                     </td>
-                                    <td class="px-4 py-3">
-                                        <input
-                                            v-model="ligne.notes"
-                                            type="text"
-                                            placeholder="Remarque…"
-                                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
-                                        />
-                                    </td>
                                     <td class="px-4 py-3 text-center">
                                         <Button
                                             type="button"
@@ -582,19 +569,6 @@ function submit() {
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full text-center"
-                                    />
-                                </div>
-                                <div>
-                                    <p
-                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
-                                    >
-                                        Note
-                                    </p>
-                                    <input
-                                        v-model="ligne.notes"
-                                        type="text"
-                                        placeholder="Remarque…"
-                                        class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
                                     />
                                 </div>
                             </div>

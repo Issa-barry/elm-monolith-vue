@@ -64,6 +64,11 @@ function toggleMenu(item: NavItem) {
     const key = menuKey(item);
     openMenus[key] = !isMenuOpen(item);
 }
+
+function parentBadge(item: NavItem): number | undefined {
+    const total = item.items?.reduce((sum, s) => sum + (s.badge ?? 0), 0) ?? 0;
+    return total > 0 ? total : undefined;
+}
 </script>
 
 <template>
@@ -104,6 +109,11 @@ function toggleMenu(item: NavItem) {
                             class="text-sidebar-primary"
                         />
                         <span>{{ item.title }}</span>
+                        <span
+                            v-if="parentBadge(item)"
+                            class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                            >{{ parentBadge(item) }}</span
+                        >
                     </SidebarMenuButton>
                     <SidebarMenuAction @click.stop="toggleMenu(item)">
                         <ChevronDown
@@ -126,6 +136,11 @@ function toggleMenu(item: NavItem) {
                                     @click="closeMobileSidebar"
                                 >
                                     <span>{{ subItem.title }}</span>
+                                    <span
+                                        v-if="subItem.badge"
+                                        class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                                        >{{ subItem.badge }}</span
+                                    >
                                 </Link>
                             </SidebarMenuSubButton>
                         </SidebarMenuSubItem>

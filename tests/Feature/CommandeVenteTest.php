@@ -14,6 +14,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Permission;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -139,7 +140,7 @@ class CommandeVenteTest extends TestCase
             ->post(route('ventes.store'), [
                 'client_id' => $client->id,
                 'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 1500],
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => (int) $produit->prix_vente],
                 ],
             ])
             ->assertRedirect();
@@ -524,6 +525,107 @@ class CommandeVenteTest extends TestCase
     }
 
     // ── show ──────────────────────────────────────────────────────────────────
+
+    public function test_store_fails_when_prix_unitaire_is_changed_without_permission(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => (int) $produit->prix_vente + 500],
+                ],
+            ])
+            ->assertSessionHasErrors('lignes.0.prix_vente');
+    }
+
+    public function test_store_accepts_custom_prix_unitaire_with_permission(): void
+    {
+        Permission::firstOrCreate(['name' => 'ventes.prix.update', 'guard_name' => 'web']);
+        $this->user->givePermissionTo('ventes.prix.update');
+
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        $customPrice = (int) $produit->prix_vente + 500;
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => $customPrice],
+                ],
+            ])
+            ->assertRedirect();
+
+        $commande = CommandeVente::query()->latest('id')->first();
+
+        $this->assertDatabaseHas('commande_vente_lignes', [
+            'commande_vente_id' => $commande->id,
+            'produit_id' => $produit->id,
+            'prix_vente_snapshot' => $customPrice,
+        ]);
+    }
+
+    public function test_update_fails_when_prix_unitaire_is_changed_without_permission(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => (float) $produit->prix_vente,
+        ]);
+
+        $commande->lignes()->create([
+            'produit_id' => $produit->id,
+            'qte' => 1,
+            'prix_usine_snapshot' => (float) $produit->prix_usine,
+            'prix_vente_snapshot' => (float) $produit->prix_vente,
+            'total_ligne' => (float) $produit->prix_vente,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('ventes.update', $commande), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => (int) $produit->prix_vente + 500],
+                ],
+            ])
+            ->assertSessionHasErrors('lignes.0.prix_vente');
+    }
+
+    public function test_update_accepts_existing_custom_prix_without_permission(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        $customPrice = (int) $produit->prix_vente + 700;
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => $customPrice,
+        ]);
+
+        $commande->lignes()->create([
+            'produit_id' => $produit->id,
+            'qte' => 1,
+            'prix_usine_snapshot' => (float) $produit->prix_usine,
+            'prix_vente_snapshot' => (float) $customPrice,
+            'total_ligne' => (float) $customPrice,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('ventes.update', $commande), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => $customPrice],
+                ],
+            ])
+            ->assertRedirect();
+    }
 
     public function test_show_returns_200_for_authorized_user(): void
     {
