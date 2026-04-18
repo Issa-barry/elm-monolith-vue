@@ -56,6 +56,7 @@ defineProps<{
     ca_par_site: SiteData[];
     ca_par_type_vehicule: TypeVehiculeData[];
     ca_par_produit: ProduitData[];
+    periode: string;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -74,7 +75,7 @@ const breadcrumbs: BreadcrumbItem[] = [
             <HeaderWidget />
 
             <div class="mt-4 grid grid-cols-12 gap-8">
-                <StatsBankingWidget :stats="stats_factures" />
+                <StatsBankingWidget :stats="stats_factures" :periode="periode" />
             </div>
 
             <div class="hidden sm:grid grid-cols-12 gap-8">

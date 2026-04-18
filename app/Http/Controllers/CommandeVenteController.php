@@ -11,6 +11,7 @@ use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -25,39 +26,85 @@ class CommandeVenteController extends Controller
 
     // ── Index ─────────────────────────────────────────────────────────────────
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $this->authorize('viewAny', CommandeVente::class);
 
         $orgId = auth()->user()->organization_id;
         $user = auth()->user();
+        $periode = $request->input('periode', 'today');
+        $statut = $request->input('statut', 'tous');
 
-        $commandes = CommandeVente::with(['vehicule', 'client', 'facture'])
+        $query = CommandeVente::with(['vehicule', 'client', 'site', 'facture.encaissements.creator'])
             ->where('organization_id', $orgId)
-            ->orderByDesc('created_at')
-            ->get()
-            ->map(fn (CommandeVente $c) => [
-                'id' => $c->id,
-                'reference' => $c->reference,
-                'statut' => $c->statut?->value,
-                'statut_label' => $c->statut_label,
-                'total_commande' => (float) $c->total_commande,
-                'vehicule_nom' => $c->vehicule?->nom_vehicule,
-                'client_nom' => $c->client ? trim($c->client->prenom.' '.$c->client->nom) : null,
-                'facture_statut' => $c->facture?->statut_facture?->value,
-                'facture_statut_label' => $c->facture?->statut_facture?->label(),
-                'facture_montant_restant' => $c->facture ? (float) $c->facture->montant_restant : null,
-                'created_at' => $c->created_at?->format(self::DATE_DISPLAY_FORMAT),
-                'is_annulee' => $c->isAnnulee(),
-                'is_brouillon' => $c->isBrouillon(),
-                'is_en_cours' => $c->isEnCours(),
-                'can_modifier' => $c->isBrouillon() && $user->can('update', $c),
-                'can_valider' => $c->isBrouillon() && $user->can('update', $c),
-                'can_annuler' => $c->isEnCours() && $user->can('annuler', $c),
-            ]);
+            ->orderByDesc('created_at');
+
+        match ($periode) {
+            'today' => $query->whereDate('created_at', Carbon::today()),
+            'week' => $query->whereBetween('created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
+            'month' => $query->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month),
+            default => null,
+        };
+
+        if ($statut !== 'tous') {
+            $query->where('statut', $statut);
+        }
+
+        $commandes = $query->get();
+
+        $nonAnnulees = $commandes->filter(fn ($c) => ! $c->isAnnulee());
+        $enCours = $commandes->filter(fn ($c) => $c->isEnCours());
+        $cloturees = $commandes->filter(fn ($c) => $c->isCloturee());
+
+        $totaux = [
+            'total_montant' => (float) $nonAnnulees->sum('total_commande'),
+            'nb_total' => $nonAnnulees->count(),
+            'total_a_encaisser' => (float) $commandes
+                ->filter(fn ($c) => $c->facture && ! $c->facture->isAnnulee())
+                ->sum(fn ($c) => (float) $c->facture->montant_restant),
+            'deja_paye' => (float) $commandes
+                ->filter(fn ($c) => $c->facture && ! $c->facture->isAnnulee())
+                ->sum(fn ($c) => (float) $c->facture->montant_encaisse),
+            'nb_cloturees' => $cloturees->count(),
+            'montant_cloturees' => (float) $cloturees->sum('total_commande'),
+        ];
+
+        $mapped = $commandes->map(fn (CommandeVente $c) => [
+            'id' => $c->id,
+            'reference' => $c->reference,
+            'statut' => $c->statut?->value,
+            'statut_label' => $c->statut_label,
+            'total_commande' => (float) $c->total_commande,
+            'vehicule_nom' => $c->vehicule?->nom_vehicule,
+            'client_nom' => $c->client ? trim($c->client->prenom.' '.$c->client->nom) : null,
+            'site_nom' => $c->site?->nom,
+            'facture_id' => $c->facture?->id,
+            'facture_statut' => $c->facture?->statut_facture?->value,
+            'facture_statut_label' => $c->facture?->statut_facture?->label(),
+            'facture_montant_encaisse' => $c->facture ? (float) $c->facture->montant_encaisse : null,
+            'facture_montant_restant' => $c->facture ? (float) $c->facture->montant_restant : null,
+            'encaissements' => $c->facture ? $c->facture->encaissements->map(fn ($e) => [
+                'id' => $e->id,
+                'montant' => (float) $e->montant,
+                'date_encaissement' => $e->date_encaissement?->format(self::DATE_DISPLAY_FORMAT),
+                'heure' => $e->created_at?->format('H:i'),
+                'mode_paiement_label' => $e->mode_paiement?->label(),
+                'created_by' => $e->creator?->name,
+            ])->values() : [],
+            'created_at' => $c->created_at?->format(self::DATE_DISPLAY_FORMAT),
+            'is_annulee' => $c->isAnnulee(),
+            'is_brouillon' => $c->isBrouillon(),
+            'is_en_cours' => $c->isEnCours(),
+            'can_modifier' => $c->isBrouillon() && $user->can('update', $c),
+            'can_valider' => $c->isBrouillon() && $user->can('update', $c),
+            'can_annuler' => $c->isEnCours() && $user->can('annuler', $c),
+        ]);
 
         return Inertia::render('Ventes/Index', [
-            'commandes' => $commandes,
+            'commandes' => $mapped->values(),
+            'totaux' => $totaux,
+            'periode' => $periode,
+            'statut' => $statut,
         ]);
     }
 
@@ -160,7 +207,6 @@ class CommandeVenteController extends Controller
         );
 
         $this->ensureVehiculeOrClientSelected($data);
-        $this->ensureQuantiteMatchesVehiculeCapacity($data);
 
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
@@ -189,7 +235,7 @@ class CommandeVenteController extends Controller
         $this->authorize('view', $vente);
 
         $commande_vente = $vente;
-        $commande_vente->load(['vehicule', 'client', 'site', 'lignes.produit', 'createdBy']);
+        $commande_vente->load(['vehicule', 'client', 'site', 'lignes.produit', 'createdBy', 'facture.encaissements.creator']);
 
         $user = auth()->user();
 
@@ -202,6 +248,8 @@ class CommandeVenteController extends Controller
             'prix_vente_snapshot' => (float) $l->prix_vente_snapshot,
             'total_ligne' => (float) $l->total_ligne,
         ]);
+
+        $facture = $commande_vente->facture;
 
         return Inertia::render('Ventes/Show', [
             'commande' => [
@@ -223,10 +271,30 @@ class CommandeVenteController extends Controller
                 'can_modifier' => $commande_vente->isBrouillon() && $user->can('update', $commande_vente),
                 'can_valider' => $commande_vente->isBrouillon() && $user->can('update', $commande_vente),
                 'can_annuler' => $commande_vente->isEnCours() && $user->can('annuler', $commande_vente),
+                'can_encaisser' => $facture && ! $facture->isAnnulee() && (float) $facture->montant_restant > 0 && $user->can('update', $commande_vente),
                 'created_at' => $commande_vente->created_at?->format(self::DATE_DISPLAY_FORMAT),
                 'created_by' => $commande_vente->createdBy?->name,
                 'lignes' => $lignes,
             ],
+            'facture' => $facture ? [
+                'id' => $facture->id,
+                'reference' => $facture->reference,
+                'montant_net' => (float) $facture->montant_net,
+                'montant_encaisse' => (float) $facture->montant_encaisse,
+                'montant_restant' => (float) $facture->montant_restant,
+                'statut' => $facture->statut_facture?->value,
+                'statut_label' => $facture->statut_label,
+                'encaissements' => $facture->encaissements->map(fn ($e) => [
+                    'id' => $e->id,
+                    'montant' => (float) $e->montant,
+                    'date_encaissement' => $e->date_encaissement?->format(self::DATE_DISPLAY_FORMAT),
+                    'heure' => $e->created_at?->format('H:i'),
+                    'mode_paiement' => $e->mode_paiement?->value,
+                    'mode_paiement_label' => $e->mode_paiement?->label(),
+                    'note' => $e->note,
+                    'created_by' => $e->creator?->name,
+                ])->values(),
+            ] : null,
         ]);
     }
 
@@ -322,7 +390,6 @@ class CommandeVenteController extends Controller
         );
 
         $this->ensureVehiculeOrClientSelected($data);
-        $this->ensureQuantiteMatchesVehiculeCapacity($data);
 
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
@@ -445,9 +512,9 @@ class CommandeVenteController extends Controller
         );
         $capacite = (int) $vehicule->capacite_packs;
 
-        if ($qteTotale !== $capacite) {
+        if ($qteTotale > $capacite) {
             throw ValidationException::withMessages([
-                'lignes' => "La quantité totale des produits ({$qteTotale}) doit être égale à la capacité du véhicule sélectionné ({$capacite}).",
+                'lignes' => "La quantité totale ({$qteTotale} packs) dépasse la capacité du véhicule ({$capacite} packs maximum).",
             ]);
         }
     }

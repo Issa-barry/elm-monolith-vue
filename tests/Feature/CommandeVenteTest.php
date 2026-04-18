@@ -183,7 +183,7 @@ class CommandeVenteTest extends TestCase
             ->assertSessionHasErrors(['lignes']);
     }
 
-    public function test_store_fails_when_total_quantite_differs_from_vehicule_capacity(): void
+    public function test_store_succeeds_when_total_quantite_exceeds_vehicule_capacity(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
         $vehicule->update(['capacite_packs' => 5]);
@@ -192,16 +192,150 @@ class CommandeVenteTest extends TestCase
             ->post(route('ventes.store'), [
                 'vehicule_id' => $vehicule->id,
                 'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 6, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commandes_ventes', [
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+        ]);
+    }
+
+    public function test_store_succeeds_when_total_quantite_below_vehicule_capacity(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        $vehicule->update(['capacite_packs' => 10]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 3, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commandes_ventes', ['vehicule_id' => $vehicule->id]);
+    }
+
+    public function test_store_succeeds_when_multi_lines_total_exceeds_vehicule_capacity(): void
+    {
+        ['vehicule' => $vehicule] = $this->makeContext($this->org);
+        $vehicule->update(['capacite_packs' => 5]);
+
+        $p1 = Produit::create([
+            'organization_id' => $this->org->id, 'nom' => 'Px', 'type' => 'materiel',
+            'statut' => 'actif', 'prix_vente' => 1000, 'prix_usine' => 800,
+        ]);
+        $p2 = Produit::create([
+            'organization_id' => $this->org->id, 'nom' => 'Py', 'type' => 'materiel',
+            'statut' => 'actif', 'prix_vente' => 1500, 'prix_usine' => 1000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $p1->id, 'qte' => 3, 'prix_vente' => 1000],
+                    ['produit_id' => $p2->id, 'qte' => 4, 'prix_vente' => 1500],
+                ],
+            ])
+            ->assertRedirect();
+    }
+
+    // ── qte éditable / capacité véhicule par défaut ───────────────────────────
+
+    public function test_store_accepts_qte_equal_to_vehicule_capacity(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        // capacite_packs = 2 définie dans makeContext
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
                     ['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 2000],
                 ],
             ])
-            ->assertSessionHasErrors('lignes');
+            ->assertRedirect();
 
-        $this->assertDatabaseMissing('commandes_ventes', [
-            'organization_id' => $this->org->id,
-            'vehicule_id' => $vehicule->id,
-            'total_commande' => 4000,
+        $this->assertDatabaseHas('commandes_ventes', ['vehicule_id' => $vehicule->id]);
+    }
+
+    public function test_store_accepts_multiple_lignes_summing_to_capacity(): void
+    {
+        ['vehicule' => $vehicule] = $this->makeContext($this->org);
+        $vehicule->update(['capacite_packs' => 10]);
+
+        $produit1 = Produit::create([
+            'organization_id' => $this->org->id, 'nom' => 'P1', 'type' => 'materiel',
+            'statut' => 'actif', 'prix_vente' => 1000, 'prix_usine' => 800,
         ]);
+        $produit2 = Produit::create([
+            'organization_id' => $this->org->id, 'nom' => 'P2', 'type' => 'materiel',
+            'statut' => 'actif', 'prix_vente' => 1500, 'prix_usine' => 1000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit1->id, 'qte' => 6, 'prix_vente' => 1000],
+                    ['produit_id' => $produit2->id, 'qte' => 4, 'prix_vente' => 1500],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commandes_ventes', ['vehicule_id' => $vehicule->id]);
+    }
+
+    public function test_store_fails_with_zero_qte(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 0, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertSessionHasErrors('lignes.0.qte');
+    }
+
+    public function test_store_with_client_only_accepts_any_valid_qte(): void
+    {
+        // Sans véhicule (fallback qte=1), tous les rôles autorisés peuvent saisir
+        ['produit' => $produit, 'client' => $client] = $this->makeContext($this->org);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'client_id' => $client->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commandes_ventes', ['client_id' => $client->id]);
+    }
+
+    public function test_create_exposes_vehicule_capacity_for_new_ligne_default(): void
+    {
+        ['vehicule' => $vehicule] = $this->makeContext($this->org);
+        $vehicule->update(['capacite_packs' => 50]);
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.create'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Ventes/Create')
+                ->has('vehicules', fn (Assert $v) => $v
+                    ->where('0.capacite_packs', 50)
+                    ->etc()
+                )
+            );
     }
 
     public function test_edit_exposes_vehicule_capacity_in_inertia_props(): void

@@ -6,19 +6,48 @@ use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
 use App\Enums\TypeVehicule;
 use App\Models\FactureVente;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function index(): Response
+    private function dateRangeForPeriode(string $periode): array
     {
-        $orgId = auth()->user()->organization_id;
+        $now = Carbon::now();
+        return match ($periode) {
+            'aujourd_hui'      => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
+            'hier'             => [$now->copy()->subDay()->startOfDay(), $now->copy()->subDay()->endOfDay()],
+            'cette_semaine'    => [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()],
+            'semaine_derniere' => [$now->copy()->subWeek()->startOfWeek(), $now->copy()->subWeek()->endOfWeek()],
+            'ce_mois'          => [$now->copy()->startOfMonth(), $now->copy()->endOfMonth()],
+            'mois_dernier'     => [$now->copy()->subMonth()->startOfMonth(), $now->copy()->subMonth()->endOfMonth()],
+            't1'               => [Carbon::create($now->year, 1, 1)->startOfDay(), Carbon::create($now->year, 3, 31)->endOfDay()],
+            't2'               => [Carbon::create($now->year, 4, 1)->startOfDay(), Carbon::create($now->year, 6, 30)->endOfDay()],
+            't3'               => [Carbon::create($now->year, 7, 1)->startOfDay(), Carbon::create($now->year, 9, 30)->endOfDay()],
+            't4'               => [Carbon::create($now->year, 10, 1)->startOfDay(), Carbon::create($now->year, 12, 31)->endOfDay()],
+            's1'               => [Carbon::create($now->year, 1, 1)->startOfDay(), Carbon::create($now->year, 6, 30)->endOfDay()],
+            's2'               => [Carbon::create($now->year, 7, 1)->startOfDay(), Carbon::create($now->year, 12, 31)->endOfDay()],
+            'cette_annee'      => [$now->copy()->startOfYear(), $now->copy()->endOfYear()],
+            default            => [null, null],
+        };
+    }
+
+    public function index(Request $request): Response
+    {
+        $orgId  = auth()->user()->organization_id;
+        $periode = $request->get('periode', 'ce_mois');
+        [$start, $end] = $this->dateRangeForPeriode($periode);
 
         // ── Agrégats des factures de vente ─────────────────────────────────────
-        $row = FactureVente::where('organization_id', $orgId)
-            ->selectRaw("
+        $statsQuery = FactureVente::where('organization_id', $orgId);
+        if ($start && $end) {
+            $statsQuery->whereBetween('created_at', [$start, $end]);
+        }
+
+        $row = $statsQuery->selectRaw("
                 COUNT(*) as total_count,
                 COALESCE(SUM(montant_net), 0) as total_montant,
                 COALESCE(SUM(CASE WHEN statut_facture = 'payee'    THEN 1 ELSE 0 END), 0) as payees_count,
@@ -30,15 +59,18 @@ class DashboardController extends Controller
             ->first();
 
         // Encaissé sur les factures encore actives (impayée + partielle)
-        $encaisseActif = DB::table('encaissements_ventes as ev')
+        $encaisseQuery = DB::table('encaissements_ventes as ev')
             ->join('factures_ventes as fv', 'fv.id', '=', 'ev.facture_vente_id')
             ->where('fv.organization_id', $orgId)
             ->whereNull('fv.deleted_at')
             ->whereIn('fv.statut_facture', [
                 StatutFactureVente::IMPAYEE->value,
                 StatutFactureVente::PARTIEL->value,
-            ])
-            ->sum('ev.montant');
+            ]);
+        if ($start && $end) {
+            $encaisseQuery->whereBetween('fv.created_at', [$start, $end]);
+        }
+        $encaisseActif = $encaisseQuery->sum('ev.montant');
 
         $resteAEncaisser = max(0, (float) $row->montant_actif - (float) $encaisseActif);
 
@@ -146,6 +178,7 @@ class DashboardController extends Controller
             ->toArray();
 
         return Inertia::render('Dashboard', [
+            'periode' => $periode,
             'stats_factures' => [
                 'total_count' => (int) $row->total_count,
                 'total_montant' => (float) $row->total_montant,

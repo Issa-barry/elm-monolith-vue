@@ -202,7 +202,7 @@ function onProduitChange(index: number, produitId: number | null) {
 
 function onQteChange(index: number, qte: number | null) {
     const ligne = form.lignes[index];
-    ligne.qte = qte ?? 1;
+    ligne.qte = Math.max(1, qte ?? 1);
     ligne.total = ligne.prix_vente * ligne.qte;
 }
 
@@ -213,7 +213,10 @@ function onPrixChange(index: number, prix: number | null) {
 }
 
 function addLigne() {
-    form.lignes.push({ produit_id: null, qte: 1, prix_vente: 0, total: 0 });
+    const capacite = capaciteVehiculeSelectionne.value;
+    const hasProducts = form.lignes.some((l) => l.produit_id !== null);
+    const qte = hasProducts ? 1 : (capacite ?? 1);
+    form.lignes.push({ produit_id: null, qte, prix_vente: 0, total: 0 });
 }
 
 function removeLigne(index: number) {
@@ -267,7 +270,6 @@ onMounted(() => {
 const canSubmit = computed(
     () =>
         (form.vehicule_id !== null || form.client_id !== null) &&
-        capaciteVehiculeConforme.value &&
         totalGeneral.value > 0 &&
         !form.processing,
 );

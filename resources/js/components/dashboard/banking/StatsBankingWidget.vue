@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { router } from '@inertiajs/vue3';
+import Select from 'primevue/select';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 
 interface StatsFactures {
     total_count: number;
@@ -11,7 +13,44 @@ interface StatsFactures {
     reste_a_encaisser: number;
 }
 
-defineProps<{ stats: StatsFactures }>();
+const props = defineProps<{ stats: StatsFactures; periode?: string }>();
+
+const periodes = [
+    { label: "Aujourd'hui", value: 'aujourd_hui' },
+    { label: 'Hier', value: 'hier' },
+    { label: 'Cette semaine', value: 'cette_semaine' },
+    { label: 'Semaine dernière', value: 'semaine_derniere' },
+    { label: 'Ce mois', value: 'ce_mois' },
+    { label: 'Mois dernier', value: 'mois_dernier' },
+    { label: 'T1', value: 't1' },
+    { label: 'T2', value: 't2' },
+    { label: 'T3', value: 't3' },
+    { label: 'T4', value: 't4' },
+    { label: 'S1', value: 's1' },
+    { label: 'S2', value: 's2' },
+    { label: 'Cette année', value: 'cette_annee' },
+    { label: 'Tout', value: 'tout' },
+];
+
+const selectedPeriode = ref(
+    periodes.find((p) => p.value === props.periode) ?? periodes[4],
+);
+
+function changerPeriode() {
+    router.get(
+        '/dashboard',
+        { periode: selectedPeriode.value.value },
+        { only: ['stats_factures', 'periode'], preserveState: true, preserveScroll: true },
+    );
+}
+
+watch(
+    () => props.periode,
+    (val) => {
+        const found = periodes.find((p) => p.value === val);
+        if (found) selectedPeriode.value = found;
+    },
+);
 
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
@@ -68,6 +107,18 @@ onUnmounted(() => {
 </script>
 
 <template>
+    <!-- ══ Filtre période (mobile + desktop) ══════════════════════════════════ -->
+    <div class="col-span-12 flex items-center justify-between">
+        <span class="text-base font-semibold text-foreground">KPIs Facturation</span>
+        <Select
+            v-model="selectedPeriode"
+            :options="periodes"
+            option-label="label"
+            class="w-44"
+            @change="changerPeriode"
+        />
+    </div>
+
     <!-- ══ MOBILE ══════════════════════════════════════════════════════════════ -->
     <div class="col-span-12 sm:hidden">
         <div

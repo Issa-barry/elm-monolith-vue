@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\StatutPartCommission;
 use App\Models\CommissionPayment;
+use App\Models\Livreur;
 use App\Models\Vehicule;
 use App\Services\CommissionPaymentService;
 use App\Services\PeriodeComptableService;
@@ -55,9 +56,13 @@ class CommissionVehiculeController extends Controller
             'total_paid' => (float) $list->sum('paid'),
         ];
 
+        $livreurIds = $list->pluck('livreur_id')->filter()->unique()->values()->toArray();
+        $telephones = Livreur::whereIn('id', $livreurIds)->pluck('telephone', 'id');
+
         $livreurs = $list->map(fn ($row) => [
             'livreur_id' => (int) $row->livreur_id,
             'nom' => $row->beneficiaire_nom,
+            'telephone' => $telephones[(int) $row->livreur_id] ?? null,
             'pending' => (float) $row->pending,
             'available' => (float) $row->available,
             'paid' => (float) $row->paid,
@@ -68,6 +73,7 @@ class CommissionVehiculeController extends Controller
             'kpis' => $kpis,
             'search' => $search,
             'filtre_statut' => $filtreStatut,
+            'can_payer' => auth()->user()->can('logistique.commission.verser'),
         ]);
     }
 
@@ -86,6 +92,7 @@ class CommissionVehiculeController extends Controller
         $allParts = CommissionPaymentService::releveLivreur($livreurId, $orgId);
 
         $livreurNom = $allParts->first()?->beneficiaire_nom ?? '—';
+        $livreurTelephone = Livreur::find($livreurId)?->telephone;
 
         // ── KPIs globaux (toutes périodes confondues) ─────────────────────────
         $totalPending = (float) $allParts
@@ -117,60 +124,96 @@ class CommissionVehiculeController extends Controller
             ? $allParts->filter(fn ($p) => $p->periode === $selectedPeriode)
             : $allParts;
 
-        // ── Historique des paiements ──────────────────────────────────────────
-        $payments = CommissionPayment::with('createur:id,prenom,nom')
+        // ── Statistiques de la période sélectionnée ───────────────────────────
+        $periodeStats = null;
+
+        if ($selectedPeriode !== '' && $filteredParts->isNotEmpty()) {
+            $totalCommissionPeriode = (float) $filteredParts->sum('montant_net');
+
+            // Total versé = somme des allocations sur les parts de cette période
+            $totalVersePeriode = (float) $filteredParts
+                ->flatMap(fn ($p) => $p->paymentItems)
+                ->sum('amount_allocated');
+
+            $restePeriode = max(0.0, $totalCommissionPeriode - $totalVersePeriode);
+
+            $allPending = $filteredParts->every(fn ($p) => $p->statut === StatutPartCommission::PENDING);
+
+            [$statutVal, $statutLabel, $statutDot] = match (true) {
+                $allPending          => ['pending',        'En attente',             'bg-zinc-400 dark:bg-zinc-500'],
+                $totalVersePeriode <= 0 => ['available',   'Non versée',             'bg-amber-500'],
+                $restePeriode < 0.01 => ['paid',           'Soldée',                 'bg-emerald-500'],
+                default              => ['partially_paid', 'Partiellement versée',   'bg-blue-500'],
+            };
+
+            $periodeStats = [
+                'code'            => $selectedPeriode,
+                'label'           => PeriodeComptableService::labelForCode($selectedPeriode),
+                'total_commission' => $totalCommissionPeriode,
+                'total_verse'     => $totalVersePeriode,
+                'reste'           => $restePeriode,
+                'statut'          => $statutVal,
+                'statut_label'    => $statutLabel,
+                'statut_dot_class' => $statutDot,
+            ];
+        }
+
+        // ── Historique des paiements (filtré par période si applicable) ────────
+        $filteredPartIds = $filteredParts->pluck('id')->toArray();
+
+        $paymentsQuery = CommissionPayment::with('createur:id,prenom,nom')
             ->where('organization_id', $orgId)
             ->where('livreur_id', $livreurId)
             ->where('beneficiary_type', 'livreur')
             ->orderByDesc('paid_at')
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn ($p) => [
-                'id' => $p->id,
-                'montant' => (float) $p->montant,
-                'mode_paiement' => $p->mode_paiement,
-                'note' => $p->note,
-                'paid_at' => $p->paid_at?->format(self::DATE_FORMAT),
-                'created_by' => $p->createur
-                    ? trim("{$p->createur->prenom} {$p->createur->nom}")
-                    : null,
-            ]);
+            ->orderByDesc('id');
+
+        if ($selectedPeriode !== '') {
+            // Uniquement les paiements ayant au moins une allocation sur cette période
+            count($filteredPartIds) > 0
+                ? $paymentsQuery->whereHas('items', fn ($q) => $q->whereIn('part_id', $filteredPartIds))
+                : $paymentsQuery->whereRaw('1 = 0');
+        }
+
+        $payments = $paymentsQuery->get()->map(fn ($p) => [
+            'id'           => $p->id,
+            'montant'      => (float) $p->montant,
+            'mode_paiement' => $p->mode_paiement,
+            'note'         => $p->note,
+            'paid_at'      => $p->paid_at?->format(self::DATE_FORMAT),
+            'created_by'   => $p->createur
+                ? trim("{$p->createur->prenom} {$p->createur->nom}")
+                : null,
+        ]);
 
         return Inertia::render('Logistique/Commissions/Livreur/Show', [
             'livreur' => [
-                'id' => $livreurId,
-                'nom' => $livreurNom,
+                'id'        => $livreurId,
+                'nom'       => $livreurNom,
+                'telephone' => $livreurTelephone,
             ],
             'kpis' => [
-                'pending' => $totalPending,
+                'pending'   => $totalPending,
                 'available' => $totalAvailable,
-                'paid' => $totalPaid,
+                'paid'      => $totalPaid,
             ],
             'parts' => $filteredParts->map(fn ($p) => [
-                'id' => $p->id,
+                'id'                  => $p->id,
                 'transfert_reference' => $p->commission?->transfert?->reference,
-                'taux_commission' => (float) $p->taux_commission,
-                'montant_brut' => (float) $p->montant_brut,
-                'montant_net' => (float) $p->montant_net,
-                'montant_verse' => (float) $p->montant_verse,
-                'montant_restant' => (float) $p->montant_restant,
-                'earned_at' => $p->earned_at?->format(self::DATE_FORMAT),
-                'periode' => $p->periode,
-                'periode_label' => $p->periode ? PeriodeComptableService::labelForCode($p->periode) : null,
-                'statut' => $p->statut?->value,
-                'statut_label' => $p->statut_label,
-                'statut_dot_class' => $p->statut_dot_class,
-                'payments' => $p->paymentItems->map(fn ($item) => [
-                    'paid_at' => $item->payment?->paid_at?->format(self::DATE_FORMAT),
-                    'montant' => (float) $item->amount_allocated,
-                    'mode_paiement' => $item->payment?->mode_paiement,
-                ])->values()->all(),
+                'montant_net'         => (float) $p->montant_net,
+                'earned_at'           => $p->earned_at?->format(self::DATE_FORMAT),
+                'periode'             => $p->periode,
+                'periode_label'       => $p->periode ? PeriodeComptableService::labelForCode($p->periode) : null,
+                'statut'              => $p->statut?->value,
+                'statut_label'        => $p->statut_label,
+                'statut_dot_class'    => $p->statut_dot_class,
             ])->values(),
-            'payments' => $payments,
-            'periode_courante' => $periodeCourante,
+            'periode_stats' => $periodeStats,
+            'payments'      => $payments,
+            'periode_courante'       => $periodeCourante,
             'periode_courante_label' => PeriodeComptableService::labelForCode($periodeCourante),
-            'selected_periode' => $selectedPeriode,
-            'periodes_disponibles' => $periodesDisponibles,
+            'selected_periode'       => $selectedPeriode,
+            'periodes_disponibles'   => $periodesDisponibles,
             'modes_paiement' => [
                 ['value' => 'especes',      'label' => 'Espèces'],
                 ['value' => 'virement',     'label' => 'Virement'],

@@ -11,13 +11,37 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, CheckCircle, Lock, MoreVertical, Pencil, XCircle } from 'lucide-vue-next';
+import { ArrowLeft, CheckCircle, HandCoins, Lock, MoreVertical, Pencil, XCircle } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
+import InputNumber from 'primevue/inputnumber';
+import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
 import { ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+interface Encaissement {
+    id: number;
+    montant: number;
+    date_encaissement: string;
+    heure: string | null;
+    mode_paiement: string;
+    mode_paiement_label: string;
+    note: string | null;
+    created_by: string | null;
+}
+
+interface FactureData {
+    id: number;
+    reference: string;
+    montant_net: number;
+    montant_encaisse: number;
+    montant_restant: number;
+    statut: string;
+    statut_label: string;
+    encaissements: Encaissement[];
+}
+
 interface LigneCommande {
     id: number;
     produit_id: number;
@@ -47,6 +71,7 @@ interface CommandeData {
     can_modifier: boolean;
     can_valider: boolean;
     can_annuler: boolean;
+    can_encaisser: boolean;
     created_at: string;
     created_by: string | null;
     lignes: LigneCommande[];
@@ -55,6 +80,7 @@ interface CommandeData {
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
     commande: CommandeData;
+    facture: FactureData | null;
 }>();
 
 const toast = useToast();
@@ -121,6 +147,44 @@ function submitAnnuler() {
         },
     });
 }
+
+// ── Encaissement ──────────────────────────────────────────────────────────────
+const modesPaiement = [
+    { value: 'especes', label: 'Espèces' },
+    { value: 'mobile_money', label: 'Mobile Money' },
+    { value: 'virement', label: 'Virement' },
+    { value: 'cheque', label: 'Chèque' },
+];
+
+const encaisserDialogVisible = ref(false);
+const encaisserForm = useForm({
+    montant: null as number | null,
+    mode_paiement: 'especes' as string | null,
+    note: '',
+    date_encaissement: new Date().toISOString().slice(0, 10),
+});
+
+function openEncaisserDialog() {
+    encaisserForm.reset();
+    encaisserForm.montant = props.facture?.montant_restant ?? null;
+    encaisserForm.date_encaissement = new Date().toISOString().slice(0, 10);
+    encaisserDialogVisible.value = true;
+}
+
+function submitEncaisser() {
+    if (!props.facture) return;
+    encaisserForm.post(`/factures/${props.facture.id}/encaissements`, {
+        onSuccess: () => {
+            encaisserDialogVisible.value = false;
+            toast.add({
+                severity: 'success',
+                summary: 'Encaissement enregistré',
+                detail: `${formatGNF(encaisserForm.montant ?? 0)} enregistré avec succès.`,
+                life: 3000,
+            });
+        },
+    });
+}
 </script>
 
 <template>
@@ -148,7 +212,7 @@ function submitAnnuler() {
                 </div>
                 <!-- Actions mobile -->
                 <div
-                    v-if="commande.can_modifier || commande.can_valider || commande.can_annuler"
+                    v-if="commande.can_modifier || commande.can_valider || commande.can_annuler || commande.can_encaisser"
                     class="absolute right-4"
                 >
                     <DropdownMenu>
@@ -176,7 +240,7 @@ function submitAnnuler() {
                                 <CheckCircle class="h-4 w-4" />
                                 Valider la commande
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator v-if="commande.can_annuler && (commande.can_modifier || commande.can_valider)" />
+                            <DropdownMenuSeparator v-if="commande.can_annuler && (commande.can_modifier || commande.can_valider || commande.can_encaisser)" />
                             <DropdownMenuItem
                                 v-if="commande.can_annuler"
                                 class="cursor-pointer text-amber-600 focus:text-amber-600"
@@ -191,7 +255,7 @@ function submitAnnuler() {
             </div>
         </div>
 
-        <div class="mr-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
+        <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
             <!-- En-tête commande ──────────────────────────────────────────────── -->
             <div class="hidden items-start justify-between gap-4 sm:flex">
                 <div class="flex items-start gap-4">
@@ -415,7 +479,163 @@ function submitAnnuler() {
                     </table>
                 </div>
             </div>
+
+            <!-- Facturation -->
+            <div v-if="facture" class="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+                <div class="mb-5 flex items-center justify-between">
+                    <h3 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+                        Facturation
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <Button
+                            v-if="commande.can_encaisser"
+                            size="sm"
+                            @click="openEncaisserDialog"
+                        >
+                            <HandCoins class="mr-2 h-4 w-4" />
+                            Encaisser
+                        </Button>
+                        <span
+                            class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                        :class="{
+                            'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400': facture.statut === 'impayee',
+                            'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300': facture.statut === 'partiel',
+                            'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300': facture.statut === 'payee',
+                            'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400': facture.statut === 'annulee',
+                        }"
+                    >
+                        {{ facture.statut_label }}
+                    </span>
+                    </div>
+                </div>
+
+                <!-- KPIs -->
+                <div class="mb-6 grid grid-cols-3 gap-3">
+                    <div class="rounded-lg border bg-muted/30 px-4 py-3">
+                        <p class="text-xs text-muted-foreground">Total facturé</p>
+                        <p class="mt-0.5 text-lg font-bold tabular-nums">{{ formatGNF(facture.montant_net) }}</p>
+                    </div>
+                    <div class="rounded-lg border bg-muted/30 px-4 py-3">
+                        <p class="text-xs text-muted-foreground">Déjà encaissé</p>
+                        <p class="mt-0.5 text-lg font-bold tabular-nums">{{ formatGNF(facture.montant_encaisse) }}</p>
+                    </div>
+                    <div class="rounded-lg border bg-muted/30 px-4 py-3">
+                        <p class="text-xs text-muted-foreground">Restant dû</p>
+                        <p class="mt-0.5 text-lg font-bold tabular-nums">{{ formatGNF(facture.montant_restant) }}</p>
+                    </div>
+                </div>
+
+                <!-- Historique encaissements -->
+                <div v-if="facture.encaissements.length > 0">
+                    <p class="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                        Historique des encaissements
+                    </p>
+                    <div class="overflow-hidden rounded-lg border">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b bg-muted/40">
+                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Date</th>
+                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Heure</th>
+                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Mode</th>
+                                    <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Montant</th>
+                                    <th class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground sm:table-cell">Par</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                <tr
+                                    v-for="enc in facture.encaissements"
+                                    :key="enc.id"
+                                    class="hover:bg-muted/10"
+                                >
+                                    <td class="px-4 py-3 tabular-nums">{{ enc.date_encaissement }}</td>
+                                    <td class="px-4 py-3 text-muted-foreground tabular-nums">{{ enc.heure ?? '—' }}</td>
+                                    <td class="px-4 py-3 text-muted-foreground">{{ enc.mode_paiement_label }}</td>
+                                    <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatGNF(enc.montant) }}</td>
+                                    <td class="hidden px-4 py-3 text-muted-foreground sm:table-cell">{{ enc.created_by ?? '—' }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <p v-else class="text-sm text-muted-foreground">Aucun encaissement enregistré.</p>
+            </div>
         </div>
+
+        <!-- Dialog Encaissement -->
+        <Dialog
+            v-model:visible="encaisserDialogVisible"
+            modal
+            header="Encaisser un paiement"
+            :style="{ width: '440px' }"
+        >
+            <div class="space-y-4">
+                <!-- Solde restant -->
+                <div
+                    v-if="facture"
+                    class="rounded-lg bg-primary/10 px-4 py-3"
+                >
+                    <p class="text-xs text-primary">Restant dû</p>
+                    <p class="text-xl font-bold tabular-nums text-primary">
+                        {{ formatGNF(facture.montant_restant) }}
+                    </p>
+                </div>
+
+                <!-- Montant -->
+                <div>
+                    <Label for="enc-montant" class="mb-1.5 block text-sm">
+                        Montant <span class="text-destructive">*</span>
+                    </Label>
+                    <InputNumber
+                        id="enc-montant"
+                        v-model="encaisserForm.montant"
+                        :max="facture?.montant_restant"
+                        :min="1"
+                        :use-grouping="true"
+                        locale="fr-FR"
+                        suffix=" GNF"
+                        class="w-full"
+                        fluid
+                        :class="{ 'p-invalid': encaisserForm.errors.montant }"
+                    />
+                    <p v-if="encaisserForm.errors.montant" class="mt-1 text-xs text-destructive">
+                        {{ encaisserForm.errors.montant }}
+                    </p>
+                </div>
+
+                <!-- Mode de paiement -->
+                <div>
+                    <Label for="enc-mode" class="mb-1.5 block text-sm">
+                        Mode de paiement <span class="text-destructive">*</span>
+                    </Label>
+                    <Select
+                        id="enc-mode"
+                        v-model="encaisserForm.mode_paiement"
+                        :options="modesPaiement"
+                        option-label="label"
+                        option-value="value"
+                        placeholder="Sélectionner"
+                        class="w-full"
+                        fluid
+                        :class="{ 'p-invalid': encaisserForm.errors.mode_paiement }"
+                    />
+                    <p v-if="encaisserForm.errors.mode_paiement" class="mt-1 text-xs text-destructive">
+                        {{ encaisserForm.errors.mode_paiement }}
+                    </p>
+                </div>
+            </div>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <Button variant="outline" @click="encaisserDialogVisible = false">Annuler</Button>
+                    <Button
+                        :disabled="encaisserForm.processing || !encaisserForm.montant || !encaisserForm.mode_paiement"
+                        @click="submitEncaisser"
+                    >
+                        <HandCoins class="mr-2 h-4 w-4" />
+                        {{ encaisserForm.processing ? 'Enregistrement…' : 'Confirmer' }}
+                    </Button>
+                </div>
+            </template>
+        </Dialog>
 
         <!-- Dialog Annulation -->
         <Dialog
