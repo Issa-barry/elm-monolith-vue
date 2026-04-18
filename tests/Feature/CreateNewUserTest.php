@@ -265,6 +265,7 @@ class CreateNewUserTest extends TestCase
             'telephone' => '+224622000011',
             'user_id' => $user->id,
         ]);
+        $this->assertTrue($user->hasRole('livreur'));
     }
 
     public function test_create_user_links_proprietaire_and_creates_client(): void
@@ -298,6 +299,7 @@ class CreateNewUserTest extends TestCase
             'telephone' => '+224622000012',
             'user_id' => $user->id,
         ]);
+        $this->assertTrue($user->hasRole('proprietaire'));
     }
 
     // ─── OTP nettoyé après création ───────────────────────────────────────────

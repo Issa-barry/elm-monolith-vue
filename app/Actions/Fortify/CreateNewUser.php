@@ -118,6 +118,8 @@ class CreateNewUser implements CreatesNewUsers
         // 2. Livreur → créer un client dans son organisation
         $livreur = Livreur::where('telephone', $telephone)->first();
         if ($livreur) {
+            Role::firstOrCreate(['name' => 'livreur', 'guard_name' => 'web']);
+            $user->assignRole('livreur');
             $this->findOrCreateClientInOrg($user, $livreur->organization_id, $telephone);
 
             return;
@@ -126,6 +128,8 @@ class CreateNewUser implements CreatesNewUsers
         // 3. Propriétaire sans user_id → lier le propriétaire et créer un client
         $proprietaire = Proprietaire::where('telephone', $telephone)->whereNull('user_id')->first();
         if ($proprietaire) {
+            Role::firstOrCreate(['name' => 'proprietaire', 'guard_name' => 'web']);
+            $user->assignRole('proprietaire');
             $proprietaire->update(['user_id' => $user->id]);
             $this->findOrCreateClientInOrg($user, $proprietaire->organization_id, $telephone);
         }

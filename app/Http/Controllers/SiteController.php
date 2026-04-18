@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\SiteStatut;
 use App\Enums\SiteType;
 use App\Models\Site;
 use App\Models\UserInvitation;
@@ -146,8 +145,6 @@ class SiteController extends Controller
 
         return Inertia::render('Sites/Create', [
             'types' => SiteType::options(),
-            'statuts' => SiteStatut::options(),
-            'parentOptions' => $this->parentOptions(),
         ]);
     }
 
@@ -161,20 +158,9 @@ class SiteController extends Controller
         $data = $request->validate([
             'nom' => 'required|string|max:255',
             'type' => ['required', Rule::in(array_column(SiteType::cases(), 'value'))],
-            'statut' => ['nullable', Rule::in(array_column(SiteStatut::cases(), 'value'))],
-            'localisation' => 'required|string|max:255',
-            'pays' => 'nullable|string|max:100',
             'ville' => 'nullable|string|max:100',
             'quartier' => 'nullable|string|max:100',
-            'description' => 'nullable|string',
-            'parent_id' => [
-                'nullable', 'integer',
-                Rule::exists('sites', 'id')->where('organization_id', $orgId),
-            ],
-            'latitude' => 'nullable|numeric|between:-90,90',
-            'longitude' => 'nullable|numeric|between:-180,180',
             'telephone' => 'nullable|string|max:50',
-            'email' => 'nullable|email|max:255',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
@@ -194,8 +180,6 @@ class SiteController extends Controller
         return Inertia::render('Sites/Edit', [
             'site' => $this->siteData($site),
             'types' => SiteType::options(),
-            'statuts' => SiteStatut::options(),
-            'parentOptions' => $this->parentOptions($site->id),
         ]);
     }
 
@@ -215,20 +199,9 @@ class SiteController extends Controller
                     ->ignore($site->id),
             ],
             'type' => ['required', Rule::in(array_column(SiteType::cases(), 'value'))],
-            'statut' => ['nullable', Rule::in(array_column(SiteStatut::cases(), 'value'))],
-            'localisation' => 'required|string|max:255',
-            'pays' => 'nullable|string|max:100',
             'ville' => 'nullable|string|max:100',
             'quartier' => 'nullable|string|max:100',
-            'description' => 'nullable|string',
-            'parent_id' => [
-                'nullable', 'integer',
-                Rule::exists('sites', 'id')->where('organization_id', $orgId),
-            ],
-            'latitude' => 'nullable|numeric|between:-90,90',
-            'longitude' => 'nullable|numeric|between:-180,180',
             'telephone' => 'nullable|string|max:50',
-            'email' => 'nullable|email|max:255',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);

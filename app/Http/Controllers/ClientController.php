@@ -39,6 +39,7 @@ class ClientController extends Controller
                 'code_pays' => $c->code_pays,
                 'adresse' => $c->adresse,
                 'is_active' => $c->is_active,
+                'cashback_eligible' => $c->cashback_eligible,
             ]);
 
         return Inertia::render('Clients/Index', [

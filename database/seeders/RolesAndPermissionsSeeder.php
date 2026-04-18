@@ -45,6 +45,8 @@ class RolesAndPermissionsSeeder extends Seeder
         $commerciale = Role::firstOrCreate(['name' => 'commerciale']);
         $comptable = Role::firstOrCreate(['name' => 'comptable']);
         Role::firstOrCreate(['name' => 'client']);
+        Role::firstOrCreate(['name' => 'proprietaire']);
+        Role::firstOrCreate(['name' => 'livreur']);
 
         $superAdmin->syncPermissions(Permission::all());
 
@@ -171,13 +173,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'code_pays' => 'FR',
                 'role' => 'super_admin',
             ],
-            [
-                'prenom' => 'Amadou',
-                'nom' => 'DIALLO',
-                'telephone' => '+33754158797',
-                'code_pays' => 'FR',
-                'role' => 'admin_entreprise',
-            ],
+
         ];
 
         foreach ($staff as $data) {
@@ -220,7 +216,6 @@ class RolesAndPermissionsSeeder extends Seeder
                 ['Aminata DIALLO',      '— (à définir)',  'comptable',        self::PASSWORD],
                 ['Alpha Oumar CAMARA',  '— (à définir)',  'commerciale',      self::PASSWORD],
                 ['Elhadj Oumar TALL',   '+33605751596',   'super_admin',      self::PASSWORD],
-                ['Amadou DIALLO',       '+33754158797',   'admin_entreprise', self::PASSWORD],
             ]
         );
         $this->command->newLine();

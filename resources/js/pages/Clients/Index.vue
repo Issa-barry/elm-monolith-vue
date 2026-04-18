@@ -57,6 +57,7 @@ interface Client {
     code_pays: string | null;
     adresse: string | null;
     is_active: boolean;
+    cashback_eligible: boolean;
 }
 
 const props = defineProps<{ clients: Client[] }>();
@@ -373,6 +374,7 @@ function confirmDelete(c: Client) {
                         'adresse',
                         'ville',
                         'pays',
+                        'cashback_eligible',
                     ]"
                     v-model:filters="filters"
                     data-key="id"
@@ -510,6 +512,29 @@ function confirmDelete(c: Client) {
                                     }}
                                 </span>
                             </div>
+                        </template>
+                    </Column>
+
+                    <!-- Cashback -->
+                    <Column
+                        field="cashback_eligible"
+                        header="Cashback"
+                        style="width: 150px"
+                    >
+                        <template #body="{ data }">
+                            <StatusDot
+                                :label="
+                                    data.cashback_eligible
+                                        ? 'Éligible'
+                                        : 'Non éligible'
+                                "
+                                :dot-class="
+                                    data.cashback_eligible
+                                        ? 'bg-blue-500'
+                                        : 'bg-zinc-400 dark:bg-zinc-500'
+                                "
+                                class="text-muted-foreground"
+                            />
                         </template>
                     </Column>
 
