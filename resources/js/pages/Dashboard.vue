@@ -72,10 +72,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 p-4 sm:p-6">
-            <HeaderWidget />
+            <HeaderWidget :periode="periode" />
 
             <div class="mt-4 grid grid-cols-12 gap-8">
-                <StatsBankingWidget :stats="stats_factures" :periode="periode" />
+                <StatsBankingWidget :stats="stats_factures" />
             </div>
 
             <div class="hidden sm:grid grid-cols-12 gap-8">
@@ -83,6 +83,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                     <EvolutionCAWidget
                         :evolution-mensuelle="evolution_mensuelle"
                         :evolution-quotidienne="evolution_quotidienne"
+                        :periode="periode"
                     />
                 </div>
                 <div class="col-span-12 xl:col-span-4">

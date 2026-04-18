@@ -164,22 +164,24 @@ function onProduitChange(index: number, produitId: number | null) {
         return;
     }
 
-    // Si le produit existe déjà sur une autre ligne → fusionner les quantités
+    // Produit déjà présent → supprimer la ligne courante et incrémenter de +1
     const existingIndex = form.lignes.findIndex(
         (l, i) => i !== index && l.produit_id === produitId,
     );
     if (existingIndex !== -1) {
-        const existing = form.lignes[existingIndex];
-        existing.qte += form.lignes[index].qte;
-        existing.total = existing.prix_vente * existing.qte;
+        form.lignes[existingIndex].qte += 1;
+        form.lignes[existingIndex].total =
+            form.lignes[existingIndex].prix_vente * form.lignes[existingIndex].qte;
         form.lignes.splice(index, 1);
         return;
     }
 
+    // Nouveau produit → initialiser à la capacité du véhicule
     const ligne = form.lignes[index];
     ligne.produit_id = produitId;
     const produit = props.produits.find((p) => p.id === produitId);
     ligne.prix_vente = produit ? produit.prix_vente : 0;
+    ligne.qte = capaciteVehiculeSelectionne.value ?? ligne.qte;
     ligne.total = ligne.prix_vente * ligne.qte;
 }
 
@@ -196,10 +198,7 @@ function onPrixChange(index: number, prix: number | null) {
 }
 
 function addLigne() {
-    const capacite = capaciteVehiculeSelectionne.value;
-    const hasProducts = form.lignes.some((l) => l.produit_id !== null);
-    const qte = hasProducts ? 1 : (capacite ?? 1);
-    form.lignes.push({ produit_id: null, qte, prix_vente: 0, total: 0 });
+    form.lignes.push({ produit_id: null, qte: 1, prix_vente: 0, total: 0 });
 }
 
 function removeLigne(index: number) {

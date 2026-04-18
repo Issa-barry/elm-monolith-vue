@@ -81,8 +81,14 @@ class DashboardController extends Controller
             ? "CAST(strftime('%m', created_at) AS INTEGER)"
             : 'MONTH(created_at)';
 
-        $monthly = FactureVente::where('organization_id', $orgId)
-            ->whereYear('created_at', $year)
+        $monthlyQuery = FactureVente::where('organization_id', $orgId);
+        if ($start && $end) {
+            $monthlyQuery->whereBetween('created_at', [$start, $end]);
+        } else {
+            $monthlyQuery->whereYear('created_at', $year);
+        }
+
+        $monthly = $monthlyQuery
             ->selectRaw("
                 {$monthExpr} as mois,
                 COALESCE(SUM(CASE WHEN statut_facture = 'payee'   THEN montant_net ELSE 0 END), 0) as payees,
@@ -101,8 +107,14 @@ class DashboardController extends Controller
 
         // ── Évolution journalière (60 derniers jours) ─────────────────────────
         // Couvre aujourd'hui, hier, cette semaine, semaine préc., ce mois, mois préc.
-        $dailyRows = FactureVente::where('organization_id', $orgId)
-            ->where('created_at', '>=', now()->subDays(59)->startOfDay())
+        $dailyQuery = FactureVente::where('organization_id', $orgId);
+        if ($start && $end) {
+            $dailyQuery->whereBetween('created_at', [$start, $end]);
+        } else {
+            $dailyQuery->where('created_at', '>=', now()->subDays(59)->startOfDay());
+        }
+
+        $dailyRows = $dailyQuery
             ->selectRaw("
                 DATE(created_at) as date,
                 COALESCE(SUM(CASE WHEN statut_facture = 'payee'   THEN montant_net ELSE 0 END), 0) as payees,
@@ -133,7 +145,11 @@ class DashboardController extends Controller
             ->join('sites', function ($join) {
                 $join->on('sites.id', '=', 'factures_ventes.site_id')
                     ->whereNull('sites.deleted_at');
-            })
+            });
+        if ($start && $end) {
+            $caParSite->whereBetween('factures_ventes.created_at', [$start, $end]);
+        }
+        $caParSite = $caParSite
             ->selectRaw('sites.nom, COALESCE(SUM(factures_ventes.montant_net), 0) as montant')
             ->groupBy('sites.id', 'sites.nom')
             ->orderByDesc('montant')
@@ -149,7 +165,11 @@ class DashboardController extends Controller
             ->join('vehicules', function ($join) {
                 $join->on('vehicules.id', '=', 'factures_ventes.vehicule_id')
                     ->whereNull('vehicules.deleted_at');
-            })
+            });
+        if ($start && $end) {
+            $caParTypeVehicule->whereBetween('factures_ventes.created_at', [$start, $end]);
+        }
+        $caParTypeVehicule = $caParTypeVehicule
             ->selectRaw('vehicules.type_vehicule, COALESCE(SUM(factures_ventes.montant_net), 0) as montant')
             ->groupBy('vehicules.type_vehicule')
             ->orderByDesc('montant')
@@ -168,7 +188,11 @@ class DashboardController extends Controller
             ->where('cv.organization_id', $orgId)
             ->whereNull('cv.deleted_at')
             ->whereNull('p.deleted_at')
-            ->where('cv.statut', '!=', StatutCommandeVente::ANNULEE->value)
+            ->where('cv.statut', '!=', StatutCommandeVente::ANNULEE->value);
+        if ($start && $end) {
+            $caParProduit->whereBetween('cv.created_at', [$start, $end]);
+        }
+        $caParProduit = $caParProduit
             ->selectRaw('p.nom as nom, COALESCE(SUM(cvl.total_ligne), 0) as total')
             ->groupBy('p.id', 'p.nom')
             ->orderByDesc('total')
