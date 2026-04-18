@@ -17,27 +17,28 @@ class DashboardController extends Controller
     private function dateRangeForPeriode(string $periode): array
     {
         $now = Carbon::now();
+
         return match ($periode) {
-            'aujourd_hui'      => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
-            'hier'             => [$now->copy()->subDay()->startOfDay(), $now->copy()->subDay()->endOfDay()],
-            'cette_semaine'    => [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()],
+            'aujourd_hui' => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
+            'hier' => [$now->copy()->subDay()->startOfDay(), $now->copy()->subDay()->endOfDay()],
+            'cette_semaine' => [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()],
             'semaine_derniere' => [$now->copy()->subWeek()->startOfWeek(), $now->copy()->subWeek()->endOfWeek()],
-            'ce_mois'          => [$now->copy()->startOfMonth(), $now->copy()->endOfMonth()],
-            'mois_dernier'     => [$now->copy()->subMonth()->startOfMonth(), $now->copy()->subMonth()->endOfMonth()],
-            't1'               => [Carbon::create($now->year, 1, 1)->startOfDay(), Carbon::create($now->year, 3, 31)->endOfDay()],
-            't2'               => [Carbon::create($now->year, 4, 1)->startOfDay(), Carbon::create($now->year, 6, 30)->endOfDay()],
-            't3'               => [Carbon::create($now->year, 7, 1)->startOfDay(), Carbon::create($now->year, 9, 30)->endOfDay()],
-            't4'               => [Carbon::create($now->year, 10, 1)->startOfDay(), Carbon::create($now->year, 12, 31)->endOfDay()],
-            's1'               => [Carbon::create($now->year, 1, 1)->startOfDay(), Carbon::create($now->year, 6, 30)->endOfDay()],
-            's2'               => [Carbon::create($now->year, 7, 1)->startOfDay(), Carbon::create($now->year, 12, 31)->endOfDay()],
-            'cette_annee'      => [$now->copy()->startOfYear(), $now->copy()->endOfYear()],
-            default            => [null, null],
+            'ce_mois' => [$now->copy()->startOfMonth(), $now->copy()->endOfMonth()],
+            'mois_dernier' => [$now->copy()->subMonth()->startOfMonth(), $now->copy()->subMonth()->endOfMonth()],
+            't1' => [Carbon::create($now->year, 1, 1)->startOfDay(), Carbon::create($now->year, 3, 31)->endOfDay()],
+            't2' => [Carbon::create($now->year, 4, 1)->startOfDay(), Carbon::create($now->year, 6, 30)->endOfDay()],
+            't3' => [Carbon::create($now->year, 7, 1)->startOfDay(), Carbon::create($now->year, 9, 30)->endOfDay()],
+            't4' => [Carbon::create($now->year, 10, 1)->startOfDay(), Carbon::create($now->year, 12, 31)->endOfDay()],
+            's1' => [Carbon::create($now->year, 1, 1)->startOfDay(), Carbon::create($now->year, 6, 30)->endOfDay()],
+            's2' => [Carbon::create($now->year, 7, 1)->startOfDay(), Carbon::create($now->year, 12, 31)->endOfDay()],
+            'cette_annee' => [$now->copy()->startOfYear(), $now->copy()->endOfYear()],
+            default => [null, null],
         };
     }
 
     public function index(Request $request): Response
     {
-        $orgId  = auth()->user()->organization_id;
+        $orgId = auth()->user()->organization_id;
         $periode = $request->get('periode', 'ce_mois');
         [$start, $end] = $this->dateRangeForPeriode($periode);
 

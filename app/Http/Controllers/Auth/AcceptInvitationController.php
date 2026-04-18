@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\UserInvitation;
 use App\Models\User;
+use App\Models\UserInvitation;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
 use App\Services\UserInvitationService;
@@ -12,8 +12,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -113,9 +113,13 @@ class AcceptInvitationController extends Controller
      * POST /invitations/accept/{token}
      * Final step: validate data, create user, log them in.
      */
-    public function accept(Request $request, string $token, OtpService $otp, UserInvitationService $service): RedirectResponse
+    public function accept(Request $request, string $token, OtpService $otp, UserInvitationService $service): RedirectResponse|JsonResponse
     {
         if (Auth::check()) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Vous êtes déjà connecté.'], 422);
+            }
+
             return redirect()->route('invitations.accept', [
                 'token' => $token,
                 'state' => 'already_authenticated',
@@ -125,6 +129,10 @@ class AcceptInvitationController extends Controller
         $invitation = $service->findByToken($token);
 
         if (! $invitation || ! $invitation->isPending()) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Invitation invalide ou expirée.'], 422);
+            }
+
             return redirect()->route('invitations.accept', [
                 'token' => $token,
                 'state' => $this->invitationErrorState($invitation) ?? 'not_found',
