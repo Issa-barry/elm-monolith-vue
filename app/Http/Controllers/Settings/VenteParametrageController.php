@@ -17,12 +17,14 @@ class VenteParametrageController extends Controller
 {
     private const QUANTITY_UPDATE_PERMISSION = 'ventes.qte.update';
 
+    private const UNIT_PRICE_UPDATE_PERMISSION = 'ventes.prix.update';
+
     public function edit(): Response
     {
         abort_if(! auth()->user()->can('parametres.read'), 403);
 
         $orgId = auth()->user()->organization_id;
-        $this->ensureQuantityPermissionExists();
+        $this->ensureSalesPermissionsExist();
 
         $roles = Role::query()
             ->orderBy('name')
@@ -33,6 +35,9 @@ class VenteParametrageController extends Controller
                 'can_update_quantite' => $role->name === 'super_admin'
                     ? true
                     : $role->hasPermissionTo(self::QUANTITY_UPDATE_PERMISSION),
+                'can_update_prix_unitaire' => $role->name === 'super_admin'
+                    ? true
+                    : $role->hasPermissionTo(self::UNIT_PRICE_UPDATE_PERMISSION),
                 'locked' => $role->name === 'super_admin',
             ])
             ->values();
@@ -48,28 +53,37 @@ class VenteParametrageController extends Controller
     {
         abort_if(! auth()->user()->can('parametres.update'), 403);
 
-        $this->ensureQuantityPermissionExists();
+        $this->ensureSalesPermissionsExist();
 
         $validated = $request->validate([
             'commission_generation_mode' => ['required', Rule::in(Parametre::ventesCommissionModes())],
             'quantity_edit_role_names' => ['array'],
             'quantity_edit_role_names.*' => ['string', Rule::exists('roles', 'name')],
+            'price_edit_role_names' => ['array'],
+            'price_edit_role_names.*' => ['string', Rule::exists('roles', 'name')],
         ]);
 
-        $enabledRoleNames = collect($validated['quantity_edit_role_names'] ?? [])
+        $enabledQuantityRoleNames = collect($validated['quantity_edit_role_names'] ?? [])
+            ->values()
+            ->all();
+        $enabledPriceRoleNames = collect($validated['price_edit_role_names'] ?? [])
             ->values()
             ->all();
 
         $roles = Role::query()->whereNotIn('name', ['super_admin'])->get();
 
         foreach ($roles as $role) {
-            if (in_array($role->name, $enabledRoleNames, true)) {
+            if (in_array($role->name, $enabledQuantityRoleNames, true)) {
                 $role->givePermissionTo(self::QUANTITY_UPDATE_PERMISSION);
-
-                continue;
+            } else {
+                $role->revokePermissionTo(self::QUANTITY_UPDATE_PERMISSION);
             }
 
-            $role->revokePermissionTo(self::QUANTITY_UPDATE_PERMISSION);
+            if (in_array($role->name, $enabledPriceRoleNames, true)) {
+                $role->givePermissionTo(self::UNIT_PRICE_UPDATE_PERMISSION);
+            } else {
+                $role->revokePermissionTo(self::UNIT_PRICE_UPDATE_PERMISSION);
+            }
         }
 
         Parametre::setVentesCommissionMode(
@@ -112,17 +126,26 @@ class VenteParametrageController extends Controller
         ];
     }
 
-    private function ensureQuantityPermissionExists(): void
+    private function ensureSalesPermissionsExist(): void
     {
-        $permission = Permission::findOrCreate(self::QUANTITY_UPDATE_PERMISSION);
+        $quantityPermission = Permission::findOrCreate(self::QUANTITY_UPDATE_PERMISSION);
+        $unitPricePermission = Permission::findOrCreate(self::UNIT_PRICE_UPDATE_PERMISSION);
 
-        if (! $permission->wasRecentlyCreated) {
+        if (! $quantityPermission->wasRecentlyCreated && ! $unitPricePermission->wasRecentlyCreated) {
             return;
         }
 
-        Role::query()
+        $defaultRoles = Role::query()
             ->whereIn('name', ['admin_entreprise', 'manager'])
-            ->each(fn (Role $role) => $role->givePermissionTo(self::QUANTITY_UPDATE_PERMISSION));
+            ->get();
+
+        if ($quantityPermission->wasRecentlyCreated) {
+            $defaultRoles->each(fn (Role $role) => $role->givePermissionTo(self::QUANTITY_UPDATE_PERMISSION));
+        }
+
+        if ($unitPricePermission->wasRecentlyCreated) {
+            $defaultRoles->each(fn (Role $role) => $role->givePermissionTo(self::UNIT_PRICE_UPDATE_PERMISSION));
+        }
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
     }

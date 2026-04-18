@@ -74,13 +74,26 @@ interface StatutOption {
     label: string;
 }
 
+interface SiteOption {
+    id: number;
+    nom: string;
+}
+
+interface FilterOption {
+    value: number | string | null;
+    label: string;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 const props = defineProps<{
     transferts: Transfert[];
     kpis: Kpis;
     statuts: StatutOption[];
+    sites: SiteOption[];
     filtre_statut: string | null;
+    filtre_site_source_id: number | null;
+    filtre_site_destination_id: number | null;
     vue: 'transferts' | 'receptions';
     can_create: boolean;
 }>();
@@ -106,23 +119,61 @@ const breadcrumbs = computed((): BreadcrumbItem[] => [
 
 const search = ref('');
 const statutFiltre = ref(props.filtre_statut ?? null);
+const siteSourceFiltre = ref<number | null>(
+    props.filtre_site_source_id ?? null,
+);
+const siteDestinationFiltre = ref<number | null>(
+    props.filtre_site_destination_id ?? null,
+);
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
+const statutOptions = computed<FilterOption[]>(() => [
+    { value: null, label: 'Tous les statuts' },
+    ...props.statuts,
+]);
+const siteSourceOptions = computed<FilterOption[]>(() => [
+    { value: null, label: 'Tous les sites depart' },
+    ...props.sites.map((site) => ({ value: site.id, label: site.nom })),
+]);
+const siteDestinationOptions = computed<FilterOption[]>(() => [
+    { value: null, label: 'Tous les sites arrivee' },
+    ...props.sites.map((site) => ({ value: site.id, label: site.nom })),
+]);
 
 watch(search, (val) => {
     filters.value.global.value = val;
 });
 
-function appliquerFiltreStatut(val: string | null) {
-    statutFiltre.value = val;
-    const url =
-        props.vue === 'receptions'
-            ? '/logistique/receptions'
-            : '/logistique/transferts';
+function indexUrl(): string {
+    return props.vue === 'receptions'
+        ? '/logistique/receptions'
+        : '/logistique/transferts';
+}
+
+function appliquerFiltresServeur() {
     router.get(
-        url,
-        { statut: val ?? undefined },
+        indexUrl(),
+        {
+            statut: statutFiltre.value ?? undefined,
+            site_source_id: siteSourceFiltre.value ?? undefined,
+            site_destination_id: siteDestinationFiltre.value ?? undefined,
+        },
         { preserveState: true, replace: true },
     );
+}
+
+function appliquerFiltreStatut(val: string | null) {
+    statutFiltre.value = val;
+    appliquerFiltresServeur();
+}
+
+function appliquerFiltreSiteSource(val: number | null) {
+    siteSourceFiltre.value = val;
+    appliquerFiltresServeur();
+}
+
+function appliquerFiltreSiteDestination(val: number | null) {
+    siteDestinationFiltre.value = val;
+    appliquerFiltresServeur();
 }
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
@@ -478,16 +529,36 @@ const commStatutDot: Record<string, string> = {
                                 />
                             </IconField>
                             <Dropdown
-                                :options="[
-                                    { value: null, label: 'Tous les statuts' },
-                                    ...statuts,
-                                ]"
+                                :options="statutOptions"
                                 option-label="label"
                                 option-value="value"
                                 :model-value="statutFiltre"
                                 placeholder="Tous les statuts"
                                 class="w-48 text-sm"
                                 @change="(e) => appliquerFiltreStatut(e.value)"
+                            />
+                            <Dropdown
+                                :options="siteSourceOptions"
+                                option-label="label"
+                                option-value="value"
+                                :model-value="siteSourceFiltre"
+                                placeholder="Tous les sites depart"
+                                class="w-56 text-sm"
+                                @change="
+                                    (e) => appliquerFiltreSiteSource(e.value)
+                                "
+                            />
+                            <Dropdown
+                                :options="siteDestinationOptions"
+                                option-label="label"
+                                option-value="value"
+                                :model-value="siteDestinationFiltre"
+                                placeholder="Tous les sites arrivee"
+                                class="w-56 text-sm"
+                                @change="
+                                    (e) =>
+                                        appliquerFiltreSiteDestination(e.value)
+                                "
                             />
                             <span class="text-xs text-muted-foreground">
                                 {{ transferts.length }} résultat{{

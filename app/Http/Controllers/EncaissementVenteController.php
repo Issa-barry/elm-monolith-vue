@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AuditEvent;
 use App\Enums\ModePaiement;
 use App\Features\ModuleFeature;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\Organization;
 use App\Models\Parametre;
+use App\Services\AuditLogService;
 use App\Services\CashbackService;
 use App\Services\CommissionGenerator;
 use Illuminate\Http\RedirectResponse;
@@ -17,6 +19,8 @@ use Laravel\Pennant\Feature;
 
 class EncaissementVenteController extends Controller
 {
+    public function __construct(private readonly AuditLogService $auditService) {}
+
     public function store(Request $request, FactureVente $facture_vente): RedirectResponse
     {
         abort_if($facture_vente->isAnnulee(), 422, 'Cette facture est annulee.');
@@ -50,6 +54,22 @@ class EncaissementVenteController extends Controller
             'created_by' => auth()->id(),
         ]);
 
+        // Audit: log on the parent commande
+        $commande = $facture_vente->commande;
+        if ($commande) {
+            $this->auditService->record(
+                $commande,
+                AuditEvent::ENCAISSEMENT_ADDED,
+                auth()->user(),
+                null,
+                [
+                    'montant' => (float) $data['montant'],
+                    'mode_paiement' => $data['mode_paiement'],
+                    'date_encaissement' => $data['date_encaissement'],
+                ],
+            );
+        }
+
         $etaitPayee = $facture_vente->isPayee();
         $facture_vente->recalculStatut();
         $estPayeeMaintenant = $facture_vente->isPayee();
@@ -59,8 +79,6 @@ class EncaissementVenteController extends Controller
 
         // Hooks de transition vers facture payee.
         if (! $etaitPayee && $estPayeeMaintenant) {
-            $commande = $facture_vente->commande;
-
             if ($commande && $commande->organization_id) {
                 $modeCommission = Parametre::getVentesCommissionMode($commande->organization_id);
 
@@ -99,6 +117,22 @@ class EncaissementVenteController extends Controller
             'Acces refuse.'
         );
         abort_if($facture->isAnnulee(), 422, 'Impossible de modifier une facture annulee.');
+
+        // Audit: log on the parent commande before deletion
+        $commande = $facture->commande;
+        if ($commande) {
+            $this->auditService->record(
+                $commande,
+                AuditEvent::ENCAISSEMENT_DELETED,
+                auth()->user(),
+                [
+                    'montant' => (float) $encaissement_vente->montant,
+                    'mode_paiement' => $encaissement_vente->mode_paiement?->value,
+                    'date_encaissement' => $encaissement_vente->date_encaissement?->toDateString(),
+                ],
+                null,
+            );
+        }
 
         $encaissement_vente->delete();
         $facture->recalculStatut();

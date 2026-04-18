@@ -69,7 +69,7 @@ class UserTest extends TestCase
 
     // ── permissionsMap ────────────────────────────────────────────────────────
 
-    public function test_permissions_map_returns_48_keys(): void
+    public function test_permissions_map_returns_59_keys(): void
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
@@ -77,7 +77,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         // 14 resources × 4 actions + 2 standalone (logistique.commission.verser, ventes.qte.update)
-        $this->assertCount(58, $map);
+        $this->assertCount(59, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void
@@ -93,6 +93,7 @@ class UserTest extends TestCase
         $this->assertArrayHasKey('users.delete', $map);
         $this->assertArrayHasKey('clients.read', $map);
         $this->assertArrayHasKey('ventes.create', $map);
+        $this->assertArrayHasKey('ventes.prix.update', $map);
     }
 
     public function test_permissions_map_all_true_for_super_admin(): void

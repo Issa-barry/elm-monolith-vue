@@ -8,7 +8,6 @@ import { ArrowLeft, Lock, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
-import Textarea from 'primevue/textarea';
 import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -231,7 +230,7 @@ function submit() {
             </div>
         </div>
 
-        <div class="mx-auto max-w-5xl p-4 sm:p-6">
+        <div class="mx-auto max-w-[85rem] p-4 sm:p-6">
             <!-- En-tête desktop -->
             <div class="mb-6 hidden sm:block">
                 <h1 class="text-2xl font-semibold tracking-tight">
@@ -404,17 +403,6 @@ function submit() {
                     </div>
 
                     <!-- Dates — masquées temporairement (valeur = date du jour par défaut) -->
-
-                    <!-- Notes -->
-                    <div class="mt-4">
-                        <Label class="mb-1.5 block text-sm">Notes</Label>
-                        <Textarea
-                            v-model="form.notes"
-                            rows="2"
-                            class="w-full"
-                            placeholder="Informations complémentaires…"
-                        />
-                    </div>
                 </div>
 
                 <!-- ── Section : Lignes produits ── -->
@@ -449,11 +437,6 @@ function submit() {
                                         style="width: 120px"
                                     >
                                         Quantité
-                                    </th>
-                                    <th
-                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                    >
-                                        Note (optionnel)
                                     </th>
                                     <th
                                         class="px-4 py-2.5"
@@ -517,14 +500,6 @@ function submit() {
                                             input-class="w-full text-center"
                                         />
                                     </td>
-                                    <td class="px-4 py-3">
-                                        <input
-                                            v-model="ligne.notes"
-                                            type="text"
-                                            placeholder="Remarque…"
-                                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
-                                        />
-                                    </td>
                                     <td class="px-4 py-3 text-center">
                                         <Button
                                             type="button"
@@ -582,19 +557,6 @@ function submit() {
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full text-center"
-                                    />
-                                </div>
-                                <div>
-                                    <p
-                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
-                                    >
-                                        Note
-                                    </p>
-                                    <input
-                                        v-model="ligne.notes"
-                                        type="text"
-                                        placeholder="Remarque…"
-                                        class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
                                     />
                                 </div>
                             </div>

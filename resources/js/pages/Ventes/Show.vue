@@ -15,6 +15,7 @@ import {
     ArrowLeft,
     CheckCircle,
     HandCoins,
+    History,
     Lock,
     MoreVertical,
     Pencil,
@@ -28,6 +29,16 @@ import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+interface AuditEntry {
+    id: number;
+    event_code: string;
+    event_label: string;
+    actor_name: string;
+    old_values: Record<string, unknown> | null;
+    new_values: Record<string, unknown> | null;
+    created_at: string;
+}
+
 interface Encaissement {
     id: number;
     montant: number;
@@ -89,6 +100,7 @@ interface CommandeData {
 const props = defineProps<{
     commande: CommandeData;
     facture: FactureData | null;
+    historiques: AuditEntry[];
 }>();
 
 const toast = useToast();
@@ -112,6 +124,90 @@ const statutCommandeColor: Record<string, string> = {
 // ── Formatage ─────────────────────────────────────────────────────────────────
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
+}
+
+// ── Audit helpers ────────────────────────────────────────────────────────────
+const auditEventTextColor: Record<string, string> = {
+    created: 'text-blue-600 dark:text-blue-400',
+    updated: 'text-amber-600 dark:text-amber-400',
+    validated: 'text-emerald-600 dark:text-emerald-400',
+    cancelled: 'text-red-600 dark:text-red-400',
+    encaissement_added: 'text-violet-600 dark:text-violet-400',
+    encaissement_deleted: 'text-orange-600 dark:text-orange-400',
+    deleted: 'text-red-600 dark:text-red-400',
+};
+
+const auditEventVerb: Record<string, string> = {
+    created: 'Créée par',
+    updated: 'Modifiée par',
+    validated: 'Validée par',
+    cancelled: 'Annulée par',
+    encaissement_added: 'Encaissement ajouté par',
+    encaissement_deleted: 'Encaissement supprimé par',
+    deleted: 'Supprimée par',
+};
+
+const AUDIT_HIDDEN_FIELDS = new Set([
+    'vehicule_id',
+    'client_id',
+    'statut',
+    'client_nom',
+]);
+
+const AUDIT_FIELD_LABELS: Record<string, string> = {
+    vehicule_nom: 'Véhicule',
+    total_commande: 'Total',
+    montant: 'Montant',
+    mode_paiement: 'Mode paiement',
+    date_encaissement: 'Date encaissement',
+    lignes: 'Produits',
+};
+
+interface AuditLigne {
+    produit_nom?: string;
+    qte?: number;
+    prix_vente_snapshot?: number;
+    total_ligne?: number;
+}
+
+function formatLignes(val: unknown): string {
+    if (!Array.isArray(val) || val.length === 0) return '—';
+    return (val as AuditLigne[])
+        .map((l) => {
+            const nom = l.produit_nom ?? '?';
+            const qte = l.qte ?? 0;
+            const montant = l.total_ligne ?? qte * (l.prix_vente_snapshot ?? 0);
+            return `${nom} × ${qte} — ${formatGNF(montant)}`;
+        })
+        .join('\n');
+}
+
+function formatAuditValue(key: string, val: unknown): string {
+    if (val === null || val === undefined) return '—';
+    if (key === 'total_commande' || key === 'montant')
+        return formatGNF(Number(val));
+    if (key === 'lignes') return formatLignes(val);
+    return String(val);
+}
+
+function auditDiffRows(
+    entry: AuditEntry,
+): { field: string; label: string; old: string; new: string }[] {
+    const old = entry.old_values ?? {};
+    const next = entry.new_values ?? {};
+    const keys = new Set([...Object.keys(old), ...Object.keys(next)]);
+    const rows: { field: string; label: string; old: string; new: string }[] =
+        [];
+    keys.forEach((k) => {
+        if (AUDIT_HIDDEN_FIELDS.has(k)) return;
+        rows.push({
+            field: k,
+            label: AUDIT_FIELD_LABELS[k] ?? k,
+            old: formatAuditValue(k, old[k]),
+            new: formatAuditValue(k, next[k]),
+        });
+    });
+    return rows;
 }
 
 // ── Actions de transition ─────────────────────────────────────────────────────
@@ -171,6 +267,9 @@ const annulerDisabled = computed(
         (annulerForm.motif_annulation_code === 'autre' &&
             !annulerForm.motif_annulation_detail.trim()),
 );
+
+// ── Historique dialog ────────────────────────────────────────────────────────
+const historiquesDialogVisible = ref(false);
 
 // ── Encaissement ──────────────────────────────────────────────────────────────
 const modesPaiement = [
@@ -330,6 +429,17 @@ function submitEncaisser() {
 
                 <!-- Boutons d'action selon statut -->
                 <div class="flex items-center gap-2">
+                    <!-- Historique -->
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        class="h-8 w-8 text-muted-foreground"
+                        title="Historique"
+                        @click="historiquesDialogVisible = true"
+                    >
+                        <History class="h-4 w-4" />
+                    </Button>
+
                     <!-- Modifier (brouillon) -->
                     <Link
                         v-if="commande.can_modifier"
@@ -658,6 +768,111 @@ function submitEncaisser() {
                 </p>
             </div>
         </div>
+
+        <!-- Dialog Historique -->
+        <Dialog
+            v-model:visible="historiquesDialogVisible"
+            modal
+            header="Historique"
+            :style="{ width: '860px' }"
+        >
+            <div
+                v-if="historiques.length === 0"
+                class="py-6 text-center text-sm text-muted-foreground"
+            >
+                Aucun historique disponible.
+            </div>
+
+            <ol v-else class="relative border-l border-border">
+                <li
+                    v-for="entry in historiques"
+                    :key="entry.id"
+                    class="mb-6 ml-4 last:mb-0"
+                >
+                    <span
+                        class="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border border-background bg-border"
+                    />
+
+                    <div class="flex flex-wrap items-baseline gap-1 text-xs">
+                        <span
+                            class="font-semibold"
+                            :class="
+                                auditEventTextColor[entry.event_code] ??
+                                'text-muted-foreground'
+                            "
+                        >
+                            {{
+                                auditEventVerb[entry.event_code] ??
+                                entry.event_label
+                            }}
+                        </span>
+                        <strong>{{ entry.actor_name }}</strong>
+                        <span class="text-muted-foreground"
+                            >— {{ entry.created_at }}</span
+                        >
+                    </div>
+
+                    <div
+                        v-if="
+                            (entry.old_values &&
+                                Object.keys(entry.old_values).length > 0) ||
+                            (entry.new_values &&
+                                Object.keys(entry.new_values).length > 0)
+                        "
+                        class="mt-2 overflow-hidden rounded-lg border text-xs"
+                    >
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b bg-muted/40">
+                                    <th
+                                        class="px-3 py-1.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Champ
+                                    </th>
+                                    <th
+                                        v-if="entry.old_values"
+                                        class="px-3 py-1.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Avant
+                                    </th>
+                                    <th
+                                        v-if="entry.new_values"
+                                        class="px-3 py-1.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Après
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                <tr
+                                    v-for="row in auditDiffRows(entry)"
+                                    :key="row.field"
+                                    class="hover:bg-muted/10"
+                                >
+                                    <td
+                                        class="px-3 py-1.5 font-medium text-muted-foreground"
+                                    >
+                                        {{ row.label }}
+                                    </td>
+                                    <td
+                                        v-if="entry.old_values"
+                                        class="px-3 py-1.5 whitespace-pre-line"
+                                    >
+                                        {{ row.old }}
+                                    </td>
+                                    <td
+                                        v-if="entry.new_values"
+                                        class="px-3 py-1.5 whitespace-pre-line"
+                                    >
+                                        {{ row.new }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </li>
+            </ol>
+        </Dialog>
 
         <!-- Dialog Encaissement -->
         <Dialog
