@@ -6,29 +6,27 @@ use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\FactureVente;
+use App\Models\Parametre;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class CommandeVenteService
 {
-    // ── Validation : BROUILLON → EN_COURS ────────────────────────────────────
-
     /**
      * Valide une commande en brouillon.
-     * - Transition gardée atomique dans une transaction DB.
-     * - Crée la facture (IMPAYEE) si absente (idempotent).
-     * - Génère les commissions si un véhicule est associé.
+     * - Transition gardee atomique dans une transaction DB.
+     * - Cree la facture (IMPAYEE) si absente (idempotent).
+     * - Genere les commissions si le mode est "commande validee".
      */
     public function valider(CommandeVente $commande): void
     {
         abort_if(
             ! $commande->isBrouillon(),
             422,
-            'Seule une commande en brouillon peut être validée.'
+            'Seule une commande en brouillon peut etre validee.'
         );
 
         DB::transaction(function () use ($commande) {
-            // Idempotent : ne crée pas de doublon si la facture existe déjà
             if (! $commande->relationLoaded('facture')) {
                 $commande->load('facture');
             }
@@ -50,32 +48,35 @@ class CommandeVenteService
             ]);
         });
 
-        // Génération commissions (hors transaction : non bloquante)
+        $modeCommission = Parametre::getVentesCommissionMode($commande->organization_id);
         $commande->loadMissing('vehicule');
-        if ($commande->vehicule_id && $commande->vehicule) {
+
+        if (
+            $modeCommission === Parametre::COMMISSION_MODE_COMMANDE_VALIDEE
+            && $commande->vehicule_id
+            && $commande->vehicule
+        ) {
             CommissionGenerator::generateForCommandeIfMissing(
                 $commande,
                 null,
-                'commande_validee'
+                Parametre::COMMISSION_MODE_COMMANDE_VALIDEE
             );
         }
     }
 
-    // ── Annulation : EN_COURS → ANNULEE ──────────────────────────────────────
-
     /**
      * Annule une commande en cours.
-     * - Vérifie que la facture est IMPAYEE (ou absente).
-     * - Annule commande + facture dans la même transaction.
+     * - Verifie que la facture est IMPAYEE (ou absente).
+     * - Annule commande + facture dans la meme transaction.
      */
     public function annuler(CommandeVente $commande, string $motif): void
     {
-        abort_if($commande->isAnnulee(), 422, 'Cette commande est déjà annulée.');
+        abort_if($commande->isAnnulee(), 422, 'Cette commande est deja annulee.');
 
         abort_if(
             ! $commande->isEnCours(),
             422,
-            'Seule une commande en cours peut être annulée.'
+            'Seule une commande en cours peut etre annulee.'
         );
 
         if (! $commande->relationLoaded('facture')) {
@@ -86,7 +87,7 @@ class CommandeVenteService
             abort_if(
                 $commande->facture->statut_facture !== StatutFactureVente::IMPAYEE,
                 422,
-                "Impossible d'annuler : la facture est déjà encaissée partiellement ou soldée."
+                "Impossible d'annuler : la facture est deja encaissee partiellement ou soldee."
             );
         }
 

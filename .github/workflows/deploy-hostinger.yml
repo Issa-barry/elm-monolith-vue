@@ -111,7 +111,7 @@ jobs:
             -o ServerAliveInterval=60 \
             -o ServerAliveCountMax=10 \
             -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" \
-            "cd '$HOSTINGER_DEPLOY_PATH' && php artisan down --retry=10 || true"
+            "cd '$HOSTINGER_DEPLOY_PATH' && php artisan down --render='errors.503' --retry=10 --refresh=30 || true"
 
       - name: Sync files to server
         run: |
@@ -230,7 +230,7 @@ jobs:
           EOF
 
       # Runs whether the deploy succeeded or failed — guarantees the app never
-      # stays in maintenance mode.  Three SSH attempts with 20 s back-off cover
+      # stays in maintenance mode.  Three SSH attempts with 30 s back-off cover
       # transient firewall blocks after a long deployment session.
       - name: Take site out of maintenance mode
         if: always()
@@ -240,18 +240,47 @@ jobs:
           HOSTINGER_USER: ${{ secrets.HOSTINGER_SSH_USER }}
           HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
         run: |
+          # Write the remote script to a temp file so each retry re-sends it cleanly
+          cat > /tmp/artisan_up.sh << 'REMOTESCRIPT'
+          set -euo pipefail
+          cd "${DEPLOY_PATH}"
+          PHP_BIN=""
+          for candidate in php8.4 php84 /usr/bin/php84 /usr/local/bin/php84 /usr/local/php84/bin/php /opt/alt/php84/usr/bin/php /opt/php84/bin/php php; do
+            if command -v "$candidate" >/dev/null 2>&1 || [ -x "$candidate" ]; then
+              ver="$("$candidate" -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || true)"
+              if [ "$ver" = "8.4" ] || [ "$ver" = "8.5" ] || [ "$ver" = "8.6" ]; then
+                PHP_BIN="$candidate"
+                break
+              fi
+            fi
+          done
+          if [ -z "$PHP_BIN" ]; then
+            echo "ERROR: no PHP 8.4+ binary found — site remains in maintenance mode"
+            exit 1
+          fi
+          "$PHP_BIN" artisan up
+          echo "✅ Site back online (PHP: $PHP_BIN)"
+          REMOTESCRIPT
+
+          succeeded=false
           for attempt in 1 2 3; do
-            ssh -i ~/.ssh/hostinger_key \
-              -o StrictHostKeyChecking=yes \
-              -o BatchMode=yes \
-              -o ConnectTimeout=30 \
-              -o ServerAliveInterval=60 \
-              -o ServerAliveCountMax=5 \
-              -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" \
-              "cd '$HOSTINGER_DEPLOY_PATH' && {
-                for bin in php8.4 php84 php; do
-                  if command -v \"\$bin\" >/dev/null 2>&1; then \"\$bin\" artisan up || true; break; fi
-                done
-              }" && break \
-              || { echo "SSH attempt $attempt/3 failed — waiting 20 s…"; sleep 20; }
-          done || echo "Warning: artisan up could not run — check the server manually."
+            if ssh -i ~/.ssh/hostinger_key \
+                -o StrictHostKeyChecking=yes \
+                -o BatchMode=yes \
+                -o ConnectTimeout=30 \
+                -o ServerAliveInterval=60 \
+                -o ServerAliveCountMax=5 \
+                -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" \
+                "DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash --noprofile --norc -s" \
+                < /tmp/artisan_up.sh; then
+              succeeded=true
+              echo "✅ Maintenance mode disabled (attempt $attempt/3)"
+              break
+            fi
+            echo "⚠️ attempt $attempt/3 failed — waiting 30 s…"
+            [ "$attempt" -lt 3 ] && sleep 30
+          done
+          if [ "$succeeded" = "false" ]; then
+            echo "❌ artisan up failed after 3 attempts — check the server"
+            exit 1
+          fi

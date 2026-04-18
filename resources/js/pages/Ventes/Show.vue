@@ -25,7 +25,7 @@ import InputNumber from 'primevue/inputnumber';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Encaissement {
@@ -137,9 +137,17 @@ function valider() {
 }
 
 // ── Annulation commande ───────────────────────────────────────────────────────
+const MOTIFS_ANNULATION = [
+    { value: 'erreur_saisie', label: 'Erreur de saisie' },
+    { value: 'doublon', label: 'Doublon' },
+    { value: 'rupture_stock', label: 'Rupture de stock' },
+    { value: 'autre', label: 'Autre' },
+] as const;
+
 const annulerDialogVisible = ref(false);
 const annulerForm = useForm({
-    motif_annulation: '',
+    motif_annulation_code: '' as string,
+    motif_annulation_detail: '',
 });
 
 function submitAnnuler() {
@@ -155,6 +163,14 @@ function submitAnnuler() {
         },
     });
 }
+
+const annulerDisabled = computed(
+    () =>
+        annulerForm.processing ||
+        !annulerForm.motif_annulation_code ||
+        (annulerForm.motif_annulation_code === 'autre' &&
+            !annulerForm.motif_annulation_detail.trim()),
+);
 
 // ── Encaissement ──────────────────────────────────────────────────────────────
 const modesPaiement = [
@@ -752,26 +768,61 @@ function submitEncaisser() {
                     >. Cette action est irréversible et annulera également la
                     facture associée.
                 </p>
+
+                <!-- Motif -->
                 <div>
-                    <Label for="annulation-motif" class="mb-1.5 block text-sm">
-                        Motif d'annulation
-                        <span class="text-destructive">*</span>
+                    <Label
+                        for="annulation-motif-code"
+                        class="mb-1.5 block text-sm"
+                    >
+                        Motif <span class="text-destructive">*</span>
                     </Label>
-                    <Textarea
-                        id="annulation-motif"
-                        v-model="annulerForm.motif_annulation"
-                        rows="4"
+                    <Select
+                        id="annulation-motif-code"
+                        v-model="annulerForm.motif_annulation_code"
+                        :options="MOTIFS_ANNULATION"
+                        option-label="label"
+                        option-value="value"
+                        placeholder="Sélectionner un motif"
                         class="w-full"
-                        placeholder="Indiquez la raison de l'annulation..."
+                        fluid
                         :class="{
-                            'p-invalid': annulerForm.errors.motif_annulation,
+                            'p-invalid':
+                                annulerForm.errors.motif_annulation_code,
                         }"
                     />
                     <p
-                        v-if="annulerForm.errors.motif_annulation"
+                        v-if="annulerForm.errors.motif_annulation_code"
                         class="mt-1 text-xs text-destructive"
                     >
-                        {{ annulerForm.errors.motif_annulation }}
+                        {{ annulerForm.errors.motif_annulation_code }}
+                    </p>
+                </div>
+
+                <!-- Précision (Autre seulement) -->
+                <div v-if="annulerForm.motif_annulation_code === 'autre'">
+                    <Label
+                        for="annulation-motif-detail"
+                        class="mb-1.5 block text-sm"
+                    >
+                        Précision <span class="text-destructive">*</span>
+                    </Label>
+                    <Textarea
+                        id="annulation-motif-detail"
+                        v-model="annulerForm.motif_annulation_detail"
+                        rows="3"
+                        class="w-full"
+                        placeholder="Indiquez la raison de l'annulation..."
+                        :class="{
+                            'p-invalid':
+                                annulerForm.errors.motif_annulation_detail,
+                        }"
+                    />
+                    <p
+                        v-if="annulerForm.errors.motif_annulation_detail"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ annulerForm.errors.motif_annulation_detail }}
                     </p>
                 </div>
             </div>
@@ -784,10 +835,7 @@ function submitEncaisser() {
                     >
                     <Button
                         variant="destructive"
-                        :disabled="
-                            annulerForm.processing ||
-                            !annulerForm.motif_annulation.trim()
-                        "
+                        :disabled="annulerDisabled"
                         @click="submitAnnuler"
                     >
                         <XCircle class="mr-2 h-4 w-4" />

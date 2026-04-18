@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MotifAnnulation;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Models\Client;
@@ -207,6 +208,7 @@ class CommandeVenteController extends Controller
         );
 
         $this->ensureVehiculeOrClientSelected($data);
+        $this->ensureQuantiteMatchesVehiculeCapacity($data);
 
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
@@ -390,6 +392,7 @@ class CommandeVenteController extends Controller
         );
 
         $this->ensureVehiculeOrClientSelected($data);
+        $this->ensureQuantiteMatchesVehiculeCapacity($data);
 
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
@@ -425,13 +428,22 @@ class CommandeVenteController extends Controller
     {
         $this->authorize('annuler', $commande_vente);
 
+        $validCodes = implode(',', MotifAnnulation::validValues());
+
         $data = $request->validate([
-            'motif_annulation' => 'required|string|max:2000',
+            'motif_annulation_code' => ['required', 'string', "in:{$validCodes}"],
+            'motif_annulation_detail' => ['nullable', 'string', 'max:2000', 'required_if:motif_annulation_code,autre'],
         ], [
-            'motif_annulation.required' => "Le motif d'annulation est obligatoire.",
+            'motif_annulation_code.required' => "Le motif d'annulation est obligatoire.",
+            'motif_annulation_code.in' => 'Le motif sélectionné est invalide.',
+            'motif_annulation_detail.required_if' => "Veuillez préciser la raison de l'annulation.",
+            'motif_annulation_detail.max' => 'La précision ne peut pas dépasser 2000 caractères.',
         ]);
 
-        $this->service->annuler($commande_vente, $data['motif_annulation']);
+        $motif = MotifAnnulation::from($data['motif_annulation_code'])
+            ->toMotifString($data['motif_annulation_detail'] ?? '');
+
+        $this->service->annuler($commande_vente, $motif);
 
         return back()->with('success', 'Commande et facture annulées.');
     }

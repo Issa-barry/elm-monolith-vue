@@ -24,13 +24,14 @@ const sidebarNavItems = computed((): NavItem[] => {
     ];
 
     if (can('users.read')) {
-        items.push({ title: 'Rôles & Permissions', href: '/roles' });
+        items.push({ title: 'Roles & Permissions', href: '/roles' });
     }
 
     if (can('parametres.update')) {
         items.push(
-            { title: 'Paramétrage système', href: editParametres().url },
-            { title: 'Modules métier', href: '/settings/modules' },
+            { title: 'Parametrage systeme', href: editParametres().url },
+            { title: 'Parametrage ventes', href: '/settings/ventes' },
+            { title: 'Modules metier', href: '/settings/modules' },
         );
     }
 
@@ -43,8 +44,8 @@ const currentPath = typeof window !== undefined ? window.location.pathname : '';
 <template>
     <div class="p-4 sm:p-6">
         <Heading
-            title="Paramètres"
-            description="Gérez votre profil et les paramètres de votre compte"
+            title="Parametres"
+            description="Gerez votre profil et les parametres de votre compte"
         />
 
         <div class="flex flex-col lg:flex-row lg:space-x-12">

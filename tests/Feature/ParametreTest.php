@@ -16,9 +16,11 @@ class ParametreTest extends TestCase
     private function userWithPermission(Organization $org): User
     {
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'parametres.read', 'guard_name' => 'web']);
         Permission::firstOrCreate(['name' => 'parametres.update', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
+        $user->givePermissionTo('parametres.read');
         $user->givePermissionTo('parametres.update');
 
         return $user;
