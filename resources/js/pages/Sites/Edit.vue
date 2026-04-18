@@ -16,23 +16,14 @@ interface SiteData {
     nom: string;
     code: string;
     type: string | null;
-    statut: string | null;
-    localisation: string | null;
-    pays: string | null;
     ville: string | null;
-    description: string | null;
-    parent_id: number | null;
-    latitude: number | null;
-    longitude: number | null;
+    quartier: string | null;
     telephone: string | null;
-    email: string | null;
 }
 
 const props = defineProps<{
     site: SiteData;
     types: Option[];
-    statuts: Option[];
-    parentOptions: Option[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -46,16 +37,9 @@ const form = useForm({
     nom: props.site.nom,
     code: props.site.code,
     type: props.site.type,
-    statut: props.site.statut,
-    localisation: props.site.localisation,
-    pays: props.site.pays,
     ville: props.site.ville,
-    description: props.site.description,
-    parent_id: props.site.parent_id,
-    latitude: props.site.latitude,
-    longitude: props.site.longitude,
+    quartier: props.site.quartier,
     telephone: props.site.telephone,
-    email: props.site.email,
 });
 
 function submit() {
@@ -108,8 +92,6 @@ function submit() {
                 :errors="form.errors"
                 :processing="form.processing"
                 :types="types"
-                :statuts="statuts"
-                :parent-options="parentOptions"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

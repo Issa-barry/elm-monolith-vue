@@ -50,7 +50,7 @@ class EquipesLivraisonSeeder extends Seeder
         $equipesExternes = [
             [
                 'nom' => 'Nen Dow',
-                'proprietaire_tel' => '+224621000001', // Mamadou BARRY
+                'proprietaire_tel' => '+33754158797', // Amadou DIALLO
                 'membres' => [
                     ['telephone' => '+224622000001', 'role' => 'principal', 'taux' => 25, 'ordre' => 0],
                     ['telephone' => '+224622000002', 'role' => 'assistant', 'taux' => 15, 'ordre' => 1],
@@ -65,7 +65,7 @@ class EquipesLivraisonSeeder extends Seeder
             ],
             [
                 'nom' => 'Baba Ousou',
-                'proprietaire_tel' => '+224621000001', // Mamadou BARRY
+                'proprietaire_tel' => '+33754158797', // Amadou DIALLO
                 'membres' => [
                     ['telephone' => '+224622000008', 'role' => 'principal', 'taux' => 20, 'ordre' => 0],
                     ['telephone' => '+224622000009', 'role' => 'assistant', 'taux' => 15, 'ordre' => 1],

@@ -51,6 +51,20 @@ class LoginResponseTest extends TestCase
         $this->assertStringContainsString('client', $response->getTargetUrl());
     }
 
+    public function test_proprietaire_user_is_redirected_to_client_dashboard(): void
+    {
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'proprietaire', 'guard_name' => 'web']);
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('proprietaire');
+
+        $request = $this->makeRequest($user);
+        $loginResponse = new LoginResponse;
+        $response = $loginResponse->toResponse($request);
+
+        $this->assertStringContainsString('client', $response->getTargetUrl());
+    }
+
     public function test_login_response_returns_json_when_request_wants_json(): void
     {
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
