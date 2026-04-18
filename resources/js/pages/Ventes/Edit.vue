@@ -194,12 +194,16 @@ function onProduitChange(index: number, produitId: number | null) {
         return;
     }
 
-    // Nouveau produit → initialiser à la capacité du véhicule
+    // Nouveau produit → capacité par défaut uniquement sur la 1re ligne
     const ligne = form.lignes[index];
     ligne.produit_id = produitId;
     const produit = props.produits.find((p) => p.id === produitId);
     ligne.prix_vente = produit ? produit.prix_vente : 0;
-    ligne.qte = capaciteVehiculeSelectionne.value ?? ligne.qte;
+    const qteParDefaut =
+        index === 0
+            ? (capaciteVehiculeSelectionne.value ?? ligne.qte)
+            : ligne.qte;
+    ligne.qte = Math.max(1, qteParDefaut);
     ligne.total = ligne.prix_vente * ligne.qte;
 }
 
@@ -255,7 +259,7 @@ const capaciteVehiculeConforme = computed(() => {
         return false;
     }
 
-    return quantiteTotale.value === capaciteVehiculeSelectionne.value;
+    return quantiteTotale.value <= capaciteVehiculeSelectionne.value;
 });
 
 // ── Reset au montage (évite la persistance SPA entre navigations) ─────────────
@@ -271,6 +275,7 @@ const canSubmit = computed(
     () =>
         (form.vehicule_id !== null || form.client_id !== null) &&
         totalGeneral.value > 0 &&
+        capaciteVehiculeConforme.value &&
         !form.processing,
 );
 

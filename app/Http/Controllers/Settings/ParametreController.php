@@ -15,11 +15,12 @@ class ParametreController extends Controller
 {
     public function edit(): Response
     {
-        abort_if(! auth()->user()->can('parametres.update'), 403);
+        abort_if(! auth()->user()->can('parametres.read'), 403);
 
         $orgId = auth()->user()->organization_id;
 
         $parametres = Parametre::where('organization_id', $orgId)
+            ->where('groupe', '!=', Parametre::GROUPE_VENTES)
             ->orderBy('groupe')
             ->orderBy('cle')
             ->get()

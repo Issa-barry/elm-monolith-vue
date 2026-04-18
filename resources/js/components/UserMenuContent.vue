@@ -1,20 +1,34 @@
 <script setup lang="ts">
-import UserInfo from '@/components/UserInfo.vue';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import UserInfo from '@/components/UserInfo.vue';
+import { usePermissions } from '@/composables/usePermissions';
 import { logout } from '@/routes';
-import { edit } from '@/routes/profile';
+import { edit as editParametres } from '@/routes/parametres';
+import { edit as editProfile } from '@/routes/profile';
 import type { User } from '@/types';
 import { router } from '@inertiajs/vue3';
 import { LogOut, Settings } from 'lucide-vue-next';
+import { computed } from 'vue';
 
 interface Props {
     user: User;
 }
+
+const { can } = usePermissions();
+
+const settingsHref = computed(() =>
+    can('parametres.read') ? editParametres().url : editProfile().url,
+);
+
+const openSettings = () => {
+    router.flushAll();
+    router.visit(settingsHref.value);
+};
 
 const handleLogout = () => {
     router.flushAll();
@@ -32,11 +46,9 @@ defineProps<Props>();
     </DropdownMenuLabel>
     <DropdownMenuSeparator />
     <DropdownMenuGroup>
-        <DropdownMenuItem :as-child="true">
-            <Link class="block w-full" :href="edit()" prefetch as="button">
-                <Settings class="mr-2 h-4 w-4" />
-                Parametres
-            </Link>
+        <DropdownMenuItem class="cursor-pointer" @click="openSettings">
+            <Settings class="mr-2 h-4 w-4" />
+            Parametres
         </DropdownMenuItem>
     </DropdownMenuGroup>
     <DropdownMenuSeparator />

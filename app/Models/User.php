@@ -94,7 +94,7 @@ class User extends Authenticatable
         }
 
         // Permissions standalone hors matrice CRUD
-        $standalone = ['logistique.commission.verser'];
+        $standalone = ['logistique.commission.verser', 'ventes.qte.update'];
         foreach ($standalone as $perm) {
             $map[$perm] = $this->isSuperAdmin() || $this->can($perm);
         }
