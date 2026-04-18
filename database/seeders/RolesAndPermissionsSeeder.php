@@ -173,7 +173,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'code_pays' => 'FR',
                 'role' => 'super_admin',
             ],
-           
+
         ];
 
         foreach ($staff as $data) {

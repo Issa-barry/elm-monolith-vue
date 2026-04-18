@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\SiteStatut;
 use App\Enums\SiteType;
 use App\Models\Site;
 use App\Models\UserInvitation;

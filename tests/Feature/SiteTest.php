@@ -69,9 +69,8 @@ class SiteTest extends TestCase
             ->post(route('sites.store'), [
                 'nom' => 'Depot Conakry',
                 'type' => 'depot',
-                'localisation' => 'Ratoma, Conakry',
                 'ville' => 'Conakry',
-                'pays' => 'Guinée',
+                'quartier' => 'Ratoma',
             ])
             ->assertRedirect(route('sites.index'));
 
@@ -84,7 +83,7 @@ class SiteTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('sites.store'), [])
-            ->assertSessionHasErrors(['nom', 'type', 'localisation']);
+            ->assertSessionHasErrors(['nom', 'type']);
     }
 
     public function test_store_fails_with_invalid_type(): void
@@ -93,7 +92,6 @@ class SiteTest extends TestCase
             ->post(route('sites.store'), [
                 'nom' => 'Test',
                 'type' => 'type_invalide',
-                'localisation' => 'Quelque part',
             ])
             ->assertSessionHasErrors('type');
     }
@@ -141,7 +139,8 @@ class SiteTest extends TestCase
                 'nom' => 'Depot modifie',
                 'code' => $site->code,
                 'type' => 'depot',
-                'localisation' => 'Kaloum, Conakry',
+                'ville' => 'Conakry',
+                'quartier' => 'Kaloum',
             ])
             ->assertRedirect(route('sites.index'));
 
@@ -156,7 +155,7 @@ class SiteTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('sites.update', $site), [])
-            ->assertSessionHasErrors(['nom', 'code', 'type', 'localisation']);
+            ->assertSessionHasErrors(['nom', 'code', 'type']);
     }
 
     // ── destroy ───────────────────────────────────────────────────────────────
