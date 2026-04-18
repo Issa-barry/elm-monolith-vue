@@ -13,8 +13,6 @@ interface Option {
 
 defineProps<{
     types: Option[];
-    statuts: Option[];
-    parentOptions: Option[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -26,16 +24,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: '',
     type: null as string | null,
-    statut: 'active' as string | null,
-    localisation: null as string | null,
-    pays: 'Guinée' as string | null,
-    ville: 'Conakry' as string | null,
-    description: null as string | null,
-    parent_id: null as number | null,
-    latitude: null as number | null,
-    longitude: null as number | null,
+    ville: null as string | null,
+    quartier: null as string | null,
     telephone: null as string | null,
-    email: null as string | null,
 });
 
 function submit() {
@@ -83,8 +74,6 @@ function submit() {
                 :errors="form.errors"
                 :processing="form.processing"
                 :types="types"
-                :statuts="statuts"
-                :parent-options="parentOptions"
                 :is-create="true"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"

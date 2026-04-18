@@ -10,7 +10,7 @@ class LoginResponse implements LoginResponseContract
     {
         $user = $request->user();
 
-        if ($user?->hasRole('client')) {
+        if ($user?->hasAnyRole(['client', 'proprietaire', 'livreur'])) {
             $redirectTo = route('client.dashboard');
         } elseif ($user?->hasAnyRole(['super_admin', 'admin_entreprise', 'manager', 'commerciale', 'comptable'])) {
             $redirectTo = route('dashboard');

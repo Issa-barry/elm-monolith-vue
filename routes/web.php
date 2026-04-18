@@ -3,6 +3,7 @@
 use App\Features\ModuleFeature;
 use App\Http\Controllers\Auth\AcceptInvitationController;
 use App\Http\Controllers\CashbackController;
+use App\Http\Controllers\Client\ClientDashboardController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
@@ -238,8 +239,13 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 });
 
 // ── Espace client ─────────────────────────────────────────────────────────────
-Route::middleware(['auth', 'role:client'])->prefix('client')->name('client.')->group(function () {
-    Route::get('/dashboard', [\App\Http\Controllers\Client\ClientDashboardController::class, 'index'])->name('dashboard');
+Route::middleware(['auth', 'role:client|proprietaire|livreur'])->prefix('client')->name('client.')->group(function () {
+    Route::get('/dashboard', [ClientDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/vehicules', [ClientDashboardController::class, 'vehicles'])->name('vehicles');
+    Route::get('/gains', [ClientDashboardController::class, 'earnings'])->name('earnings');
+    Route::get('/proposer-vehicule', [ClientDashboardController::class, 'proposals'])->name('propositions.index');
+    Route::get('/profile', [ClientDashboardController::class, 'profile'])->name('profile');
+    Route::post('/propositions-vehicules', [ClientDashboardController::class, 'storeVehicleProposal'])->name('propositions.store');
 });
 
 require __DIR__.'/settings.php';
