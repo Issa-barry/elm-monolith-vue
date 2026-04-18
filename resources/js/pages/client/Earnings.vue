@@ -126,7 +126,9 @@ function formatMoney(value: number): string {
                                 <th class="py-2 pr-4 font-medium">Date</th>
                                 <th class="py-2 pr-4 font-medium">Reference</th>
                                 <th class="py-2 pr-4 font-medium">Vehicule</th>
-                                <th class="py-2 pr-4 font-medium">Montant net</th>
+                                <th class="py-2 pr-4 font-medium">
+                                    Montant net
+                                </th>
                                 <th class="py-2 pr-4 font-medium">Frais</th>
                                 <th class="py-2 pr-4 font-medium">Verse</th>
                                 <th class="py-2 pr-4 font-medium">Reste</th>
@@ -153,7 +155,11 @@ function formatMoney(value: number): string {
                                     {{ formatMoney(line.montant_net) }}
                                 </td>
                                 <td class="py-2 pr-4 text-destructive">
-                                    {{ line.frais > 0 ? `- ${formatMoney(line.frais)}` : '-' }}
+                                    {{
+                                        line.frais > 0
+                                            ? `- ${formatMoney(line.frais)}`
+                                            : '-'
+                                    }}
                                 </td>
                                 <td class="py-2 pr-4">
                                     {{ formatMoney(line.montant_verse) }}
@@ -197,7 +203,9 @@ function formatMoney(value: number): string {
                                 </th>
                                 <th class="py-2 pr-4 font-medium">Gains</th>
                                 <th class="py-2 pr-4 font-medium">Verses</th>
-                                <th class="py-2 pr-0 font-medium">Reste à payer</th>
+                                <th class="py-2 pr-0 font-medium">
+                                    Reste à payer
+                                </th>
                             </tr>
                         </thead>
                         <tbody>

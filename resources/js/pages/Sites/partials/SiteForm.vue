@@ -47,7 +47,10 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
                         id="nom"
                         :model-value="form.nom"
                         @update:model-value="
-                            emit('update:form', { ...form, nom: $event as string })
+                            emit('update:form', {
+                                ...form,
+                                nom: $event as string,
+                            })
                         "
                         class="w-full"
                         :class="{ 'p-invalid': errors.nom }"
@@ -127,7 +130,9 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
 
                 <!-- Téléphone -->
                 <div class="sm:col-span-2">
-                    <Label for="telephone" class="mb-1.5 block">Téléphone</Label>
+                    <Label for="telephone" class="mb-1.5 block"
+                        >Téléphone</Label
+                    >
                     <InputText
                         id="telephone"
                         :model-value="form.telephone ?? ''"
