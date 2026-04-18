@@ -183,7 +183,7 @@ class CommandeVenteTest extends TestCase
             ->assertSessionHasErrors(['lignes']);
     }
 
-    public function test_store_succeeds_when_total_quantite_exceeds_vehicule_capacity(): void
+    public function test_store_fails_when_total_quantite_exceeds_vehicule_capacity(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
         $vehicule->update(['capacite_packs' => 5]);
@@ -195,12 +195,9 @@ class CommandeVenteTest extends TestCase
                     ['produit_id' => $produit->id, 'qte' => 6, 'prix_vente' => 2000],
                 ],
             ])
-            ->assertRedirect();
+            ->assertSessionHasErrors('lignes');
 
-        $this->assertDatabaseHas('commandes_ventes', [
-            'organization_id' => $this->org->id,
-            'vehicule_id' => $vehicule->id,
-        ]);
+        $this->assertDatabaseMissing('commandes_ventes', ['vehicule_id' => $vehicule->id]);
     }
 
     public function test_store_succeeds_when_total_quantite_below_vehicule_capacity(): void
@@ -220,7 +217,7 @@ class CommandeVenteTest extends TestCase
         $this->assertDatabaseHas('commandes_ventes', ['vehicule_id' => $vehicule->id]);
     }
 
-    public function test_store_succeeds_when_multi_lines_total_exceeds_vehicule_capacity(): void
+    public function test_store_fails_when_multi_lines_total_exceed_vehicule_capacity(): void
     {
         ['vehicule' => $vehicule] = $this->makeContext($this->org);
         $vehicule->update(['capacite_packs' => 5]);
@@ -242,7 +239,29 @@ class CommandeVenteTest extends TestCase
                     ['produit_id' => $p2->id, 'qte' => 4, 'prix_vente' => 1500],
                 ],
             ])
-            ->assertRedirect();
+            ->assertSessionHasErrors('lignes');
+    }
+
+    public function test_store_fails_when_vehicule_has_no_capacity_defined(): void
+    {
+        ['produit' => $produit] = $this->makeContext($this->org);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'capacite_packs' => null,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertSessionHasErrors('vehicule_id');
+
+        $this->assertDatabaseMissing('commandes_ventes', ['vehicule_id' => $vehicule->id]);
     }
 
     // ── qte éditable / capacité véhicule par défaut ───────────────────────────
@@ -320,6 +339,141 @@ class CommandeVenteTest extends TestCase
             ->assertRedirect();
 
         $this->assertDatabaseHas('commandes_ventes', ['client_id' => $client->id]);
+    }
+
+    // ── update : capacité véhicule ────────────────────────────────────────────
+
+    public function test_update_accepts_qte_within_capacity(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        $vehicule->update(['capacite_packs' => 10]);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => 2000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('ventes.update', $commande), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 10, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commandes_ventes', ['id' => $commande->id, 'vehicule_id' => $vehicule->id]);
+    }
+
+    public function test_update_fails_when_total_quantite_exceeds_vehicule_capacity(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        $vehicule->update(['capacite_packs' => 5]);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => 2000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('ventes.update', $commande), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 6, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertSessionHasErrors('lignes');
+    }
+
+    public function test_update_fails_when_multi_lines_total_exceed_vehicule_capacity(): void
+    {
+        ['vehicule' => $vehicule] = $this->makeContext($this->org);
+        $vehicule->update(['capacite_packs' => 5]);
+
+        $p1 = Produit::create([
+            'organization_id' => $this->org->id, 'nom' => 'Pa', 'type' => 'materiel',
+            'statut' => 'actif', 'prix_vente' => 1000, 'prix_usine' => 800,
+        ]);
+        $p2 = Produit::create([
+            'organization_id' => $this->org->id, 'nom' => 'Pb', 'type' => 'materiel',
+            'statut' => 'actif', 'prix_vente' => 1500, 'prix_usine' => 1000,
+        ]);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => 5000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('ventes.update', $commande), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $p1->id, 'qte' => 3, 'prix_vente' => 1000],
+                    ['produit_id' => $p2->id, 'qte' => 4, 'prix_vente' => 1500],
+                ],
+            ])
+            ->assertSessionHasErrors('lignes');
+    }
+
+    public function test_update_fails_when_vehicule_has_no_capacity_defined(): void
+    {
+        ['produit' => $produit] = $this->makeContext($this->org);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'capacite_packs' => null,
+        ]);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => 2000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('ventes.update', $commande), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertSessionHasErrors('vehicule_id');
+    }
+
+    public function test_update_with_client_only_accepts_any_valid_qte(): void
+    {
+        ['produit' => $produit, 'client' => $client] = $this->makeContext($this->org);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'client_id' => $client->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => 2000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('ventes.update', $commande), [
+                'client_id' => $client->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 999, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commandes_ventes', ['id' => $commande->id, 'client_id' => $client->id]);
     }
 
     public function test_create_exposes_vehicule_capacity_for_new_ligne_default(): void
@@ -438,7 +592,7 @@ class CommandeVenteTest extends TestCase
 
         $this->actingAs($this->user)
             ->patch(route('ventes.annuler', $commande), [
-                'motif_annulation' => 'Annulation test',
+                'motif_annulation_code' => 'erreur_saisie',
             ])
             ->assertRedirect();
 
@@ -454,7 +608,84 @@ class CommandeVenteTest extends TestCase
 
         $this->actingAs($this->user)
             ->patch(route('ventes.annuler', $commande), [])
-            ->assertSessionHasErrors('motif_annulation');
+            ->assertSessionHasErrors('motif_annulation_code');
+    }
+
+    public function test_annuler_fails_with_invalid_code(): void
+    {
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => StatutCommandeVente::EN_COURS,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('ventes.annuler', $commande), [
+                'motif_annulation_code' => 'code_invalide',
+            ])
+            ->assertSessionHasErrors('motif_annulation_code');
+    }
+
+    public function test_annuler_fails_with_autre_without_detail(): void
+    {
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => StatutCommandeVente::EN_COURS,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('ventes.annuler', $commande), [
+                'motif_annulation_code' => 'autre',
+            ])
+            ->assertSessionHasErrors('motif_annulation_detail');
+    }
+
+    public function test_annuler_succeeds_with_autre_and_stores_detail(): void
+    {
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => StatutCommandeVente::EN_COURS,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('ventes.annuler', $commande), [
+                'motif_annulation_code' => 'autre',
+                'motif_annulation_detail' => 'Raison spécifique',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commandes_ventes', [
+            'id' => $commande->id,
+            'motif_annulation' => 'Autre: Raison spécifique',
+        ]);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('motifStandardProvider')]
+    public function test_annuler_stores_correct_label_for_standard_motif(string $code, string $expectedLabel): void
+    {
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => StatutCommandeVente::EN_COURS,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('ventes.annuler', $commande), [
+                'motif_annulation_code' => $code,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commandes_ventes', [
+            'id' => $commande->id,
+            'motif_annulation' => $expectedLabel,
+        ]);
+    }
+
+    public static function motifStandardProvider(): array
+    {
+        return [
+            'erreur_saisie' => ['erreur_saisie', 'Erreur de saisie'],
+            'doublon' => ['doublon', 'Doublon'],
+            'rupture_stock' => ['rupture_stock', 'Rupture de stock'],
+        ];
     }
 
     public function test_annuler_returns_422_if_already_annulee(): void
@@ -466,7 +697,7 @@ class CommandeVenteTest extends TestCase
 
         $this->actingAs($this->user)
             ->patch(route('ventes.annuler', $commande), [
-                'motif_annulation' => 'Tentative double annulation',
+                'motif_annulation_code' => 'doublon',
             ])
             ->assertStatus(422);
     }
@@ -495,7 +726,7 @@ class CommandeVenteTest extends TestCase
 
         $this->actingAs($this->user)
             ->patch(route('ventes.annuler', $commande), [
-                'motif_annulation' => 'Test annulation avec encaissement',
+                'motif_annulation_code' => 'erreur_saisie',
             ])
             ->assertStatus(422);
     }

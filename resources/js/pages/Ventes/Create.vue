@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
@@ -56,9 +55,6 @@ const props = defineProps<{
     user_site: UserSite;
 }>();
 
-const { can } = usePermissions();
-const canEditQuantite = computed(() => can('ventes.qte.update'));
-
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Ventes', href: '/ventes' },
@@ -102,16 +98,6 @@ function onVehiculeClear() {
 
 function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
     if (!vehicule || vehicule.capacite_packs === null) {
-        return;
-    }
-
-    if (!canEditQuantite.value) {
-        form.lignes = form.lignes.map((ligne) => ({
-            ...ligne,
-            qte: vehicule.capacite_packs,
-            total: ligne.prix_vente * vehicule.capacite_packs,
-        }));
-
         return;
     }
 
@@ -183,30 +169,28 @@ function onProduitChange(index: number, produitId: number | null) {
         (l, i) => i !== index && l.produit_id === produitId,
     );
     if (existingIndex !== -1) {
-        if (canEditQuantite.value) {
-            form.lignes[existingIndex].qte += 1;
-            form.lignes[existingIndex].total =
-                form.lignes[existingIndex].prix_vente *
-                form.lignes[existingIndex].qte;
-        }
+        form.lignes[existingIndex].qte += 1;
+        form.lignes[existingIndex].total =
+            form.lignes[existingIndex].prix_vente *
+            form.lignes[existingIndex].qte;
         form.lignes.splice(index, 1);
         return;
     }
 
-    // Nouveau produit → initialiser à la capacité du véhicule
+    // Nouveau produit → capacité par défaut uniquement sur la 1re ligne
     const ligne = form.lignes[index];
     ligne.produit_id = produitId;
     const produit = props.produits.find((p) => p.id === produitId);
     ligne.prix_vente = produit ? produit.prix_vente : 0;
-    ligne.qte = capaciteVehiculeSelectionne.value ?? ligne.qte;
+    const qteParDefaut =
+        index === 0
+            ? (capaciteVehiculeSelectionne.value ?? ligne.qte)
+            : ligne.qte;
+    ligne.qte = Math.max(1, qteParDefaut);
     ligne.total = ligne.prix_vente * ligne.qte;
 }
 
 function onQteChange(index: number, qte: number | null) {
-    if (!canEditQuantite.value) {
-        return;
-    }
-
     const ligne = form.lignes[index];
     ligne.qte = Math.max(1, qte ?? 1);
     ligne.total = ligne.prix_vente * ligne.qte;
@@ -258,7 +242,7 @@ const capaciteVehiculeConforme = computed(() => {
         return false;
     }
 
-    return quantiteTotale.value === capaciteVehiculeSelectionne.value;
+    return quantiteTotale.value <= capaciteVehiculeSelectionne.value;
 });
 
 // ── Reset au montage (évite la persistance SPA entre navigations) ─────────────
@@ -281,6 +265,7 @@ const canSubmit = computed(
     () =>
         (form.vehicule_id !== null || form.client_id !== null) &&
         totalGeneral.value > 0 &&
+        capaciteVehiculeConforme.value &&
         !form.processing,
 );
 
@@ -588,7 +573,6 @@ function submit() {
                                                 onQteChange(index, $event)
                                             "
                                             :min="1"
-                                            :disabled="!canEditQuantite"
                                             :use-grouping="false"
                                             class="w-full"
                                             input-class="w-full text-center"
@@ -673,7 +657,6 @@ function submit() {
                                             onQteChange(index, $event)
                                         "
                                         :min="1"
-                                        :disabled="!canEditQuantite"
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full text-center"
