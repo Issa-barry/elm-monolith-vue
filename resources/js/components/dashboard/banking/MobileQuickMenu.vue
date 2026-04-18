@@ -16,7 +16,8 @@ import {
     PackageCheck,
     ShoppingCart,
     Truck,
-    UserRound,
+    UserCog,
+    UserRoundCheck,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
 
@@ -36,6 +37,18 @@ const moduleActive = (key: ModuleFlagKey): boolean =>
     moduleFlags.value[key] !== false;
 const canSee = (permission: PermissionKey, module: ModuleFlagKey): boolean =>
     can(permission) && moduleActive(module);
+const vehiculesItems = computed((): QuickMenuHref[] => {
+    if (!moduleActive('vehicules')) return [];
+
+    const items: QuickMenuHref[] = [];
+    if (can('proprietaires.read')) items.push('/proprietaires');
+    if (can('vehicules.read')) items.push('/vehicules');
+    if (can('equipes-livraison.read')) items.push('/equipes-livraison');
+    return items;
+});
+const vehiculesQuickHref = computed<QuickMenuHref>(
+    () => vehiculesItems.value[0] ?? '/vehicules',
+);
 
 const quickMenuItems = computed((): QuickMenuItem[] =>
     [
@@ -64,6 +77,12 @@ const quickMenuItems = computed((): QuickMenuItem[] =>
             visible: canSee('packings.read', 'packings'),
         },
         {
+            title: 'Clients',
+            href: '/clients',
+            icon: UserRoundCheck,
+            visible: can('clients.read'),
+        },
+        {
             title: 'Prestataires',
             href: '/prestataires',
             icon: HandCoins,
@@ -71,21 +90,9 @@ const quickMenuItems = computed((): QuickMenuItem[] =>
         },
         {
             title: 'Vehicules',
-            href: '/vehicules',
+            href: vehiculesQuickHref.value,
             icon: Car,
-            visible: canSee('vehicules.read', 'vehicules'),
-        },
-        {
-            title: 'Livreurs',
-            href: '/livreurs',
-            icon: Truck,
-            visible: canSee('livreurs.read', 'vehicules'),
-        },
-        {
-            title: 'Proprietaires',
-            href: '/proprietaires',
-            icon: UserRound,
-            visible: canSee('proprietaires.read', 'vehicules'),
+            visible: vehiculesItems.value.length > 0,
         },
         {
             title: 'Produits',
@@ -94,10 +101,22 @@ const quickMenuItems = computed((): QuickMenuItem[] =>
             visible: canSee('produits.read', 'produits'),
         },
         {
+            title: 'Logistique',
+            href: '/logistique/transferts',
+            icon: Truck,
+            visible: canSee('logistique.read', 'logistique'),
+        },
+        {
             title: 'Sites',
             href: '/sites',
             icon: Building2,
             visible: canSee('sites.read', 'sites'),
+        },
+        {
+            title: 'Utilisateurs',
+            href: '/users',
+            icon: UserCog,
+            visible: canSee('users.read', 'utilisateurs'),
         },
     ].filter((item) => item.visible),
 );

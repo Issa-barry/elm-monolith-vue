@@ -5,20 +5,103 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import AuthBase from '@/layouts/AuthLayout.vue';
-import { Head, useForm } from '@inertiajs/vue3';
-import { AlertCircle, CheckCircle, Lock, MailCheck } from 'lucide-vue-next';
+import { dashboard, home, login, logout } from '@/routes';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import {
+    AlertCircle,
+    CheckCircle,
+    Home,
+    LayoutDashboard,
+    Lock,
+    LogIn,
+    LogOut,
+    MailCheck,
+} from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed, ref } from 'vue';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
+type InvitationError =
+    | 'not_found'
+    | 'already_accepted'
+    | 'revoked'
+    | 'expired'
+    | 'already_authenticated';
+
 const props = defineProps<{
     token?: string;
     email?: string;
     role?: string;
+    site_type_label?: string;
     site_nom?: string;
-    error?: 'not_found' | 'already_accepted' | 'revoked' | 'expired';
+    error?: InvitationError;
 }>();
+
+const siteLabel = computed(() => {
+    const typeLabel = props.site_type_label?.trim();
+    const siteName = props.site_nom?.trim();
+
+    if (typeLabel && siteName) {
+        return `${typeLabel} ${siteName}`;
+    }
+
+    return siteName ?? '';
+});
+
+const roleLabel = computed(() => props.role ?? 'collaborateur');
+
+const pageTitle = computed(() =>
+    props.error
+        ? 'Invitation indisponible'
+        : `Rejoindre ${siteLabel.value || 'votre site'}`,
+);
+
+const pageDescription = computed(() =>
+    props.error
+        ? ''
+        : `Créez votre compte pour rejoindre ${siteLabel.value || 'votre site'} en tant que ${roleLabel.value}.`,
+);
+
+const errorContent = computed(() => {
+    switch (props.error) {
+        case 'not_found':
+            return {
+                title: 'Invitation introuvable',
+                message: "Ce lien d'invitation est invalide ou n'existe plus.",
+            };
+        case 'already_accepted':
+            return {
+                title: 'Invitation déjà acceptée',
+                message:
+                    'Cette invitation a déjà été utilisée. Connectez-vous pour accéder à votre espace.',
+            };
+        case 'revoked':
+            return {
+                title: 'Invitation révoquée',
+                message:
+                    "Cette invitation a été annulée. Contactez l'administrateur pour recevoir un nouveau lien.",
+            };
+        case 'expired':
+            return {
+                title: 'Invitation expirée',
+                message:
+                    "Ce lien d'invitation a expiré (validité de 24 heures). Demandez un nouveau lien à l'administrateur.",
+            };
+        case 'already_authenticated':
+            return {
+                title: 'Vous êtes déjà connecté',
+                message:
+                    'Déconnectez-vous puis reconnectez-vous avec le compte invité pour accepter cette invitation.',
+            };
+        default:
+            return {
+                title: 'Invitation indisponible',
+                message:
+                    "Une erreur est survenue avec ce lien d'invitation. Veuillez réessayer plus tard.",
+            };
+    }
+});
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -247,53 +330,92 @@ function submitAccept() {
         },
     });
 }
+
+function logoutAndGoToLogin() {
+    router.post(
+        logout().url,
+        {},
+        {
+            onFinish: () => router.visit(login().url),
+        },
+    );
+}
 </script>
 
 <template>
-    <AuthBase
-        :title="
-            error ? 'Invitation invalide' : `Rejoindre ${site_nom ?? 'le site'}`
-        "
-        :description="
-            error
-                ? ''
-                : `Créez votre compte pour rejoindre ${site_nom} en tant que ${role}.`
-        "
-    >
+    <AuthBase :title="pageTitle" :description="pageDescription">
         <Head title="Accepter l'invitation" />
 
         <!-- ── États d'erreur ──────────────────────────────────────────────── -->
-        <div v-if="error" class="flex flex-col items-center gap-4 py-4">
-            <AlertCircle class="h-12 w-12 text-destructive opacity-70" />
+        <div v-if="error" class="space-y-6">
+            <div
+                class="rounded-xl border border-border bg-[radial-gradient(50%_120%_at_50%_0%,color-mix(in_srgb,var(--p-primary-500)_12%,transparent)_0%,rgba(255,255,255,0)_100%)] p-6 sm:p-8"
+            >
+                <div class="flex flex-col items-center gap-6 text-center">
+                    <div
+                        class="bg-primary-100 dark:bg-primary-900/60 dark:text-primary-100 inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-primary"
+                    >
+                        Invitation
+                    </div>
 
-            <div class="text-center">
-                <p
-                    v-if="error === 'not_found'"
-                    class="text-sm text-muted-foreground"
-                >
-                    Ce lien d'invitation est invalide ou introuvable.
-                </p>
-                <p
-                    v-else-if="error === 'already_accepted'"
-                    class="text-sm text-muted-foreground"
-                >
-                    Cette invitation a déjà été acceptée. Connectez-vous pour
-                    accéder à votre compte.
-                </p>
-                <p
-                    v-else-if="error === 'revoked'"
-                    class="text-sm text-muted-foreground"
-                >
-                    Cette invitation a été révoquée. Contactez l'administrateur
-                    pour obtenir une nouvelle invitation.
-                </p>
-                <p
-                    v-else-if="error === 'expired'"
-                    class="text-sm text-muted-foreground"
-                >
-                    Ce lien d'invitation a expiré (valable 24 h). Demandez un
-                    renvoi à l'administrateur.
-                </p>
+                    <div
+                        class="bg-primary-100 dark:bg-primary-900/60 dark:text-primary-100 flex h-12 w-12 items-center justify-center rounded-full text-primary"
+                    >
+                        <AlertCircle class="h-6 w-6" />
+                    </div>
+
+                    <div class="space-y-2">
+                        <h2
+                            class="text-surface-900 dark:text-surface-0 text-2xl font-bold"
+                        >
+                            {{ errorContent.title }}
+                        </h2>
+                        <p
+                            class="text-sm leading-relaxed text-muted-foreground"
+                        >
+                            {{ errorContent.message }}
+                        </p>
+                    </div>
+
+                    <div class="flex w-full flex-col gap-3">
+                        <Button
+                            :as-child="true"
+                            variant="outline"
+                            class="w-full"
+                        >
+                            <Link :href="home()">
+                                <Home class="mr-2 h-4 w-4" />
+                                Retour à l'accueil
+                            </Link>
+                        </Button>
+
+                        <template v-if="error === 'already_authenticated'">
+                            <Button :as-child="true" class="w-full">
+                                <Link :href="dashboard()">
+                                    <LayoutDashboard class="mr-2 h-4 w-4" />
+                                    Aller au tableau de bord
+                                </Link>
+                            </Button>
+
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                class="w-full"
+                                @click="logoutAndGoToLogin"
+                            >
+                                <LogOut class="mr-2 h-4 w-4" />
+                                Se connecter avec un autre compte
+                            </Button>
+                        </template>
+
+                        <Button v-else :as-child="true" class="w-full">
+                            <Link :href="login()">
+                                <LogIn class="mr-2 h-4 w-4" />
+                                Aller à la connexion
+                            </Link>
+                        </Button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -575,7 +697,8 @@ function submitAccept() {
                 >
                     <Spinner v-if="form.processing" />
                     <CheckCircle v-else class="mr-2 h-4 w-4" />
-                    Créer mon compte et rejoindre {{ site_nom }}
+                    Créer mon compte et rejoindre
+                    {{ siteLabel || site_nom || 'votre site' }}
                 </Button>
             </div>
         </div>

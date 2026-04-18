@@ -1,17 +1,29 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ChevronRight, HandCoins, User } from 'lucide-vue-next';
-import Dropdown from 'primevue/dropdown';
+import { HandCoins, MoreHorizontal, User } from 'lucide-vue-next';
+import Dialog from 'primevue/dialog';
+import PvDropdown from 'primevue/dropdown';
+import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import { ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface LivreurRow {
     livreur_id: number;
     nom: string;
+    telephone: string | null;
     pending: number;
     available: number;
     paid: number;
@@ -36,6 +48,7 @@ const props = defineProps<{
     kpis: Kpis;
     search: string;
     filtre_statut: string;
+    can_payer: boolean;
 }>();
 
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
@@ -75,10 +88,94 @@ watch(searchVal, () => {
 });
 watch(statutFiltre, appliquerFiltres);
 
+// ── KPIs calculés ─────────────────────────────────────────────────────────────
+
+const kpiTotalCumule = computed(
+    () =>
+        props.kpis.total_pending +
+        props.kpis.total_available +
+        props.kpis.total_paid,
+);
+
+// ── Paiement ──────────────────────────────────────────────────────────────────
+
+const MODES_PAIEMENT = [
+    { value: 'especes', label: 'Espèces' },
+    { value: 'virement', label: 'Virement' },
+    { value: 'cheque', label: 'Chèque' },
+    { value: 'mobile_money', label: 'Mobile Money' },
+];
+
+const showPaiementDialog = ref(false);
+const selectedLivreur = ref<LivreurRow | null>(null);
+
+interface PaiementForm {
+    montant: number | null;
+    mode_paiement: string;
+    processing: boolean;
+    errors: Record<string, string>;
+}
+
+const paiementForm = reactive<PaiementForm>({
+    montant: null,
+    mode_paiement: 'especes',
+    processing: false,
+    errors: {},
+});
+
+function openPaiement(livreur: LivreurRow) {
+    selectedLivreur.value = livreur;
+    paiementForm.montant = livreur.available > 0 ? livreur.available : null;
+    paiementForm.mode_paiement = 'especes';
+    paiementForm.processing = false;
+    paiementForm.errors = {};
+    showPaiementDialog.value = true;
+}
+
+function submitPaiement() {
+    if (
+        !paiementForm.montant ||
+        paiementForm.montant <= 0 ||
+        !selectedLivreur.value
+    )
+        return;
+    paiementForm.processing = true;
+    paiementForm.errors = {};
+    router.post(
+        `/logistique/commissions/livreurs/${selectedLivreur.value.livreur_id}/paiements`,
+        {
+            montant: paiementForm.montant,
+            mode_paiement: paiementForm.mode_paiement,
+        },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                showPaiementDialog.value = false;
+            },
+            onError: (e) => {
+                paiementForm.errors = e as Record<string, string>;
+            },
+            onFinish: () => {
+                paiementForm.processing = false;
+            },
+        },
+    );
+}
+
 // ── Formatage ─────────────────────────────────────────────────────────────────
 
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
+}
+
+function formatPhone(tel: string | null): string {
+    if (!tel) return '';
+    const digits = tel.replace(/\D/g, '');
+    if (digits.startsWith('33') && digits.length === 11)
+        return `+33 ${digits[2]} ${digits.slice(3, 5)} ${digits.slice(5, 7)} ${digits.slice(7, 9)} ${digits.slice(9, 11)}`;
+    if (digits.startsWith('224') && digits.length === 12)
+        return `+224 ${digits.slice(3, 6)} ${digits.slice(6, 9)} ${digits.slice(9, 12)}`;
+    return tel;
 }
 </script>
 
@@ -103,21 +200,23 @@ function formatGNF(val: number): string {
             </div>
 
             <!-- ── KPIs ──────────────────────────────────────────────────────── -->
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
+            <div class="grid grid-cols-3 gap-3">
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
                     >
-                        En attente de déblocage
+                        Total cumulé
                     </p>
                     <p
-                        class="mt-1 text-xl font-bold text-zinc-500 tabular-nums dark:text-zinc-400"
+                        class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
                     >
-                        {{ formatGNF(kpis.total_pending) }}
+                        {{ formatGNF(kpiTotalCumule) }}
                     </p>
                 </div>
                 <div
-                    class="rounded-xl border bg-card p-4 shadow-sm"
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
                     :class="
                         kpis.total_available > 0
                             ? 'border-amber-200 dark:border-amber-900'
@@ -125,12 +224,12 @@ function formatGNF(val: number): string {
                     "
                 >
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
                     >
-                        Disponible à payer
+                        Reste à payer
                     </p>
                     <p
-                        class="mt-1 text-xl font-bold tabular-nums"
+                        class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
                         :class="
                             kpis.total_available > 0
                                 ? 'text-amber-600 dark:text-amber-400'
@@ -140,14 +239,16 @@ function formatGNF(val: number): string {
                         {{ formatGNF(kpis.total_available) }}
                     </p>
                 </div>
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
                     >
-                        Versé (total)
+                        Déjà payé
                     </p>
                     <p
-                        class="mt-1 text-xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
+                        class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
                     >
                         {{ formatGNF(kpis.total_paid) }}
                     </p>
@@ -161,7 +262,7 @@ function formatGNF(val: number): string {
                     placeholder="Rechercher un livreur…"
                     class="w-64 text-sm"
                 />
-                <Dropdown
+                <PvDropdown
                     :options="STATUT_OPTIONS"
                     option-label="label"
                     option-value="value"
@@ -170,11 +271,11 @@ function formatGNF(val: number): string {
                     class="w-52 text-sm"
                     @change="(e) => (statutFiltre = e.value)"
                 />
-                <span class="text-xs text-muted-foreground"
-                    >{{ livreurs.length }} résultat{{
+                <span class="text-xs text-muted-foreground">
+                    {{ livreurs.length }} résultat{{
                         livreurs.length !== 1 ? 's' : ''
-                    }}</span
-                >
+                    }}
+                </span>
             </div>
 
             <!-- ── Tableau livreurs ──────────────────────────────────────────── -->
@@ -190,19 +291,19 @@ function formatGNF(val: number): string {
                             <th
                                 class="px-4 py-3 text-right font-medium text-muted-foreground"
                             >
-                                En attente
+                                Total cumulé
                             </th>
                             <th
                                 class="px-4 py-3 text-right font-medium text-muted-foreground"
                             >
-                                Disponible
+                                Reste à payer
                             </th>
                             <th
                                 class="px-4 py-3 text-right font-medium text-muted-foreground"
                             >
-                                Versé
+                                Déjà payé
                             </th>
-                            <th class="px-4 py-3" />
+                            <th class="w-10 px-4 py-3" />
                         </tr>
                     </thead>
                     <tbody class="divide-y">
@@ -216,13 +317,21 @@ function formatGNF(val: number): string {
                                     <User
                                         class="h-4 w-4 shrink-0 text-muted-foreground"
                                     />
-                                    <span class="font-medium">{{ l.nom }}</span>
+                                    <div>
+                                        <p class="font-medium">{{ l.nom }}</p>
+                                        <p
+                                            v-if="l.telephone"
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            {{ formatPhone(l.telephone) }}
+                                        </p>
+                                    </div>
                                 </div>
                             </td>
-                            <td
-                                class="px-4 py-3 text-right text-muted-foreground tabular-nums"
-                            >
-                                {{ formatGNF(l.pending) }}
+                            <td class="px-4 py-3 text-right tabular-nums">
+                                {{
+                                    formatGNF(l.pending + l.available + l.paid)
+                                }}
                             </td>
                             <td
                                 class="px-4 py-3 text-right font-semibold tabular-nums"
@@ -234,22 +343,45 @@ function formatGNF(val: number): string {
                             >
                                 {{ formatGNF(l.available) }}
                             </td>
-                            <td
-                                class="px-4 py-3 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
-                            >
+                            <td class="px-4 py-3 text-right tabular-nums">
                                 {{ formatGNF(l.paid) }}
                             </td>
                             <td class="px-4 py-3 text-right">
-                                <Link
-                                    :href="`/logistique/commissions/livreurs/${l.livreur_id}`"
-                                >
-                                    <button
-                                        class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                    >
-                                        Détail
-                                        <ChevronRight class="h-3.5 w-3.5" />
-                                    </button>
-                                </Link>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger as-child>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-7 w-7"
+                                        >
+                                            <MoreHorizontal class="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuItem as-child>
+                                            <Link
+                                                :href="`/logistique/commissions/livreurs/${l.livreur_id}`"
+                                                class="flex w-full cursor-pointer items-center"
+                                            >
+                                                Détail
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <template
+                                            v-if="can_payer && l.available > 0"
+                                        >
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                class="cursor-pointer"
+                                                @click="openPaiement(l)"
+                                            >
+                                                <HandCoins
+                                                    class="mr-2 h-4 w-4"
+                                                />
+                                                Payer
+                                            </DropdownMenuItem>
+                                        </template>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </td>
                         </tr>
                     </tbody>
@@ -267,4 +399,71 @@ function formatGNF(val: number): string {
             </div>
         </div>
     </AppLayout>
+
+    <!-- ── Dialog paiement ───────────────────────────────────────────────────── -->
+    <Dialog
+        v-model:visible="showPaiementDialog"
+        modal
+        :header="selectedLivreur ? `Payer — ${selectedLivreur.nom}` : 'Payer'"
+        :style="{ width: '420px' }"
+        :draggable="false"
+    >
+        <div v-if="selectedLivreur" class="space-y-4 py-2">
+            <div
+                class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+            >
+                Solde à payer :
+                <strong>{{ formatGNF(selectedLivreur.available) }}</strong>
+            </div>
+            <div>
+                <Label class="mb-1.5 block text-sm">Montant (GNF)</Label>
+                <InputNumber
+                    v-model="paiementForm.montant"
+                    :min="1"
+                    :max="selectedLivreur.available"
+                    class="w-full"
+                    input-class="w-full"
+                />
+                <p
+                    v-if="paiementForm.errors.montant"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ paiementForm.errors.montant }}
+                </p>
+            </div>
+            <div>
+                <Label class="mb-1.5 block text-sm">Mode de paiement</Label>
+                <PvDropdown
+                    v-model="paiementForm.mode_paiement"
+                    :options="MODES_PAIEMENT"
+                    option-label="label"
+                    option-value="value"
+                    class="w-full"
+                />
+            </div>
+        </div>
+        <template #footer>
+            <Button
+                variant="outline"
+                :disabled="paiementForm.processing"
+                @click="showPaiementDialog = false"
+            >
+                Annuler
+            </Button>
+            <Button
+                :disabled="paiementForm.processing || !paiementForm.montant"
+                @click="submitPaiement"
+            >
+                <HandCoins
+                    v-if="!paiementForm.processing"
+                    class="mr-1.5 h-4 w-4"
+                />
+                <span
+                    v-else
+                    class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                />
+                Confirmer le paiement
+            </Button>
+        </template>
+    </Dialog>
 </template>
