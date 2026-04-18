@@ -22,6 +22,8 @@ class CommandeVenteController extends Controller
 
     private const LIGNES_REQUIRED_MESSAGE = 'Au moins une ligne de commande est requise.';
 
+    private const QUANTITY_UPDATE_PERMISSION = 'ventes.qte.update';
+
     public function __construct(private readonly CommandeVenteService $service) {}
 
     // ── Index ─────────────────────────────────────────────────────────────────
@@ -207,6 +209,7 @@ class CommandeVenteController extends Controller
         );
 
         $this->ensureVehiculeOrClientSelected($data);
+        $this->enforceQuantitePolicy($data, null);
 
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
@@ -390,6 +393,7 @@ class CommandeVenteController extends Controller
         );
 
         $this->ensureVehiculeOrClientSelected($data);
+        $this->enforceQuantitePolicy($data, $vente);
 
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
@@ -517,6 +521,75 @@ class CommandeVenteController extends Controller
                 'lignes' => "La quantité totale ({$qteTotale} packs) dépasse la capacité du véhicule ({$capacite} packs maximum).",
             ]);
         }
+    }
+
+    private function enforceQuantitePolicy(array $data, ?CommandeVente $commande): void
+    {
+        if (auth()->user()->can(self::QUANTITY_UPDATE_PERMISSION)) {
+            return;
+        }
+
+        $lines = $data['lignes'] ?? [];
+        $produits = collect($lines)->pluck('produit_id')->all();
+
+        if (count($produits) !== count(array_unique($produits))) {
+            throw ValidationException::withMessages([
+                'lignes' => 'Vous ne pouvez pas dupliquer un produit dans plusieurs lignes.',
+            ]);
+        }
+
+        $capaciteParDefaut = $this->defaultQuantiteForVehicule($data);
+        $existingQuantites = $this->existingQuantitesByProduit($commande, $data);
+
+        foreach ($lines as $index => $ligne) {
+            $produitId = (int) $ligne['produit_id'];
+            $qteRecue = (int) ($ligne['qte'] ?? 0);
+            $qteAttendue = $existingQuantites[$produitId] ?? $capaciteParDefaut;
+
+            if ($qteRecue !== $qteAttendue) {
+                throw ValidationException::withMessages([
+                    "lignes.{$index}.qte" => 'Vous n etes pas autorise a modifier la quantite manuellement.',
+                ]);
+            }
+        }
+    }
+
+    private function defaultQuantiteForVehicule(array $data): int
+    {
+        if (empty($data['vehicule_id'])) {
+            return 1;
+        }
+
+        $vehicule = Vehicule::query()
+            ->select(['id', 'capacite_packs'])
+            ->find($data['vehicule_id']);
+
+        if (! $vehicule || $vehicule->capacite_packs === null) {
+            return 1;
+        }
+
+        return max(1, (int) $vehicule->capacite_packs);
+    }
+
+    private function existingQuantitesByProduit(?CommandeVente $commande, array $data): array
+    {
+        if (! $commande) {
+            return [];
+        }
+
+        $vehiculeRequis = $data['vehicule_id'] ?? null;
+        $vehiculeCourant = $commande->vehicule_id;
+
+        if ((int) ($vehiculeCourant ?? 0) !== (int) ($vehiculeRequis ?? 0)) {
+            return [];
+        }
+
+        $commande->loadMissing('lignes');
+
+        return $commande->lignes
+            ->groupBy('produit_id')
+            ->map(fn ($lignes) => (int) $lignes->sum('qte'))
+            ->toArray();
     }
 
     private function buildLignesDataAndTotal(array $lignes): array

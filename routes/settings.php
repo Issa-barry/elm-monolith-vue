@@ -5,6 +5,7 @@ use App\Http\Controllers\Settings\ParametreController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\TwoFactorAuthenticationController;
+use App\Http\Controllers\Settings\VenteParametrageController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -35,4 +36,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/modules', [ModuleController::class, 'edit'])->name('modules.edit');
     Route::patch('settings/modules', [ModuleController::class, 'toggle'])->name('modules.toggle');
+
+    Route::get('settings/ventes', [VenteParametrageController::class, 'edit'])->name('settings.ventes.edit');
+    Route::put('settings/ventes', [VenteParametrageController::class, 'update'])->name('settings.ventes.update');
 });

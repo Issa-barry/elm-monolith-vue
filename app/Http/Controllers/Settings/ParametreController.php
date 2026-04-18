@@ -20,6 +20,7 @@ class ParametreController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $parametres = Parametre::where('organization_id', $orgId)
+            ->where('groupe', '!=', Parametre::GROUPE_VENTES)
             ->orderBy('groupe')
             ->orderBy('cle')
             ->get()

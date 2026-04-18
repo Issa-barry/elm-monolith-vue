@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
@@ -64,6 +65,9 @@ const props = defineProps<{
     user_site: UserSite;
 }>();
 
+const { can } = usePermissions();
+const canEditQuantite = computed(() => can('ventes.qte.update'));
+
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Ventes', href: '/ventes' },
@@ -113,6 +117,16 @@ function onVehiculeClear() {
 
 function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
     if (!vehicule || vehicule.capacite_packs === null) {
+        return;
+    }
+
+    if (!canEditQuantite.value) {
+        form.lignes = form.lignes.map((ligne) => ({
+            ...ligne,
+            qte: vehicule.capacite_packs,
+            total: ligne.prix_vente * vehicule.capacite_packs,
+        }));
+
         return;
     }
 
@@ -186,10 +200,12 @@ function onProduitChange(index: number, produitId: number | null) {
         (l, i) => i !== index && l.produit_id === produitId,
     );
     if (existingIndex !== -1) {
-        form.lignes[existingIndex].qte += 1;
-        form.lignes[existingIndex].total =
-            form.lignes[existingIndex].prix_vente *
-            form.lignes[existingIndex].qte;
+        if (canEditQuantite.value) {
+            form.lignes[existingIndex].qte += 1;
+            form.lignes[existingIndex].total =
+                form.lignes[existingIndex].prix_vente *
+                form.lignes[existingIndex].qte;
+        }
         form.lignes.splice(index, 1);
         return;
     }
@@ -204,6 +220,10 @@ function onProduitChange(index: number, produitId: number | null) {
 }
 
 function onQteChange(index: number, qte: number | null) {
+    if (!canEditQuantite.value) {
+        return;
+    }
+
     const ligne = form.lignes[index];
     ligne.qte = Math.max(1, qte ?? 1);
     ligne.total = ligne.prix_vente * ligne.qte;
@@ -592,6 +612,7 @@ function submit() {
                                                 onQteChange(index, $event)
                                             "
                                             :min="1"
+                                            :disabled="!canEditQuantite"
                                             :use-grouping="false"
                                             class="w-full"
                                             input-class="w-full text-center"
@@ -674,6 +695,7 @@ function submit() {
                                             onQteChange(index, $event)
                                         "
                                         :min="1"
+                                        :disabled="!canEditQuantite"
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full text-center"

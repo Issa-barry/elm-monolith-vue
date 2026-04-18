@@ -120,7 +120,7 @@
         </div>
 
         <div class="content">
-            <h1>Service en cours de mise à jour</h1>
+            <h1>Maintenace en cours !</h1>
             <p>
                 <span class="brand">Eau la maman</span> est momentanément indisponible.<br>
                 Nous revenons très bientôt, merci de votre patience.
