@@ -171,7 +171,8 @@ function onProduitChange(index: number, produitId: number | null) {
     if (existingIndex !== -1) {
         form.lignes[existingIndex].qte += 1;
         form.lignes[existingIndex].total =
-            form.lignes[existingIndex].prix_vente * form.lignes[existingIndex].qte;
+            form.lignes[existingIndex].prix_vente *
+            form.lignes[existingIndex].qte;
         form.lignes.splice(index, 1);
         return;
     }

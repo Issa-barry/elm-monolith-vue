@@ -92,7 +92,7 @@ const errorContent = computed(() => {
             return {
                 title: 'Vous êtes déjà connecté',
                 message:
-                    "Déconnectez-vous puis reconnectez-vous avec le compte invité pour accepter cette invitation.",
+                    'Déconnectez-vous puis reconnectez-vous avec le compte invité pour accepter cette invitation.',
             };
         default:
             return {
@@ -332,9 +332,13 @@ function submitAccept() {
 }
 
 function logoutAndGoToLogin() {
-    router.post(logout().url, {}, {
-        onFinish: () => router.visit(login().url),
-    });
+    router.post(
+        logout().url,
+        {},
+        {
+            onFinish: () => router.visit(login().url),
+        },
+    );
 }
 </script>
 
@@ -349,28 +353,36 @@ function logoutAndGoToLogin() {
             >
                 <div class="flex flex-col items-center gap-6 text-center">
                     <div
-                        class="inline-flex items-center rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold text-primary dark:bg-primary-900/60 dark:text-primary-100"
+                        class="bg-primary-100 dark:bg-primary-900/60 dark:text-primary-100 inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-primary"
                     >
                         Invitation
                     </div>
 
                     <div
-                        class="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-primary dark:bg-primary-900/60 dark:text-primary-100"
+                        class="bg-primary-100 dark:bg-primary-900/60 dark:text-primary-100 flex h-12 w-12 items-center justify-center rounded-full text-primary"
                     >
                         <AlertCircle class="h-6 w-6" />
                     </div>
 
                     <div class="space-y-2">
-                        <h2 class="text-2xl font-bold text-surface-900 dark:text-surface-0">
+                        <h2
+                            class="text-surface-900 dark:text-surface-0 text-2xl font-bold"
+                        >
                             {{ errorContent.title }}
                         </h2>
-                        <p class="text-sm leading-relaxed text-muted-foreground">
+                        <p
+                            class="text-sm leading-relaxed text-muted-foreground"
+                        >
                             {{ errorContent.message }}
                         </p>
                     </div>
 
                     <div class="flex w-full flex-col gap-3">
-                        <Button :as-child="true" variant="outline" class="w-full">
+                        <Button
+                            :as-child="true"
+                            variant="outline"
+                            class="w-full"
+                        >
                             <Link :href="home()">
                                 <Home class="mr-2 h-4 w-4" />
                                 Retour à l'accueil

@@ -13,7 +13,14 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, HandCoins, MoreHorizontal, Search, Truck, User } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    HandCoins,
+    MoreHorizontal,
+    Search,
+    Truck,
+    User,
+} from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
@@ -206,13 +213,22 @@ function openPaiement(b: BeneficiaireRow) {
 }
 
 function submitPaiement() {
-    if (!paiementForm.montant || paiementForm.montant <= 0 || !selectedBeneficiaire.value) return;
+    if (
+        !paiementForm.montant ||
+        paiementForm.montant <= 0 ||
+        !selectedBeneficiaire.value
+    )
+        return;
     paiementForm.processing = true;
     paiementForm.errors = {};
     const b = selectedBeneficiaire.value;
     router.post(
         `/commissions/beneficiaires/${b.type_beneficiaire}/${b.beneficiaire_id}/paiements`,
-        { montant: paiementForm.montant, mode_paiement: paiementForm.mode_paiement, paid_at: paiementForm.paid_at },
+        {
+            montant: paiementForm.montant,
+            mode_paiement: paiementForm.mode_paiement,
+            paid_at: paiementForm.paid_at,
+        },
         {
             preserveScroll: true,
             onSuccess: () => {
@@ -224,8 +240,12 @@ function submitPaiement() {
                     life: 3000,
                 });
             },
-            onError: (e) => { paiementForm.errors = e as Record<string, string>; },
-            onFinish: () => { paiementForm.processing = false; },
+            onError: (e) => {
+                paiementForm.errors = e as Record<string, string>;
+            },
+            onFinish: () => {
+                paiementForm.processing = false;
+            },
         },
     );
 }
@@ -609,9 +629,17 @@ function detailUrl(b: BeneficiaireRow): string {
                         <template #body="{ data }">
                             <span
                                 class="font-semibold whitespace-nowrap tabular-nums"
-                                :class="data.solde_restant > 0 ? '' : 'text-muted-foreground'"
+                                :class="
+                                    data.solde_restant > 0
+                                        ? ''
+                                        : 'text-muted-foreground'
+                                "
                             >
-                                {{ data.solde_restant > 0 ? formatGNF(data.solde_restant) : '—' }}
+                                {{
+                                    data.solde_restant > 0
+                                        ? formatGNF(data.solde_restant)
+                                        : '—'
+                                }}
                             </span>
                         </template>
                     </Column>
@@ -625,7 +653,11 @@ function detailUrl(b: BeneficiaireRow): string {
                     >
                         <template #body="{ data }">
                             <span class="whitespace-nowrap tabular-nums">
-                                {{ data.total_verse > 0 ? formatGNF(data.total_verse) : '—' }}
+                                {{
+                                    data.total_verse > 0
+                                        ? formatGNF(data.total_verse)
+                                        : '—'
+                                }}
                             </span>
                         </template>
                     </Column>
@@ -658,20 +690,37 @@ function detailUrl(b: BeneficiaireRow): string {
                             <div class="flex justify-end">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger as-child>
-                                        <Button variant="ghost" size="icon" class="h-7 w-7">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-7 w-7"
+                                        >
                                             <MoreHorizontal class="h-4 w-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
                                         <DropdownMenuItem as-child>
-                                            <Link :href="detailUrl(data)" class="flex w-full cursor-pointer items-center">
+                                            <Link
+                                                :href="detailUrl(data)"
+                                                class="flex w-full cursor-pointer items-center"
+                                            >
                                                 Détails
                                             </Link>
                                         </DropdownMenuItem>
-                                        <template v-if="can_payer && data.solde_restant > 0">
+                                        <template
+                                            v-if="
+                                                can_payer &&
+                                                data.solde_restant > 0
+                                            "
+                                        >
                                             <DropdownMenuSeparator />
-                                            <DropdownMenuItem class="cursor-pointer" @click="openPaiement(data)">
-                                                <HandCoins class="mr-2 h-4 w-4" />
+                                            <DropdownMenuItem
+                                                class="cursor-pointer"
+                                                @click="openPaiement(data)"
+                                            >
+                                                <HandCoins
+                                                    class="mr-2 h-4 w-4"
+                                                />
                                                 Payer
                                             </DropdownMenuItem>
                                         </template>
@@ -697,13 +746,22 @@ function detailUrl(b: BeneficiaireRow): string {
     <Dialog
         v-model:visible="showPaiementDialog"
         modal
-        :header="selectedBeneficiaire ? `Payer — ${selectedBeneficiaire.beneficiaire_nom}` : 'Payer'"
+        :header="
+            selectedBeneficiaire
+                ? `Payer — ${selectedBeneficiaire.beneficiaire_nom}`
+                : 'Payer'
+        "
         :style="{ width: '420px' }"
         :draggable="false"
     >
         <div v-if="selectedBeneficiaire" class="space-y-4 py-2">
-            <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-                Solde à payer : <strong>{{ formatGNF(selectedBeneficiaire.solde_restant) }}</strong>
+            <div
+                class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+            >
+                Solde à payer :
+                <strong>{{
+                    formatGNF(selectedBeneficiaire.solde_restant)
+                }}</strong>
             </div>
             <div>
                 <Label class="mb-1.5 block text-sm">Montant (GNF)</Label>
@@ -714,7 +772,10 @@ function detailUrl(b: BeneficiaireRow): string {
                     class="w-full"
                     input-class="w-full"
                 />
-                <p v-if="paiementForm.errors.montant" class="mt-1 text-xs text-destructive">
+                <p
+                    v-if="paiementForm.errors.montant"
+                    class="mt-1 text-xs text-destructive"
+                >
                     {{ paiementForm.errors.montant }}
                 </p>
             </div>
@@ -730,12 +791,25 @@ function detailUrl(b: BeneficiaireRow): string {
             </div>
         </div>
         <template #footer>
-            <Button variant="outline" :disabled="paiementForm.processing" @click="showPaiementDialog = false">
+            <Button
+                variant="outline"
+                :disabled="paiementForm.processing"
+                @click="showPaiementDialog = false"
+            >
                 Annuler
             </Button>
-            <Button :disabled="paiementForm.processing || !paiementForm.montant" @click="submitPaiement">
-                <HandCoins v-if="!paiementForm.processing" class="mr-1.5 h-4 w-4" />
-                <span v-else class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            <Button
+                :disabled="paiementForm.processing || !paiementForm.montant"
+                @click="submitPaiement"
+            >
+                <HandCoins
+                    v-if="!paiementForm.processing"
+                    class="mr-1.5 h-4 w-4"
+                />
+                <span
+                    v-else
+                    class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                />
                 Confirmer le paiement
             </Button>
         </template>

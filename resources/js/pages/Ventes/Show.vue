@@ -11,7 +11,15 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, CheckCircle, HandCoins, Lock, MoreVertical, Pencil, XCircle } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    CheckCircle,
+    HandCoins,
+    Lock,
+    MoreVertical,
+    Pencil,
+    XCircle,
+} from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import InputNumber from 'primevue/inputnumber';
 import Select from 'primevue/select';
@@ -212,7 +220,12 @@ function submitEncaisser() {
                 </div>
                 <!-- Actions mobile -->
                 <div
-                    v-if="commande.can_modifier || commande.can_valider || commande.can_annuler || commande.can_encaisser"
+                    v-if="
+                        commande.can_modifier ||
+                        commande.can_valider ||
+                        commande.can_annuler ||
+                        commande.can_encaisser
+                    "
                     class="absolute right-4"
                 >
                     <DropdownMenu>
@@ -222,7 +235,10 @@ function submitEncaisser() {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" class="w-48">
-                            <DropdownMenuItem v-if="commande.can_modifier" as-child>
+                            <DropdownMenuItem
+                                v-if="commande.can_modifier"
+                                as-child
+                            >
                                 <Link
                                     :href="`/ventes/${commande.id}/edit`"
                                     class="flex w-full cursor-pointer items-center gap-2"
@@ -240,7 +256,14 @@ function submitEncaisser() {
                                 <CheckCircle class="h-4 w-4" />
                                 Valider la commande
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator v-if="commande.can_annuler && (commande.can_modifier || commande.can_valider || commande.can_encaisser)" />
+                            <DropdownMenuSeparator
+                                v-if="
+                                    commande.can_annuler &&
+                                    (commande.can_modifier ||
+                                        commande.can_valider ||
+                                        commande.can_encaisser)
+                                "
+                            />
                             <DropdownMenuItem
                                 v-if="commande.can_annuler"
                                 class="cursor-pointer text-amber-600 focus:text-amber-600"
@@ -481,9 +504,14 @@ function submitEncaisser() {
             </div>
 
             <!-- Facturation -->
-            <div v-if="facture" class="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+            <div
+                v-if="facture"
+                class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
+            >
                 <div class="mb-5 flex items-center justify-between">
-                    <h3 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+                    <h3
+                        class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
                         Facturation
                     </h3>
                     <div class="flex items-center gap-2">
@@ -497,48 +525,84 @@ function submitEncaisser() {
                         </Button>
                         <span
                             class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                        :class="{
-                            'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400': facture.statut === 'impayee',
-                            'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300': facture.statut === 'partiel',
-                            'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300': facture.statut === 'payee',
-                            'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400': facture.statut === 'annulee',
-                        }"
-                    >
-                        {{ facture.statut_label }}
-                    </span>
+                            :class="{
+                                'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400':
+                                    facture.statut === 'impayee',
+                                'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300':
+                                    facture.statut === 'partiel',
+                                'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300':
+                                    facture.statut === 'payee',
+                                'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400':
+                                    facture.statut === 'annulee',
+                            }"
+                        >
+                            {{ facture.statut_label }}
+                        </span>
                     </div>
                 </div>
 
                 <!-- KPIs -->
                 <div class="mb-6 grid grid-cols-3 gap-3">
                     <div class="rounded-lg border bg-muted/30 px-4 py-3">
-                        <p class="text-xs text-muted-foreground">Total facturé</p>
-                        <p class="mt-0.5 text-lg font-bold tabular-nums">{{ formatGNF(facture.montant_net) }}</p>
+                        <p class="text-xs text-muted-foreground">
+                            Total facturé
+                        </p>
+                        <p class="mt-0.5 text-lg font-bold tabular-nums">
+                            {{ formatGNF(facture.montant_net) }}
+                        </p>
                     </div>
                     <div class="rounded-lg border bg-muted/30 px-4 py-3">
-                        <p class="text-xs text-muted-foreground">Déjà encaissé</p>
-                        <p class="mt-0.5 text-lg font-bold tabular-nums">{{ formatGNF(facture.montant_encaisse) }}</p>
+                        <p class="text-xs text-muted-foreground">
+                            Déjà encaissé
+                        </p>
+                        <p class="mt-0.5 text-lg font-bold tabular-nums">
+                            {{ formatGNF(facture.montant_encaisse) }}
+                        </p>
                     </div>
                     <div class="rounded-lg border bg-muted/30 px-4 py-3">
                         <p class="text-xs text-muted-foreground">Restant dû</p>
-                        <p class="mt-0.5 text-lg font-bold tabular-nums">{{ formatGNF(facture.montant_restant) }}</p>
+                        <p class="mt-0.5 text-lg font-bold tabular-nums">
+                            {{ formatGNF(facture.montant_restant) }}
+                        </p>
                     </div>
                 </div>
 
                 <!-- Historique encaissements -->
                 <div v-if="facture.encaissements.length > 0">
-                    <p class="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                    <p
+                        class="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
                         Historique des encaissements
                     </p>
                     <div class="overflow-hidden rounded-lg border">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b bg-muted/40">
-                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Date</th>
-                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Heure</th>
-                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Mode</th>
-                                    <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Montant</th>
-                                    <th class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground sm:table-cell">Par</th>
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Date
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Heure
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Mode
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                    >
+                                        Montant
+                                    </th>
+                                    <th
+                                        class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground sm:table-cell"
+                                    >
+                                        Par
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
@@ -547,17 +611,35 @@ function submitEncaisser() {
                                     :key="enc.id"
                                     class="hover:bg-muted/10"
                                 >
-                                    <td class="px-4 py-3 tabular-nums">{{ enc.date_encaissement }}</td>
-                                    <td class="px-4 py-3 text-muted-foreground tabular-nums">{{ enc.heure ?? '—' }}</td>
-                                    <td class="px-4 py-3 text-muted-foreground">{{ enc.mode_paiement_label }}</td>
-                                    <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatGNF(enc.montant) }}</td>
-                                    <td class="hidden px-4 py-3 text-muted-foreground sm:table-cell">{{ enc.created_by ?? '—' }}</td>
+                                    <td class="px-4 py-3 tabular-nums">
+                                        {{ enc.date_encaissement }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-muted-foreground tabular-nums"
+                                    >
+                                        {{ enc.heure ?? '—' }}
+                                    </td>
+                                    <td class="px-4 py-3 text-muted-foreground">
+                                        {{ enc.mode_paiement_label }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-right font-semibold tabular-nums"
+                                    >
+                                        {{ formatGNF(enc.montant) }}
+                                    </td>
+                                    <td
+                                        class="hidden px-4 py-3 text-muted-foreground sm:table-cell"
+                                    >
+                                        {{ enc.created_by ?? '—' }}
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
-                <p v-else class="text-sm text-muted-foreground">Aucun encaissement enregistré.</p>
+                <p v-else class="text-sm text-muted-foreground">
+                    Aucun encaissement enregistré.
+                </p>
             </div>
         </div>
 
@@ -570,12 +652,9 @@ function submitEncaisser() {
         >
             <div class="space-y-4">
                 <!-- Solde restant -->
-                <div
-                    v-if="facture"
-                    class="rounded-lg bg-primary/10 px-4 py-3"
-                >
+                <div v-if="facture" class="rounded-lg bg-primary/10 px-4 py-3">
                     <p class="text-xs text-primary">Restant dû</p>
-                    <p class="text-xl font-bold tabular-nums text-primary">
+                    <p class="text-xl font-bold text-primary tabular-nums">
                         {{ formatGNF(facture.montant_restant) }}
                     </p>
                 </div>
@@ -597,7 +676,10 @@ function submitEncaisser() {
                         fluid
                         :class="{ 'p-invalid': encaisserForm.errors.montant }"
                     />
-                    <p v-if="encaisserForm.errors.montant" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="encaisserForm.errors.montant"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ encaisserForm.errors.montant }}
                     </p>
                 </div>
@@ -616,22 +698,39 @@ function submitEncaisser() {
                         placeholder="Sélectionner"
                         class="w-full"
                         fluid
-                        :class="{ 'p-invalid': encaisserForm.errors.mode_paiement }"
+                        :class="{
+                            'p-invalid': encaisserForm.errors.mode_paiement,
+                        }"
                     />
-                    <p v-if="encaisserForm.errors.mode_paiement" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="encaisserForm.errors.mode_paiement"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ encaisserForm.errors.mode_paiement }}
                     </p>
                 </div>
             </div>
             <template #footer>
                 <div class="flex justify-end gap-2">
-                    <Button variant="outline" @click="encaisserDialogVisible = false">Annuler</Button>
                     <Button
-                        :disabled="encaisserForm.processing || !encaisserForm.montant || !encaisserForm.mode_paiement"
+                        variant="outline"
+                        @click="encaisserDialogVisible = false"
+                        >Annuler</Button
+                    >
+                    <Button
+                        :disabled="
+                            encaisserForm.processing ||
+                            !encaisserForm.montant ||
+                            !encaisserForm.mode_paiement
+                        "
                         @click="submitEncaisser"
                     >
                         <HandCoins class="mr-2 h-4 w-4" />
-                        {{ encaisserForm.processing ? 'Enregistrement…' : 'Confirmer' }}
+                        {{
+                            encaisserForm.processing
+                                ? 'Enregistrement…'
+                                : 'Confirmer'
+                        }}
                     </Button>
                 </div>
             </template>

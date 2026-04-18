@@ -5,7 +5,13 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, CalendarClock, CalendarDays, HandCoins, History } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    CalendarClock,
+    CalendarDays,
+    HandCoins,
+    History,
+} from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
@@ -45,8 +51,14 @@ interface PaymentRow {
     created_by: string | null;
 }
 
-interface ModePaiement { value: string; label: string }
-interface PeriodeOption { code: string; label: string }
+interface ModePaiement {
+    value: string;
+    label: string;
+}
+interface PeriodeOption {
+    code: string;
+    label: string;
+}
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -158,7 +170,8 @@ const paiementForm = reactive<PaiementForm>({
 });
 
 function openPaiement() {
-    paiementForm.montant = props.kpis.available > 0 ? props.kpis.available : null;
+    paiementForm.montant =
+        props.kpis.available > 0 ? props.kpis.available : null;
     paiementForm.mode_paiement = 'especes';
     paiementForm.note = '';
     paiementForm.processing = false;
@@ -172,12 +185,22 @@ function submitPaiement() {
     paiementForm.errors = {};
     router.post(
         `/logistique/commissions/livreurs/${props.livreur.id}/paiements`,
-        { montant: paiementForm.montant, mode_paiement: paiementForm.mode_paiement, note: paiementForm.note || null },
+        {
+            montant: paiementForm.montant,
+            mode_paiement: paiementForm.mode_paiement,
+            note: paiementForm.note || null,
+        },
         {
             preserveScroll: true,
-            onSuccess: () => { showPaiementDialog.value = false; },
-            onError: (e) => { paiementForm.errors = e as Record<string, string>; },
-            onFinish: () => { paiementForm.processing = false; },
+            onSuccess: () => {
+                showPaiementDialog.value = false;
+            },
+            onError: (e) => {
+                paiementForm.errors = e as Record<string, string>;
+            },
+            onFinish: () => {
+                paiementForm.processing = false;
+            },
         },
     );
 }
@@ -211,9 +234,10 @@ function formatMode(mode: string): string {
     <Head :title="`Commissions — ${livreur.nom}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-
         <!-- ── MOBILE STICKY HEADER ──────────────────────────────────────────── -->
-        <div class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden">
+        <div
+            class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
+        >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
                     href="/logistique/commissions"
@@ -222,9 +246,20 @@ function formatMode(mode: string): string {
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
                 <div class="text-center">
-                    <p class="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">Livreur</p>
-                    <h1 class="text-[17px] leading-tight font-semibold">{{ livreur.nom }}</h1>
-                    <p v-if="livreur.telephone" class="text-[11px] text-muted-foreground">{{ formatPhone(livreur.telephone) }}</p>
+                    <p
+                        class="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase"
+                    >
+                        Livreur
+                    </p>
+                    <h1 class="text-[17px] leading-tight font-semibold">
+                        {{ livreur.nom }}
+                    </h1>
+                    <p
+                        v-if="livreur.telephone"
+                        class="text-[11px] text-muted-foreground"
+                    >
+                        {{ formatPhone(livreur.telephone) }}
+                    </p>
                 </div>
                 <div class="absolute right-4 flex items-center gap-1">
                     <Button
@@ -235,7 +270,10 @@ function formatMode(mode: string): string {
                         @click="showHistoriqueDialog = true"
                     >
                         <History class="h-5 w-5" />
-                        <span class="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">{{ payments.length }}</span>
+                        <span
+                            class="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground"
+                            >{{ payments.length }}</span
+                        >
                     </Button>
                     <Button
                         v-if="can_payer && kpis.available > 0"
@@ -250,10 +288,13 @@ function formatMode(mode: string): string {
             </div>
         </div>
 
-        <div class="mx-auto w-full max-w-5xl space-y-4 px-4 py-4 sm:space-y-6 sm:px-6 sm:py-6">
-
+        <div
+            class="mx-auto w-full max-w-5xl space-y-4 px-4 py-4 sm:space-y-6 sm:px-6 sm:py-6"
+        >
             <!-- ── En-tête desktop ────────────────────────────────────────────── -->
-            <div class="hidden flex-wrap items-start justify-between gap-4 sm:flex">
+            <div
+                class="hidden flex-wrap items-start justify-between gap-4 sm:flex"
+            >
                 <div class="flex items-center gap-3">
                     <Link
                         href="/logistique/commissions"
@@ -262,45 +303,99 @@ function formatMode(mode: string): string {
                         <ArrowLeft class="h-4 w-4" />
                     </Link>
                     <div>
-                        <p class="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Livreur</p>
-                        <p class="mt-0.5 text-xl font-semibold">{{ livreur.nom }}</p>
-                        <p v-if="livreur.telephone" class="text-sm text-muted-foreground">{{ formatPhone(livreur.telephone) }}</p>
+                        <p
+                            class="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase"
+                        >
+                            Livreur
+                        </p>
+                        <p class="mt-0.5 text-xl font-semibold">
+                            {{ livreur.nom }}
+                        </p>
+                        <p
+                            v-if="livreur.telephone"
+                            class="text-sm text-muted-foreground"
+                        >
+                            {{ formatPhone(livreur.telephone) }}
+                        </p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <Button v-if="payments.length > 0" variant="outline" size="sm" @click="showHistoriqueDialog = true">
+                    <Button
+                        v-if="payments.length > 0"
+                        variant="outline"
+                        size="sm"
+                        @click="showHistoriqueDialog = true"
+                    >
                         <History class="mr-1.5 h-3.5 w-3.5" />
                         Historique
-                        <span class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums">{{ payments.length }}</span>
+                        <span
+                            class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums"
+                            >{{ payments.length }}</span
+                        >
                     </Button>
-                    <Button v-if="can_payer && kpis.available > 0" size="sm" @click="openPaiement">
+                    <Button
+                        v-if="can_payer && kpis.available > 0"
+                        size="sm"
+                        @click="openPaiement"
+                    >
                         <HandCoins class="mr-1.5 h-4 w-4" />
                         Payer {{ formatGNF(kpis.available) }}
                     </Button>
                 </div>
             </div>
 
-
             <!-- ── KPIs ───────────────────────────────────────────────────────── -->
             <div class="grid grid-cols-3 gap-3">
                 <!-- Vue période sélectionnée -->
                 <template v-if="periode_stats">
-                    <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
-                        <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Commission période</p>
-                        <p class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base">{{ formatGNF(periode_stats.total_commission) }}</p>
-                    </div>
-                    <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
-                        <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Déjà payé</p>
-                        <p class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base">{{ formatGNF(periode_stats.total_verse) }}</p>
+                    <div
+                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                    >
+                        <p
+                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            Commission période
+                        </p>
+                        <p
+                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                        >
+                            {{ formatGNF(periode_stats.total_commission) }}
+                        </p>
                     </div>
                     <div
                         class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
-                        :class="periode_stats.reste > 0 ? 'border-amber-200 dark:border-amber-900' : ''"
                     >
-                        <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Reste à payer</p>
+                        <p
+                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            Déjà payé
+                        </p>
                         <p
                             class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
-                            :class="periode_stats.reste > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'"
+                        >
+                            {{ formatGNF(periode_stats.total_verse) }}
+                        </p>
+                    </div>
+                    <div
+                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                        :class="
+                            periode_stats.reste > 0
+                                ? 'border-amber-200 dark:border-amber-900'
+                                : ''
+                        "
+                    >
+                        <p
+                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            Reste à payer
+                        </p>
+                        <p
+                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                            :class="
+                                periode_stats.reste > 0
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-foreground'
+                            "
                         >
                             {{ formatGNF(periode_stats.reste) }}
                         </p>
@@ -308,27 +403,55 @@ function formatMode(mode: string): string {
                 </template>
                 <!-- Vue toutes périodes (KPIs globaux) -->
                 <template v-else>
-                    <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
-                        <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">En attente</p>
-                        <p class="mt-0.5 text-sm font-semibold text-zinc-500 tabular-nums dark:text-zinc-400 sm:text-base">
+                    <div
+                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                    >
+                        <p
+                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            En attente
+                        </p>
+                        <p
+                            class="mt-0.5 text-sm font-semibold text-zinc-500 tabular-nums sm:text-base dark:text-zinc-400"
+                        >
                             {{ formatGNF(kpis.pending) }}
                         </p>
                     </div>
                     <div
                         class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
-                        :class="kpis.available > 0 ? 'border-amber-200 dark:border-amber-900' : ''"
+                        :class="
+                            kpis.available > 0
+                                ? 'border-amber-200 dark:border-amber-900'
+                                : ''
+                        "
                     >
-                        <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">A payer</p>
+                        <p
+                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            A payer
+                        </p>
                         <p
                             class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
-                            :class="kpis.available > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'"
+                            :class="
+                                kpis.available > 0
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-foreground'
+                            "
                         >
                             {{ formatGNF(kpis.available) }}
                         </p>
                     </div>
-                    <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
-                        <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Déjà payé</p>
-                        <p class="mt-0.5 text-sm font-semibold tabular-nums dark:text-zinc-400 sm:text-base">
+                    <div
+                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                    >
+                        <p
+                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            Déjà payé
+                        </p>
+                        <p
+                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base dark:text-zinc-400"
+                        >
                             {{ formatGNF(kpis.paid) }}
                         </p>
                     </div>
@@ -338,10 +461,19 @@ function formatMode(mode: string): string {
             <!-- ── Section détail transferts ─────────────────────────────────── -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
                 <!-- En-tête + filtre -->
-                <div class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5 sm:py-3.5">
+                <div
+                    class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5 sm:py-3.5"
+                >
                     <div class="flex items-center gap-2">
-                        <h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Détail par transfert</h2>
-                        <span class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums">{{ parts.length }}</span>
+                        <h2
+                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
+                            Détail par transfert
+                        </h2>
+                        <span
+                            class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums"
+                            >{{ parts.length }}</span
+                        >
                         <StatusDot
                             v-if="periode_stats"
                             :label="periode_stats.statut_label"
@@ -364,94 +496,213 @@ function formatMode(mode: string): string {
                 <div v-if="parts.length > 0" class="divide-y sm:hidden">
                     <template v-for="group in partsGrouped" :key="group.code">
                         <!-- En-tête période (visible uniquement en vue "toutes périodes") -->
-                        <div v-if="!periode_stats" class="flex items-center justify-between bg-muted/30 px-4 py-2">
-                            <span class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                        <div
+                            v-if="!periode_stats"
+                            class="flex items-center justify-between bg-muted/30 px-4 py-2"
+                        >
+                            <span
+                                class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                            >
                                 <CalendarDays class="h-3 w-3" />
                                 {{ group.label }}
                             </span>
-                            <StatusDot :label="group.statut_label" :dot-class="group.statut_dot_class" class="text-xs text-muted-foreground" />
+                            <StatusDot
+                                :label="group.statut_label"
+                                :dot-class="group.statut_dot_class"
+                                class="text-xs text-muted-foreground"
+                            />
                         </div>
                         <!-- Cartes transferts -->
-                        <div v-for="part in group.parts" :key="part.id" class="px-4 py-3">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="font-mono text-sm font-semibold text-primary">{{ part.transfert_reference ?? '—' }}</span>
-                                <span class="flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
+                        <div
+                            v-for="part in group.parts"
+                            :key="part.id"
+                            class="px-4 py-3"
+                        >
+                            <div
+                                class="flex items-center justify-between gap-2"
+                            >
+                                <span
+                                    class="font-mono text-sm font-semibold text-primary"
+                                    >{{ part.transfert_reference ?? '—' }}</span
+                                >
+                                <span
+                                    class="flex items-center gap-1 text-xs text-muted-foreground tabular-nums"
+                                >
                                     <CalendarClock class="h-3 w-3" />
                                     {{ part.earned_at ?? '—' }}
                                 </span>
                             </div>
                             <div class="mt-1.5 text-xs text-muted-foreground">
                                 Commission nette :
-                                <span class="ml-1 font-semibold text-foreground tabular-nums">{{ formatGNF(part.montant_net) }}</span>
+                                <span
+                                    class="ml-1 font-semibold text-foreground tabular-nums"
+                                    >{{ formatGNF(part.montant_net) }}</span
+                                >
                             </div>
                         </div>
                         <!-- Sous-total (vue toutes périodes uniquement) -->
-                        <div v-if="!periode_stats" class="flex items-center justify-between border-t bg-muted/10 px-4 py-2">
-                            <span class="text-xs text-muted-foreground">Sous-total {{ group.label }}</span>
-                            <span class="text-sm font-bold tabular-nums">{{ formatGNF(group.total_net) }}</span>
+                        <div
+                            v-if="!periode_stats"
+                            class="flex items-center justify-between border-t bg-muted/10 px-4 py-2"
+                        >
+                            <span class="text-xs text-muted-foreground"
+                                >Sous-total {{ group.label }}</span
+                            >
+                            <span class="text-sm font-bold tabular-nums">{{
+                                formatGNF(group.total_net)
+                            }}</span>
                         </div>
                     </template>
                     <!-- Total global (vue toutes périodes, plusieurs groupes) -->
-                    <div v-if="!periode_stats && partsGrouped.length > 1" class="flex items-center justify-between border-t-2 bg-muted/20 px-4 py-3">
-                        <span class="text-xs font-bold text-muted-foreground uppercase">Total toutes périodes</span>
-                        <span class="text-sm font-bold tabular-nums">{{ formatGNF(parts.reduce((s, p) => s + p.montant_net, 0)) }}</span>
+                    <div
+                        v-if="!periode_stats && partsGrouped.length > 1"
+                        class="flex items-center justify-between border-t-2 bg-muted/20 px-4 py-3"
+                    >
+                        <span
+                            class="text-xs font-bold text-muted-foreground uppercase"
+                            >Total toutes périodes</span
+                        >
+                        <span class="text-sm font-bold tabular-nums">{{
+                            formatGNF(
+                                parts.reduce((s, p) => s + p.montant_net, 0),
+                            )
+                        }}</span>
                     </div>
                 </div>
 
                 <!-- ── DESKTOP : table ────────────────────────────────────────── -->
-                <div v-if="parts.length > 0" class="hidden overflow-x-auto sm:block">
+                <div
+                    v-if="parts.length > 0"
+                    class="hidden overflow-x-auto sm:block"
+                >
                     <table class="w-full table-fixed text-sm">
                         <thead>
                             <tr class="border-b bg-muted/40">
-                                <th class="w-[48%] px-4 py-3 text-left font-medium text-muted-foreground">Transfert</th>
-                                <th class="w-[22%] px-4 py-3 text-left font-medium text-muted-foreground">Acquis le</th>
-                                <th class="w-[30%] px-4 py-3 text-right font-medium text-muted-foreground">Commission nette</th>
+                                <th
+                                    class="w-[48%] px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Transfert
+                                </th>
+                                <th
+                                    class="w-[22%] px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Acquis le
+                                </th>
+                                <th
+                                    class="w-[30%] px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Commission nette
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
-                            <template v-for="group in partsGrouped" :key="group.code">
+                            <template
+                                v-for="group in partsGrouped"
+                                :key="group.code"
+                            >
                                 <!-- En-tête période (vue toutes périodes uniquement) -->
                                 <tr v-if="!periode_stats" class="bg-muted/30">
                                     <td colspan="3" class="px-4 py-2">
-                                        <div class="flex items-center justify-between">
-                                            <span class="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                                                <CalendarDays class="h-3.5 w-3.5" />
+                                        <div
+                                            class="flex items-center justify-between"
+                                        >
+                                            <span
+                                                class="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                                            >
+                                                <CalendarDays
+                                                    class="h-3.5 w-3.5"
+                                                />
                                                 {{ group.label }}
                                             </span>
-                                            <StatusDot :label="group.statut_label" :dot-class="group.statut_dot_class" class="text-xs text-muted-foreground" />
+                                            <StatusDot
+                                                :label="group.statut_label"
+                                                :dot-class="
+                                                    group.statut_dot_class
+                                                "
+                                                class="text-xs text-muted-foreground"
+                                            />
                                         </div>
                                     </td>
                                 </tr>
                                 <!-- Lignes transferts -->
-                                <tr v-for="part in group.parts" :key="part.id" class="border-b transition-colors hover:bg-muted/10">
-                                    <td class="px-4 py-3 font-mono text-sm font-semibold text-primary">{{ part.transfert_reference ?? '—' }}</td>
-                                    <td class="px-4 py-3 text-muted-foreground tabular-nums">
+                                <tr
+                                    v-for="part in group.parts"
+                                    :key="part.id"
+                                    class="border-b transition-colors hover:bg-muted/10"
+                                >
+                                    <td
+                                        class="px-4 py-3 font-mono text-sm font-semibold text-primary"
+                                    >
+                                        {{ part.transfert_reference ?? '—' }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-muted-foreground tabular-nums"
+                                    >
                                         <div class="flex items-center gap-1.5">
-                                            <CalendarClock class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                            <CalendarClock
+                                                class="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                            />
                                             {{ part.earned_at ?? '—' }}
                                         </div>
                                     </td>
-                                    <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatGNF(part.montant_net) }}</td>
+                                    <td
+                                        class="px-4 py-3 text-right font-semibold tabular-nums"
+                                    >
+                                        {{ formatGNF(part.montant_net) }}
+                                    </td>
                                 </tr>
                                 <!-- Sous-total (vue toutes périodes uniquement) -->
-                                <tr v-if="!periode_stats" class="border-b-2 bg-muted/5">
-                                    <td colspan="2" class="px-4 py-2 text-xs text-muted-foreground">Sous-total {{ group.label }}</td>
-                                    <td class="px-4 py-2 text-right text-sm font-bold tabular-nums">{{ formatGNF(group.total_net) }}</td>
+                                <tr
+                                    v-if="!periode_stats"
+                                    class="border-b-2 bg-muted/5"
+                                >
+                                    <td
+                                        colspan="2"
+                                        class="px-4 py-2 text-xs text-muted-foreground"
+                                    >
+                                        Sous-total {{ group.label }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-2 text-right text-sm font-bold tabular-nums"
+                                    >
+                                        {{ formatGNF(group.total_net) }}
+                                    </td>
                                 </tr>
                             </template>
                         </tbody>
                         <tfoot v-if="!periode_stats && partsGrouped.length > 1">
                             <tr class="border-t-2 bg-muted/20 font-semibold">
-                                <td colspan="2" class="px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase">Total toutes périodes</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ formatGNF(parts.reduce((s, p) => s + p.montant_net, 0)) }}</td>
+                                <td
+                                    colspan="2"
+                                    class="px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase"
+                                >
+                                    Total toutes périodes
+                                </td>
+                                <td class="px-4 py-2.5 text-right tabular-nums">
+                                    {{
+                                        formatGNF(
+                                            parts.reduce(
+                                                (s, p) => s + p.montant_net,
+                                                0,
+                                            ),
+                                        )
+                                    }}
+                                </td>
                             </tr>
                         </tfoot>
                     </table>
                 </div>
 
-                <div v-if="parts.length === 0" class="py-12 text-center text-sm text-muted-foreground">
-                    <span v-if="selected_periode">Aucune commission pour la période sélectionnée.</span>
-                    <span v-else>Aucune commission enregistrée pour ce livreur.</span>
+                <div
+                    v-if="parts.length === 0"
+                    class="py-12 text-center text-sm text-muted-foreground"
+                >
+                    <span v-if="selected_periode"
+                        >Aucune commission pour la période sélectionnée.</span
+                    >
+                    <span v-else
+                        >Aucune commission enregistrée pour ce livreur.</span
+                    >
                 </div>
             </div>
         </div>

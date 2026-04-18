@@ -91,7 +91,10 @@ watch(statutFiltre, appliquerFiltres);
 // ── KPIs calculés ─────────────────────────────────────────────────────────────
 
 const kpiTotalCumule = computed(
-    () => props.kpis.total_pending + props.kpis.total_available + props.kpis.total_paid,
+    () =>
+        props.kpis.total_pending +
+        props.kpis.total_available +
+        props.kpis.total_paid,
 );
 
 // ── Paiement ──────────────────────────────────────────────────────────────────
@@ -130,17 +133,31 @@ function openPaiement(livreur: LivreurRow) {
 }
 
 function submitPaiement() {
-    if (!paiementForm.montant || paiementForm.montant <= 0 || !selectedLivreur.value) return;
+    if (
+        !paiementForm.montant ||
+        paiementForm.montant <= 0 ||
+        !selectedLivreur.value
+    )
+        return;
     paiementForm.processing = true;
     paiementForm.errors = {};
     router.post(
         `/logistique/commissions/livreurs/${selectedLivreur.value.livreur_id}/paiements`,
-        { montant: paiementForm.montant, mode_paiement: paiementForm.mode_paiement },
+        {
+            montant: paiementForm.montant,
+            mode_paiement: paiementForm.mode_paiement,
+        },
         {
             preserveScroll: true,
-            onSuccess: () => { showPaiementDialog.value = false; },
-            onError: (e) => { paiementForm.errors = e as Record<string, string>; },
-            onFinish: () => { paiementForm.processing = false; },
+            onSuccess: () => {
+                showPaiementDialog.value = false;
+            },
+            onError: (e) => {
+                paiementForm.errors = e as Record<string, string>;
+            },
+            onFinish: () => {
+                paiementForm.processing = false;
+            },
         },
     );
 }
@@ -170,36 +187,69 @@ function formatPhone(tel: string | null): string {
             <!-- ── En-tête ───────────────────────────────────────────────────── -->
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">Commissions logistiques</h1>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Commissions logistiques
+                    </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ kpis.nb_livreurs }} livreur{{ kpis.nb_livreurs !== 1 ? 's' : '' }} avec commissions
+                        {{ kpis.nb_livreurs }} livreur{{
+                            kpis.nb_livreurs !== 1 ? 's' : ''
+                        }}
+                        avec commissions
                     </p>
                 </div>
             </div>
 
             <!-- ── KPIs ──────────────────────────────────────────────────────── -->
             <div class="grid grid-cols-3 gap-3">
-                <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
-                    <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Total cumulé</p>
-                    <p class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base">
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Total cumulé
+                    </p>
+                    <p
+                        class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                    >
                         {{ formatGNF(kpiTotalCumule) }}
                     </p>
                 </div>
                 <div
                     class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
-                    :class="kpis.total_available > 0 ? 'border-amber-200 dark:border-amber-900' : ''"
+                    :class="
+                        kpis.total_available > 0
+                            ? 'border-amber-200 dark:border-amber-900'
+                            : ''
+                    "
                 >
-                    <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Reste à payer</p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Reste à payer
+                    </p>
                     <p
                         class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
-                        :class="kpis.total_available > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'"
+                        :class="
+                            kpis.total_available > 0
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : 'text-foreground'
+                        "
                     >
                         {{ formatGNF(kpis.total_available) }}
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
-                    <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Déjà payé</p>
-                    <p class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base">
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Déjà payé
+                    </p>
+                    <p
+                        class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                    >
                         {{ formatGNF(kpis.total_paid) }}
                     </p>
                 </div>
@@ -222,7 +272,9 @@ function formatPhone(tel: string | null): string {
                     @change="(e) => (statutFiltre = e.value)"
                 />
                 <span class="text-xs text-muted-foreground">
-                    {{ livreurs.length }} résultat{{ livreurs.length !== 1 ? 's' : '' }}
+                    {{ livreurs.length }} résultat{{
+                        livreurs.length !== 1 ? 's' : ''
+                    }}
                 </span>
             </div>
 
@@ -231,11 +283,27 @@ function formatPhone(tel: string | null): string {
                 <table v-if="livreurs.length > 0" class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
-                            <th class="px-4 py-3 text-left font-medium text-muted-foreground">Livreur</th>
-                            <th class="px-4 py-3 text-right font-medium text-muted-foreground">Total cumulé</th>
-                            <th class="px-4 py-3 text-right font-medium text-muted-foreground">Reste à payer</th>
-                            <th class="px-4 py-3 text-right font-medium text-muted-foreground">Déjà payé</th>
-                            <th class="px-4 py-3 w-10" />
+                            <th
+                                class="px-4 py-3 text-left font-medium text-muted-foreground"
+                            >
+                                Livreur
+                            </th>
+                            <th
+                                class="px-4 py-3 text-right font-medium text-muted-foreground"
+                            >
+                                Total cumulé
+                            </th>
+                            <th
+                                class="px-4 py-3 text-right font-medium text-muted-foreground"
+                            >
+                                Reste à payer
+                            </th>
+                            <th
+                                class="px-4 py-3 text-right font-medium text-muted-foreground"
+                            >
+                                Déjà payé
+                            </th>
+                            <th class="w-10 px-4 py-3" />
                         </tr>
                     </thead>
                     <tbody class="divide-y">
@@ -246,19 +314,32 @@ function formatPhone(tel: string | null): string {
                         >
                             <td class="px-4 py-3">
                                 <div class="flex items-center gap-2">
-                                    <User class="h-4 w-4 shrink-0 text-muted-foreground" />
+                                    <User
+                                        class="h-4 w-4 shrink-0 text-muted-foreground"
+                                    />
                                     <div>
                                         <p class="font-medium">{{ l.nom }}</p>
-                                        <p v-if="l.telephone" class="text-xs text-muted-foreground">{{ formatPhone(l.telephone) }}</p>
+                                        <p
+                                            v-if="l.telephone"
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            {{ formatPhone(l.telephone) }}
+                                        </p>
                                     </div>
                                 </div>
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
-                                {{ formatGNF(l.pending + l.available + l.paid) }}
+                                {{
+                                    formatGNF(l.pending + l.available + l.paid)
+                                }}
                             </td>
                             <td
                                 class="px-4 py-3 text-right font-semibold tabular-nums"
-                                :class="l.available > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+                                :class="
+                                    l.available > 0
+                                        ? 'text-amber-600 dark:text-amber-400'
+                                        : 'text-muted-foreground'
+                                "
                             >
                                 {{ formatGNF(l.available) }}
                             </td>
@@ -268,20 +349,34 @@ function formatPhone(tel: string | null): string {
                             <td class="px-4 py-3 text-right">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger as-child>
-                                        <Button variant="ghost" size="icon" class="h-7 w-7">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-7 w-7"
+                                        >
                                             <MoreHorizontal class="h-4 w-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
                                         <DropdownMenuItem as-child>
-                                            <Link :href="`/logistique/commissions/livreurs/${l.livreur_id}`" class="flex w-full cursor-pointer items-center">
+                                            <Link
+                                                :href="`/logistique/commissions/livreurs/${l.livreur_id}`"
+                                                class="flex w-full cursor-pointer items-center"
+                                            >
                                                 Détail
                                             </Link>
                                         </DropdownMenuItem>
-                                        <template v-if="can_payer && l.available > 0">
+                                        <template
+                                            v-if="can_payer && l.available > 0"
+                                        >
                                             <DropdownMenuSeparator />
-                                            <DropdownMenuItem class="cursor-pointer" @click="openPaiement(l)">
-                                                <HandCoins class="mr-2 h-4 w-4" />
+                                            <DropdownMenuItem
+                                                class="cursor-pointer"
+                                                @click="openPaiement(l)"
+                                            >
+                                                <HandCoins
+                                                    class="mr-2 h-4 w-4"
+                                                />
                                                 Payer
                                             </DropdownMenuItem>
                                         </template>
@@ -292,9 +387,14 @@ function formatPhone(tel: string | null): string {
                     </tbody>
                 </table>
 
-                <div v-else class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                <div
+                    v-else
+                    class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+                >
                     <HandCoins class="h-12 w-12 opacity-30" />
-                    <p class="text-sm">Aucune commission trouvée pour ce filtre.</p>
+                    <p class="text-sm">
+                        Aucune commission trouvée pour ce filtre.
+                    </p>
                 </div>
             </div>
         </div>
@@ -309,8 +409,11 @@ function formatPhone(tel: string | null): string {
         :draggable="false"
     >
         <div v-if="selectedLivreur" class="space-y-4 py-2">
-            <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-                Solde à payer : <strong>{{ formatGNF(selectedLivreur.available) }}</strong>
+            <div
+                class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+            >
+                Solde à payer :
+                <strong>{{ formatGNF(selectedLivreur.available) }}</strong>
             </div>
             <div>
                 <Label class="mb-1.5 block text-sm">Montant (GNF)</Label>
@@ -321,7 +424,10 @@ function formatPhone(tel: string | null): string {
                     class="w-full"
                     input-class="w-full"
                 />
-                <p v-if="paiementForm.errors.montant" class="mt-1 text-xs text-destructive">
+                <p
+                    v-if="paiementForm.errors.montant"
+                    class="mt-1 text-xs text-destructive"
+                >
                     {{ paiementForm.errors.montant }}
                 </p>
             </div>
@@ -337,12 +443,25 @@ function formatPhone(tel: string | null): string {
             </div>
         </div>
         <template #footer>
-            <Button variant="outline" :disabled="paiementForm.processing" @click="showPaiementDialog = false">
+            <Button
+                variant="outline"
+                :disabled="paiementForm.processing"
+                @click="showPaiementDialog = false"
+            >
                 Annuler
             </Button>
-            <Button :disabled="paiementForm.processing || !paiementForm.montant" @click="submitPaiement">
-                <HandCoins v-if="!paiementForm.processing" class="mr-1.5 h-4 w-4" />
-                <span v-else class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            <Button
+                :disabled="paiementForm.processing || !paiementForm.montant"
+                @click="submitPaiement"
+            >
+                <HandCoins
+                    v-if="!paiementForm.processing"
+                    class="mr-1.5 h-4 w-4"
+                />
+                <span
+                    v-else
+                    class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                />
                 Confirmer le paiement
             </Button>
         </template>
