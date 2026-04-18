@@ -90,12 +90,7 @@ class HandleInertiaRequests extends Middleware
         $query = TransfertLogistique::where('organization_id', $user->organization_id)
             ->where('statut', StatutTransfert::TRANSIT->value);
 
-        // Admins : voient tous les transferts en transit de l'org
-        if ($user->hasAnyRole(['super_admin', 'admin_entreprise'])) {
-            return $query->count();
-        }
-
-        // Autres : uniquement ceux destinés à leurs sites
+        // Notification uniquement pour les utilisateurs lies au site de destination.
         $siteIds = $user->sites()->pluck('sites.id');
         if ($siteIds->isEmpty()) {
             return 0;

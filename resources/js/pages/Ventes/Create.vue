@@ -54,6 +54,7 @@ const props = defineProps<{
     vehicules: VehiculeOption[];
     clients: ClientOption[];
     user_site: UserSite;
+    can_modifier_qte: boolean;
 }>();
 
 const { can } = usePermissions();
@@ -523,7 +524,15 @@ function submit() {
                                         class="px-4 py-2.5 text-center font-medium text-muted-foreground"
                                         style="width: 110px"
                                     >
-                                        Qté
+                                        <span
+                                            class="inline-flex items-center justify-center gap-1"
+                                        >
+                                            Qté
+                                            <Lock
+                                                v-if="!can_modifier_qte"
+                                                class="h-3.5 w-3.5"
+                                            />
+                                        </span>
                                     </th>
                                     <th
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
@@ -597,6 +606,12 @@ function submit() {
                                                 onQteChange(index, $event)
                                             "
                                             :min="1"
+                                            :max="
+                                                can_modifier_qte
+                                                    ? undefined
+                                                    : (capaciteVehiculeSelectionne ??
+                                                      undefined)
+                                            "
                                             :use-grouping="false"
                                             class="w-full"
                                             input-class="w-full text-center"
@@ -674,7 +689,15 @@ function submit() {
                                     <p
                                         class="mb-1 text-[11px] font-medium text-muted-foreground"
                                     >
-                                        Quantité
+                                        <span
+                                            class="inline-flex items-center gap-1"
+                                        >
+                                            Quantité
+                                            <Lock
+                                                v-if="!can_modifier_qte"
+                                                class="h-3.5 w-3.5"
+                                            />
+                                        </span>
                                     </p>
                                     <InputNumber
                                         :model-value="ligne.qte"
@@ -682,6 +705,12 @@ function submit() {
                                             onQteChange(index, $event)
                                         "
                                         :min="1"
+                                        :max="
+                                            can_modifier_qte
+                                                ? undefined
+                                                : (capaciteVehiculeSelectionne ??
+                                                  undefined)
+                                        "
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full text-center"

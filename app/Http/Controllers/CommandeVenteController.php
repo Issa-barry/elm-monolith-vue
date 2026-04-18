@@ -186,6 +186,7 @@ class CommandeVenteController extends Controller
                 'nom' => $userSite->nom,
                 'label' => ($userSite->type?->label() ?? '').' de '.$userSite->nom,
             ],
+            'can_modifier_qte' => auth()->user()->can('ventes.qte.update'),
         ]);
     }
 
@@ -574,6 +575,10 @@ class CommandeVenteController extends Controller
 
     private function ensureQuantiteMatchesVehiculeCapacity(array $data): void
     {
+        if (auth()->user()->can('ventes.qte.update')) {
+            return;
+        }
+
         if (empty($data['vehicule_id'])) {
             return;
         }

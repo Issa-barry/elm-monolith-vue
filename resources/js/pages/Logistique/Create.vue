@@ -8,7 +8,6 @@ import { ArrowLeft, Lock, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
-import Textarea from 'primevue/textarea';
 import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -231,7 +230,7 @@ function submit() {
             </div>
         </div>
 
-        <div class="mx-auto max-w-5xl p-4 sm:p-6">
+        <div class="mx-auto max-w-[85rem] p-4 sm:p-6">
             <!-- En-tête desktop -->
             <div class="mb-6 hidden sm:block">
                 <h1 class="text-2xl font-semibold tracking-tight">
@@ -404,17 +403,6 @@ function submit() {
                     </div>
 
                     <!-- Dates — masquées temporairement (valeur = date du jour par défaut) -->
-
-                    <!-- Notes -->
-                    <div class="mt-4">
-                        <Label class="mb-1.5 block text-sm">Notes</Label>
-                        <Textarea
-                            v-model="form.notes"
-                            rows="2"
-                            class="w-full"
-                            placeholder="Informations complémentaires…"
-                        />
-                    </div>
                 </div>
 
                 <!-- ── Section : Lignes produits ── -->

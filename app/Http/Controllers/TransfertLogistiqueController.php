@@ -50,8 +50,22 @@ class TransfertLogistiqueController extends Controller
         $orgId = $user->organization_id;
         $statut = $request->input('statut');
         $search = $request->input('search');
+        $siteSourceId = $request->filled('site_source_id') ? (int) $request->input('site_source_id') : null;
+        $siteDestinationId = $request->filled('site_destination_id') ? (int) $request->input('site_destination_id') : null;
         $isAdmin = $user->hasAnyRole(['super_admin', 'admin_entreprise']);
         $siteIds = $isAdmin ? collect() : $user->sites()->pluck('sites.id');
+        $sites = Site::where('organization_id', $orgId)
+            ->select('id', 'nom')
+            ->orderBy('nom')
+            ->get();
+        $orgSiteIds = $sites->pluck('id');
+
+        if ($siteSourceId !== null && ! $orgSiteIds->contains($siteSourceId)) {
+            $siteSourceId = null;
+        }
+        if ($siteDestinationId !== null && ! $orgSiteIds->contains($siteDestinationId)) {
+            $siteDestinationId = null;
+        }
 
         // ── Requête principale ─────────────────────────────────────────────────
         $query = TransfertLogistique::with([
@@ -69,7 +83,7 @@ class TransfertLogistiqueController extends Controller
                 $query->when($statut, fn ($q) => $q->where('statut', $statut))
                     ->when(! $statut, fn ($q) => $q->whereIn('statut', $statutsVue));
             } else {
-                // Non-admins : TRANSIT + RECEPTION + CLOTURE où je suis le destinataire
+                // Non-admins : uniquement les transferts dont le site destination est un de leurs sites
                 $statutsVue = [
                     StatutTransfert::TRANSIT->value,
                     StatutTransfert::RECEPTION->value,
@@ -85,6 +99,8 @@ class TransfertLogistiqueController extends Controller
                 StatutTransfert::BROUILLON->value,
                 StatutTransfert::CHARGEMENT->value,
                 StatutTransfert::TRANSIT->value,
+                StatutTransfert::RECEPTION->value,
+                StatutTransfert::CLOTURE->value,
                 StatutTransfert::ANNULE->value,
             ];
 
@@ -92,38 +108,17 @@ class TransfertLogistiqueController extends Controller
                 $query->when($statut, fn ($q) => $q->where('statut', $statut))
                     ->when(! $statut, fn ($q) => $q->whereIn('statut', $statutsVue));
             } else {
-                // Non-admins :
-                // - BROUILLON / CHARGEMENT / ANNULE : source OU destination dans mes sites
-                // - TRANSIT : uniquement si je suis la source (sinon → Réceptions)
-                if ($statut === StatutTransfert::TRANSIT->value) {
-                    $query->where('statut', StatutTransfert::TRANSIT->value)
-                        ->whereIn('site_source_id', $siteIds);
-                } elseif ($statut) {
-                    $query->where('statut', $statut)
-                        ->where(fn ($q) => $q->whereIn('site_source_id', $siteIds)
-                            ->orWhereIn('site_destination_id', $siteIds));
-                } else {
-                    $query->where(function ($q) use ($siteIds) {
-                        // BROUILLON / CHARGEMENT / ANNULE : site impliqué
-                        $q->where(function ($sub) use ($siteIds) {
-                            $sub->whereIn('statut', [
-                                StatutTransfert::BROUILLON->value,
-                                StatutTransfert::CHARGEMENT->value,
-                                StatutTransfert::ANNULE->value,
-                            ])->where(fn ($s) => $s->whereIn('site_source_id', $siteIds)
-                                ->orWhereIn('site_destination_id', $siteIds));
-                        })
-                        // TRANSIT : uniquement si je suis la source
-                            ->orWhere(function ($sub) use ($siteIds) {
-                                $sub->where('statut', StatutTransfert::TRANSIT->value)
-                                    ->whereIn('site_source_id', $siteIds);
-                            });
-                    });
-                }
+                // Non-admins : uniquement les transferts dont le site source est un de leurs sites
+                $query->whereIn('site_source_id', $siteIds)
+                    ->when($statut, fn ($q) => $q->where('statut', $statut))
+                    ->when(! $statut, fn ($q) => $q->whereIn('statut', $statutsVue));
             }
         }
 
-        $query->when($search, fn ($q) => $q->where('reference', 'like', "%{$search}%"))
+        $query
+            ->when($siteSourceId !== null, fn ($q) => $q->where('site_source_id', $siteSourceId))
+            ->when($siteDestinationId !== null, fn ($q) => $q->where('site_destination_id', $siteDestinationId))
+            ->when($search, fn ($q) => $q->where('reference', 'like', "%{$search}%"))
             ->orderByDesc('created_at');
 
         $transferts = $query->get();
@@ -162,7 +157,10 @@ class TransfertLogistiqueController extends Controller
             'transferts' => $transferts->map(fn ($t) => $this->mapTransfert($t))->values(),
             'kpis' => $kpis,
             'statuts' => $statutsFiltre,
+            'sites' => $sites->map(fn ($site) => ['id' => $site->id, 'nom' => $site->nom])->values(),
             'filtre_statut' => $statut,
+            'filtre_site_source_id' => $siteSourceId,
+            'filtre_site_destination_id' => $siteDestinationId,
             'vue' => $vue,
             'can_create' => auth()->user()->can('create', TransfertLogistique::class),
         ]);
