@@ -56,6 +56,7 @@ defineProps<{
     ca_par_site: SiteData[];
     ca_par_type_vehicule: TypeVehiculeData[];
     ca_par_produit: ProduitData[];
+    periode: string;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -71,17 +72,18 @@ const breadcrumbs: BreadcrumbItem[] = [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 p-4 sm:p-6">
-            <HeaderWidget />
+            <HeaderWidget :periode="periode" />
 
             <div class="mt-4 grid grid-cols-12 gap-8">
                 <StatsBankingWidget :stats="stats_factures" />
             </div>
 
-            <div class="grid grid-cols-12 gap-8">
+            <div class="hidden grid-cols-12 gap-8 sm:grid">
                 <div class="col-span-12 xl:col-span-8">
                     <EvolutionCAWidget
                         :evolution-mensuelle="evolution_mensuelle"
                         :evolution-quotidienne="evolution_quotidienne"
+                        :periode="periode"
                     />
                 </div>
                 <div class="col-span-12 xl:col-span-4">
@@ -91,7 +93,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                 </div>
             </div>
 
-            <div class="grid grid-cols-12 gap-8">
+            <div class="hidden grid-cols-12 gap-8 sm:grid">
                 <div class="col-span-12 xl:col-span-6">
                     <CaParSiteDoughnutWidget :ca-par-site="ca_par_site" />
                 </div>

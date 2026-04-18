@@ -21,14 +21,14 @@ class UserInvitationMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Invitation à rejoindre '.$this->invitation->site->nom,
+            subject: 'Invitation à rejoindre '.$this->invitation->site->type_label.' '.$this->invitation->site->nom,
         );
     }
 
     public function content(): Content
     {
         return new Content(
-            markdown: 'emails.invitation',
+            view: 'emails.invitation',
         );
     }
 }

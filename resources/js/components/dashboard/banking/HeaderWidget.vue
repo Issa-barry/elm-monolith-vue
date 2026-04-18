@@ -1,14 +1,50 @@
 <script setup lang="ts">
-import { usePage } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
 import Button from 'primevue/button';
 import Select from 'primevue/select';
 import Tooltip from 'primevue/tooltip';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const vTooltip = Tooltip;
 const page = usePage();
-const selectedPeriod = ref("Aujourd'hui");
-const periodOptions = ["Aujourd'hui", 'Cette semaine', 'Ce mois'];
+const props = defineProps<{ periode?: string }>();
+
+const periodOptions = [
+    { label: "Aujourd'hui", value: 'aujourd_hui' },
+    { label: 'Hier', value: 'hier' },
+    { label: 'Cette semaine', value: 'cette_semaine' },
+    { label: 'Semaine dernière', value: 'semaine_derniere' },
+    { label: 'Ce mois', value: 'ce_mois' },
+    { label: 'Mois dernier', value: 'mois_dernier' },
+    { label: 'T1', value: 't1' },
+    { label: 'T2', value: 't2' },
+    { label: 'T3', value: 't3' },
+    { label: 'T4', value: 't4' },
+    { label: 'S1', value: 's1' },
+    { label: 'S2', value: 's2' },
+    { label: 'Cette année', value: 'cette_annee' },
+    { label: 'Tout', value: 'tout' },
+];
+
+const selectedPeriod = ref(
+    periodOptions.find((p) => p.value === props.periode) ?? periodOptions[4],
+);
+
+function changePeriod() {
+    router.get(
+        '/dashboard',
+        { periode: selectedPeriod.value.value },
+        { preserveState: true, preserveScroll: true },
+    );
+}
+
+watch(
+    () => props.periode,
+    (val) => {
+        const found = periodOptions.find((p) => p.value === val);
+        if (found) selectedPeriod.value = found;
+    },
+);
 
 const user = computed(() => page.props.auth.user);
 const defaultSite = computed(() => page.props.auth.default_site ?? null);
@@ -78,7 +114,9 @@ const initials = computed(() =>
                 <Select
                     v-model="selectedPeriod"
                     :options="periodOptions"
+                    option-label="label"
                     class="min-w-40 text-xs sm:min-w-56 sm:text-sm"
+                    @change="changePeriod"
                 />
             </div>
         </div>

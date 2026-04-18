@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\UserInvitation;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
 use App\Services\UserInvitationService;
@@ -12,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -21,17 +23,12 @@ class AcceptInvitationController extends Controller
      * GET /invitations/accept/{token}
      * Render the onboarding stepper page (or an error state).
      */
-    public function show(string $token, UserInvitationService $service): Response
+    public function show(Request $request, string $token, UserInvitationService $service): Response
     {
         $invitation = $service->findByToken($token);
 
-        $error = match (true) {
-            $invitation === null => 'not_found',
-            $invitation->isAccepted() => 'already_accepted',
-            $invitation->isRevoked() => 'revoked',
-            $invitation->isExpired() => 'expired',
-            default => null,
-        };
+        $error = $this->invitationErrorState($invitation)
+            ?? $this->queryErrorState((string) $request->query('state', ''));
 
         if ($error !== null) {
             return Inertia::render('Invitations/Accept', ['error' => $error]);
@@ -41,6 +38,7 @@ class AcceptInvitationController extends Controller
             'token' => $token,
             'email' => $invitation->email,
             'role' => $invitation->role,
+            'site_type_label' => $invitation->site->type_label,
             'site_nom' => $invitation->site->nom,
         ]);
     }
@@ -118,13 +116,27 @@ class AcceptInvitationController extends Controller
     public function accept(Request $request, string $token, OtpService $otp, UserInvitationService $service): RedirectResponse|JsonResponse
     {
         if (Auth::check()) {
-            return response()->json(['error' => 'Vous êtes déjà connecté.'], 422);
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Vous êtes déjà connecté.'], 422);
+            }
+
+            return redirect()->route('invitations.accept', [
+                'token' => $token,
+                'state' => 'already_authenticated',
+            ]);
         }
 
         $invitation = $service->findByToken($token);
 
         if (! $invitation || ! $invitation->isPending()) {
-            return response()->json(['error' => 'Invitation invalide ou expirée.'], 422);
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Invitation invalide ou expirée.'], 422);
+            }
+
+            return redirect()->route('invitations.accept', [
+                'token' => $token,
+                'state' => $this->invitationErrorState($invitation) ?? 'not_found',
+            ]);
         }
 
         $data = $request->validate([
@@ -142,7 +154,9 @@ class AcceptInvitationController extends Controller
         ]);
 
         if (! $otp->isVerified($data['telephone'])) {
-            return response()->json(['error' => 'Veuillez vérifier votre numéro de téléphone.'], 422);
+            throw ValidationException::withMessages([
+                'telephone' => 'Veuillez vérifier votre numéro de téléphone.',
+            ]);
         }
 
         $user = $service->accept($invitation, $data);
@@ -152,5 +166,27 @@ class AcceptInvitationController extends Controller
         Auth::login($user);
 
         return redirect()->route('dashboard');
+    }
+
+    private function invitationErrorState(?UserInvitation $invitation): ?string
+    {
+        return match (true) {
+            $invitation === null => 'not_found',
+            $invitation->isAccepted() => 'already_accepted',
+            $invitation->isRevoked() => 'revoked',
+            $invitation->isExpired() => 'expired',
+            default => null,
+        };
+    }
+
+    private function queryErrorState(string $state): ?string
+    {
+        return in_array($state, [
+            'already_authenticated',
+            'not_found',
+            'already_accepted',
+            'revoked',
+            'expired',
+        ], true) ? $state : null;
     }
 }

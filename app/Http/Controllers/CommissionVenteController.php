@@ -150,6 +150,7 @@ class CommissionVenteController extends Controller
             'tab' => $tab,
             'filtre_statut' => $filtreStatut,
             'search' => $search,
+            'can_payer' => auth()->user()->can('viewAny', \App\Models\CommandeVente::class),
         ]);
     }
 

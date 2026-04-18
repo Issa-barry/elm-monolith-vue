@@ -6,19 +6,49 @@ use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
 use App\Enums\TypeVehicule;
 use App\Models\FactureVente;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function index(): Response
+    private function dateRangeForPeriode(string $periode): array
+    {
+        $now = Carbon::now();
+
+        return match ($periode) {
+            'aujourd_hui' => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
+            'hier' => [$now->copy()->subDay()->startOfDay(), $now->copy()->subDay()->endOfDay()],
+            'cette_semaine' => [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()],
+            'semaine_derniere' => [$now->copy()->subWeek()->startOfWeek(), $now->copy()->subWeek()->endOfWeek()],
+            'ce_mois' => [$now->copy()->startOfMonth(), $now->copy()->endOfMonth()],
+            'mois_dernier' => [$now->copy()->subMonth()->startOfMonth(), $now->copy()->subMonth()->endOfMonth()],
+            't1' => [Carbon::create($now->year, 1, 1)->startOfDay(), Carbon::create($now->year, 3, 31)->endOfDay()],
+            't2' => [Carbon::create($now->year, 4, 1)->startOfDay(), Carbon::create($now->year, 6, 30)->endOfDay()],
+            't3' => [Carbon::create($now->year, 7, 1)->startOfDay(), Carbon::create($now->year, 9, 30)->endOfDay()],
+            't4' => [Carbon::create($now->year, 10, 1)->startOfDay(), Carbon::create($now->year, 12, 31)->endOfDay()],
+            's1' => [Carbon::create($now->year, 1, 1)->startOfDay(), Carbon::create($now->year, 6, 30)->endOfDay()],
+            's2' => [Carbon::create($now->year, 7, 1)->startOfDay(), Carbon::create($now->year, 12, 31)->endOfDay()],
+            'cette_annee' => [$now->copy()->startOfYear(), $now->copy()->endOfYear()],
+            default => [null, null],
+        };
+    }
+
+    public function index(Request $request): Response
     {
         $orgId = auth()->user()->organization_id;
+        $periode = $request->get('periode', 'ce_mois');
+        [$start, $end] = $this->dateRangeForPeriode($periode);
 
         // ── Agrégats des factures de vente ─────────────────────────────────────
-        $row = FactureVente::where('organization_id', $orgId)
-            ->selectRaw("
+        $statsQuery = FactureVente::where('organization_id', $orgId);
+        if ($start && $end) {
+            $statsQuery->whereBetween('created_at', [$start, $end]);
+        }
+
+        $row = $statsQuery->selectRaw("
                 COUNT(*) as total_count,
                 COALESCE(SUM(montant_net), 0) as total_montant,
                 COALESCE(SUM(CASE WHEN statut_facture = 'payee'    THEN 1 ELSE 0 END), 0) as payees_count,
@@ -30,15 +60,18 @@ class DashboardController extends Controller
             ->first();
 
         // Encaissé sur les factures encore actives (impayée + partielle)
-        $encaisseActif = DB::table('encaissements_ventes as ev')
+        $encaisseQuery = DB::table('encaissements_ventes as ev')
             ->join('factures_ventes as fv', 'fv.id', '=', 'ev.facture_vente_id')
             ->where('fv.organization_id', $orgId)
             ->whereNull('fv.deleted_at')
             ->whereIn('fv.statut_facture', [
                 StatutFactureVente::IMPAYEE->value,
                 StatutFactureVente::PARTIEL->value,
-            ])
-            ->sum('ev.montant');
+            ]);
+        if ($start && $end) {
+            $encaisseQuery->whereBetween('fv.created_at', [$start, $end]);
+        }
+        $encaisseActif = $encaisseQuery->sum('ev.montant');
 
         $resteAEncaisser = max(0, (float) $row->montant_actif - (float) $encaisseActif);
 
@@ -49,8 +82,14 @@ class DashboardController extends Controller
             ? "CAST(strftime('%m', created_at) AS INTEGER)"
             : 'MONTH(created_at)';
 
-        $monthly = FactureVente::where('organization_id', $orgId)
-            ->whereYear('created_at', $year)
+        $monthlyQuery = FactureVente::where('organization_id', $orgId);
+        if ($start && $end) {
+            $monthlyQuery->whereBetween('created_at', [$start, $end]);
+        } else {
+            $monthlyQuery->whereYear('created_at', $year);
+        }
+
+        $monthly = $monthlyQuery
             ->selectRaw("
                 {$monthExpr} as mois,
                 COALESCE(SUM(CASE WHEN statut_facture = 'payee'   THEN montant_net ELSE 0 END), 0) as payees,
@@ -69,8 +108,14 @@ class DashboardController extends Controller
 
         // ── Évolution journalière (60 derniers jours) ─────────────────────────
         // Couvre aujourd'hui, hier, cette semaine, semaine préc., ce mois, mois préc.
-        $dailyRows = FactureVente::where('organization_id', $orgId)
-            ->where('created_at', '>=', now()->subDays(59)->startOfDay())
+        $dailyQuery = FactureVente::where('organization_id', $orgId);
+        if ($start && $end) {
+            $dailyQuery->whereBetween('created_at', [$start, $end]);
+        } else {
+            $dailyQuery->where('created_at', '>=', now()->subDays(59)->startOfDay());
+        }
+
+        $dailyRows = $dailyQuery
             ->selectRaw("
                 DATE(created_at) as date,
                 COALESCE(SUM(CASE WHEN statut_facture = 'payee'   THEN montant_net ELSE 0 END), 0) as payees,
@@ -101,7 +146,11 @@ class DashboardController extends Controller
             ->join('sites', function ($join) {
                 $join->on('sites.id', '=', 'factures_ventes.site_id')
                     ->whereNull('sites.deleted_at');
-            })
+            });
+        if ($start && $end) {
+            $caParSite->whereBetween('factures_ventes.created_at', [$start, $end]);
+        }
+        $caParSite = $caParSite
             ->selectRaw('sites.nom, COALESCE(SUM(factures_ventes.montant_net), 0) as montant')
             ->groupBy('sites.id', 'sites.nom')
             ->orderByDesc('montant')
@@ -117,7 +166,11 @@ class DashboardController extends Controller
             ->join('vehicules', function ($join) {
                 $join->on('vehicules.id', '=', 'factures_ventes.vehicule_id')
                     ->whereNull('vehicules.deleted_at');
-            })
+            });
+        if ($start && $end) {
+            $caParTypeVehicule->whereBetween('factures_ventes.created_at', [$start, $end]);
+        }
+        $caParTypeVehicule = $caParTypeVehicule
             ->selectRaw('vehicules.type_vehicule, COALESCE(SUM(factures_ventes.montant_net), 0) as montant')
             ->groupBy('vehicules.type_vehicule')
             ->orderByDesc('montant')
@@ -136,7 +189,11 @@ class DashboardController extends Controller
             ->where('cv.organization_id', $orgId)
             ->whereNull('cv.deleted_at')
             ->whereNull('p.deleted_at')
-            ->where('cv.statut', '!=', StatutCommandeVente::ANNULEE->value)
+            ->where('cv.statut', '!=', StatutCommandeVente::ANNULEE->value);
+        if ($start && $end) {
+            $caParProduit->whereBetween('cv.created_at', [$start, $end]);
+        }
+        $caParProduit = $caParProduit
             ->selectRaw('p.nom as nom, COALESCE(SUM(cvl.total_ligne), 0) as total')
             ->groupBy('p.id', 'p.nom')
             ->orderByDesc('total')
@@ -146,6 +203,7 @@ class DashboardController extends Controller
             ->toArray();
 
         return Inertia::render('Dashboard', [
+            'periode' => $periode,
             'stats_factures' => [
                 'total_count' => (int) $row->total_count,
                 'total_montant' => (float) $row->total_montant,

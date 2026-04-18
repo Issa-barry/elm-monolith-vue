@@ -1,18 +1,36 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, ChevronRight, Search, Truck, User } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    HandCoins,
+    MoreHorizontal,
+    Search,
+    Truck,
+    User,
+} from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
+import Dialog from 'primevue/dialog';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
+import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-import { computed, ref } from 'vue';
+import { useToast } from 'primevue/usetoast';
+import { computed, reactive, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -50,6 +68,7 @@ const props = defineProps<{
     tab: 'livreurs' | 'proprietaires';
     filtre_statut: string;
     search: string;
+    can_payer: boolean;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -149,6 +168,89 @@ const statutLabel: Record<string, string> = {
     partielle: 'Partielle',
     versee: 'Versée',
 };
+
+// ── Paiement ──────────────────────────────────────────────────────────────────
+
+const MODES_PAIEMENT = [
+    { value: 'especes', label: 'Espèces' },
+    { value: 'virement', label: 'Virement' },
+    { value: 'cheque', label: 'Chèque' },
+    { value: 'mobile_money', label: 'Mobile Money' },
+];
+
+const toast = useToast();
+const showPaiementDialog = ref(false);
+const selectedBeneficiaire = ref<BeneficiaireRow | null>(null);
+
+function todayIso(): string {
+    return new Date().toISOString().slice(0, 10);
+}
+
+interface PaiementForm {
+    montant: number | null;
+    mode_paiement: string;
+    paid_at: string;
+    processing: boolean;
+    errors: Record<string, string>;
+}
+
+const paiementForm = reactive<PaiementForm>({
+    montant: null,
+    mode_paiement: 'especes',
+    paid_at: todayIso(),
+    processing: false,
+    errors: {},
+});
+
+function openPaiement(b: BeneficiaireRow) {
+    selectedBeneficiaire.value = b;
+    paiementForm.montant = b.solde_restant > 0 ? b.solde_restant : null;
+    paiementForm.mode_paiement = 'especes';
+    paiementForm.paid_at = todayIso();
+    paiementForm.processing = false;
+    paiementForm.errors = {};
+    showPaiementDialog.value = true;
+}
+
+function submitPaiement() {
+    if (
+        !paiementForm.montant ||
+        paiementForm.montant <= 0 ||
+        !selectedBeneficiaire.value
+    )
+        return;
+    paiementForm.processing = true;
+    paiementForm.errors = {};
+    const b = selectedBeneficiaire.value;
+    router.post(
+        `/commissions/beneficiaires/${b.type_beneficiaire}/${b.beneficiaire_id}/paiements`,
+        {
+            montant: paiementForm.montant,
+            mode_paiement: paiementForm.mode_paiement,
+            paid_at: paiementForm.paid_at,
+        },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                showPaiementDialog.value = false;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Paiement enregistré',
+                    detail: `Paiement de ${selectedBeneficiaire.value?.beneficiaire_nom} enregistré avec succès.`,
+                    life: 3000,
+                });
+            },
+            onError: (e) => {
+                paiementForm.errors = e as Record<string, string>;
+            },
+            onFinish: () => {
+                paiementForm.processing = false;
+            },
+        },
+    );
+}
+
+// ── Formatage ─────────────────────────────────────────────────────────────────
 
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
@@ -400,7 +502,7 @@ function detailUrl(b: BeneficiaireRow): string {
                         header: { class: 'border-b bg-muted/30 px-4 py-3' },
                         tbody: { class: 'divide-y' },
                         table: {
-                            style: 'table-layout: fixed; min-width: 760px',
+                            style: 'table-layout: fixed; min-width: 960px',
                         },
                     }"
                 >
@@ -441,12 +543,12 @@ function detailUrl(b: BeneficiaireRow): string {
                         </div>
                     </template>
 
-                    <!-- Bénéficiaire (34%) -->
+                    <!-- Bénéficiaire (26%) -->
                     <Column
                         field="beneficiaire_nom"
                         header="Bénéficiaire"
                         sortable
-                        style="width: 34%"
+                        style="width: 26%"
                     >
                         <template #body="{ data }">
                             <p class="truncate font-semibold">
@@ -461,12 +563,12 @@ function detailUrl(b: BeneficiaireRow): string {
                         </template>
                     </Column>
 
-                    <!-- Brut (15%) -->
+                    <!-- Brut (11%) -->
                     <Column
                         field="total_brut_cumule"
                         header="Brut"
                         sortable
-                        style="width: 15%"
+                        style="width: 11%"
                     >
                         <template #body="{ data }">
                             <span
@@ -476,12 +578,12 @@ function detailUrl(b: BeneficiaireRow): string {
                         </template>
                     </Column>
 
-                    <!-- Frais (13%) -->
+                    <!-- Frais (10%) -->
                     <Column
                         field="total_frais"
                         header="Frais"
                         sortable
-                        style="width: 13%"
+                        style="width: 10%"
                     >
                         <template #body="{ data }">
                             <span
@@ -502,12 +604,12 @@ function detailUrl(b: BeneficiaireRow): string {
                         </template>
                     </Column>
 
-                    <!-- Total net (15%) -->
+                    <!-- Total net (12%) -->
                     <Column
                         field="total_net_cumule"
                         header="Total net"
                         sortable
-                        style="width: 15%"
+                        style="width: 12%"
                     >
                         <template #body="{ data }">
                             <span
@@ -517,12 +619,55 @@ function detailUrl(b: BeneficiaireRow): string {
                         </template>
                     </Column>
 
-                    <!-- Statut (13%) -->
+                    <!-- Reste à payer (13%) -->
+                    <Column
+                        field="solde_restant"
+                        header="Reste à payer"
+                        sortable
+                        style="width: 13%"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                class="font-semibold whitespace-nowrap tabular-nums"
+                                :class="
+                                    data.solde_restant > 0
+                                        ? ''
+                                        : 'text-muted-foreground'
+                                "
+                            >
+                                {{
+                                    data.solde_restant > 0
+                                        ? formatGNF(data.solde_restant)
+                                        : '—'
+                                }}
+                            </span>
+                        </template>
+                    </Column>
+
+                    <!-- Déjà payé (13%) -->
+                    <Column
+                        field="total_verse"
+                        header="Déjà payé"
+                        sortable
+                        style="width: 13%"
+                    >
+                        <template #body="{ data }">
+                            <span class="whitespace-nowrap tabular-nums">
+                                {{
+                                    data.total_verse > 0
+                                        ? formatGNF(data.total_verse)
+                                        : '—'
+                                }}
+                            </span>
+                        </template>
+                    </Column>
+
+                    <!-- Statut (11%) -->
                     <Column
                         field="statut_global"
                         header="Statut"
                         sortable
-                        style="width: 13%"
+                        style="width: 11%"
                     >
                         <template #body="{ data }">
                             <StatusDot
@@ -539,20 +684,48 @@ function detailUrl(b: BeneficiaireRow): string {
                         </template>
                     </Column>
 
-                    <!-- Action (10%) -->
-                    <Column header="" style="width: 10%">
+                    <!-- Action (8%) -->
+                    <Column header="" style="width: 8%">
                         <template #body="{ data }">
                             <div class="flex justify-end">
-                                <Link :href="detailUrl(data)">
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        class="h-8 gap-1 text-xs"
-                                    >
-                                        Détails
-                                        <ChevronRight class="h-3.5 w-3.5" />
-                                    </Button>
-                                </Link>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger as-child>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-7 w-7"
+                                        >
+                                            <MoreHorizontal class="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuItem as-child>
+                                            <Link
+                                                :href="detailUrl(data)"
+                                                class="flex w-full cursor-pointer items-center"
+                                            >
+                                                Détails
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <template
+                                            v-if="
+                                                can_payer &&
+                                                data.solde_restant > 0
+                                            "
+                                        >
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                class="cursor-pointer"
+                                                @click="openPaiement(data)"
+                                            >
+                                                <HandCoins
+                                                    class="mr-2 h-4 w-4"
+                                                />
+                                                Payer
+                                            </DropdownMenuItem>
+                                        </template>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </div>
                         </template>
                     </Column>
@@ -568,4 +741,77 @@ function detailUrl(b: BeneficiaireRow): string {
             </div>
         </div>
     </AppLayout>
+
+    <!-- ── Dialog paiement ───────────────────────────────────────────────────── -->
+    <Dialog
+        v-model:visible="showPaiementDialog"
+        modal
+        :header="
+            selectedBeneficiaire
+                ? `Payer — ${selectedBeneficiaire.beneficiaire_nom}`
+                : 'Payer'
+        "
+        :style="{ width: '420px' }"
+        :draggable="false"
+    >
+        <div v-if="selectedBeneficiaire" class="space-y-4 py-2">
+            <div
+                class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+            >
+                Solde à payer :
+                <strong>{{
+                    formatGNF(selectedBeneficiaire.solde_restant)
+                }}</strong>
+            </div>
+            <div>
+                <Label class="mb-1.5 block text-sm">Montant (GNF)</Label>
+                <InputNumber
+                    v-model="paiementForm.montant"
+                    :min="1"
+                    :max="selectedBeneficiaire.solde_restant"
+                    class="w-full"
+                    input-class="w-full"
+                />
+                <p
+                    v-if="paiementForm.errors.montant"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ paiementForm.errors.montant }}
+                </p>
+            </div>
+            <div>
+                <Label class="mb-1.5 block text-sm">Mode de paiement</Label>
+                <Select
+                    v-model="paiementForm.mode_paiement"
+                    :options="MODES_PAIEMENT"
+                    option-label="label"
+                    option-value="value"
+                    class="w-full"
+                />
+            </div>
+        </div>
+        <template #footer>
+            <Button
+                variant="outline"
+                :disabled="paiementForm.processing"
+                @click="showPaiementDialog = false"
+            >
+                Annuler
+            </Button>
+            <Button
+                :disabled="paiementForm.processing || !paiementForm.montant"
+                @click="submitPaiement"
+            >
+                <HandCoins
+                    v-if="!paiementForm.processing"
+                    class="mr-1.5 h-4 w-4"
+                />
+                <span
+                    v-else
+                    class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                />
+                Confirmer le paiement
+            </Button>
+        </template>
+    </Dialog>
 </template>

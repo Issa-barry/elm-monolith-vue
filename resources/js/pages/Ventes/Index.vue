@@ -17,6 +17,8 @@ import {
     ArrowLeft,
     CheckCircle,
     ChevronRight,
+    HandCoins,
+    History,
     MoreVertical,
     Pencil,
     Plus,
@@ -30,7 +32,9 @@ import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
+import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
@@ -45,9 +49,20 @@ interface Commande {
     total_commande: number;
     vehicule_nom: string | null;
     client_nom: string | null;
+    site_nom: string | null;
+    facture_id: number | null;
     facture_statut: string | null;
     facture_statut_label: string | null;
+    facture_montant_encaisse: number | null;
     facture_montant_restant: number | null;
+    encaissements: {
+        id: number;
+        montant: number;
+        date_encaissement: string;
+        heure: string | null;
+        mode_paiement_label: string;
+        created_by: string | null;
+    }[];
     created_at: string;
     is_annulee: boolean;
     is_brouillon: boolean;
@@ -57,25 +72,93 @@ interface Commande {
     can_annuler: boolean;
 }
 
+interface Totaux {
+    total_montant: number;
+    nb_total: number;
+    total_a_encaisser: number;
+    deja_paye: number;
+    nb_cloturees: number;
+    montant_cloturees: number;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
-const props = defineProps<{ commandes: Commande[] }>();
+const props = defineProps<{
+    commandes: Commande[];
+    totaux: Totaux;
+    periode: string;
+    statut: string;
+}>();
 
 const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
-
-const search = ref('');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Ventes', href: '/ventes' },
 ];
 
-// ── Statut couleurs ───────────────────────────────────────────────────────────
+// ── Filtres période ───────────────────────────────────────────────────────────
+const periodes = [
+    { value: 'today', label: "Aujourd'hui" },
+    { value: 'week', label: 'Cette semaine' },
+    { value: 'month', label: 'Ce mois' },
+    { value: 'all', label: 'Tout' },
+];
+
+function setPeriode(p: string) {
+    const params: Record<string, string> = { periode: p };
+    if (props.statut !== 'tous') params.statut = props.statut;
+    router.get('/ventes', params, { preserveScroll: true, replace: true });
+}
+
+// ── Filtres statut (server-driven) ────────────────────────────────────────────
+const filtresStatut = [
+    { value: 'tous', label: 'Toutes' },
+    { value: 'brouillon', label: 'Brouillons' },
+    { value: 'en_cours', label: 'En cours' },
+    { value: 'cloturee', label: 'Clôturées' },
+    { value: 'annulee', label: 'Annulées' },
+];
+
+function setStatut(s: string) {
+    const params: Record<string, string> = { periode: props.periode };
+    if (s !== 'tous') params.statut = s;
+    router.get('/ventes', params, { preserveScroll: true, replace: true });
+}
+
+// ── Recherche locale ──────────────────────────────────────────────────────────
+const search = ref('');
+const filters = ref({ global: { value: '', matchMode: 'contains' } });
+watch(search, (val) => {
+    filters.value.global.value = val;
+});
+
+const commandesFiltrees = computed(() => {
+    const q = search.value.toLowerCase().trim();
+    if (!q) return props.commandes;
+    return props.commandes.filter(
+        (c) =>
+            c.reference.toLowerCase().includes(q) ||
+            (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
+            (c.client_nom && c.client_nom.toLowerCase().includes(q)),
+    );
+});
+
+// ── Filtre mobile ─────────────────────────────────────────────────────────────
+const mobileSearch = ref('');
+
+const mobileFiltered = computed(() => {
+    const q = mobileSearch.value.toLowerCase().trim();
+    if (!q) return props.commandes;
+    return props.commandes.filter(
+        (c) =>
+            c.reference.toLowerCase().includes(q) ||
+            (c.client_nom && c.client_nom.toLowerCase().includes(q)),
+    );
+});
+
+// ── Couleurs statut ───────────────────────────────────────────────────────────
 const statutCommandeColor: Record<string, string> = {
     brouillon: 'bg-zinc-400 dark:bg-zinc-500',
     en_cours: 'bg-blue-500',
@@ -94,19 +177,6 @@ const statutFactureColor: Record<string, string> = {
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
-
-// ── Filtre mobile ─────────────────────────────────────────────────────────────
-const mobileSearch = ref('');
-
-const mobileFiltered = computed(() => {
-    const q = mobileSearch.value.toLowerCase().trim();
-    if (!q) return props.commandes;
-    return props.commandes.filter(
-        (c) =>
-            c.reference.toLowerCase().includes(q) ||
-            (c.client_nom && c.client_nom.toLowerCase().includes(q)),
-    );
-});
 
 // ── Validation ────────────────────────────────────────────────────────────────
 const validationProcessing = ref(false);
@@ -134,9 +204,7 @@ function valider(commande: Commande) {
 const annulerDialogVisible = ref(false);
 const selectedCommande = ref<Commande | null>(null);
 
-const annulerForm = useForm({
-    motif_annulation: '',
-});
+const annulerForm = useForm({ motif_annulation: '' });
 
 function openAnnulerDialog(commande: Commande) {
     selectedCommande.value = commande;
@@ -157,6 +225,58 @@ function submitAnnuler() {
             });
         },
     });
+}
+
+// ── Encaissement ──────────────────────────────────────────────────────────────
+const modesPaiement = [
+    { value: 'especes', label: 'Espèces' },
+    { value: 'mobile_money', label: 'Mobile Money' },
+    { value: 'virement', label: 'Virement' },
+    { value: 'cheque', label: 'Chèque' },
+];
+
+const encaisserDialogVisible = ref(false);
+const encaisserCommande = ref<Commande | null>(null);
+const encaisserForm = useForm({
+    montant: null as number | null,
+    mode_paiement: 'especes' as string | null,
+    date_encaissement: new Date().toISOString().slice(0, 10),
+});
+
+function openEncaisserDialog(commande: Commande) {
+    encaisserCommande.value = commande;
+    encaisserForm.reset();
+    encaisserForm.montant = commande.facture_montant_restant;
+    encaisserForm.mode_paiement = 'especes';
+    encaisserForm.date_encaissement = new Date().toISOString().slice(0, 10);
+    encaisserDialogVisible.value = true;
+}
+
+function submitEncaisser() {
+    if (!encaisserCommande.value?.facture_id) return;
+    encaisserForm.post(
+        `/factures/${encaisserCommande.value.facture_id}/encaissements`,
+        {
+            onSuccess: () => {
+                encaisserDialogVisible.value = false;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Encaissement enregistré',
+                    detail: `${formatGNF(encaisserForm.montant ?? 0)} enregistré avec succès.`,
+                    life: 3000,
+                });
+            },
+        },
+    );
+}
+
+// ── Historique ────────────────────────────────────────────────────────────────
+const historyVisible = ref(false);
+const historyCommande = ref<Commande | null>(null);
+
+function openHistory(commande: Commande) {
+    historyCommande.value = commande;
+    historyVisible.value = true;
 }
 
 // ── Suppression ───────────────────────────────────────────────────────────────
@@ -209,8 +329,37 @@ function confirmDelete(c: Commande) {
                 <div v-else class="w-8" />
             </div>
 
+            <!-- KPI cards -->
+            <div class="grid grid-cols-3 gap-3 p-4">
+                <div class="rounded-xl border bg-card p-4 shadow-sm">
+                    <p class="text-xs text-muted-foreground">Total</p>
+                    <p class="mt-1 text-lg font-bold tabular-nums">
+                        {{ formatGNF(totaux.total_montant) }}
+                    </p>
+                    <p class="text-xs text-muted-foreground">
+                        {{ totaux.nb_total }} commande{{
+                            totaux.nb_total > 1 ? 's' : ''
+                        }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-4 shadow-sm">
+                    <p class="text-xs text-muted-foreground">
+                        Restant à encaisser
+                    </p>
+                    <p class="mt-1 text-lg font-bold tabular-nums">
+                        {{ formatGNF(totaux.total_a_encaisser) }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-4 shadow-sm">
+                    <p class="text-xs text-muted-foreground">Déjà payé</p>
+                    <p class="mt-1 text-lg font-bold tabular-nums">
+                        {{ formatGNF(totaux.deja_paye) }}
+                    </p>
+                </div>
+            </div>
+
             <!-- Search -->
-            <div class="border-b px-4 py-2">
+            <div class="border-t border-b px-4 py-2">
                 <div class="relative">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -239,10 +388,19 @@ function confirmDelete(c: Commande) {
                             {{ c.reference }}
                         </p>
                         <p class="mt-0.5 text-xs text-muted-foreground">
-                            {{ c.client_nom ?? '—' }}
+                            {{ c.vehicule_nom ?? c.client_nom ?? '—' }}
                         </p>
                         <p class="mt-1 text-sm font-medium tabular-nums">
                             {{ formatGNF(c.total_commande) }}
+                        </p>
+                        <p
+                            v-if="
+                                c.facture_montant_restant !== null &&
+                                c.facture_montant_restant > 0
+                            "
+                            class="text-xs font-semibold text-amber-600 tabular-nums dark:text-amber-400"
+                        >
+                            Restant : {{ formatGNF(c.facture_montant_restant) }}
                         </p>
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
@@ -292,9 +450,7 @@ function confirmDelete(c: Commande) {
                         Ventes
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ commandes.length }} commande{{
-                            commandes.length !== 1 ? 's' : ''
-                        }}
+                        Suivi et encaissement des commandes.
                     </p>
                 </div>
                 <Link v-if="can('ventes.create')" href="/ventes/create">
@@ -305,25 +461,45 @@ function confirmDelete(c: Commande) {
                 </Link>
             </div>
 
+            <!-- KPI cards -->
+            <div class="grid gap-4 sm:grid-cols-3">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Total</p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">
+                        {{ formatGNF(totaux.total_montant) }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ totaux.nb_total }} commande{{
+                            totaux.nb_total > 1 ? 's' : ''
+                        }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">
+                        Restant à encaisser
+                    </p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">
+                        {{ formatGNF(totaux.total_a_encaisser) }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Déjà payé</p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums">
+                        {{ formatGNF(totaux.deja_paye) }}
+                    </p>
+                </div>
+            </div>
+
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="commandes"
-                    :paginator="commandes.length > 20"
+                    :value="commandesFiltrees"
+                    :paginator="commandesFiltrees.length > 20"
                     :rows="20"
-                    :global-filter-fields="[
-                        'reference',
-                        'vehicule_nom',
-                        'client_nom',
-                        'statut_label',
-                        'facture_statut_label',
-                    ]"
-                    v-model:filters="filters"
                     data-key="id"
                     striped-rows
                     removable-sort
                     class="text-sm"
-                    table-class="w-full"
                     :pt="{
                         root: { class: 'w-full' },
                         header: { class: 'border-b bg-muted/30 px-4 py-3' },
@@ -340,15 +516,31 @@ function confirmDelete(c: Commande) {
                                 </InputIcon>
                                 <InputText
                                     v-model="search"
-                                    placeholder="Rechercher..."
+                                    placeholder="Référence, véhicule, client…"
                                     class="w-full text-sm"
                                 />
                             </IconField>
-                            <span class="text-xs text-muted-foreground"
-                                >{{ commandes.length }} résultat{{
-                                    commandes.length !== 1 ? 's' : ''
-                                }}</span
-                            >
+                            <Select
+                                :model-value="statut"
+                                :options="filtresStatut"
+                                option-label="label"
+                                option-value="value"
+                                class="w-36"
+                                @update:model-value="setStatut($event)"
+                            />
+                            <Select
+                                :model-value="periode"
+                                :options="periodes"
+                                option-label="label"
+                                option-value="value"
+                                class="w-40"
+                                @update:model-value="setPeriode($event)"
+                            />
+                            <span class="text-xs text-muted-foreground">
+                                {{ commandesFiltrees.length }} résultat{{
+                                    commandesFiltrees.length !== 1 ? 's' : ''
+                                }}
+                            </span>
                         </div>
                     </template>
 
@@ -362,115 +554,114 @@ function confirmDelete(c: Commande) {
                         <template #body="{ data }">
                             <Link
                                 :href="`/ventes/${data.id}`"
-                                class="font-mono text-sm font-semibold tracking-wide hover:underline"
+                                class="hover:underline"
                             >
-                                {{ data.reference }}
+                                <span
+                                    class="inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+                                >
+                                    {{ data.reference }}
+                                </span>
                             </Link>
                         </template>
                     </Column>
 
-                    <!-- Date -->
+                    <!-- Véhicule / Client -->
+                    <Column header="Véhicule / Client" style="min-width: 160px">
+                        <template #body="{ data }">
+                            <div v-if="data.vehicule_nom" class="font-medium">
+                                {{ data.vehicule_nom }}
+                            </div>
+                            <div
+                                v-if="data.client_nom"
+                                class="text-muted-foreground"
+                                :class="{ 'text-xs': data.vehicule_nom }"
+                            >
+                                {{ data.client_nom }}
+                            </div>
+                            <span
+                                v-if="!data.vehicule_nom && !data.client_nom"
+                                class="text-muted-foreground"
+                                >—</span
+                            >
+                        </template>
+                    </Column>
+
+                    <!-- Site -->
                     <Column
-                        field="created_at"
-                        header="Date"
+                        field="site_nom"
+                        header="Site"
                         sortable
-                        style="width: 120px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground tabular-nums">{{
-                                data.created_at
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Véhicule -->
-                    <Column
-                        field="vehicule_nom"
-                        header="Véhicule"
-                        style="min-width: 150px"
+                        style="min-width: 120px"
                     >
                         <template #body="{ data }">
                             <span class="text-muted-foreground">{{
-                                data.vehicule_nom ?? '—'
+                                data.site_nom ?? '—'
                             }}</span>
                         </template>
                     </Column>
 
-                    <!-- Client -->
-                    <Column
-                        field="client_nom"
-                        header="Client"
-                        style="min-width: 150px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground">{{
-                                data.client_nom ?? '—'
-                            }}</span>
-                        </template>
-                    </Column>
-
-                    <!-- Total -->
+                    <!-- Montant -->
                     <Column
                         field="total_commande"
-                        header="Total"
+                        header="Montant"
                         sortable
-                        style="width: 160px"
+                        style="width: 140px"
                     >
                         <template #body="{ data }">
-                            <span class="font-medium tabular-nums">{{
+                            <span class="tabular-nums">{{
                                 formatGNF(data.total_commande)
                             }}</span>
                         </template>
                     </Column>
 
-                    <!-- Restant dû -->
+                    <!-- Encaissé -->
                     <Column
-                        field="facture_montant_restant"
-                        header="Restant dû"
+                        field="facture_montant_encaisse"
+                        header="Encaissé"
                         sortable
-                        style="width: 150px"
+                        style="width: 140px"
                     >
                         <template #body="{ data }">
-                            <span
-                                v-if="data.facture_montant_restant !== null"
-                                class="font-medium tabular-nums"
-                                :class="
-                                    data.facture_montant_restant > 0
-                                        ? 'text-amber-600 dark:text-amber-400'
-                                        : 'text-emerald-600 dark:text-emerald-400'
-                                "
-                            >
-                                {{ formatGNF(data.facture_montant_restant) }}
+                            <span class="text-muted-foreground tabular-nums">
+                                {{
+                                    data.facture_montant_encaisse !== null
+                                        ? formatGNF(
+                                              data.facture_montant_encaisse,
+                                          )
+                                        : '—'
+                                }}
                             </span>
-                            <span v-else class="text-muted-foreground">—</span>
                         </template>
                     </Column>
 
-                    <!-- Statut commande -->
+                    <!-- Restant -->
                     <Column
-                        field="statut"
-                        header="Statut cmde"
+                        field="facture_montant_restant"
+                        header="Restant"
                         sortable
-                        style="width: 130px"
+                        style="width: 140px"
                     >
                         <template #body="{ data }">
-                            <StatusDot
-                                :label="data.statut_label"
-                                :dot-class="
-                                    statutCommandeColor[data.statut] ??
-                                    'bg-zinc-400 dark:bg-zinc-500'
-                                "
-                                class="text-muted-foreground"
-                            />
+                            <span class="text-muted-foreground tabular-nums">
+                                {{
+                                    data.facture_montant_restant !== null
+                                        ? data.facture_montant_restant > 0
+                                            ? formatGNF(
+                                                  data.facture_montant_restant,
+                                              )
+                                            : '—'
+                                        : '—'
+                                }}
+                            </span>
                         </template>
                     </Column>
 
                     <!-- Statut facture -->
                     <Column
                         field="facture_statut"
-                        header="Statut facture"
+                        header="Statut"
                         sortable
-                        style="width: 130px"
+                        style="width: 120px"
                     >
                         <template #body="{ data }">
                             <StatusDot
@@ -483,6 +674,21 @@ function confirmDelete(c: Commande) {
                                 class="text-muted-foreground"
                             />
                             <span v-else class="text-muted-foreground">—</span>
+                        </template>
+                    </Column>
+
+                    <!-- Date -->
+                    <Column
+                        field="created_at"
+                        header="Date"
+                        sortable
+                        style="width: 110px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                class="text-xs text-muted-foreground tabular-nums"
+                                >{{ data.created_at }}</span
+                            >
                         </template>
                     </Column>
 
@@ -510,7 +716,7 @@ function confirmDelete(c: Commande) {
                                                 class="flex w-full cursor-pointer items-center gap-2"
                                             >
                                                 <ShoppingCart class="h-4 w-4" />
-                                                Voir
+                                                Détail
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
@@ -534,6 +740,34 @@ function confirmDelete(c: Commande) {
                                             <CheckCircle class="h-4 w-4" />
                                             Valider
                                         </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            v-if="
+                                                data.facture_id &&
+                                                data.facture_montant_restant >
+                                                    0 &&
+                                                can('ventes.update')
+                                            "
+                                            class="cursor-pointer"
+                                            @click="openEncaisserDialog(data)"
+                                        >
+                                            <HandCoins class="h-4 w-4" />
+                                            Encaisser
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            v-if="data.facture_id"
+                                            class="cursor-pointer"
+                                            @click="openHistory(data)"
+                                        >
+                                            <History class="h-4 w-4" />
+                                            Historique
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator
+                                            v-if="
+                                                data.can_annuler ||
+                                                (data.is_annulee &&
+                                                    can('ventes.delete'))
+                                            "
+                                        />
                                         <DropdownMenuItem
                                             v-if="data.can_annuler"
                                             class="cursor-pointer text-amber-600 focus:text-amber-600"
@@ -565,7 +799,6 @@ function confirmDelete(c: Commande) {
                         </template>
                     </Column>
 
-                    <!-- État vide -->
                     <template #empty>
                         <div
                             class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
@@ -586,6 +819,219 @@ function confirmDelete(c: Commande) {
                 </DataTable>
             </div>
         </div>
+
+        <!-- Dialog Historique -->
+        <Dialog
+            v-model:visible="historyVisible"
+            modal
+            :header="
+                historyCommande
+                    ? `Historique — ${historyCommande.reference}`
+                    : 'Historique'
+            "
+            :style="{ width: '560px' }"
+        >
+            <div v-if="historyCommande">
+                <div
+                    v-if="historyCommande.encaissements.length === 0"
+                    class="py-8 text-center text-sm text-muted-foreground"
+                >
+                    Aucun encaissement enregistré.
+                </div>
+                <table v-else class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b bg-muted/30">
+                            <th
+                                class="px-3 py-2 text-left font-medium text-muted-foreground"
+                            >
+                                Date
+                            </th>
+                            <th
+                                class="px-3 py-2 text-left font-medium text-muted-foreground"
+                            >
+                                Heure
+                            </th>
+                            <th
+                                class="px-3 py-2 text-left font-medium text-muted-foreground"
+                            >
+                                Mode
+                            </th>
+                            <th
+                                class="px-3 py-2 text-right font-medium text-muted-foreground"
+                            >
+                                Montant
+                            </th>
+                            <th
+                                class="px-3 py-2 text-left font-medium text-muted-foreground"
+                            >
+                                Par
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr
+                            v-for="e in historyCommande.encaissements"
+                            :key="e.id"
+                            class="hover:bg-muted/10"
+                        >
+                            <td
+                                class="px-3 py-2 text-muted-foreground tabular-nums"
+                            >
+                                {{ e.date_encaissement }}
+                            </td>
+                            <td
+                                class="px-3 py-2 text-muted-foreground tabular-nums"
+                            >
+                                {{ e.heure ?? '—' }}
+                            </td>
+                            <td class="px-3 py-2 text-muted-foreground">
+                                {{ e.mode_paiement_label }}
+                            </td>
+                            <td
+                                class="px-3 py-2 text-right font-medium tabular-nums"
+                            >
+                                {{ formatGNF(e.montant) }}
+                            </td>
+                            <td class="px-3 py-2 text-xs text-muted-foreground">
+                                {{ e.created_by ?? '—' }}
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr class="border-t">
+                            <td
+                                colspan="3"
+                                class="px-3 py-2 text-sm font-semibold"
+                            >
+                                Total encaissé
+                            </td>
+                            <td
+                                class="px-3 py-2 text-right font-semibold tabular-nums"
+                            >
+                                {{
+                                    formatGNF(
+                                        historyCommande.encaissements.reduce(
+                                            (s, e) => s + e.montant,
+                                            0,
+                                        ),
+                                    )
+                                }}
+                            </td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </Dialog>
+
+        <!-- Dialog Encaissement -->
+        <Dialog
+            v-model:visible="encaisserDialogVisible"
+            modal
+            header="Encaisser un paiement"
+            :style="{ width: '440px' }"
+        >
+            <div v-if="encaisserCommande" class="space-y-4">
+                <div class="space-y-1.5 rounded-lg bg-muted/40 p-4 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-muted-foreground">Commande</span>
+                        <span class="font-mono font-semibold">{{
+                            encaisserCommande.reference
+                        }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-muted-foreground">Montant total</span>
+                        <span class="tabular-nums">{{
+                            formatGNF(encaisserCommande.total_commande)
+                        }}</span>
+                    </div>
+                    <div class="flex justify-between border-t pt-1.5">
+                        <span class="font-semibold text-muted-foreground"
+                            >Restant dû</span
+                        >
+                        <span class="font-bold tabular-nums">{{
+                            formatGNF(
+                                encaisserCommande.facture_montant_restant ?? 0,
+                            )
+                        }}</span>
+                    </div>
+                </div>
+
+                <div>
+                    <Label class="mb-1.5 block text-sm"
+                        >Montant <span class="text-destructive">*</span></Label
+                    >
+                    <InputNumber
+                        v-model="encaisserForm.montant"
+                        :max="
+                            encaisserCommande.facture_montant_restant ??
+                            undefined
+                        "
+                        :min="1"
+                        :use-grouping="true"
+                        locale="fr-FR"
+                        suffix=" GNF"
+                        class="w-full"
+                        fluid
+                        :class="{ 'p-invalid': encaisserForm.errors.montant }"
+                    />
+                    <p
+                        v-if="encaisserForm.errors.montant"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ encaisserForm.errors.montant }}
+                    </p>
+                </div>
+
+                <div>
+                    <Label class="mb-1.5 block text-sm"
+                        >Mode de paiement
+                        <span class="text-destructive">*</span></Label
+                    >
+                    <Select
+                        v-model="encaisserForm.mode_paiement"
+                        :options="modesPaiement"
+                        option-label="label"
+                        option-value="value"
+                        class="w-full"
+                        fluid
+                        :class="{
+                            'p-invalid': encaisserForm.errors.mode_paiement,
+                        }"
+                    />
+                    <p
+                        v-if="encaisserForm.errors.mode_paiement"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ encaisserForm.errors.mode_paiement }}
+                    </p>
+                </div>
+            </div>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <Button
+                        variant="outline"
+                        @click="encaisserDialogVisible = false"
+                        >Annuler</Button
+                    >
+                    <Button
+                        :disabled="
+                            encaisserForm.processing ||
+                            !encaisserForm.montant ||
+                            !encaisserForm.mode_paiement
+                        "
+                        @click="submitEncaisser"
+                    >
+                        <HandCoins class="mr-2 h-4 w-4" />
+                        {{
+                            encaisserForm.processing
+                                ? 'Enregistrement…'
+                                : 'Confirmer'
+                        }}
+                    </Button>
+                </div>
+            </template>
+        </Dialog>
 
         <!-- Dialog Annulation -->
         <Dialog

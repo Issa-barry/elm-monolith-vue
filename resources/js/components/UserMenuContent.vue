@@ -9,7 +9,7 @@ import {
 import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
 import type { User } from '@/types';
-import { Link, router } from '@inertiajs/vue3';
+import { router } from '@inertiajs/vue3';
 import { LogOut, Settings } from 'lucide-vue-next';
 
 interface Props {
@@ -18,6 +18,7 @@ interface Props {
 
 const handleLogout = () => {
     router.flushAll();
+    router.post(logout().url);
 };
 
 defineProps<Props>();
@@ -39,16 +40,12 @@ defineProps<Props>();
         </DropdownMenuItem>
     </DropdownMenuGroup>
     <DropdownMenuSeparator />
-    <DropdownMenuItem :as-child="true">
-        <Link
-            class="block w-full"
-            :href="logout()"
-            @click="handleLogout"
-            as="button"
-            data-test="logout-button"
-        >
-            <LogOut class="mr-2 h-4 w-4" />
-            Deconnexion
-        </Link>
+    <DropdownMenuItem
+        class="cursor-pointer"
+        data-test="logout-button"
+        @click="handleLogout"
+    >
+        <LogOut class="mr-2 h-4 w-4" />
+        Deconnexion
     </DropdownMenuItem>
 </template>

@@ -20,6 +20,7 @@ interface JourData {
 const props = defineProps<{
     evolutionMensuelle: MoisData[];
     evolutionQuotidienne: JourData[];
+    periode?: string;
 }>();
 
 // ── Thème — même pattern que ChartDoc.vue (useLayout remplacé par useChartTheme)
@@ -40,9 +41,12 @@ const periodes = [
     { label: 'S1', value: 's1' },
     { label: 'S2', value: 's2' },
     { label: 'Cette année', value: 'cette_annee' },
+    { label: 'Tout', value: 'tout' },
 ];
 
-const selectedPeriode = ref(periodes[0]); // "Aujourd'hui" par défaut
+const selectedPeriode = ref(
+    periodes.find((p) => p.value === props.periode) ?? periodes[4],
+);
 
 // ── Chart refs — nommage identique à ChartDoc ─────────────────────────────────
 const barData = ref({});
@@ -256,6 +260,10 @@ function setColorOptions() {
     };
 }
 
+function changePeriode() {
+    setColorOptions();
+}
+
 // Pattern ChartDoc.vue exact
 onMounted(() => {
     setColorOptions();
@@ -275,6 +283,17 @@ watch(
     () => setColorOptions(),
     { deep: true },
 );
+
+watch(
+    () => props.periode,
+    (val) => {
+        const found = periodes.find((p) => p.value === val);
+        if (found) {
+            selectedPeriode.value = found;
+            setColorOptions();
+        }
+    },
+);
 </script>
 
 <template>
@@ -290,7 +309,7 @@ watch(
                 :options="periodes"
                 option-label="label"
                 class="w-44"
-                @change="setColorOptions"
+                @change="changePeriode"
             />
         </div>
 
