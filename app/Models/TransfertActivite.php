@@ -43,6 +43,8 @@ class TransfertActivite extends Model
         'annule' => 'a annulé le transfert',
         'commission_generee' => 'a généré la commission logistique',
         'versement_effectue' => 'a effectué un versement',
+        'validation_admin_accord' => 'a approuvé la réception (commission générée)',
+        'validation_admin_refus' => 'a refusé la réception',
     ];
 
     public function getActionLabelAttribute(): string

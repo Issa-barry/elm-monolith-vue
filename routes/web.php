@@ -24,6 +24,7 @@ use App\Http\Controllers\ProduitController;
 use App\Http\Controllers\ProprietaireController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SiteController;
+use App\Http\Controllers\ReceptionValidationAdminController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
 use App\Http\Controllers\UserController;
@@ -229,7 +230,10 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::post('logistique/{transfert_logistique}/statut/avancer', [TransfertStatutController::class, 'avancer'])->name('logistique.statut.avancer');
         Route::post('logistique/{transfert_logistique}/statut/annuler', [TransfertStatutController::class, 'annuler'])->name('logistique.statut.annuler');
 
-        // Commission logistique
+        // Validation admin de la réception (génère la commission automatiquement)
+        Route::post('logistique/{transfert_logistique}/validation-reception', [ReceptionValidationAdminController::class, 'store'])->name('logistique.validation-reception.store');
+
+        // Commission logistique (accès direct, backward compat)
         Route::post('logistique/{transfert_logistique}/commission', [CommissionLogistiqueController::class, 'store'])->name('logistique.commission.store');
 
         // Versements de parts de commission

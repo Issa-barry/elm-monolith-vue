@@ -122,6 +122,13 @@ class TransfertLogistiquePolicy
             && $user->isAssignedToSite($transfert->site_source_id);
     }
 
+    public function validerReceptionAdmin(User $user, TransfertLogistique $transfert): bool
+    {
+        return $this->sameOrganization($user, $transfert)
+            && $transfert->isReception()
+            && $user->hasAnyRole(['super_admin', 'admin_entreprise']);
+    }
+
     public function genererCommission(User $user, TransfertLogistique $transfert): bool
     {
         return $user->can('logistique.commission.verser')

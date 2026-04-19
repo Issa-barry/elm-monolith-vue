@@ -309,6 +309,7 @@ class TransfertLogistiqueController extends Controller
             'lignes.produit:id,nom',
             'commission.parts.versements.createur:id,prenom,nom',
             'createur:id,prenom,nom',
+            'validateur:id,prenom,nom',
             'activites.user:id,prenom,nom',
         ]);
 
@@ -342,6 +343,7 @@ class TransfertLogistiqueController extends Controller
             'can_update' => $user->can('update', $transfert_logistique),
             'can_generer_commission' => $user->can('genererCommission', $transfert_logistique),
             'can_verser_commission' => $user->can('verserCommission', $transfert_logistique),
+            'can_valider_reception_admin' => $user->can('validerReceptionAdmin', $transfert_logistique),
             'activites' => $transfert_logistique->activites->map(fn ($a) => [
                 'id' => $a->id,
                 'action' => $a->action,
@@ -510,6 +512,11 @@ class TransfertLogistiqueController extends Controller
         $base['site_source_id'] = $t->site_source_id;
         $base['site_destination_id'] = $t->site_destination_id;
         $base['createur'] = $t->createur ? trim($t->createur->prenom.' '.$t->createur->nom) : null;
+
+        $base['validation_reception'] = $t->validation_reception;
+        $base['validated_by_nom'] = $t->validateur ? trim($t->validateur->prenom.' '.$t->validateur->nom) : null;
+        $base['validated_at'] = $t->validated_at?->format('d/m/Y H:i');
+        $base['validation_motif'] = $t->validation_motif;
 
         $base['lignes'] = $t->lignes->map(fn ($l) => [
             'id' => $l->id,

@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { HandCoins, MoreHorizontal, User } from 'lucide-vue-next';
+import { HandCoins, MoreHorizontal, Truck, User } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import PvDropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
@@ -24,6 +24,7 @@ interface LivreurRow {
     livreur_id: number;
     nom: string;
     telephone: string | null;
+    vehicules: string | null;
     pending: number;
     available: number;
     paid: number;
@@ -289,6 +290,11 @@ function formatPhone(tel: string | null): string {
                                 Livreur
                             </th>
                             <th
+                                class="px-4 py-3 text-left font-medium text-muted-foreground"
+                            >
+                                Véhicule(s)
+                            </th>
+                            <th
                                 class="px-4 py-3 text-right font-medium text-muted-foreground"
                             >
                                 Total cumulé
@@ -327,6 +333,16 @@ function formatPhone(tel: string | null): string {
                                         </p>
                                     </div>
                                 </div>
+                            </td>
+                            <td class="px-4 py-3">
+                                <div
+                                    v-if="l.vehicules"
+                                    class="flex items-center gap-1.5 text-sm text-muted-foreground"
+                                >
+                                    <Truck class="h-3.5 w-3.5 shrink-0" />
+                                    <span>{{ l.vehicules }}</span>
+                                </div>
+                                <span v-else class="text-xs text-muted-foreground">—</span>
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{

@@ -33,6 +33,10 @@ class TransfertLogistique extends Model
         'date_arrivee_reelle',
         'notes',
         'created_by',
+        'validation_reception',
+        'validated_by',
+        'validated_at',
+        'validation_motif',
     ];
 
     protected $appends = ['statut_label'];
@@ -45,6 +49,7 @@ class TransfertLogistique extends Model
             'date_depart_reelle' => 'date',
             'date_arrivee_prevue' => 'date',
             'date_arrivee_reelle' => 'date',
+            'validated_at' => 'datetime',
         ];
     }
 
@@ -115,6 +120,11 @@ class TransfertLogistique extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function validateur(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'validated_by');
+    }
+
     public function activites(): HasMany
     {
         return $this->hasMany(TransfertActivite::class)->orderBy('created_at');
@@ -157,5 +167,20 @@ class TransfertLogistique extends Model
     public function isTerminal(): bool
     {
         return $this->statut instanceof StatutTransfert && $this->statut->isTerminal();
+    }
+
+    public function isValideeAdmin(): bool
+    {
+        return $this->validation_reception === 'accord';
+    }
+
+    public function isRefuseeAdmin(): bool
+    {
+        return $this->validation_reception === 'refus';
+    }
+
+    public function hasValidationAdmin(): bool
+    {
+        return $this->validation_reception !== null;
     }
 }

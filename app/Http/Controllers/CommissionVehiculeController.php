@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\StatutPartCommission;
+use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPayment;
 use App\Models\Livreur;
 use App\Models\Vehicule;
@@ -59,10 +60,26 @@ class CommissionVehiculeController extends Controller
         $livreurIds = $list->pluck('livreur_id')->filter()->unique()->values()->toArray();
         $telephones = Livreur::whereIn('id', $livreurIds)->pluck('telephone', 'id');
 
+        $vehiculesParLivreur = CommissionLogistiquePart::with('commission.vehicule:id,nom_vehicule')
+            ->whereIn('livreur_id', $livreurIds)
+            ->where('type_beneficiaire', 'livreur')
+            ->whereNotNull('livreur_id')
+            ->get()
+            ->groupBy('livreur_id')
+            ->map(fn ($parts) => $parts
+                ->pluck('commission.vehicule')
+                ->filter()
+                ->unique('id')
+                ->pluck('nom_vehicule')
+                ->values()
+                ->implode(', ')
+            );
+
         $livreurs = $list->map(fn ($row) => [
             'livreur_id' => (int) $row->livreur_id,
             'nom' => $row->beneficiaire_nom,
             'telephone' => $telephones[(int) $row->livreur_id] ?? null,
+            'vehicules' => $vehiculesParLivreur[(int) $row->livreur_id] ?? null,
             'pending' => (float) $row->pending,
             'available' => (float) $row->available,
             'paid' => (float) $row->paid,
