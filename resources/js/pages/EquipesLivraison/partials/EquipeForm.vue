@@ -112,7 +112,7 @@ const proprietaireSelected = ref<ProprietaireOption | null>(
 );
 const proprietaireSuggests = ref<ProprietaireOption[]>([]);
 
-function searchProprietaire(event: { query: string }) {
+function _searchProprietaire(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
     proprietaireSuggests.value = q
         ? props.proprietaires.filter(
@@ -123,12 +123,12 @@ function searchProprietaire(event: { query: string }) {
         : [...props.proprietaires];
 }
 
-function onProprietaireSelect(p: ProprietaireOption | null) {
+function _onProprietaireSelect(p: ProprietaireOption | null) {
     // eslint-disable-next-line vue/no-mutating-props
     props.form.proprietaire_id = p ? p.value : null;
 }
 
-function onProprietaireClear() {
+function _onProprietaireClear() {
     proprietaireSelected.value = null;
     // eslint-disable-next-line vue/no-mutating-props
     props.form.proprietaire_id = null;
@@ -164,6 +164,10 @@ const principalIndex = computed(() =>
 );
 
 const hasPrincipal = computed(() => principalIndex.value >= 0);
+
+const vehiculeHasProprietaire = computed(
+    () => !!vehiculeSelected.value?.proprietaire_id,
+);
 
 const vehiculeWarning = computed(() => {
     if (!props.form.vehicule_id) {
@@ -410,34 +414,70 @@ function handleSubmit() {
                 Identification
             </h3>
             <div class="grid gap-4 sm:grid-cols-2">
-                <!-- Propriétaire (auto-renseigné depuis le véhicule) -->
+                <!-- Propriétaire -->
                 <div>
-                    <Label class="mb-1.5 block">
+                    <Label for="proprietaire_id" class="mb-1.5 block">
                         Propriétaire
                         <span class="text-destructive">*</span>
                     </Label>
+
+                    <!-- Verrouillé : auto-renseigné depuis le véhicule -->
                     <div
+                        v-if="vehiculeHasProprietaire"
                         class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
                         :class="{
                             'border-destructive': form.errors?.proprietaire_id,
                         }"
                     >
-                        <span
-                            :class="
-                                proprietaireSelected
-                                    ? 'text-foreground'
-                                    : 'text-muted-foreground'
-                            "
-                        >
-                            {{
-                                proprietaireSelected?.label ||
-                                'Automatique selon le véhicule'
-                            }}
-                        </span>
+                        <span class="text-foreground">{{
+                            proprietaireSelected?.label
+                        }}</span>
                         <Lock
                             class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
                         />
                     </div>
+
+                    <!-- Éditable : le véhicule n'a pas de propriétaire lié -->
+                    <AutoComplete
+                        v-else
+                        v-model="proprietaireSelected"
+                        input-id="proprietaire_id"
+                        :suggestions="proprietaireSuggests"
+                        option-label="label"
+                        @complete="_searchProprietaire"
+                        @item-select="
+                            _onProprietaireSelect(proprietaireSelected)
+                        "
+                        @clear="_onProprietaireClear"
+                        placeholder="Nom ou téléphone…"
+                        class="w-full"
+                        input-class="w-full"
+                        :class="{ 'p-invalid': form.errors?.proprietaire_id }"
+                        dropdown
+                        force-selection
+                    >
+                        <template #option="{ option }">
+                            <div class="py-0.5">
+                                <div class="leading-tight font-medium">
+                                    {{ option.label }}
+                                </div>
+                                <div
+                                    v-if="option.telephone"
+                                    class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                >
+                                    {{ option.telephone }}
+                                </div>
+                            </div>
+                        </template>
+                        <template #empty>
+                            <div
+                                class="px-1 py-0.5 text-sm text-muted-foreground"
+                            >
+                                Aucun résultat
+                            </div>
+                        </template>
+                    </AutoComplete>
+
                     <p
                         v-if="form.errors?.proprietaire_id"
                         class="mt-1 text-xs text-destructive"
