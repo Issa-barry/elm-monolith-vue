@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Proprietaire;
+use App\Models\Vehicule;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -112,6 +113,60 @@ class ProprietaireController extends Controller
                 'code_phone_pays' => $codePhonePays,
                 'is_active' => $proprietaire->is_active,
             ],
+        ]);
+    }
+
+    public function show(Proprietaire $proprietaire): Response
+    {
+        $this->authorize('view', $proprietaire);
+
+        $vehicules = Vehicule::query()
+            ->with(['equipe.membres.livreur'])
+            ->where('organization_id', auth()->user()->organization_id)
+            ->where('proprietaire_id', $proprietaire->id)
+            ->orderBy('nom_vehicule')
+            ->get()
+            ->map(function (Vehicule $vehicule) {
+                $livreurPrincipal = $vehicule
+                    ->equipe
+                    ?->membres
+                    ?->firstWhere('role', 'principal')
+                    ?->livreur;
+
+                return [
+                    'id' => $vehicule->id,
+                    'nom_vehicule' => $vehicule->nom_vehicule,
+                    'immatriculation' => $vehicule->immatriculation,
+                    'type_label' => $vehicule->type_label,
+                    'capacite_packs' => $vehicule->capacite_packs,
+                    'categorie' => $vehicule->categorie,
+                    'is_active' => $vehicule->is_active,
+                    'equipe_nom' => $vehicule->equipe?->nom,
+                    'livreur_principal_nom' => $livreurPrincipal
+                        ? trim($livreurPrincipal->prenom.' '.$livreurPrincipal->nom)
+                        : null,
+                ];
+            })
+            ->values();
+
+        return Inertia::render('Proprietaires/Show', [
+            'proprietaire' => [
+                'id' => $proprietaire->id,
+                'nom' => $proprietaire->nom,
+                'prenom' => $proprietaire->prenom,
+                'nom_complet' => trim($proprietaire->prenom.' '.$proprietaire->nom),
+                'email' => $proprietaire->email,
+                'telephone' => $proprietaire->telephone,
+                'code_phone_pays' => $proprietaire->code_phone_pays,
+                'ville' => $proprietaire->ville,
+                'pays' => $proprietaire->pays,
+                'code_pays' => $proprietaire->code_pays,
+                'adresse' => $proprietaire->adresse,
+                'is_active' => $proprietaire->is_active,
+                'vehicules_count' => $vehicules->count(),
+            ],
+            'vehicules' => $vehicules,
+            'can_create_vehicule' => auth()->user()->can('vehicules.create'),
         ]);
     }
 

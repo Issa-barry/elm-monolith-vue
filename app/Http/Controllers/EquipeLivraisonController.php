@@ -224,7 +224,8 @@ class EquipeLivraisonController extends Controller
 
     private function vehiculesOptions(int $orgId, ?int $currentEquipeId = null): array
     {
-        return Vehicule::where('organization_id', $orgId)
+        return Vehicule::with('proprietaire')
+            ->where('organization_id', $orgId)
             ->where('is_active', true)
             ->whereNull('deleted_at')
             ->where(function ($q) use ($currentEquipeId) {
@@ -243,6 +244,8 @@ class EquipeLivraisonController extends Controller
                 'immatriculation' => $v->immatriculation,
                 'categorie' => $v->categorie,
                 'type_label' => $v->type_label,
+                'proprietaire_id' => $v->proprietaire_id,
+                'proprietaire_nom' => $v->proprietaire ? trim("{$v->proprietaire->prenom} {$v->proprietaire->nom}") : null,
             ])
             ->toArray();
     }

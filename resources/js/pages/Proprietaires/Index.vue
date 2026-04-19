@@ -16,6 +16,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    Eye,
     Home,
     MoreVertical,
     Pencil,
@@ -212,7 +213,12 @@ function confirmDelete(p: Proprietaire) {
                     <!-- Info -->
                     <div class="min-w-0 flex-1">
                         <div class="truncate text-sm font-medium">
-                            {{ p.nom_complet }}
+                            <Link
+                                :href="`/proprietaires/${p.id}`"
+                                class="hover:underline"
+                            >
+                                {{ p.nom_complet }}
+                            </Link>
                         </div>
                         <div
                             v-if="p.email"
@@ -258,6 +264,21 @@ function confirmDelete(p: Proprietaire) {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" class="w-44">
+                            <DropdownMenuItem as-child>
+                                <Link
+                                    :href="`/proprietaires/${p.id}`"
+                                    class="flex w-full items-center gap-2"
+                                >
+                                    <Eye class="h-4 w-4" />
+                                    Details
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator
+                                v-if="
+                                    can('proprietaires.update') ||
+                                    can('proprietaires.delete')
+                                "
+                            />
                             <DropdownMenuItem
                                 v-if="can('proprietaires.update')"
                                 as-child
@@ -459,9 +480,12 @@ function confirmDelete(p: Proprietaire) {
                                     {{ initials(data.nom_complet) }}
                                 </div>
                                 <div>
-                                    <div class="font-medium">
+                                    <Link
+                                        :href="`/proprietaires/${data.id}`"
+                                        class="font-medium hover:underline"
+                                    >
                                         {{ data.nom_complet }}
-                                    </div>
+                                    </Link>
                                     <div
                                         v-if="data.email"
                                         class="text-xs text-muted-foreground"
@@ -552,6 +576,21 @@ function confirmDelete(p: Proprietaire) {
                                         align="end"
                                         class="w-44"
                                     >
+                                        <DropdownMenuItem as-child>
+                                            <Link
+                                                :href="`/proprietaires/${data.id}`"
+                                                class="flex w-full items-center gap-2"
+                                            >
+                                                <Eye class="h-4 w-4" />
+                                                Details
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator
+                                            v-if="
+                                                can('proprietaires.update') ||
+                                                can('proprietaires.delete')
+                                            "
+                                        />
                                         <DropdownMenuItem
                                             v-if="can('proprietaires.update')"
                                             as-child

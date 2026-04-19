@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { formatPhoneDisplay } from '@/lib/utils';
-import { AlertTriangle, Pencil, Plus, Save, Trash2 } from 'lucide-vue-next';
+import { AlertTriangle, Lock, Pencil, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import InputNumber from 'primevue/inputnumber';
 import { useConfirm } from 'primevue/useconfirm';
@@ -16,6 +16,8 @@ interface VehiculeOption {
     immatriculation: string;
     categorie: string;
     type_label: string;
+    proprietaire_id: number | null;
+    proprietaire_nom: string | null;
 }
 
 type Membre = MembreFormData;
@@ -68,12 +70,31 @@ function searchVehicule(event: { query: string }) {
 function onVehiculeSelect(v: VehiculeOption | null) {
     // eslint-disable-next-line vue/no-mutating-props
     props.form.vehicule_id = v ? v.value : null;
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.nom = v ? v.label : '';
+    if (v?.proprietaire_id) {
+        const prop = props.proprietaires.find(
+            (p) => p.value === v.proprietaire_id,
+        );
+        proprietaireSelected.value = prop ?? null;
+        // eslint-disable-next-line vue/no-mutating-props
+        props.form.proprietaire_id = v.proprietaire_id;
+    } else {
+        proprietaireSelected.value = null;
+        // eslint-disable-next-line vue/no-mutating-props
+        props.form.proprietaire_id = null;
+    }
 }
 
 function onVehiculeClear() {
     vehiculeSelected.value = null;
     // eslint-disable-next-line vue/no-mutating-props
     props.form.vehicule_id = null;
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.nom = '';
+    proprietaireSelected.value = null;
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.proprietaire_id = null;
 }
 
 // ── AutoComplete : Propriétaire ───────────────────────────────────────────────
@@ -356,15 +377,15 @@ function handleSubmit() {
                 Nom de l'équipe
                 <span class="text-destructive">*</span>
             </Label>
-            <!-- eslint-disable vue/no-mutating-props -->
-            <input
-                id="nom"
-                v-model="form.nom"
-                type="text"
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            <div
+                class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
                 :class="{ 'border-destructive': form.errors?.nom }"
-            />
-            <!-- eslint-enable vue/no-mutating-props -->
+            >
+                <span :class="form.nom ? 'text-foreground' : 'text-muted-foreground'">
+                    {{ form.nom || 'Sélectionnez un véhicule…' }}
+                </span>
+                <Lock class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+            </div>
             <p v-if="form.errors?.nom" class="mt-1 text-xs text-destructive">
                 {{ form.errors.nom }}
             </p>
@@ -378,54 +399,23 @@ function handleSubmit() {
                 Identification
             </h3>
             <div class="grid gap-4 sm:grid-cols-2">
-                <!-- Propriétaire -->
+                <!-- Propriétaire (auto-renseigné depuis le véhicule) -->
                 <div>
-                    <Label for="proprietaire_id" class="mb-1.5 block">
+                    <Label class="mb-1.5 block">
                         Propriétaire
                         <span class="text-destructive">*</span>
                     </Label>
-                    <AutoComplete
-                        v-model="proprietaireSelected"
-                        input-id="proprietaire_id"
-                        :suggestions="proprietaireSuggests"
-                        option-label="label"
-                        @complete="searchProprietaire"
-                        @item-select="
-                            onProprietaireSelect(proprietaireSelected)
-                        "
-                        @clear="onProprietaireClear"
-                        placeholder="Nom ou téléphone…"
-                        class="w-full"
-                        input-class="w-full"
-                        :class="{ 'p-invalid': form.errors?.proprietaire_id }"
-                        dropdown
-                        force-selection
+                    <div
+                        class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
+                        :class="{ 'border-destructive': form.errors?.proprietaire_id }"
                     >
-                        <template #option="{ option }">
-                            <div class="py-0.5">
-                                <div class="leading-tight font-medium">
-                                    {{ option.label }}
-                                </div>
-                                <div
-                                    v-if="option.telephone"
-                                    class="mt-0.5 font-mono text-xs text-muted-foreground"
-                                >
-                                    {{ option.telephone }}
-                                </div>
-                            </div>
-                        </template>
-                        <template #empty>
-                            <div
-                                class="px-1 py-0.5 text-sm text-muted-foreground"
-                            >
-                                Aucun résultat
-                            </div>
-                        </template>
-                    </AutoComplete>
+                        <span :class="proprietaireSelected ? 'text-foreground' : 'text-muted-foreground'">
+                            {{ proprietaireSelected?.label || 'Automatique selon le véhicule' }}
+                        </span>
+                        <Lock class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                    </div>
                     <p
-                        v-if="
-                            proprietaireWarning && form.errors?.proprietaire_id
-                        "
+                        v-if="form.errors?.proprietaire_id"
                         class="mt-1 text-xs text-destructive"
                     >
                         {{ form.errors.proprietaire_id }}
