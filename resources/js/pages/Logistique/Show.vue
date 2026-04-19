@@ -411,10 +411,7 @@ const needsQuantite = computed(() =>
 );
 
 const totalQuantiteRecue = computed(() =>
-    props.transfert.lignes.reduce(
-        (sum, l) => sum + (l.quantite_recue ?? 0),
-        0,
-    ),
+    props.transfert.lignes.reduce((sum, l) => sum + (l.quantite_recue ?? 0), 0),
 );
 
 const gainPreview = computed(() => {
@@ -1461,9 +1458,7 @@ function activiteDotClass(action: string): string {
                     </p>
                 </div>
                 <div v-if="needsQuantite">
-                    <Label class="mb-1.5 block text-sm"
-                        >Qté réceptionnée</Label
-                    >
+                    <Label class="mb-1.5 block text-sm">Qté réceptionnée</Label>
                     <InputNumber
                         v-model="commissionForm.quantite_reference"
                         :min="1"
@@ -1495,11 +1490,9 @@ function activiteDotClass(action: string): string {
                         Commission totale estimée
                     </p>
                     <p
-                        class="mt-0.5 text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-400"
+                        class="mt-0.5 text-lg font-bold text-emerald-700 tabular-nums dark:text-emerald-400"
                     >
-                        {{
-                            new Intl.NumberFormat('fr-FR').format(gainPreview)
-                        }}
+                        {{ new Intl.NumberFormat('fr-FR').format(gainPreview) }}
                         GNF
                     </p>
                 </div>

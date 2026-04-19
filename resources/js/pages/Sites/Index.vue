@@ -169,9 +169,14 @@ function exportExcel(): void {
         { label: 'sites_enfants', value: (s) => s.enfants_count },
     ];
 
-    const header = columns.map((c) => `<th>${escapeHtml(c.label)}</th>`).join('');
+    const header = columns
+        .map((c) => `<th>${escapeHtml(c.label)}</th>`)
+        .join('');
     const body = rows
-        .map((s) => `<tr>${columns.map((c) => toExcelCell(c.value(s))).join('')}</tr>`)
+        .map(
+            (s) =>
+                `<tr>${columns.map((c) => toExcelCell(c.value(s))).join('')}</tr>`,
+        )
         .join('');
 
     const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"/></head><body><table border="1"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></body></html>`;

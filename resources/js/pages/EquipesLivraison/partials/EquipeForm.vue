@@ -3,7 +3,14 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { formatPhoneDisplay } from '@/lib/utils';
-import { AlertTriangle, Lock, Pencil, Plus, Save, Trash2 } from 'lucide-vue-next';
+import {
+    AlertTriangle,
+    Lock,
+    Pencil,
+    Plus,
+    Save,
+    Trash2,
+} from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import InputNumber from 'primevue/inputnumber';
 import { useConfirm } from 'primevue/useconfirm';
@@ -381,7 +388,11 @@ function handleSubmit() {
                 class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
                 :class="{ 'border-destructive': form.errors?.nom }"
             >
-                <span :class="form.nom ? 'text-foreground' : 'text-muted-foreground'">
+                <span
+                    :class="
+                        form.nom ? 'text-foreground' : 'text-muted-foreground'
+                    "
+                >
                     {{ form.nom || 'Sélectionnez un véhicule…' }}
                 </span>
                 <Lock class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
@@ -407,12 +418,25 @@ function handleSubmit() {
                     </Label>
                     <div
                         class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
-                        :class="{ 'border-destructive': form.errors?.proprietaire_id }"
+                        :class="{
+                            'border-destructive': form.errors?.proprietaire_id,
+                        }"
                     >
-                        <span :class="proprietaireSelected ? 'text-foreground' : 'text-muted-foreground'">
-                            {{ proprietaireSelected?.label || 'Automatique selon le véhicule' }}
+                        <span
+                            :class="
+                                proprietaireSelected
+                                    ? 'text-foreground'
+                                    : 'text-muted-foreground'
+                            "
+                        >
+                            {{
+                                proprietaireSelected?.label ||
+                                'Automatique selon le véhicule'
+                            }}
                         </span>
-                        <Lock class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                        <Lock
+                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                        />
                     </div>
                     <p
                         v-if="form.errors?.proprietaire_id"

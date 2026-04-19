@@ -507,9 +507,27 @@ function submit() {
                         }}
                         · Quantité saisie: {{ quantiteTotale }} packs
                         <template v-if="capaciteVehiculeSelectionne !== null">
-                            <span v-if="capaciteVehiculeConforme"> — capacité atteinte ✓</span>
-                            <span v-else-if="quantiteTotale < capaciteVehiculeSelectionne"> — {{ capaciteVehiculeSelectionne - quantiteTotale }} pack(s) manquant(s)</span>
-                            <span v-else> — {{ quantiteTotale - capaciteVehiculeSelectionne }} pack(s) en trop</span>
+                            <span v-if="capaciteVehiculeConforme">
+                                — capacité atteinte ✓</span
+                            >
+                            <span
+                                v-else-if="
+                                    quantiteTotale < capaciteVehiculeSelectionne
+                                "
+                            >
+                                —
+                                {{
+                                    capaciteVehiculeSelectionne - quantiteTotale
+                                }}
+                                pack(s) manquant(s)</span
+                            >
+                            <span v-else>
+                                —
+                                {{
+                                    quantiteTotale - capaciteVehiculeSelectionne
+                                }}
+                                pack(s) en trop</span
+                            >
                         </template>
                     </p>
 
