@@ -312,10 +312,10 @@ function submit() {
                 <h1 class="text-2xl font-semibold tracking-tight">
                     Nouvelle commande de vente
                 </h1>
-                <p class="mt-1 text-sm text-muted-foreground">
+                <!-- <p class="mt-1 text-sm text-muted-foreground">
                     Créez une commande et sa facture sera générée
                     automatiquement.
-                </p>
+                </p> -->
             </div>
 
             <form id="vente-form" class="space-y-6" @submit.prevent="submit">

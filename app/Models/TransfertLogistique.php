@@ -3,25 +3,29 @@
 namespace App\Models;
 
 use App\Enums\StatutTransfert;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 
 class TransfertLogistique extends Model
 {
-    use SoftDeletes;
+    use HasUlids, SoftDeletes;
 
     protected $table = 'transferts_logistiques';
 
-    private const TEMP_PREFIX = 'TMP-TRF-';
+    private const TEMP_PREFIX = 'TMP-TR-';
+
+    private const CODE_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
     protected $fillable = [
         'organization_id',
         'reference',
+        'code_confirmation',
         'site_source_id',
         'site_destination_id',
         'vehicule_id',
@@ -37,6 +41,7 @@ class TransfertLogistique extends Model
         'validated_by',
         'validated_at',
         'validation_motif',
+        'numero',
     ];
 
     protected $appends = ['statut_label'];
@@ -53,11 +58,23 @@ class TransfertLogistique extends Model
         ];
     }
 
+    private static function generateConfirmationCode(): string
+    {
+        $charset = self::CODE_CHARSET;
+        $len = strlen($charset);
+
+        return $charset[random_int(0, $len - 1)]
+            .$charset[random_int(0, $len - 1)]
+            .$charset[random_int(0, $len - 1)];
+    }
+
     protected static function booted(): void
     {
         static::creating(function (TransfertLogistique $t) {
             if (empty($t->reference)) {
-                $t->reference = self::TEMP_PREFIX.Str::uuid();
+                $t->numero = (DB::table('transferts_logistiques')->max('numero') ?? 0) + 1;
+                $t->code_confirmation = self::generateConfirmationCode();
+                $t->reference = self::TEMP_PREFIX.bin2hex(random_bytes(6));
             }
             if (empty($t->statut)) {
                 $t->statut = StatutTransfert::BROUILLON;
@@ -71,8 +88,9 @@ class TransfertLogistique extends Model
             if (! str_starts_with((string) $t->reference, self::TEMP_PREFIX)) {
                 return;
             }
-            $ref = 'TRF-'.($t->created_at ?? now())->format('Ymd').'-'.str_pad((string) $t->id, 4, '0', STR_PAD_LEFT);
-            $t->newQueryWithoutScopes()->whereKey($t->id)->update(['reference' => $ref]);
+            $code = $t->code_confirmation ?? self::generateConfirmationCode();
+            $ref = 'TR-'.str_pad((string) $t->numero, 5, '0', STR_PAD_LEFT).'-'.$code;
+            $t->newQueryWithoutScopes()->whereKey($t->id)->update(['reference' => $ref, 'code_confirmation' => $code]);
             $t->reference = $ref;
             $t->syncOriginalAttribute('reference');
         });

@@ -13,8 +13,9 @@ import {
     Pencil,
     Plus,
     UserRound,
+    X,
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 interface ProprietaireData {
     id: number;
@@ -36,6 +37,7 @@ interface VehiculeRow {
     id: number;
     nom_vehicule: string;
     immatriculation: string | null;
+    photo_url: string | null;
     type_label: string;
     capacite_packs: number | null;
     categorie: string | null;
@@ -78,6 +80,27 @@ const locationLabel = computed(() => {
 function flagUrl(code: string) {
     return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
 }
+
+const lightboxUrl = ref<string | null>(null);
+const lightboxAlt = ref('');
+
+function openLightbox(url: string, alt: string) {
+    lightboxUrl.value = url;
+    lightboxAlt.value = alt;
+}
+
+function closeLightbox() {
+    lightboxUrl.value = null;
+}
+
+function onKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+        closeLightbox();
+    }
+}
+
+onMounted(() => document.addEventListener('keydown', onKeydown));
+onUnmounted(() => document.removeEventListener('keydown', onKeydown));
 </script>
 
 <template>
@@ -127,15 +150,6 @@ function flagUrl(code: string) {
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
                             Retour
-                        </Button>
-                    </Link>
-                    <Link
-                        v-if="can('proprietaires.update')"
-                        :href="`/proprietaires/${proprietaire.id}/edit`"
-                    >
-                        <Button size="sm">
-                            <Pencil class="mr-1.5 h-4 w-4" />
-                            Modifier
                         </Button>
                     </Link>
                 </div>
@@ -189,11 +203,22 @@ function flagUrl(code: string) {
                     v-if="activeTab === 'informations'"
                     class="rounded-xl border bg-card p-5 sm:p-6"
                 >
-                    <h2
-                        class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                    >
-                        Informations du proprietaire
-                    </h2>
+                    <div class="flex items-center justify-between gap-2">
+                        <h2
+                            class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
+                            Informations du proprietaire
+                        </h2>
+                        <Link
+                            v-if="can('proprietaires.update')"
+                            :href="`/proprietaires/${proprietaire.id}/edit`"
+                        >
+                            <Button size="sm" variant="outline">
+                                <Pencil class="mr-1.5 h-4 w-4" />
+                                Modifier
+                            </Button>
+                        </Link>
+                    </div>
                     <div class="mt-5 grid gap-4 sm:grid-cols-2">
                         <div class="rounded-lg border bg-background p-4">
                             <p class="text-xs text-muted-foreground">
@@ -288,6 +313,7 @@ function flagUrl(code: string) {
                                 class="bg-muted/30 text-left text-muted-foreground"
                             >
                                 <tr>
+                                    <th class="px-4 py-3 font-medium">Photo</th>
                                     <th class="px-4 py-3 font-medium">
                                         Vehicule
                                     </th>
@@ -304,6 +330,9 @@ function flagUrl(code: string) {
                                     <th class="px-4 py-3 font-medium">
                                         Statut
                                     </th>
+                                    <th class="px-4 py-3 font-medium">
+                                        Action
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
@@ -312,6 +341,38 @@ function flagUrl(code: string) {
                                     :key="vehicule.id"
                                     class="hover:bg-muted/20"
                                 >
+                                    <td class="px-4 py-3">
+                                        <div
+                                            class="h-10 w-10 overflow-hidden rounded-lg border bg-muted"
+                                            :class="
+                                                vehicule.photo_url
+                                                    ? 'cursor-zoom-in'
+                                                    : ''
+                                            "
+                                            @click="
+                                                vehicule.photo_url &&
+                                                openLightbox(
+                                                    vehicule.photo_url,
+                                                    vehicule.nom_vehicule,
+                                                )
+                                            "
+                                        >
+                                            <img
+                                                v-if="vehicule.photo_url"
+                                                :src="vehicule.photo_url"
+                                                :alt="vehicule.nom_vehicule"
+                                                class="h-full w-full object-cover"
+                                            />
+                                            <div
+                                                v-else
+                                                class="flex h-full w-full items-center justify-center"
+                                            >
+                                                <Car
+                                                    class="h-5 w-5 text-muted-foreground/40"
+                                                />
+                                            </div>
+                                        </div>
+                                    </td>
                                     <td class="px-4 py-3">
                                         <Link
                                             v-if="can('vehicules.read')"
@@ -370,6 +431,24 @@ function flagUrl(code: string) {
                                             class="text-muted-foreground"
                                         />
                                     </td>
+                                    <td class="px-4 py-3">
+                                        <Link
+                                            v-if="can('vehicules.update')"
+                                            :href="`/vehicules/${vehicule.id}/edit`"
+                                        >
+                                            <Button size="sm" variant="outline">
+                                                <Pencil
+                                                    class="mr-1.5 h-4 w-4"
+                                                />
+                                                Modifier
+                                            </Button>
+                                        </Link>
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
+                                            >-</span
+                                        >
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -377,5 +456,30 @@ function flagUrl(code: string) {
                 </div>
             </div>
         </div>
+        <Teleport to="body">
+            <div
+                v-if="lightboxUrl"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+                @click.self="closeLightbox"
+            >
+                <div class="relative max-h-full max-w-3xl">
+                    <button
+                        type="button"
+                        class="absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+                        @click="closeLightbox"
+                    >
+                        <X class="h-5 w-5" />
+                    </button>
+                    <img
+                        :src="lightboxUrl"
+                        :alt="lightboxAlt"
+                        class="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl"
+                    />
+                    <p class="mt-2 text-center text-sm text-white/70">
+                        {{ lightboxAlt }}
+                    </p>
+                </div>
+            </div>
+        </Teleport>
     </AppLayout>
 </template>

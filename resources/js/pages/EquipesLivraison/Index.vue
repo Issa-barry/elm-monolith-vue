@@ -19,6 +19,7 @@ import DataTable from 'primevue/datatable';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
@@ -125,23 +126,17 @@ function confirmDelete(equipe: Equipe) {
                         placeholder="recherche"
                     />
                 </IconField>
-                <div class="flex gap-1.5">
-                    <Button
-                        v-for="opt in [
-                            { value: 'tous', label: 'Tous' },
-                            { value: 'actif', label: 'Actif' },
-                            { value: 'inactif', label: 'Inactif' },
-                        ] as const"
-                        :key="opt.value"
-                        :variant="
-                            statutFilter === opt.value ? 'default' : 'outline'
-                        "
-                        size="sm"
-                        @click="statutFilter = opt.value"
-                    >
-                        {{ opt.label }}
-                    </Button>
-                </div>
+                <Select
+                    v-model="statutFilter"
+                    :options="[
+                        { value: 'tous', label: 'Tous' },
+                        { value: 'actif', label: 'Actif' },
+                        { value: 'inactif', label: 'Inactif' },
+                    ]"
+                    option-label="label"
+                    option-value="value"
+                    class="w-32"
+                />
             </div>
 
             <!-- Tableau -->

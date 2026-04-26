@@ -69,7 +69,7 @@ class VehiculeTest extends TestCase
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
 
-        $this->actingAs($this->user)
+        $response = $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion 01',
                 'immatriculation' => 'RC-001-GN',
@@ -79,8 +79,14 @@ class VehiculeTest extends TestCase
                 'capacite_packs' => 200,
                 'is_active' => true,
                 'pris_en_charge_par_usine' => false,
-            ])
-            ->assertRedirect(route('vehicules.index'));
+            ]);
+
+        $vehicule = Vehicule::query()
+            ->where('organization_id', $this->org->id)
+            ->where('immatriculation', 'RC-001-GN')
+            ->firstOrFail();
+
+        $response->assertRedirect(route('vehicules.edit', $vehicule));
 
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,
@@ -91,7 +97,7 @@ class VehiculeTest extends TestCase
 
     public function test_store_creates_vehicule_interne(): void
     {
-        $this->actingAs($this->user)
+        $response = $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Moto 01',
                 'immatriculation' => 'MO-001-GN',
@@ -100,8 +106,14 @@ class VehiculeTest extends TestCase
                 'capacite_packs' => 50,
                 'is_active' => true,
                 'pris_en_charge_par_usine' => false,
-            ])
-            ->assertRedirect(route('vehicules.index'));
+            ]);
+
+        $vehicule = Vehicule::query()
+            ->where('organization_id', $this->org->id)
+            ->where('immatriculation', 'MO-001-GN')
+            ->firstOrFail();
+
+        $response->assertRedirect(route('vehicules.edit', $vehicule));
 
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,

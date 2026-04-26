@@ -76,10 +76,10 @@ class CommissionVehiculeController extends Controller
             );
 
         $livreurs = $list->map(fn ($row) => [
-            'livreur_id' => (int) $row->livreur_id,
+            'livreur_id' => $row->livreur_id,
             'nom' => $row->beneficiaire_nom,
-            'telephone' => $telephones[(int) $row->livreur_id] ?? null,
-            'vehicules' => $vehiculesParLivreur[(int) $row->livreur_id] ?? null,
+            'telephone' => $telephones[$row->livreur_id] ?? null,
+            'vehicules' => $vehiculesParLivreur[$row->livreur_id] ?? null,
             'pending' => (float) $row->pending,
             'available' => (float) $row->available,
             'paid' => (float) $row->paid,
@@ -99,7 +99,7 @@ class CommissionVehiculeController extends Controller
     /**
      * GET /logistique/commissions/livreurs/{livreurId}
      */
-    public function showLivreur(Request $request, int $livreurId): Response
+    public function showLivreur(Request $request, string $livreurId): Response
     {
         $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
 
@@ -294,7 +294,7 @@ class CommissionVehiculeController extends Controller
     /**
      * GET /logistique/commissions/vehicules/{vehicule}/beneficiaires/{type}/{id}
      */
-    public function releve(Request $request, Vehicule $vehicule, string $type, int $beneficiaireId): Response
+    public function releve(Request $request, Vehicule $vehicule, string $type, string $beneficiaireId): Response
     {
         $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
         abort_unless($vehicule->organization_id === auth()->user()->organization_id, 403);

@@ -43,6 +43,7 @@ class EquipeLivraisonController extends Controller
             'proprietaires' => $this->proprietairesOptions($orgId),
             'tauxProprietaireDefaut' => Parametre::getTauxProprietaireDefaut($orgId),
             'vehicules' => $this->vehiculesOptions($orgId),
+            'currentSiteName' => $this->currentSiteName(),
         ]);
     }
 
@@ -51,20 +52,26 @@ class EquipeLivraisonController extends Controller
         $this->authorize('create', EquipeLivraison::class);
 
         $orgId = auth()->user()->organization_id;
+        $vehiculeSelectionne = $this->selectedVehicule($orgId, $request);
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
             'nom' => ['required', 'string', 'max:100', Rule::unique('equipes_livraison', 'nom')->where('organization_id', $orgId)->whereNull('deleted_at')],
             'is_active' => 'boolean',
             'vehicule_id' => [
-                'required', 'integer',
+                'required', 'string',
                 Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
                 Rule::unique('equipes_livraison', 'vehicule_id')->whereNull('deleted_at'),
             ],
-            'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
+            'proprietaire_id' => [
+                Rule::requiredIf(fn () => $this->isVehiculeExterne($vehiculeSelectionne)),
+                'nullable',
+                'string',
+                Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
+            ],
             'taux_commission_proprietaire' => 'required|numeric|min:0|max:100',
             'membres' => 'required|array|min:1',
-            'membres.*.livreur_id' => 'nullable|integer',
+            'membres.*.livreur_id' => 'nullable|string',
             'membres.*.nom' => 'required|string|max:255',
             'membres.*.prenom' => 'required|string|max:255',
             'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
@@ -72,6 +79,10 @@ class EquipeLivraisonController extends Controller
             'membres.*.taux_commission' => 'required|numeric|min:0|max:100',
             'membres.*.ordre' => 'nullable|integer|min:0',
         ], $this->messages());
+
+        if ($vehiculeSelectionne?->categorie === 'interne') {
+            $data['proprietaire_id'] = null;
+        }
 
         $this->validatePrincipal($data['membres']);
         $this->validateUniquePhones($data['membres']);
@@ -116,6 +127,7 @@ class EquipeLivraisonController extends Controller
             'proprietaires' => $this->proprietairesOptions($orgId),
             'tauxProprietaireDefaut' => Parametre::getTauxProprietaireDefaut($orgId),
             'vehicules' => $this->vehiculesOptions($orgId, $equipes_livraison->id),
+            'currentSiteName' => $this->currentSiteName(),
         ]);
     }
 
@@ -124,19 +136,25 @@ class EquipeLivraisonController extends Controller
         $this->authorize('update', $equipes_livraison);
 
         $orgId = auth()->user()->organization_id;
+        $vehiculeSelectionne = $this->selectedVehicule($orgId, $request);
 
         $data = $request->validate([
             'nom' => ['required', 'string', 'max:100', Rule::unique('equipes_livraison', 'nom')->where('organization_id', $orgId)->whereNull('deleted_at')->ignore($equipes_livraison->id)],
             'is_active' => 'boolean',
             'vehicule_id' => [
-                'required', 'integer',
+                'required', 'string',
                 Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
                 Rule::unique('equipes_livraison', 'vehicule_id')->whereNull('deleted_at')->ignore($equipes_livraison->id),
             ],
-            'proprietaire_id' => ['required', 'integer', Rule::exists('proprietaires', 'id')->where('organization_id', $orgId)],
+            'proprietaire_id' => [
+                Rule::requiredIf(fn () => $this->isVehiculeExterne($vehiculeSelectionne)),
+                'nullable',
+                'string',
+                Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
+            ],
             'taux_commission_proprietaire' => 'required|numeric|min:0|max:100',
             'membres' => 'required|array|min:1',
-            'membres.*.livreur_id' => 'nullable|integer',
+            'membres.*.livreur_id' => 'nullable|string',
             'membres.*.nom' => 'required|string|max:255',
             'membres.*.prenom' => 'required|string|max:255',
             'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
@@ -144,6 +162,10 @@ class EquipeLivraisonController extends Controller
             'membres.*.taux_commission' => 'required|numeric|min:0|max:100',
             'membres.*.ordre' => 'nullable|integer|min:0',
         ], $this->messages());
+
+        if ($vehiculeSelectionne?->categorie === 'interne') {
+            $data['proprietaire_id'] = null;
+        }
 
         $this->validatePrincipal($data['membres']);
         $this->validateUniquePhones($data['membres']);
@@ -222,7 +244,7 @@ class EquipeLivraisonController extends Controller
         ];
     }
 
-    private function vehiculesOptions(int $orgId, ?int $currentEquipeId = null): array
+    private function vehiculesOptions(string $orgId, ?string $currentEquipeId = null): array
     {
         return Vehicule::with('proprietaire')
             ->where('organization_id', $orgId)
@@ -250,7 +272,7 @@ class EquipeLivraisonController extends Controller
             ->toArray();
     }
 
-    private function proprietairesOptions(int $orgId): array
+    private function proprietairesOptions(string $orgId): array
     {
         return Proprietaire::where('organization_id', $orgId)
             ->where('is_active', true)
@@ -264,11 +286,39 @@ class EquipeLivraisonController extends Controller
             ->toArray();
     }
 
+    private function selectedVehicule(string $orgId, Request $request): ?Vehicule
+    {
+        $vehiculeId = $request->input('vehicule_id');
+        if (! $vehiculeId) {
+            return null;
+        }
+
+        return Vehicule::query()
+            ->where('organization_id', $orgId)
+            ->whereNull('deleted_at')
+            ->find($vehiculeId);
+    }
+
+    private function isVehiculeExterne(?Vehicule $vehicule): bool
+    {
+        return $vehicule?->categorie === 'externe';
+    }
+
+    private function currentSiteName(): string
+    {
+        $user = auth()->user();
+
+        return ($user->sites()->wherePivot('is_default', true)->first()
+            ?? $user->sites()->first())?->nom
+            ?? $user->organization?->nom
+            ?? '';
+    }
+
     /**
      * Retrouve un livreur existant (par livreur_id ou par téléphone+org) ou en crée un nouveau.
      * Met à jour les données du livreur si elles ont changé.
      */
-    private function resolveOrCreateLivreur(array $m, int $orgId): Livreur
+    private function resolveOrCreateLivreur(array $m, string $orgId): Livreur
     {
         if (! empty($m['livreur_id'])) {
             $livreur = Livreur::where('id', $m['livreur_id'])
@@ -293,7 +343,7 @@ class EquipeLivraisonController extends Controller
     /**
      * Vérifie qu'aucun livreur (identifié par son téléphone) n'est déjà membre d'une autre équipe active.
      */
-    private function validateMembresExclusivite(array $membres, int $orgId, ?int $equipeIdCourant = null): void
+    private function validateMembresExclusivite(array $membres, string $orgId, ?string $equipeIdCourant = null): void
     {
         foreach ($membres as $index => $m) {
             $livreur = Livreur::where('telephone', $m['telephone'])

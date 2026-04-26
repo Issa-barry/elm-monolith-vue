@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -12,7 +13,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, HasRoles, Notifiable, TwoFactorAuthenticatable;
+    use HasFactory, HasRoles, HasUlids, Notifiable, TwoFactorAuthenticatable;
 
     protected $fillable = [
         'prenom',
@@ -59,6 +60,7 @@ class User extends Authenticatable
     public function sites(): BelongsToMany
     {
         return $this->belongsToMany(Site::class, 'user_sites')
+            ->using(UserSite::class)
             ->withPivot('role', 'is_default')
             ->withTimestamps();
     }
@@ -66,7 +68,7 @@ class User extends Authenticatable
     /**
      * Indique si l'utilisateur est affecté à un site donné (via user_sites).
      */
-    public function isAssignedToSite(int $siteId): bool
+    public function isAssignedToSite(string $siteId): bool
     {
         return $this->sites()->where('sites.id', $siteId)->exists();
     }

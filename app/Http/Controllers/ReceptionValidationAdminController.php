@@ -23,28 +23,28 @@ class ReceptionValidationAdminController extends Controller
 
         $data = $request->validate([
             'decision' => ['required', 'in:accord,refus'],
-            'motif'    => ['nullable', 'string', 'max:1000', 'required_if:decision,refus'],
+            'motif' => ['nullable', 'string', 'max:1000', 'required_if:decision,refus'],
         ], [
-            'decision.required'    => 'La décision est obligatoire.',
-            'decision.in'          => 'La décision doit être "accord" ou "refus".',
-            'motif.required_if'    => 'Le motif est obligatoire en cas de refus.',
+            'decision.required' => 'La décision est obligatoire.',
+            'decision.in' => 'La décision doit être "accord" ou "refus".',
+            'motif.required_if' => 'Le motif est obligatoire en cas de refus.',
         ]);
 
         $isAccord = $data['decision'] === 'accord';
 
         $transfert_logistique->update([
             'validation_reception' => $data['decision'],
-            'validated_by'         => auth()->id(),
-            'validated_at'         => now(),
-            'validation_motif'     => $isAccord ? null : ($data['motif'] ?? null),
+            'validated_by' => auth()->id(),
+            'validated_at' => now(),
+            'validation_motif' => $isAccord ? null : ($data['motif'] ?? null),
         ]);
 
         if ($isAccord) {
             try {
                 $commission = CommissionLogistiqueService::genererAutomatique($transfert_logistique);
                 TransfertActiviteService::log($transfert_logistique, 'validation_admin_accord', [
-                    'commission_id'  => $commission->id,
-                    'montant_total'  => $commission->montant_total,
+                    'commission_id' => $commission->id,
+                    'montant_total' => $commission->montant_total,
                     'quantite_packs' => $commission->quantite_reference,
                 ]);
             } catch (\InvalidArgumentException $e) {

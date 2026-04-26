@@ -11,7 +11,6 @@ import {
     CheckCircle2,
     ChevronRight,
     FileEdit,
-    HandCoins,
     History,
     MapPin,
     Package,
@@ -1065,12 +1064,19 @@ function activiteDotClass(action: string): string {
                                 "
                                 class="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950/30"
                             >
-                                <div class="flex items-center gap-2 text-red-700 dark:text-red-400">
+                                <div
+                                    class="flex items-center gap-2 text-red-700 dark:text-red-400"
+                                >
                                     <ShieldX class="h-4 w-4 shrink-0" />
-                                    <span class="font-semibold text-sm">Réception refusée</span>
+                                    <span class="text-sm font-semibold"
+                                        >Réception refusée</span
+                                    >
                                 </div>
-                                <p class="mt-1 text-xs text-red-600 dark:text-red-400">
-                                    Par {{ transfert.validated_by_nom }} le {{ transfert.validated_at }}
+                                <p
+                                    class="mt-1 text-xs text-red-600 dark:text-red-400"
+                                >
+                                    Par {{ transfert.validated_by_nom }} le
+                                    {{ transfert.validated_at }}
                                 </p>
                                 <p
                                     v-if="transfert.validation_motif"
@@ -1082,7 +1088,8 @@ function activiteDotClass(action: string): string {
                                     v-if="can_valider_reception_admin"
                                     class="mt-2 text-xs text-muted-foreground"
                                 >
-                                    Vous pouvez cliquer "D'accord" pour approuver et générer la commission.
+                                    Vous pouvez cliquer "D'accord" pour
+                                    approuver et générer la commission.
                                 </p>
                             </div>
 
@@ -1091,12 +1098,17 @@ function activiteDotClass(action: string): string {
                                 v-else
                                 class="px-5 py-8 text-center text-sm text-muted-foreground"
                             >
-                                <ShieldCheck class="mx-auto mb-2 h-8 w-8 opacity-30" />
-                                <p class="font-medium">En attente de validation admin</p>
+                                <ShieldCheck
+                                    class="mx-auto mb-2 h-8 w-8 opacity-30"
+                                />
+                                <p class="font-medium">
+                                    En attente de validation admin
+                                </p>
                                 <p class="mt-1 text-xs">
-                                    Un administrateur doit approuver cette réception pour
-                                    que la commission soit générée automatiquement
-                                    (200 FG × packs reçus).
+                                    Un administrateur doit approuver cette
+                                    réception pour que la commission soit
+                                    générée automatiquement (200 FG × packs
+                                    reçus).
                                 </p>
                             </div>
                         </div>
@@ -1633,14 +1645,20 @@ function activiteDotClass(action: string): string {
             header="Refuser la réception"
             :style="{ width: '460px' }"
             :draggable="false"
-            @hide="refusMotif = ''; validationErrors = {}"
+            @hide="
+                refusMotif = '';
+                validationErrors = {};
+            "
         >
             <div class="space-y-4 py-2">
                 <p class="text-sm text-muted-foreground">
-                    Indiquez le motif du refus. Aucune commission ne sera générée.
+                    Indiquez le motif du refus. Aucune commission ne sera
+                    générée.
                 </p>
                 <div>
-                    <Label class="mb-1.5 block text-sm">Motif (obligatoire)</Label>
+                    <Label class="mb-1.5 block text-sm"
+                        >Motif (obligatoire)</Label
+                    >
                     <InputText
                         v-model="refusMotif"
                         placeholder="Ex : quantités non conformes, erreur de saisie…"
@@ -1667,7 +1685,10 @@ function activiteDotClass(action: string): string {
                     :disabled="validationProcessing || !refusMotif.trim()"
                     @click="submitValidationRefus"
                 >
-                    <ShieldX v-if="!validationProcessing" class="mr-1.5 h-4 w-4" />
+                    <ShieldX
+                        v-if="!validationProcessing"
+                        class="mr-1.5 h-4 w-4"
+                    />
                     <span
                         v-else
                         class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"

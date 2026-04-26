@@ -137,6 +137,7 @@ class ProprietaireController extends Controller
                     'id' => $vehicule->id,
                     'nom_vehicule' => $vehicule->nom_vehicule,
                     'immatriculation' => $vehicule->immatriculation,
+                    'photo_url' => $vehicule->photo_url,
                     'type_label' => $vehicule->type_label,
                     'capacite_packs' => $vehicule->capacite_packs,
                     'categorie' => $vehicule->categorie,
@@ -214,7 +215,7 @@ class ProprietaireController extends Controller
             ->with('success', 'Propriétaire supprimé.');
     }
 
-    private function assertPhoneUniqueInOrg(string $phone, int $orgId, ?int $ignoreId = null): void
+    private function assertPhoneUniqueInOrg(string $phone, string $orgId, ?string $ignoreId = null): void
     {
         $exists = Proprietaire::where('organization_id', $orgId)
             ->where('telephone', $phone)
@@ -229,7 +230,7 @@ class ProprietaireController extends Controller
         }
     }
 
-    private function assertEmailUniqueInOrg(string $email, int $orgId, ?int $ignoreId = null): void
+    private function assertEmailUniqueInOrg(string $email, string $orgId, ?string $ignoreId = null): void
     {
         $exists = Proprietaire::where('organization_id', $orgId)
             ->where('email', $email)

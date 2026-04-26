@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\ModePaiement;
 use App\Enums\StatutFactureVente;
 use App\Models\FactureVente;
+use App\Models\Site;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -16,9 +17,23 @@ class FactureVenteController extends Controller
     {
         $this->authorize('viewAny', \App\Models\CommandeVente::class);
 
-        $orgId = auth()->user()->organization_id;
-        $periode = $request->input('periode', 'today');
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+
+        // Site par défaut = premier site de l'utilisateur
+        $userSiteId = $user->sites()->first(['sites.id'])?->id;
+
+        $periode = $request->input('periode', 'month');
         $statut = $request->input('statut', 'tous');
+        $siteId = $request->input('site_id', $userSiteId ? (string) $userSiteId : 'tous');
+
+        // Liste de tous les sites de l'org pour le filtre
+        $sites = Site::where('organization_id', $orgId)
+            ->orderBy('nom')
+            ->get(['id', 'nom'])
+            ->map(fn ($s) => ['value' => (string) $s->id, 'label' => $s->nom])
+            ->prepend(['value' => 'tous', 'label' => 'Tous les sites'])
+            ->values();
 
         $query = FactureVente::with([
             'commande.vehicule',
@@ -40,6 +55,10 @@ class FactureVenteController extends Controller
 
         if ($statut !== 'tous') {
             $query->where('statut_facture', $statut);
+        }
+
+        if ($siteId !== 'tous') {
+            $query->whereHas('commande', fn ($q) => $q->where('site_id', $siteId));
         }
 
         $factures = $query->orderByDesc('created_at')
@@ -101,6 +120,8 @@ class FactureVenteController extends Controller
             'modes_paiement' => ModePaiement::options(),
             'periode' => $periode,
             'statut' => $statut,
+            'site_id' => $siteId,
+            'sites' => $sites,
         ]);
     }
 }

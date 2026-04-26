@@ -28,14 +28,23 @@ class ReceptionValidationAdminTest extends TestCase
     use RefreshDatabase;
 
     protected Organization $org;
+
     protected User $admin;
+
     protected User $operateur;
+
     protected Site $siteSrc;
+
     protected Site $siteDest;
+
     protected Vehicule $vehicule;
+
     protected EquipeLivraison $equipe;
+
     protected Livreur $livreur1;
+
     protected Livreur $livreur2;
+
     protected Produit $produit;
 
     protected function setUp(): void
@@ -43,7 +52,7 @@ class ReceptionValidationAdminTest extends TestCase
         parent::setUp();
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        $this->org     = Organization::factory()->create();
+        $this->org = Organization::factory()->create();
         Feature::for($this->org)->activate(ModuleFeature::LOGISTIQUE);
 
         // Permissions
@@ -54,14 +63,14 @@ class ReceptionValidationAdminTest extends TestCase
             Role::firstOrCreate(['name' => $role, 'guard_name' => 'web']);
         }
 
-        $this->siteSrc  = $this->makeSite('Site Source');
+        $this->siteSrc = $this->makeSite('Site Source');
         $this->siteDest = $this->makeSite('Site Destination', 'siege');
 
         // Admin
         $this->admin = User::factory()->create(['organization_id' => $this->org->id]);
         $this->admin->assignRole('admin_entreprise');
         $this->admin->givePermissionTo(['logistique.read', 'logistique.update', 'logistique.commission.verser']);
-        $this->admin->sites()->attach($this->siteDest->id, ['role' => 'manager', 'is_default' => true]);
+        $this->admin->sites()->attach($this->siteDest->id, ['role' => 'responsable', 'is_default' => true]);
 
         // Opérateur (peut saisir la réception mais pas valider admin)
         $this->operateur = User::factory()->create(['organization_id' => $this->org->id]);
@@ -71,9 +80,9 @@ class ReceptionValidationAdminTest extends TestCase
         // Véhicule + équipe
         $this->vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
-            'categorie'       => 'interne',
-            'is_active'       => true,
-            'capacite_packs'  => 500,
+            'categorie' => 'interne',
+            'is_active' => true,
+            'capacite_packs' => 500,
         ]);
 
         $this->livreur1 = Livreur::factory()->create(['organization_id' => $this->org->id]);
@@ -81,18 +90,18 @@ class ReceptionValidationAdminTest extends TestCase
 
         $this->equipe = EquipeLivraison::create([
             'organization_id' => $this->org->id,
-            'vehicule_id'     => $this->vehicule->id,
-            'nom'             => 'Équipe Test',
-            'is_active'       => true,
+            'vehicule_id' => $this->vehicule->id,
+            'nom' => 'Équipe Test',
+            'is_active' => true,
         ]);
         EquipeLivreur::create([
-            'equipe_id'       => $this->equipe->id,
-            'livreur_id'      => $this->livreur1->id,
+            'equipe_id' => $this->equipe->id,
+            'livreur_id' => $this->livreur1->id,
             'taux_commission' => 60,
         ]);
         EquipeLivreur::create([
-            'equipe_id'       => $this->equipe->id,
-            'livreur_id'      => $this->livreur2->id,
+            'equipe_id' => $this->equipe->id,
+            'livreur_id' => $this->livreur2->id,
             'taux_commission' => 40,
         ]);
 
@@ -100,8 +109,8 @@ class ReceptionValidationAdminTest extends TestCase
 
         $this->produit = Produit::create([
             'organization_id' => $this->org->id,
-            'nom'             => 'Eau 19L',
-            'prix_vente'      => 5000,
+            'nom' => 'Eau 19L',
+            'prix_vente' => 5000,
         ]);
     }
 
@@ -111,32 +120,32 @@ class ReceptionValidationAdminTest extends TestCase
     {
         return Site::create([
             'organization_id' => $this->org->id,
-            'nom'             => $nom,
-            'type'            => $type,
-            'localisation'    => 'Conakry',
+            'nom' => $nom,
+            'type' => $type,
+            'localisation' => 'Conakry',
         ]);
     }
 
     private function makeTransfertEnReception(int $qteDemandee = 100, int $qteRecue = 100): TransfertLogistique
     {
         $transfert = TransfertLogistique::create([
-            'organization_id'    => $this->org->id,
-            'site_source_id'     => $this->siteSrc->id,
-            'site_destination_id'=> $this->siteDest->id,
-            'vehicule_id'        => $this->vehicule->id,
-            'equipe_livraison_id'=> $this->equipe->id,
-            'statut'             => StatutTransfert::RECEPTION,
-            'date_arrivee_reelle'=> now()->toDateString(),
-            'created_by'         => $this->admin->id,
+            'organization_id' => $this->org->id,
+            'site_source_id' => $this->siteSrc->id,
+            'site_destination_id' => $this->siteDest->id,
+            'vehicule_id' => $this->vehicule->id,
+            'equipe_livraison_id' => $this->equipe->id,
+            'statut' => StatutTransfert::RECEPTION,
+            'date_arrivee_reelle' => now()->toDateString(),
+            'created_by' => $this->admin->id,
         ]);
 
         TransfertLigne::create([
             'transfert_logistique_id' => $transfert->id,
-            'produit_id'              => $this->produit->id,
-            'quantite_demandee'       => $qteDemandee,
-            'quantite_chargee'        => $qteDemandee,
-            'quantite_recue'          => $qteRecue,
-            'ecart_type'              => TypeEcartLogistique::CONFORME->value,
+            'produit_id' => $this->produit->id,
+            'quantite_demandee' => $qteDemandee,
+            'quantite_chargee' => $qteDemandee,
+            'quantite_recue' => $qteRecue,
+            'ecart_type' => TypeEcartLogistique::CONFORME->value,
         ]);
 
         return $transfert;
@@ -179,7 +188,7 @@ class ReceptionValidationAdminTest extends TestCase
         $this->actingAs($this->admin)
             ->post($this->urlValidation($transfert), [
                 'decision' => 'refus',
-                'motif'    => 'Quantités non conformes au bon de livraison',
+                'motif' => 'Quantités non conformes au bon de livraison',
             ])
             ->assertRedirect("/logistique/{$transfert->id}");
 
@@ -214,7 +223,7 @@ class ReceptionValidationAdminTest extends TestCase
 
         $this->actingAs($this->admin)->post($this->urlValidation($transfert), [
             'decision' => 'refus',
-            'motif'    => 'Erreur de saisie',
+            'motif' => 'Erreur de saisie',
         ]);
 
         $this->assertDatabaseMissing('commissions_logistiques', ['transfert_logistique_id' => $transfert->id]);
@@ -254,7 +263,7 @@ class ReceptionValidationAdminTest extends TestCase
         $this->assertNotNull($part1);
         $this->assertNotNull($part2);
         $this->assertEquals(12000.0, (float) $part1->montant_net); // 20000 × 60 %
-        $this->assertEquals(8000.0,  (float) $part2->montant_net); // 20000 × 40 %
+        $this->assertEquals(8000.0, (float) $part2->montant_net); // 20000 × 40 %
         $this->assertEquals(12000.0 + 8000.0, (float) $commission->montant_total);
     }
 
@@ -282,12 +291,12 @@ class ReceptionValidationAdminTest extends TestCase
     public function test_validation_impossible_si_pas_reception(): void
     {
         $transfert = TransfertLogistique::create([
-            'organization_id'    => $this->org->id,
-            'site_source_id'     => $this->siteSrc->id,
-            'site_destination_id'=> $this->siteDest->id,
-            'vehicule_id'        => $this->vehicule->id,
-            'statut'             => StatutTransfert::TRANSIT,
-            'created_by'         => $this->admin->id,
+            'organization_id' => $this->org->id,
+            'site_source_id' => $this->siteSrc->id,
+            'site_destination_id' => $this->siteDest->id,
+            'vehicule_id' => $this->vehicule->id,
+            'statut' => StatutTransfert::TRANSIT,
+            'created_by' => $this->admin->id,
         ]);
 
         $this->actingAs($this->admin)
@@ -304,8 +313,8 @@ class ReceptionValidationAdminTest extends TestCase
 
         $this->assertDatabaseHas('transfert_activites', [
             'transfert_logistique_id' => $transfert->id,
-            'action'                  => 'validation_admin_accord',
-            'user_id'                 => $this->admin->id,
+            'action' => 'validation_admin_accord',
+            'user_id' => $this->admin->id,
         ]);
     }
 
@@ -316,13 +325,13 @@ class ReceptionValidationAdminTest extends TestCase
 
         $this->actingAs($this->admin)->post($this->urlValidation($transfert), [
             'decision' => 'refus',
-            'motif'    => 'Test refus',
+            'motif' => 'Test refus',
         ]);
 
         $this->assertDatabaseHas('transfert_activites', [
             'transfert_logistique_id' => $transfert->id,
-            'action'                  => 'validation_admin_refus',
-            'user_id'                 => $this->admin->id,
+            'action' => 'validation_admin_refus',
+            'user_id' => $this->admin->id,
         ]);
     }
 }

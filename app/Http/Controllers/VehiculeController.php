@@ -87,7 +87,7 @@ class VehiculeController extends Controller
             $initialProprietaireId = Proprietaire::query()
                 ->where('organization_id', $user->organization_id)
                 ->where('is_active', true)
-                ->whereKey((int) $request->integer('proprietaire_id'))
+                ->whereKey($request->string('proprietaire_id')->toString())
                 ->value('id');
         }
 
@@ -121,7 +121,7 @@ class VehiculeController extends Controller
             'proprietaire_id' => [
                 Rule::requiredIf(fn () => $request->input('categorie') === 'externe'),
                 'nullable',
-                'integer',
+                'string',
                 Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
             'pris_en_charge_par_usine' => 'boolean',
@@ -141,9 +141,9 @@ class VehiculeController extends Controller
         }
 
         unset($data['photo']);
-        Vehicule::create([...$data, 'organization_id' => $orgId]);
+        $vehicule = Vehicule::create([...$data, 'organization_id' => $orgId]);
 
-        return redirect()->route('vehicules.index')
+        return redirect()->route('vehicules.edit', $vehicule)
             ->with('success', 'Véhicule créé avec succès.');
     }
 
@@ -287,7 +287,7 @@ class VehiculeController extends Controller
             'proprietaire_id' => [
                 Rule::requiredIf(fn () => $request->input('categorie') === 'externe'),
                 'nullable',
-                'integer',
+                'string',
                 Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
             'pris_en_charge_par_usine' => 'boolean',

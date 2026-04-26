@@ -28,7 +28,7 @@ class ClientAuthorizationTest extends TestCase
         $this->otherOrg = Organization::factory()->create();
     }
 
-    private function makeUser(string $role, ?int $orgId = null): User
+    private function makeUser(string $role, ?string $orgId = null): User
     {
         $user = User::factory()->create(['organization_id' => $orgId]);
         $user->assignRole($role);

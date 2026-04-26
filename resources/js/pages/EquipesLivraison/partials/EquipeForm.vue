@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { formatPhoneDisplay } from '@/lib/utils';
 import {
     AlertTriangle,
+    Building2,
     Lock,
     Pencil,
     Plus,
@@ -14,7 +15,7 @@ import {
 import AutoComplete from 'primevue/autocomplete';
 import InputNumber from 'primevue/inputnumber';
 import { useConfirm } from 'primevue/useconfirm';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import MembreModal, { type MembreFormData } from './MembreModal.vue';
 
 interface VehiculeOption {
@@ -51,6 +52,7 @@ const props = defineProps<{
     proprietaires: ProprietaireOption[];
     vehicules: VehiculeOption[];
     tauxProprietaireDefaut: number;
+    currentSiteName: string;
 }>();
 const emit = defineEmits<{ submit: [] }>();
 
@@ -79,7 +81,11 @@ function onVehiculeSelect(v: VehiculeOption | null) {
     props.form.vehicule_id = v ? v.value : null;
     // eslint-disable-next-line vue/no-mutating-props
     props.form.nom = v ? v.label : '';
-    if (v?.proprietaire_id) {
+    if (v?.categorie === 'interne') {
+        proprietaireSelected.value = null;
+        // eslint-disable-next-line vue/no-mutating-props
+        props.form.proprietaire_id = null;
+    } else if (v?.proprietaire_id) {
         const prop = props.proprietaires.find(
             (p) => p.value === v.proprietaire_id,
         );
@@ -165,8 +171,19 @@ const principalIndex = computed(() =>
 
 const hasPrincipal = computed(() => principalIndex.value >= 0);
 
+const vehiculeCourant = computed(
+    () =>
+        vehiculeSelected.value ??
+        props.vehicules.find((v) => v.value === props.form.vehicule_id) ??
+        null,
+);
+
+const vehiculeIsInterne = computed(
+    () => vehiculeCourant.value?.categorie === 'interne',
+);
+
 const vehiculeHasProprietaire = computed(
-    () => !!vehiculeSelected.value?.proprietaire_id,
+    () => !!vehiculeCourant.value?.proprietaire_id,
 );
 
 const vehiculeWarning = computed(() => {
@@ -177,10 +194,25 @@ const vehiculeWarning = computed(() => {
 });
 
 const proprietaireWarning = computed(() => {
+    if (vehiculeIsInterne.value) {
+        return null;
+    }
+
     if (!props.form.proprietaire_id) {
         return 'Le propriétaire est obligatoire.';
     }
+
     return null;
+});
+
+watch(vehiculeIsInterne, (isInterne) => {
+    if (!isInterne) {
+        return;
+    }
+
+    proprietaireSelected.value = null;
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.proprietaire_id = null;
 });
 
 const principalWarning = computed(() => {
@@ -418,12 +450,32 @@ function handleSubmit() {
                 <div>
                     <Label for="proprietaire_id" class="mb-1.5 block">
                         Propriétaire
-                        <span class="text-destructive">*</span>
+                        <span v-if="!vehiculeIsInterne" class="text-destructive"
+                            >*</span
+                        >
                     </Label>
+
+                    <!-- Interne : le propriétaire est le site -->
+                    <div
+                        v-if="vehiculeIsInterne"
+                        class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
+                    >
+                        <span
+                            class="inline-flex items-center gap-2 text-foreground"
+                        >
+                            <Building2
+                                class="h-3.5 w-3.5 text-muted-foreground/70"
+                            />
+                            {{ currentSiteName }}
+                        </span>
+                        <Lock
+                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                        />
+                    </div>
 
                     <!-- Verrouillé : auto-renseigné depuis le véhicule -->
                     <div
-                        v-if="vehiculeHasProprietaire"
+                        v-else-if="vehiculeHasProprietaire"
                         class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
                         :class="{
                             'border-destructive': form.errors?.proprietaire_id,

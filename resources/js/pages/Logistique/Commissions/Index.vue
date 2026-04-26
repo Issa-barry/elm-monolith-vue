@@ -342,7 +342,11 @@ function formatPhone(tel: string | null): string {
                                     <Truck class="h-3.5 w-3.5 shrink-0" />
                                     <span>{{ l.vehicules }}</span>
                                 </div>
-                                <span v-else class="text-xs text-muted-foreground">—</span>
+                                <span
+                                    v-else
+                                    class="text-xs text-muted-foreground"
+                                    >—</span
+                                >
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{

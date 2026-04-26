@@ -77,12 +77,19 @@ interface ModePaiementOption {
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
+interface SiteOption {
+    value: string;
+    label: string;
+}
+
 const props = defineProps<{
     factures: FactureItem[];
     totaux: Totaux;
     modes_paiement: ModePaiementOption[];
     periode: string;
     statut: string;
+    site_id: string;
+    sites: SiteOption[];
 }>();
 
 const { can } = usePermissions();
@@ -104,6 +111,7 @@ const periodes = [
 function setPeriode(p: string) {
     const params: Record<string, string> = { periode: p };
     if (props.statut !== 'tous') params.statut = props.statut;
+    if (props.site_id !== 'tous') params.site_id = props.site_id;
     router.get('/factures', params, { preserveScroll: true, replace: true });
 }
 
@@ -119,6 +127,14 @@ const filtres = [
 function setStatut(s: string) {
     const params: Record<string, string> = { periode: props.periode };
     if (s !== 'tous') params.statut = s;
+    if (props.site_id !== 'tous') params.site_id = props.site_id;
+    router.get('/factures', params, { preserveScroll: true, replace: true });
+}
+
+function setSite(s: string) {
+    const params: Record<string, string> = { periode: props.periode };
+    if (props.statut !== 'tous') params.statut = props.statut;
+    if (s !== 'tous') params.site_id = s;
     router.get('/factures', params, { preserveScroll: true, replace: true });
 }
 
@@ -495,6 +511,14 @@ function _progressPercent(f: FactureItem): number {
                                     class="w-full text-sm"
                                 />
                             </IconField>
+                            <Select
+                                :model-value="site_id"
+                                :options="sites"
+                                option-label="label"
+                                option-value="value"
+                                @update:model-value="setSite($event)"
+                                class="w-44"
+                            />
                             <Select
                                 :model-value="statut"
                                 :options="filtres"

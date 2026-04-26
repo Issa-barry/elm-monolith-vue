@@ -221,7 +221,7 @@ class ClientDashboardController extends Controller
         ];
     }
 
-    private function userProposals(int $userId, ?int $organizationId): array
+    private function userProposals(string $userId, ?string $organizationId): array
     {
         return PropositionVehicule::query()
             ->where('user_id', $userId)
@@ -330,7 +330,7 @@ class ClientDashboardController extends Controller
     /**
      * @return Collection<int, Vehicule>
      */
-    private function vehiculesPartenaires(?int $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur): Collection
+    private function vehiculesPartenaires(?string $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur): Collection
     {
         if ($organizationId === null) {
             return collect();
@@ -357,7 +357,7 @@ class ClientDashboardController extends Controller
     /**
      * @return Collection<int, Vehicule>
      */
-    private function vehiculesDuProprietaire(?int $organizationId, ?Proprietaire $proprietaire): Collection
+    private function vehiculesDuProprietaire(?string $organizationId, ?Proprietaire $proprietaire): Collection
     {
         if ($organizationId === null || $proprietaire === null) {
             return collect();
@@ -373,7 +373,7 @@ class ClientDashboardController extends Controller
     /**
      * @return Collection<int, CommissionPart>
      */
-    private function partsVentes(?int $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur): Collection
+    private function partsVentes(?string $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur): Collection
     {
         if ($organizationId === null || ($proprietaire === null && $livreur === null)) {
             return collect();
@@ -408,7 +408,7 @@ class ClientDashboardController extends Controller
     /**
      * @return Collection<int, CommissionLogistiquePart>
      */
-    private function partsLogistiques(?int $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur): Collection
+    private function partsLogistiques(?string $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur): Collection
     {
         if ($organizationId === null || ($proprietaire === null && $livreur === null)) {
             return collect();

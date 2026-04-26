@@ -22,9 +22,9 @@ class CommissionVentePaiementService
      * @throws InvalidArgumentException si montant ≤ 0 ou > disponible.
      */
     public static function payer(
-        int $organizationId,
+        string $organizationId,
         string $type,
-        int $beneficiaireId,
+        string $beneficiaireId,
         float $montant,
         string $modePaiement,
         string $paidAt,
@@ -104,9 +104,9 @@ class CommissionVentePaiementService
      * @return Collection<CommissionPart>
      */
     public static function partsDisponibles(
-        int $organizationId,
+        string $organizationId,
         string $type,
-        int $beneficiaireId
+        string $beneficiaireId
     ): Collection {
         $query = CommissionPart::with('commission')
             ->join('commissions_ventes AS cv_fifo', 'cv_fifo.id', '=', 'commission_parts.commission_vente_id')
@@ -135,7 +135,7 @@ class CommissionVentePaiementService
     /**
      * Calcule le total disponible maintenant pour un bénéficiaire.
      */
-    public static function totalDisponible(int $organizationId, string $type, int $beneficiaireId): float
+    public static function totalDisponible(string $organizationId, string $type, string $beneficiaireId): float
     {
         return (float) self::partsDisponibles($organizationId, $type, $beneficiaireId)
             ->sum(fn ($p) => max(0.0, (float) $p->montant_net - (float) $p->montant_verse));

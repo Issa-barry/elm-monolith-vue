@@ -256,7 +256,7 @@ class ClientController extends Controller
             ->with('success', 'Client supprimé.');
     }
 
-    private function assertPhoneUniqueInOrg(string $phone, int $orgId, ?int $ignoreId = null): void
+    private function assertPhoneUniqueInOrg(string $phone, string $orgId, ?string $ignoreId = null): void
     {
         $exists = Client::where('organization_id', $orgId)
             ->where('telephone', $phone)
@@ -271,7 +271,7 @@ class ClientController extends Controller
         }
     }
 
-    private function assertEmailUniqueInOrg(string $email, int $orgId, ?int $ignoreId = null): void
+    private function assertEmailUniqueInOrg(string $email, string $orgId, ?string $ignoreId = null): void
     {
         $exists = Client::where('organization_id', $orgId)
             ->where('email', $email)
