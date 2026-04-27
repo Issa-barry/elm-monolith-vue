@@ -130,7 +130,7 @@ class ProprietaireController extends Controller
                 $livreurPrincipal = $vehicule
                     ->equipe
                     ?->membres
-                    ?->firstWhere('role', 'principal')
+                    ?->firstWhere('role', 'chauffeur')
                     ?->livreur;
 
                 return [

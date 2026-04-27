@@ -14,7 +14,6 @@ import {
 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import InputNumber from 'primevue/inputnumber';
-import { useConfirm } from 'primevue/useconfirm';
 import { computed, ref, watch } from 'vue';
 import MembreModal, { type MembreFormData } from './MembreModal.vue';
 
@@ -55,8 +54,6 @@ const props = defineProps<{
     currentSiteName: string;
 }>();
 const emit = defineEmits<{ submit: [] }>();
-
-const confirm = useConfirm();
 
 // ── AutoComplete : Véhicule ───────────────────────────────────────────────────
 
@@ -165,12 +162,6 @@ const sommeTaux = computed(() =>
     props.form.membres.reduce((s, m) => s + (m.taux_commission || 0), 0),
 );
 
-const principalIndex = computed(() =>
-    props.form.membres.findIndex((m) => m.role === 'principal'),
-);
-
-const hasPrincipal = computed(() => principalIndex.value >= 0);
-
 const vehiculeCourant = computed(
     () =>
         vehiculeSelected.value ??
@@ -215,17 +206,6 @@ watch(vehiculeIsInterne, (isInterne) => {
     props.form.proprietaire_id = null;
 });
 
-const principalWarning = computed(() => {
-    const count = props.form.membres.filter(
-        (m) => m.role === 'principal',
-    ).length;
-    if (count === 0)
-        return "L'équipe doit avoir un seul livreur principal mais plusieurs assistants.";
-    if (count > 1)
-        return "L'équipe ne peut avoir qu'un seul livreur principal.";
-    return null;
-});
-
 const tauxWarning = computed(() => {
     if (props.form.membres.some((m) => Number(m.taux_commission) < 0)) {
         return 'Le taux de commission ne peut pas être négatif.';
@@ -268,30 +248,7 @@ const totalTauxEquipe = computed(() => {
 // Gestion des membres
 
 function onMembreConfirm(data: MembreFormData) {
-    const newIsPrincipal = data.role === 'principal';
-    const existingPrincipalIdx = props.form.membres.findIndex(
-        (m, i) => m.role === 'principal' && i !== editingIndex.value,
-    );
-
-    if (newIsPrincipal && existingPrincipalIdx >= 0) {
-        // Conflit : un principal existe déjà
-        const existing = props.form.membres[existingPrincipalIdx];
-        confirm.require({
-            message: `Remplacer « ${existing.prenom} ${existing.nom} » comme principal par « ${data.prenom} ${data.nom} » ?`,
-            header: 'Remplacer le principal ?',
-            icon: 'pi pi-exclamation-triangle',
-            rejectLabel: 'Annuler',
-            acceptLabel: 'Remplacer',
-            accept: () => {
-                // Rétrograder l'ancien principal en assistant
-                // eslint-disable-next-line vue/no-mutating-props
-                props.form.membres[existingPrincipalIdx].role = 'assistant';
-                applyMembreData(data);
-            },
-        });
-    } else {
-        applyMembreData(data);
-    }
+    applyMembreData(data);
 }
 
 function applyMembreData(data: MembreFormData) {
@@ -318,6 +275,15 @@ function removeMembre(index: number) {
 
 // Affichage
 
+function roleBadgeLabel(membres: Membre[], index: number): string {
+    const role = membres[index].role;
+    let count = 0;
+    for (let i = 0; i <= index; i++) {
+        if (membres[i].role === role) count++;
+    }
+    return `${role === 'chauffeur' ? 'Chauffeur' : 'Convoyeur'} ${count}`;
+}
+
 function initiales(prenom: string, nom: string): string {
     const p = prenom.trim()[0] ?? '';
     const n = nom.trim()[0] ?? '';
@@ -332,12 +298,7 @@ function setIsActive(val: boolean | string) {
 // Submit
 
 function handleSubmit() {
-    if (
-        vehiculeWarning.value ||
-        proprietaireWarning.value ||
-        principalWarning.value ||
-        tauxWarning.value
-    )
+    if (vehiculeWarning.value || proprietaireWarning.value || tauxWarning.value)
         return;
     emit('submit');
 }
@@ -659,15 +620,6 @@ function handleSubmit() {
                 {{ proprietaireWarning }}
             </div>
 
-            <!-- Alerte principal -->
-            <div
-                v-if="principalWarning"
-                class="mb-4 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300"
-            >
-                <AlertTriangle class="h-3.5 w-3.5 shrink-0" />
-                {{ principalWarning }}
-            </div>
-
             <div
                 v-if="tauxWarning"
                 class="mb-4 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
@@ -713,7 +665,7 @@ function handleSubmit() {
                         <div
                             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
                             :class="
-                                membre.role === 'principal'
+                                membre.role === 'chauffeur'
                                     ? 'bg-primary text-primary-foreground'
                                     : 'bg-muted text-muted-foreground'
                             "
@@ -745,12 +697,12 @@ function handleSubmit() {
                         <span
                             class="inline-block rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
                             :class="
-                                membre.role === 'principal'
+                                membre.role === 'chauffeur'
                                     ? 'bg-primary/10 text-primary'
                                     : 'bg-muted text-muted-foreground'
                             "
                         >
-                            {{ membre.role }}
+                            {{ roleBadgeLabel(form.membres, index) }}
                         </span>
                     </div>
 
@@ -795,7 +747,6 @@ function handleSubmit() {
                     form.processing ||
                     !!vehiculeWarning ||
                     !!proprietaireWarning ||
-                    !!principalWarning ||
                     !!tauxWarning
                 "
                 class="gap-2"
@@ -810,7 +761,6 @@ function handleSubmit() {
     <MembreModal
         v-model:visible="showModal"
         :membre="membreEnEdition"
-        :has-principal="hasPrincipal && editingIndex !== principalIndex"
         :max-taux="maxTauxDisponible"
         :telephone-error="
             editingIndex !== null

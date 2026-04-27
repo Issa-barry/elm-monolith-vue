@@ -34,8 +34,8 @@ const emit = defineEmits<{
 }>();
 
 const roles = [
-    { value: 'principal', label: 'Principal' },
-    { value: 'assistant', label: 'Assistant' },
+    { value: 'chauffeur', label: 'Chauffeur' },
+    { value: 'convoyeur', label: 'Convoyeur' },
 ];
 
 const isEdit = computed(() => !!props.membre);
@@ -59,7 +59,7 @@ const form = reactive<MembreFormData>({
     nom: '',
     prenom: '',
     telephone: '',
-    role: 'assistant',
+    role: 'chauffeur',
     taux_commission: 0,
     ordre: 0,
 });
@@ -94,7 +94,7 @@ watch(
                 nom: '',
                 prenom: '',
                 telephone: '',
-                role: props.hasPrincipal ? 'assistant' : 'principal',
+                role: 'chauffeur',
                 taux_commission: 0,
                 ordre: 0,
             });

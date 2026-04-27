@@ -39,7 +39,7 @@ class EquipeLivraisonTest extends TestCase
                     'nom' => 'Diallo',
                     'prenom' => 'Mamadou',
                     'telephone' => '+224620000001',
-                    'role' => 'principal',
+                    'role' => 'chauffeur',
                     'taux_commission' => 30,
                     'ordre' => 0,
                 ],
@@ -122,7 +122,7 @@ class EquipeLivraisonTest extends TestCase
                 'membres' => [[
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
-                    'telephone' => '+224abc123456', 'role' => 'principal',
+                    'telephone' => '+224abc123456', 'role' => 'chauffeur',
                     'taux_commission' => 30, 'ordre' => 0,
                 ]],
             ]))
@@ -139,7 +139,7 @@ class EquipeLivraisonTest extends TestCase
                 'membres' => [[
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
-                    'telephone' => '+22462012345', 'role' => 'principal',
+                    'telephone' => '+22462012345', 'role' => 'chauffeur',
                     'taux_commission' => 30, 'ordre' => 0,
                 ]],
             ]))
@@ -199,7 +199,7 @@ class EquipeLivraisonTest extends TestCase
                 'membres' => [[
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
-                    'telephone' => '+224620000001', 'role' => 'principal',
+                    'telephone' => '+224620000001', 'role' => 'chauffeur',
                     'taux_commission' => 24.50, 'ordre' => 0,
                 ]],
             ]))
@@ -248,7 +248,7 @@ class EquipeLivraisonTest extends TestCase
                 'membres' => [[
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
-                    'telephone' => '+224620000001', 'role' => 'principal',
+                    'telephone' => '+224620000001', 'role' => 'chauffeur',
                     'taux_commission' => 30, 'ordre' => 0,
                 ]],
             ]))
@@ -281,7 +281,7 @@ class EquipeLivraisonTest extends TestCase
                 'membres' => [[
                     'livreur_id' => null,
                     'nom' => 'Barry', 'prenom' => 'Ibrahima',
-                    'telephone' => '+224620000002', 'role' => 'principal',
+                    'telephone' => '+224620000002', 'role' => 'chauffeur',
                     'taux_commission' => 30, 'ordre' => 0,
                 ]],
             ]))
@@ -311,7 +311,7 @@ class EquipeLivraisonTest extends TestCase
                 'membres' => [[
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
-                    'telephone' => '+224620000002', 'role' => 'principal',
+                    'telephone' => '+224620000002', 'role' => 'chauffeur',
                     'taux_commission' => 30, 'ordre' => 0,
                 ]],
             ]))
@@ -337,7 +337,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
                     'telephone' => '+224620000001',
-                    'role' => 'principal',
+                    'role' => 'chauffeur',
                     'taux_commission' => 30, 'ordre' => 0,
                 ]],
             ]))
@@ -380,7 +380,7 @@ class EquipeLivraisonTest extends TestCase
                 'membres' => [[
                     'livreur_id' => null,
                     'nom' => 'Barry', 'prenom' => 'Ibrahima',
-                    'telephone' => '+224620000002', 'role' => 'principal',
+                    'telephone' => '+224620000002', 'role' => 'chauffeur',
                     'taux_commission' => 30, 'ordre' => 0,
                 ]],
             ]))
@@ -398,7 +398,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
                     'telephone' => '+224620000001',
-                    'role' => 'principal',
+                    'role' => 'chauffeur',
                     'taux_commission' => 30, 'ordre' => 0,
                 ]],
             ]))
@@ -452,7 +452,7 @@ class EquipeLivraisonTest extends TestCase
                 'membres' => [[
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
-                    'telephone' => '+224620000001', 'role' => 'principal',
+                    'telephone' => '+224620000001', 'role' => 'chauffeur',
                     'taux_commission' => 45, 'ordre' => 0,
                 ]],
             ]))

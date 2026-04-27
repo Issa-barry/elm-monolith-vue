@@ -137,7 +137,7 @@ class CommandeVenteController extends Controller
                 'prix_usine' => (int) $p->prix_usine,
             ]);
 
-        $vehicules = Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'principal')])
+        $vehicules = Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur')])
             ->where('organization_id', $orgId)
             ->where('is_active', true)
             ->where('categorie', 'externe')
@@ -358,7 +358,7 @@ class CommandeVenteController extends Controller
                 'prix_usine' => (int) $p->prix_usine,
             ]);
 
-        $vehicules = Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'principal')])
+        $vehicules = Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur')])
             ->where('organization_id', $orgId)
             ->where('is_active', true)
             ->where('categorie', 'externe')

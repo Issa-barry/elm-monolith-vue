@@ -22,7 +22,7 @@ class EquipeLivraisonController extends Controller
     {
         $this->authorize('viewAny', EquipeLivraison::class);
 
-        $equipes = EquipeLivraison::with('membres.livreur', 'proprietaire')
+        $equipes = EquipeLivraison::with('membres.livreur', 'proprietaire', 'vehicule')
             ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom')
             ->get()
@@ -75,7 +75,7 @@ class EquipeLivraisonController extends Controller
             'membres.*.nom' => 'required|string|max:255',
             'membres.*.prenom' => 'required|string|max:255',
             'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
-            'membres.*.role' => ['required', Rule::in(['principal', 'assistant'])],
+            'membres.*.role' => ['required', Rule::in(['chauffeur', 'convoyeur'])],
             'membres.*.taux_commission' => 'required|numeric|min:0|max:100',
             'membres.*.ordre' => 'nullable|integer|min:0',
         ], $this->messages());
@@ -84,7 +84,6 @@ class EquipeLivraisonController extends Controller
             $data['proprietaire_id'] = null;
         }
 
-        $this->validatePrincipal($data['membres']);
         $this->validateUniquePhones($data['membres']);
         $this->validateTotalTaux($data['membres'], (float) $data['taux_commission_proprietaire']);
         $this->validateMembresExclusivite($data['membres'], $orgId);
@@ -169,7 +168,7 @@ class EquipeLivraisonController extends Controller
             'membres.*.nom' => 'required|string|max:255',
             'membres.*.prenom' => 'required|string|max:255',
             'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
-            'membres.*.role' => ['required', Rule::in(['principal', 'assistant'])],
+            'membres.*.role' => ['required', Rule::in(['chauffeur', 'convoyeur'])],
             'membres.*.taux_commission' => 'required|numeric|min:0|max:100',
             'membres.*.ordre' => 'nullable|integer|min:0',
         ], $this->messages());
@@ -178,7 +177,6 @@ class EquipeLivraisonController extends Controller
             $data['proprietaire_id'] = null;
         }
 
-        $this->validatePrincipal($data['membres']);
         $this->validateUniquePhones($data['membres']);
         $this->validateTotalTaux($data['membres'], (float) $data['taux_commission_proprietaire']);
         $this->validateMembresExclusivite($data['membres'], $orgId, $equipes_livraison->id);
@@ -227,7 +225,25 @@ class EquipeLivraisonController extends Controller
     private function equipeData(EquipeLivraison $e): array
     {
         $membres = $e->relationLoaded('membres') ? $e->membres : $e->load('membres.livreur')->membres;
-        $principal = $membres->firstWhere('role', 'principal');
+        $sorted = $membres->sortBy('ordre');
+        $premierChauffeur = $sorted->firstWhere('role', 'chauffeur');
+
+        $roleCounts = [];
+        $membresData = $sorted->map(function (EquipeLivreur $m) use (&$roleCounts) {
+            $role = $m->role;
+            $roleCounts[$role] = ($roleCounts[$role] ?? 0) + 1;
+
+            return [
+                'livreur_id' => $m->livreur_id,
+                'nom' => $m->livreur?->nom ?? '',
+                'prenom' => $m->livreur?->prenom ?? '',
+                'telephone' => $m->livreur?->telephone ?? '',
+                'role' => $role,
+                'taux_commission' => (float) $m->taux_commission,
+                'ordre' => $m->ordre,
+                'numero' => $roleCounts[$role],
+            ];
+        })->values()->all();
 
         return [
             'id' => $e->id,
@@ -244,19 +260,11 @@ class EquipeLivraisonController extends Controller
             'proprietaire_telephone' => $e->proprietaire?->telephone,
             'taux_commission_proprietaire' => $e->taux_commission_proprietaire !== null ? (float) $e->taux_commission_proprietaire : null,
             'nb_membres' => $membres->count(),
-            'nb_assistants' => $membres->where('role', 'assistant')->count(),
+            'nb_convoyeurs' => $membres->where('role', 'convoyeur')->count(),
             'somme_taux' => (float) $membres->sum('taux_commission'),
-            'principal_nom' => $principal?->livreur ? trim($principal->livreur->prenom.' '.$principal->livreur->nom) : null,
-            'principal_telephone' => $principal?->livreur?->telephone,
-            'membres' => $membres->map(fn (EquipeLivreur $m) => [
-                'livreur_id' => $m->livreur_id,
-                'nom' => $m->livreur?->nom ?? '',
-                'prenom' => $m->livreur?->prenom ?? '',
-                'telephone' => $m->livreur?->telephone ?? '',
-                'role' => $m->role,
-                'taux_commission' => (float) $m->taux_commission,
-                'ordre' => $m->ordre,
-            ])->values()->all(),
+            'premier_chauffeur_nom' => $premierChauffeur?->livreur ? trim($premierChauffeur->livreur->prenom.' '.$premierChauffeur->livreur->nom) : null,
+            'premier_chauffeur_telephone' => $premierChauffeur?->livreur?->telephone,
+            'membres' => $membresData,
         ];
     }
 
@@ -389,18 +397,6 @@ class EquipeLivraisonController extends Controller
         }
     }
 
-    private function validatePrincipal(array $membres): void
-    {
-        $count = count(array_filter($membres, fn ($m) => ($m['role'] ?? '') === 'principal'));
-
-        if ($count === 0) {
-            abort(422, "L'équipe doit avoir exactement un livreur principal.");
-        }
-        if ($count > 1) {
-            abort(422, "L'équipe ne peut avoir qu'un seul livreur principal.");
-        }
-    }
-
     private function validateUniquePhones(array $membres): void
     {
         $phones = array_map('trim', array_column($membres, 'telephone'));
@@ -447,7 +443,7 @@ class EquipeLivraisonController extends Controller
             'membres.*.telephone.required' => 'Le téléphone du livreur est obligatoire.',
             'membres.*.telephone.regex' => 'Le téléphone doit être au format guinéen (+224 suivi de 9 chiffres).',
             'membres.*.role.required' => 'Le rôle est obligatoire.',
-            'membres.*.role.in' => 'Le rôle doit être principal ou assistant.',
+            'membres.*.role.in' => 'Le rôle doit être chauffeur ou convoyeur.',
             'membres.*.taux_commission.required' => 'Le taux est obligatoire.',
             'membres.*.taux_commission.min' => 'Le taux ne peut pas être négatif.',
             'membres.*.taux_commission.max' => 'Le taux ne peut pas dépasser 100 %.',

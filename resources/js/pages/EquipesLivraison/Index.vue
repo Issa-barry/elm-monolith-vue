@@ -36,10 +36,12 @@ interface Equipe {
     nom: string;
     is_active: boolean;
     nb_membres: number;
-    nb_assistants: number;
+    nb_convoyeurs: number;
     somme_taux: number;
-    principal_nom: string | null;
-    principal_telephone: string | null;
+    premier_chauffeur_nom: string | null;
+    premier_chauffeur_telephone: string | null;
+    vehicule_nom: string | null;
+    vehicule_immatriculation: string | null;
 }
 
 const props = defineProps<{ equipes: Equipe[] }>();
@@ -150,7 +152,12 @@ function confirmDelete(equipe: Equipe) {
             <DataTable
                 :value="equipesFiltrees"
                 :filters="filters"
-                :global-filter-fields="['nom', 'principal_nom']"
+                :global-filter-fields="[
+                    'nom',
+                    'premier_chauffeur_nom',
+                    'vehicule_nom',
+                    'vehicule_immatriculation',
+                ]"
                 striped-rows
                 :rows="25"
                 :paginator="equipes.length > 25"
@@ -165,7 +172,7 @@ function confirmDelete(equipe: Equipe) {
                     </div>
                 </template>
 
-                <Column field="nom" header="Équipe" sortable style="width: 22%">
+                <Column field="nom" header="Équipe" sortable style="width: 18%">
                     <template #body="{ data }">
                         <div class="truncate font-medium" :title="data.nom">
                             {{ data.nom }}
@@ -174,37 +181,66 @@ function confirmDelete(equipe: Equipe) {
                 </Column>
 
                 <Column
-                    field="principal_nom"
-                    header="Principal"
+                    field="premier_chauffeur_nom"
+                    header="Chauffeur"
                     sortable
-                    style="width: 43%"
+                    style="width: 26%"
                 >
                     <template #body="{ data }">
-                        <template v-if="data.principal_nom">
+                        <template v-if="data.premier_chauffeur_nom">
                             <div
                                 class="truncate text-sm font-medium"
-                                :title="data.principal_nom"
+                                :title="data.premier_chauffeur_nom"
                             >
-                                {{ data.principal_nom }}
+                                {{ data.premier_chauffeur_nom }}
                             </div>
                             <div
-                                v-if="data.principal_telephone"
+                                v-if="data.premier_chauffeur_telephone"
                                 class="font-mono text-xs text-muted-foreground"
                             >
                                 {{
-                                    formatPhoneDisplay(data.principal_telephone)
+                                    formatPhoneDisplay(
+                                        data.premier_chauffeur_telephone,
+                                    )
                                 }}
                             </div>
                         </template>
-                        <span v-else class="text-xs text-destructive"
-                            >— aucun principal</span
+                        <span v-else class="text-xs text-muted-foreground"
+                            >— aucun chauffeur</span
                         >
                     </template>
                 </Column>
 
                 <Column
-                    field="nb_assistants"
-                    header="Assistants"
+                    field="vehicule_nom"
+                    header="Véhicule"
+                    sortable
+                    style="width: 20%"
+                >
+                    <template #body="{ data }">
+                        <template v-if="data.vehicule_nom">
+                            <div
+                                class="truncate text-sm font-medium"
+                                :title="data.vehicule_nom"
+                            >
+                                {{ data.vehicule_nom }}
+                            </div>
+                            <div
+                                v-if="data.vehicule_immatriculation"
+                                class="font-mono text-xs text-muted-foreground"
+                            >
+                                {{ data.vehicule_immatriculation }}
+                            </div>
+                        </template>
+                        <span v-else class="text-xs text-muted-foreground"
+                            >—</span
+                        >
+                    </template>
+                </Column>
+
+                <Column
+                    field="nb_convoyeurs"
+                    header="Convoyeurs"
                     sortable
                     style="width: 10%"
                 >
@@ -213,7 +249,7 @@ function confirmDelete(equipe: Equipe) {
                             class="flex items-center gap-1.5 text-sm text-muted-foreground"
                         >
                             <Users class="h-3.5 w-3.5" />
-                            {{ data.nb_assistants }}
+                            {{ data.nb_convoyeurs }}
                         </div>
                     </template>
                 </Column>

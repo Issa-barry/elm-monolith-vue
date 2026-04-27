@@ -40,7 +40,7 @@ interface EquipeMembre {
 }
 
 interface Vehicule {
-    id: number;
+    id: string;
     nom_vehicule: string;
     marque: string | null;
     modele: string | null;
@@ -50,6 +50,7 @@ interface Vehicule {
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     proprietaire_code_phone_pays: string | null;
+    agence_nom: string | null;
     equipe_nom: string | null;
     livreur_principal_nom: string | null;
     equipe_membres: EquipeMembre[];
@@ -68,6 +69,7 @@ const search = ref('');
 const filterType = ref('');
 const filterStatut = ref('');
 const filterCategorie = ref('');
+const filterAgence = ref('');
 
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => {
@@ -77,6 +79,16 @@ watch(search, (val) => {
 const typeOptions = computed(() => {
     const types = [...new Set(props.vehicules.map((v) => v.type_label))].sort();
     return types;
+});
+
+const agenceOptions = computed(() => {
+    return [
+        ...new Set(
+            props.vehicules
+                .map((v) => v.agence_nom)
+                .filter((agence): agence is string => Boolean(agence)),
+        ),
+    ].sort((a, b) => a.localeCompare(b));
 });
 
 const filteredVehicules = computed(() => {
@@ -91,6 +103,7 @@ const filteredVehicules = computed(() => {
             (v.proprietaire_telephone ?? '')
                 .replace(/\D/g, '')
                 .includes(q.replace(/\D/g, '')) ||
+            (v.agence_nom ?? '').toLowerCase().includes(q) ||
             (v.equipe_nom ?? '').toLowerCase().includes(q) ||
             (v.capacite_packs != null && String(v.capacite_packs).includes(q));
         const matchType =
@@ -103,7 +116,18 @@ const filteredVehicules = computed(() => {
                   : !v.is_active;
         const matchCategorie =
             !filterCategorie.value || v.categorie === filterCategorie.value;
-        return matchSearch && matchType && matchStatut && matchCategorie;
+        const matchAgence =
+            !filterAgence.value ||
+            (filterAgence.value === '__none__'
+                ? !v.agence_nom
+                : v.agence_nom === filterAgence.value);
+        return (
+            matchSearch &&
+            matchType &&
+            matchStatut &&
+            matchCategorie &&
+            matchAgence
+        );
     });
 });
 
@@ -223,6 +247,20 @@ function confirmDelete(v: Vehicule) {
                         <option value="">Tous les statuts</option>
                         <option value="actif">Actif</option>
                         <option value="inactif">Inactif</option>
+                    </select>
+                    <select
+                        v-model="filterAgence"
+                        class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    >
+                        <option value="">Toutes agences</option>
+                        <option
+                            v-for="agence in agenceOptions"
+                            :key="agence"
+                            :value="agence"
+                        >
+                            {{ agence }}
+                        </option>
+                        <option value="__none__">Non rattachée</option>
                     </select>
                 </div>
             </div>
@@ -430,6 +468,21 @@ function confirmDelete(v: Vehicule) {
                                 <option value="">Tous les statuts</option>
                                 <option value="actif">Actif</option>
                                 <option value="inactif">Inactif</option>
+                            </select>
+
+                            <select
+                                v-model="filterAgence"
+                                class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm focus:ring-2 focus:ring-ring focus:outline-none"
+                            >
+                                <option value="">Toutes agences</option>
+                                <option
+                                    v-for="agence in agenceOptions"
+                                    :key="agence"
+                                    :value="agence"
+                                >
+                                    {{ agence }}
+                                </option>
+                                <option value="__none__">Non rattachée</option>
                             </select>
 
                             <span class="text-xs text-muted-foreground"

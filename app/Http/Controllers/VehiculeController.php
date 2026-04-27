@@ -20,6 +20,10 @@ class VehiculeController extends Controller
     {
         $equipe = $v->equipe;
         $membres = $equipe ? ($equipe->relationLoaded('membres') ? $equipe->membres : $equipe->load('membres.livreur')->membres) : collect();
+        $proprietaireUser = $v->proprietaire?->user;
+        $agence = $proprietaireUser
+            ? (($proprietaireUser->sites->firstWhere('pivot.is_default', true)) ?? $proprietaireUser->sites->first())
+            : null;
 
         return [
             'id' => $v->id,
@@ -35,6 +39,7 @@ class VehiculeController extends Controller
             'proprietaire_nom' => $v->proprietaire ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom) : null,
             'proprietaire_telephone' => $v->proprietaire?->telephone,
             'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
+            'agence_nom' => $agence?->nom,
             'equipe_nom' => $equipe?->nom,
             'livreur_principal_nom' => $membres->first()?->livreur
                 ? trim($membres->first()->livreur->prenom.' '.$membres->first()->livreur->nom)
@@ -65,7 +70,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('viewAny', Vehicule::class);
 
-        $vehicules = Vehicule::with(['proprietaire', 'equipe.membres.livreur'])
+        $vehicules = Vehicule::with(['proprietaire.user.sites', 'equipe.membres.livreur'])
             ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom_vehicule')
             ->get()
