@@ -154,7 +154,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::patch('livreurs/{livreur}/toggle', [LivreurController::class, 'toggle'])->name('livreurs.toggle');
         Route::delete('livreurs/{livreur}', [LivreurController::class, 'destroy'])->name('livreurs.destroy');
 
-        Route::resource('equipes-livraison', EquipeLivraisonController::class)->except(['show']);
+        Route::resource('equipes-livraison', EquipeLivraisonController::class);
     });
 
     // ── Module : Produits ─────────────────────────────────────────────────────

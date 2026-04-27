@@ -131,6 +131,17 @@ class EquipeLivraisonController extends Controller
         ]);
     }
 
+    public function show(EquipeLivraison $equipes_livraison): Response
+    {
+        $this->authorize('view', $equipes_livraison);
+
+        $equipes_livraison->load('membres.livreur', 'proprietaire', 'vehicule');
+
+        return Inertia::render('EquipesLivraison/Show', [
+            'equipe' => $this->equipeData($equipes_livraison),
+        ]);
+    }
+
     public function update(Request $request, EquipeLivraison $equipes_livraison): RedirectResponse
     {
         $this->authorize('update', $equipes_livraison);
@@ -225,7 +236,12 @@ class EquipeLivraisonController extends Controller
             'vehicule_id' => $e->vehicule_id,
             'vehicule_immatriculation' => $e->vehicule?->immatriculation,
             'vehicule_nom' => $e->vehicule?->nom_vehicule,
+            'vehicule_type_label' => $e->vehicule?->type_label,
+            'vehicule_categorie' => $e->vehicule?->categorie,
+            'vehicule_capacite_packs' => $e->vehicule?->capacite_packs,
             'proprietaire_id' => $e->proprietaire_id,
+            'proprietaire_nom' => $e->proprietaire ? trim("{$e->proprietaire->prenom} {$e->proprietaire->nom}") : null,
+            'proprietaire_telephone' => $e->proprietaire?->telephone,
             'taux_commission_proprietaire' => $e->taux_commission_proprietaire !== null ? (float) $e->taux_commission_proprietaire : null,
             'nb_membres' => $membres->count(),
             'nb_assistants' => $membres->where('role', 'assistant')->count(),

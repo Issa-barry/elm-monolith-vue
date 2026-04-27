@@ -88,7 +88,11 @@ const filteredVehicules = computed(() => {
             v.immatriculation.toLowerCase().includes(q) ||
             v.type_label.toLowerCase().includes(q) ||
             (v.proprietaire_nom ?? '').toLowerCase().includes(q) ||
-            (v.equipe_nom ?? '').toLowerCase().includes(q);
+            (v.proprietaire_telephone ?? '')
+                .replace(/\D/g, '')
+                .includes(q.replace(/\D/g, '')) ||
+            (v.equipe_nom ?? '').toLowerCase().includes(q) ||
+            (v.capacite_packs != null && String(v.capacite_packs).includes(q));
         const matchType =
             !filterType.value || v.type_label === filterType.value;
         const matchStatut =
