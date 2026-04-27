@@ -127,10 +127,16 @@ test('create equipe with proprietaire + override taux + verify list', async ({
     await page.goto('/equipes-livraison/create');
     await expect(page).toHaveURL(/\/equipes-livraison\/create$/);
 
-    // Ordre DOM : Véhicule (first), puis Propriétaire (second) — tous deux obligatoires
+    // Véhicule : premier combobox du formulaire
     const formComboboxes = page.locator('form').getByRole('combobox');
     await selectOptionFromCombobox(page, formComboboxes.nth(0)); // Véhicule → nom auto-renseigné
-    await selectOptionFromCombobox(page, formComboboxes.nth(1)); // Propriétaire (fallback éditable)
+
+    // Propriétaire : AutoComplete éditable uniquement pour les véhicules externes sans
+    // propriétaire lié. Pour les véhicules internes, le site est propriétaire (div verrouillée).
+    const proprietaireInput = page.locator('input#proprietaire_id');
+    if (await proprietaireInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await selectOptionFromCombobox(page, formComboboxes.nth(1));
+    }
 
     // Override du taux propriétaire : 55 % (+ membre 45 % = 100 %)
     await page.locator('#taux_commission_proprietaire input').fill('55');
