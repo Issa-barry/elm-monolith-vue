@@ -138,7 +138,7 @@ class CreateNewUser implements CreatesNewUsers
     /**
      * Trouve ou crée un client dans l'organisation donnée pour l'utilisateur.
      */
-    private function findOrCreateClientInOrg(User $user, int $organizationId, string $telephone): void
+    private function findOrCreateClientInOrg(User $user, string $organizationId, string $telephone): void
     {
         $existing = Client::where('organization_id', $organizationId)
             ->where('telephone', $telephone)

@@ -16,7 +16,7 @@ class CommissionPaymentController extends Controller
      * POST /logistique/commissions/livreurs/{livreurId}/paiements
      * Paiement global multi-transferts pour un livreur.
      */
-    public function storeLivreur(Request $request, int $livreurId): RedirectResponse
+    public function storeLivreur(Request $request, string $livreurId): RedirectResponse
     {
         $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
 
@@ -63,7 +63,7 @@ class CommissionPaymentController extends Controller
 
         $data = $request->validate([
             'beneficiary_type' => ['required', Rule::in(['livreur', 'proprietaire'])],
-            'beneficiary_id' => ['required', 'integer', 'min:1'],
+            'beneficiary_id' => ['required', 'string'],
             'montant' => ['required', 'numeric', 'min:1'],
             'mode_paiement' => ['required', Rule::in(self::MODES_PAIEMENT)],
             'note' => ['nullable', 'string', 'max:500'],
@@ -81,7 +81,7 @@ class CommissionPaymentController extends Controller
             CommissionPaymentService::payer(
                 vehicule: $vehicule,
                 beneficiaryType: $data['beneficiary_type'],
-                beneficiaryId: (int) $data['beneficiary_id'],
+                beneficiaryId: $data['beneficiary_id'],
                 montant: (float) $data['montant'],
                 modePaiement: $data['mode_paiement'],
                 paidAt: now()->toDateString(),

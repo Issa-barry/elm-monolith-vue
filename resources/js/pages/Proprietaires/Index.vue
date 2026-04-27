@@ -16,6 +16,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    Eye,
     Home,
     MoreVertical,
     Pencil,
@@ -28,6 +29,7 @@ import DataTable from 'primevue/datatable';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
@@ -65,7 +67,7 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const search = ref('');
-const statusFilter = ref<boolean | null>(null);
+const statusFilter = ref<string>('tous');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => {
     filters.value.global.value = val;
@@ -81,9 +83,11 @@ const inactiveProprietaires = computed(
 
 function applyFilters(list: Proprietaire[]): Proprietaire[] {
     const byStatus =
-        statusFilter.value === null
+        statusFilter.value === 'tous'
             ? list
-            : list.filter((p) => p.is_active === statusFilter.value);
+            : list.filter(
+                  (p) => p.is_active === (statusFilter.value === 'actif'),
+              );
     const q = search.value.trim().toLowerCase();
     if (!q) return byStatus;
     return byStatus.filter(
@@ -212,7 +216,12 @@ function confirmDelete(p: Proprietaire) {
                     <!-- Info -->
                     <div class="min-w-0 flex-1">
                         <div class="truncate text-sm font-medium">
-                            {{ p.nom_complet }}
+                            <Link
+                                :href="`/proprietaires/${p.id}`"
+                                class="hover:underline"
+                            >
+                                {{ p.nom_complet }}
+                            </Link>
                         </div>
                         <div
                             v-if="p.email"
@@ -258,6 +267,21 @@ function confirmDelete(p: Proprietaire) {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" class="w-44">
+                            <DropdownMenuItem as-child>
+                                <Link
+                                    :href="`/proprietaires/${p.id}`"
+                                    class="flex w-full items-center gap-2"
+                                >
+                                    <Eye class="h-4 w-4" />
+                                    Voir le détail
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator
+                                v-if="
+                                    can('proprietaires.update') ||
+                                    can('proprietaires.delete')
+                                "
+                            />
                             <DropdownMenuItem
                                 v-if="can('proprietaires.update')"
                                 as-child
@@ -403,44 +427,17 @@ function confirmDelete(p: Proprietaire) {
                                     class="w-full text-sm"
                                 />
                             </IconField>
-                            <div class="flex gap-1">
-                                <button
-                                    type="button"
-                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                                    :class="
-                                        statusFilter === null
-                                            ? 'bg-primary text-primary-foreground'
-                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                    "
-                                    @click="statusFilter = null"
-                                >
-                                    Tous
-                                </button>
-                                <button
-                                    type="button"
-                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                                    :class="
-                                        statusFilter === true
-                                            ? 'bg-emerald-500 text-white'
-                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                    "
-                                    @click="statusFilter = true"
-                                >
-                                    Actif
-                                </button>
-                                <button
-                                    type="button"
-                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                                    :class="
-                                        statusFilter === false
-                                            ? 'bg-zinc-500 text-white'
-                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                    "
-                                    @click="statusFilter = false"
-                                >
-                                    Inactif
-                                </button>
-                            </div>
+                            <Select
+                                v-model="statusFilter"
+                                :options="[
+                                    { value: 'tous', label: 'Tous' },
+                                    { value: 'actif', label: 'Actif' },
+                                    { value: 'inactif', label: 'Inactif' },
+                                ]"
+                                option-label="label"
+                                option-value="value"
+                                class="w-32"
+                            />
                         </div>
                     </template>
 
@@ -459,9 +456,12 @@ function confirmDelete(p: Proprietaire) {
                                     {{ initials(data.nom_complet) }}
                                 </div>
                                 <div>
-                                    <div class="font-medium">
+                                    <Link
+                                        :href="`/proprietaires/${data.id}`"
+                                        class="font-medium hover:underline"
+                                    >
                                         {{ data.nom_complet }}
-                                    </div>
+                                    </Link>
                                     <div
                                         v-if="data.email"
                                         class="text-xs text-muted-foreground"
@@ -552,6 +552,21 @@ function confirmDelete(p: Proprietaire) {
                                         align="end"
                                         class="w-44"
                                     >
+                                        <DropdownMenuItem as-child>
+                                            <Link
+                                                :href="`/proprietaires/${data.id}`"
+                                                class="flex w-full items-center gap-2"
+                                            >
+                                                <Eye class="h-4 w-4" />
+                                                Voir le détail
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator
+                                            v-if="
+                                                can('proprietaires.update') ||
+                                                can('proprietaires.delete')
+                                            "
+                                        />
                                         <DropdownMenuItem
                                             v-if="can('proprietaires.update')"
                                             as-child

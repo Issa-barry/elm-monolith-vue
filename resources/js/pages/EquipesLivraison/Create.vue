@@ -17,12 +17,15 @@ interface VehiculeOption {
     immatriculation: string;
     categorie: string;
     type_label: string;
+    proprietaire_id: number | null;
+    proprietaire_nom: string | null;
 }
 
 const props = defineProps<{
     proprietaires: ProprietaireOption[];
     vehicules: VehiculeOption[];
     tauxProprietaireDefaut: number;
+    currentSiteName: string;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -78,6 +81,7 @@ function submit() {
                 :proprietaires="proprietaires"
                 :vehicules="vehicules"
                 :taux-proprietaire-defaut="tauxProprietaireDefaut"
+                :current-site-name="currentSiteName"
                 @submit="submit"
             />
         </div>

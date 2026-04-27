@@ -46,7 +46,7 @@ class SitesSeeder extends Seeder
     /**
      * Create/update site and keep existing phone if already present.
      */
-    private function upsertSite(int $organizationId, array $data, ?int $parentId = null): Site
+    private function upsertSite(string $organizationId, array $data, ?string $parentId = null): Site
     {
         $site = Site::firstOrNew([
             'organization_id' => $organizationId,

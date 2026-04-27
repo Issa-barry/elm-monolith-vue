@@ -20,7 +20,7 @@ class PaiementCommissionVenteController extends Controller
      * Input : montant, mode_paiement, paid_at, note (optionnel)
      * Contrainte : montant ≤ disponible_maintenant
      */
-    public function store(Request $request, string $type, int $beneficiaireId): RedirectResponse
+    public function store(Request $request, string $type, string $beneficiaireId): RedirectResponse
     {
         $this->authorize('viewAny', \App\Models\CommandeVente::class);
 

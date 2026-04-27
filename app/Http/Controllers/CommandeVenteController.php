@@ -63,7 +63,6 @@ class CommandeVenteController extends Controller
         $commandes = $query->get();
 
         $nonAnnulees = $commandes->filter(fn ($c) => ! $c->isAnnulee());
-        $enCours = $commandes->filter(fn ($c) => $c->isEnCours());
         $cloturees = $commandes->filter(fn ($c) => $c->isCloturee());
 
         $totaux = [
@@ -141,6 +140,7 @@ class CommandeVenteController extends Controller
         $vehicules = Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'principal')])
             ->where('organization_id', $orgId)
             ->where('is_active', true)
+            ->where('categorie', 'externe')
             ->orderBy('nom_vehicule')
             ->get()
             ->map(fn (Vehicule $v) => [
@@ -361,6 +361,7 @@ class CommandeVenteController extends Controller
         $vehicules = Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'principal')])
             ->where('organization_id', $orgId)
             ->where('is_active', true)
+            ->where('categorie', 'externe')
             ->orderBy('nom_vehicule')
             ->get()
             ->map(fn (Vehicule $v) => [
@@ -623,7 +624,6 @@ class CommandeVenteController extends Controller
         $produitIds = $lignes
             ->pluck('produit_id')
             ->filter()
-            ->map(fn (mixed $id): int => (int) $id)
             ->unique()
             ->values()
             ->all();
@@ -637,8 +637,8 @@ class CommandeVenteController extends Controller
         $existingPrixParProduit = $this->existingPrixVenteByProduit($commande);
 
         foreach ($data['lignes'] as $index => $ligne) {
-            $produitId = (int) ($ligne['produit_id'] ?? 0);
-            if ($produitId <= 0) {
+            $produitId = $ligne['produit_id'] ?? null;
+            if (! $produitId) {
                 continue;
             }
 

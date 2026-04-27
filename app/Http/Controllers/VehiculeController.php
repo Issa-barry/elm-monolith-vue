@@ -76,15 +76,25 @@ class VehiculeController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
         $this->authorize('create', Vehicule::class);
 
         $user = auth()->user();
+        $initialProprietaireId = null;
+
+        if ($request->filled('proprietaire_id')) {
+            $initialProprietaireId = Proprietaire::query()
+                ->where('organization_id', $user->organization_id)
+                ->where('is_active', true)
+                ->whereKey($request->string('proprietaire_id')->toString())
+                ->value('id');
+        }
 
         return Inertia::render('Vehicules/Create', [
             'proprietaires' => $this->proprietairesOptions(),
             'types' => TypeVehicule::options(),
+            'initial_proprietaire_id' => $initialProprietaireId,
             'currentSiteName' => ($user->sites()->wherePivot('is_default', true)->first()
                 ?? $user->sites()->first())?->nom
                 ?? $user->organization?->nom
@@ -111,7 +121,7 @@ class VehiculeController extends Controller
             'proprietaire_id' => [
                 Rule::requiredIf(fn () => $request->input('categorie') === 'externe'),
                 'nullable',
-                'integer',
+                'string',
                 Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
             'pris_en_charge_par_usine' => 'boolean',
@@ -131,9 +141,9 @@ class VehiculeController extends Controller
         }
 
         unset($data['photo']);
-        Vehicule::create([...$data, 'organization_id' => $orgId]);
+        $vehicule = Vehicule::create([...$data, 'organization_id' => $orgId]);
 
-        return redirect()->route('vehicules.index')
+        return redirect()->route('vehicules.edit', $vehicule)
             ->with('success', 'Véhicule créé avec succès.');
     }
 
@@ -277,7 +287,7 @@ class VehiculeController extends Controller
             'proprietaire_id' => [
                 Rule::requiredIf(fn () => $request->input('categorie') === 'externe'),
                 'nullable',
-                'integer',
+                'string',
                 Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
             'pris_en_charge_par_usine' => 'boolean',

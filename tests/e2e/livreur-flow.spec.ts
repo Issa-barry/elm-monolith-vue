@@ -65,17 +65,17 @@ async function sendLivreurRequest(
 async function createLivreurViaApi(
     page: Page,
     payload: LivreurCreatePayload,
-): Promise<number> {
+): Promise<string> {
     const response = await sendLivreurRequest(page, 'POST', '/livreurs', payload);
     expect(response.status()).toBe(201);
 
     const body = await response.json();
     expect(body.id).toBeTruthy();
 
-    return Number(body.id);
+    return String(body.id);
 }
 
-async function toggleLivreurViaApi(page: Page, livreurId: number): Promise<boolean> {
+async function toggleLivreurViaApi(page: Page, livreurId: string): Promise<boolean> {
     const response = await sendLivreurRequest(
         page,
         'PATCH',
@@ -87,7 +87,7 @@ async function toggleLivreurViaApi(page: Page, livreurId: number): Promise<boole
     return Boolean(body.is_active);
 }
 
-async function deleteLivreurViaApi(page: Page, livreurId: number): Promise<void> {
+async function deleteLivreurViaApi(page: Page, livreurId: string): Promise<void> {
     const response = await sendLivreurRequest(page, 'DELETE', `/livreurs/${livreurId}`);
     expect(response.ok()).toBeTruthy();
 }

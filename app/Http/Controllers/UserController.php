@@ -37,7 +37,7 @@ class UserController extends Controller
             ->map(fn ($r) => ['value' => $r->name, 'label' => $r->name]);
     }
 
-    private function getSiteOptions(int $orgId): \Illuminate\Support\Collection
+    private function getSiteOptions(string $orgId): \Illuminate\Support\Collection
     {
         return \App\Models\Site::where('organization_id', $orgId)
             ->orderBy('nom')

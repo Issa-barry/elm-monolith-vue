@@ -50,8 +50,8 @@ class TransfertLogistiqueController extends Controller
         $orgId = $user->organization_id;
         $statut = $request->input('statut');
         $search = $request->input('search');
-        $siteSourceId = $request->filled('site_source_id') ? (int) $request->input('site_source_id') : null;
-        $siteDestinationId = $request->filled('site_destination_id') ? (int) $request->input('site_destination_id') : null;
+        $siteSourceId = $request->filled('site_source_id') ? $request->input('site_source_id') : null;
+        $siteDestinationId = $request->filled('site_destination_id') ? $request->input('site_destination_id') : null;
         $isAdmin = $user->hasAnyRole(['super_admin', 'admin_entreprise']);
         $siteIds = $isAdmin ? collect() : $user->sites()->pluck('sites.id');
         $sites = Site::where('organization_id', $orgId)
@@ -231,14 +231,14 @@ class TransfertLogistiqueController extends Controller
         }
 
         $data = $request->validate([
-            'site_destination_id' => ['required', 'integer', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
-            'vehicule_id' => ['required', 'integer', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->where('categorie', 'interne')],
-            'equipe_livraison_id' => ['nullable', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
+            'site_destination_id' => ['required', 'string', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
+            'vehicule_id' => ['required', 'string', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->where('categorie', 'interne')],
+            'equipe_livraison_id' => ['nullable', 'string', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
             'date_depart_prevue' => ['nullable', 'date'],
             'date_arrivee_prevue' => ['nullable', 'date', 'after_or_equal:date_depart_prevue'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'lignes' => ['required', 'array', 'min:1'],
-            'lignes.*.produit_id' => ['required', 'integer', Rule::exists('produits', 'id')->where('organization_id', $orgId)],
+            'lignes.*.produit_id' => ['required', 'string', Rule::exists('produits', 'id')->where('organization_id', $orgId)],
             'lignes.*.quantite_demandee' => ['required', 'integer', 'min:1'],
             'lignes.*.notes' => ['nullable', 'string', 'max:250'],
         ], [
@@ -252,7 +252,7 @@ class TransfertLogistiqueController extends Controller
 
         // Forcer le site source et vérifier que destination ≠ source
         $data['site_source_id'] = $siteSource->id;
-        if ((int) $data['site_destination_id'] === $siteSource->id) {
+        if ($data['site_destination_id'] === $siteSource->id) {
             return back()->withErrors(['site_destination_id' => 'Le site destination doit être différent du site source.']);
         }
 
@@ -309,6 +309,7 @@ class TransfertLogistiqueController extends Controller
             'lignes.produit:id,nom',
             'commission.parts.versements.createur:id,prenom,nom',
             'createur:id,prenom,nom',
+            'validateur:id,prenom,nom',
             'activites.user:id,prenom,nom',
         ]);
 
@@ -342,6 +343,7 @@ class TransfertLogistiqueController extends Controller
             'can_update' => $user->can('update', $transfert_logistique),
             'can_generer_commission' => $user->can('genererCommission', $transfert_logistique),
             'can_verser_commission' => $user->can('verserCommission', $transfert_logistique),
+            'can_valider_reception_admin' => $user->can('validerReceptionAdmin', $transfert_logistique),
             'activites' => $transfert_logistique->activites->map(fn ($a) => [
                 'id' => $a->id,
                 'action' => $a->action,
@@ -396,14 +398,14 @@ class TransfertLogistiqueController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $data = $request->validate([
-            'site_destination_id' => ['required', 'integer', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
-            'vehicule_id' => ['required', 'integer', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->where('categorie', 'interne')],
-            'equipe_livraison_id' => ['nullable', 'integer', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
+            'site_destination_id' => ['required', 'string', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
+            'vehicule_id' => ['required', 'string', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->where('categorie', 'interne')],
+            'equipe_livraison_id' => ['nullable', 'string', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
             'date_depart_prevue' => ['nullable', 'date'],
             'date_arrivee_prevue' => ['nullable', 'date', 'after_or_equal:date_depart_prevue'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'lignes' => ['required', 'array', 'min:1'],
-            'lignes.*.produit_id' => ['required', 'integer', Rule::exists('produits', 'id')->where('organization_id', $orgId)],
+            'lignes.*.produit_id' => ['required', 'string', Rule::exists('produits', 'id')->where('organization_id', $orgId)],
             'lignes.*.quantite_demandee' => ['required', 'integer', 'min:1'],
             'lignes.*.notes' => ['nullable', 'string', 'max:250'],
         ], [
@@ -416,7 +418,7 @@ class TransfertLogistiqueController extends Controller
         // Le site source est immuable : on garde la valeur existante
         $data['site_source_id'] = $transfert_logistique->site_source_id;
 
-        if ((int) $data['site_destination_id'] === $data['site_source_id']) {
+        if ($data['site_destination_id'] === $data['site_source_id']) {
             return back()->withErrors(['site_destination_id' => 'Le site destination doit être différent du site source.']);
         }
 
@@ -510,6 +512,11 @@ class TransfertLogistiqueController extends Controller
         $base['site_source_id'] = $t->site_source_id;
         $base['site_destination_id'] = $t->site_destination_id;
         $base['createur'] = $t->createur ? trim($t->createur->prenom.' '.$t->createur->nom) : null;
+
+        $base['validation_reception'] = $t->validation_reception;
+        $base['validated_by_nom'] = $t->validateur ? trim($t->validateur->prenom.' '.$t->validateur->nom) : null;
+        $base['validated_at'] = $t->validated_at?->format('d/m/Y H:i');
+        $base['validation_motif'] = $t->validation_motif;
 
         $base['lignes'] = $t->lignes->map(fn ($l) => [
             'id' => $l->id,

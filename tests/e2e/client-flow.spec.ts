@@ -44,7 +44,7 @@ async function createClientInApp(
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/clients\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/);
     await page.waitForLoadState('networkidle');
 }
 
@@ -98,7 +98,7 @@ test('create client with Guinea and empty ville -> defaults to Conakry', async (
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/clients\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/);
     await expect(page.locator('#ville')).toHaveValue('Conakry');
 });
 
@@ -127,7 +127,7 @@ test('edit client -> update ville and adresse -> persists', async ({ page }) => 
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/clients\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/);
     await expect(page.locator('#ville')).toHaveValue('Kindia');
     await expect(page.locator('#adresse')).toHaveValue('Rue Principale');
 });
@@ -159,7 +159,7 @@ test('view client from list -> readonly form -> modifier redirects to edit', asy
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/clients\/\d+$/);
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+$/);
     await expect(page.locator('#prenom')).toBeDisabled();
     await expect(page.locator('#nom')).toBeDisabled();
 
@@ -171,7 +171,7 @@ test('view client from list -> readonly form -> modifier redirects to edit', asy
     await expect(editTrigger).toBeVisible();
     await editTrigger.click();
 
-    await expect(page).toHaveURL(/\/clients\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/);
     await expect(page.locator('#prenom')).toBeEnabled();
 });
 
@@ -190,7 +190,7 @@ test('create client + toggle status -> inactif in list', async ({ page }) => {
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/clients\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/);
 
     await page.goto('/clients');
     await page.waitForLoadState('networkidle');

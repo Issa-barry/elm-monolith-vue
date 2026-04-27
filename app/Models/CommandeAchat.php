@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\StatutCommandeAchat;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,7 +14,7 @@ use Illuminate\Support\Str;
 
 class CommandeAchat extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, HasUlids, SoftDeletes;
 
     protected $table = 'commandes_achats';
 

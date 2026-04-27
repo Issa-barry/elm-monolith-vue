@@ -35,7 +35,7 @@ test('commande -> validation -> encaissement facture -> visible dans /factures',
     await expect(submitCreate).toBeEnabled({ timeout: 10_000 });
     await submitCreate.click();
 
-    await expect(page).toHaveURL(/\/ventes\/\d+$/, { timeout: 30_000 });
+    await expect(page).toHaveURL(/\/ventes\/[a-z0-9]+$/, { timeout: 30_000 });
 
     // ── 2. Valider la commande ─────────────────────────────────────────────────
     const validerBtn = page.getByRole('button', { name: /valider la commande/i }).first();

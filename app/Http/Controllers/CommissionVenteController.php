@@ -157,7 +157,7 @@ class CommissionVenteController extends Controller
     /**
      * GET /commissions/beneficiaires/{type}/{beneficiaireId}
      */
-    public function showBeneficiaire(Request $request, string $type, int $beneficiaireId): Response
+    public function showBeneficiaire(Request $request, string $type, string $beneficiaireId): Response
     {
         $this->authorize('viewAny', \App\Models\CommandeVente::class);
 

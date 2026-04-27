@@ -13,18 +13,26 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { MoreVertical, Pencil, Plus, Trash2, Users } from 'lucide-vue-next';
+import {
+    Eye,
+    MoreVertical,
+    Pencil,
+    Plus,
+    Trash2,
+    Users,
+} from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
 interface Equipe {
-    id: number;
+    id: string;
     nom: string;
     is_active: boolean;
     nb_membres: number;
@@ -125,23 +133,17 @@ function confirmDelete(equipe: Equipe) {
                         placeholder="recherche"
                     />
                 </IconField>
-                <div class="flex gap-1.5">
-                    <Button
-                        v-for="opt in [
-                            { value: 'tous', label: 'Tous' },
-                            { value: 'actif', label: 'Actif' },
-                            { value: 'inactif', label: 'Inactif' },
-                        ] as const"
-                        :key="opt.value"
-                        :variant="
-                            statutFilter === opt.value ? 'default' : 'outline'
-                        "
-                        size="sm"
-                        @click="statutFilter = opt.value"
-                    >
-                        {{ opt.label }}
-                    </Button>
-                </div>
+                <Select
+                    v-model="statutFilter"
+                    :options="[
+                        { value: 'tous', label: 'Tous' },
+                        { value: 'actif', label: 'Actif' },
+                        { value: 'inactif', label: 'Inactif' },
+                    ]"
+                    option-label="label"
+                    option-value="value"
+                    class="w-32"
+                />
             </div>
 
             <!-- Tableau -->
@@ -257,6 +259,7 @@ function confirmDelete(equipe: Equipe) {
 
                 <Column
                     v-if="
+                        can('equipes-livraison.read') ||
                         can('equipes-livraison.update') ||
                         can('equipes-livraison.delete')
                     "
@@ -275,6 +278,25 @@ function confirmDelete(equipe: Equipe) {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                                 <DropdownMenuItem
+                                    v-if="can('equipes-livraison.read')"
+                                    as-child
+                                >
+                                    <Link
+                                        :href="`/equipes-livraison/${data.id}`"
+                                        class="flex items-center gap-2"
+                                    >
+                                        <Eye class="h-4 w-4" />
+                                        Détail
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator
+                                    v-if="
+                                        can('equipes-livraison.read') &&
+                                        (can('equipes-livraison.update') ||
+                                            can('equipes-livraison.delete'))
+                                    "
+                                />
+                                <DropdownMenuItem
                                     v-if="can('equipes-livraison.update')"
                                     as-child
                                 >
@@ -287,7 +309,10 @@ function confirmDelete(equipe: Equipe) {
                                     </Link>
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator
-                                    v-if="can('equipes-livraison.delete')"
+                                    v-if="
+                                        can('equipes-livraison.update') &&
+                                        can('equipes-livraison.delete')
+                                    "
                                 />
                                 <DropdownMenuItem
                                     v-if="can('equipes-livraison.delete')"

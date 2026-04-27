@@ -196,7 +196,7 @@ class UserTest extends TestCase
         $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
 
         $pivot = $user->sites()->withPivot('role', 'is_default')->first()->pivot;
-        $this->assertEquals('employe', $pivot->role);
+        $this->assertEquals('employe', $pivot->role instanceof \BackedEnum ? $pivot->role->value : $pivot->role);
         $this->assertTrue((bool) $pivot->is_default);
     }
 

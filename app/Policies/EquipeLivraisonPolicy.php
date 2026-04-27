@@ -12,6 +12,12 @@ class EquipeLivraisonPolicy
         return $user->can('equipes-livraison.read');
     }
 
+    public function view(User $user, EquipeLivraison $equipe): bool
+    {
+        return $user->can('equipes-livraison.read')
+            && $user->organization_id === $equipe->organization_id;
+    }
+
     public function create(User $user): bool
     {
         return $user->can('equipes-livraison.create');

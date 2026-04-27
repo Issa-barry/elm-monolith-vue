@@ -180,6 +180,26 @@ function supprimerLigne(index: number) {
     produitSelected.value.splice(index, 1);
 }
 
+// ── Capacité véhicule ─────────────────────────────────────────────────────────
+
+const vehiculeSelectionne = computed(
+    () => props.vehicules.find((v) => v.id === form.vehicule_id) ?? null,
+);
+
+const capaciteVehiculeSelectionne = computed(
+    () => vehiculeSelectionne.value?.capacite_packs ?? null,
+);
+
+const quantiteTotale = computed(() =>
+    form.lignes.reduce((sum, l) => sum + (l.quantite_demandee ?? 0), 0),
+);
+
+const capaciteVehiculeConforme = computed(() => {
+    if (form.vehicule_id === null) return true;
+    if (capaciteVehiculeSelectionne.value === null) return false;
+    return quantiteTotale.value === capaciteVehiculeSelectionne.value;
+});
+
 // ── Validation locale ─────────────────────────────────────────────────────────
 
 const canSubmit = computed(
@@ -191,6 +211,7 @@ const canSubmit = computed(
         form.lignes.every(
             (l) => l.produit_id !== null && l.quantite_demandee >= 1,
         ) &&
+        capaciteVehiculeConforme.value &&
         !form.processing,
 );
 
@@ -418,6 +439,47 @@ function submit() {
                         class="mb-3 text-xs text-destructive"
                     >
                         {{ form.errors.lignes }}
+                    </p>
+
+                    <p
+                        v-if="form.vehicule_id !== null"
+                        class="mb-3 text-xs"
+                        :class="
+                            capaciteVehiculeConforme
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-amber-600 dark:text-amber-400'
+                        "
+                    >
+                        Capacité véhicule:
+                        {{
+                            capaciteVehiculeSelectionne === null
+                                ? 'non définie'
+                                : `${capaciteVehiculeSelectionne} packs`
+                        }}
+                        · Quantité saisie: {{ quantiteTotale }} packs
+                        <template v-if="capaciteVehiculeSelectionne !== null">
+                            <span v-if="capaciteVehiculeConforme">
+                                — capacité atteinte ✓</span
+                            >
+                            <span
+                                v-else-if="
+                                    quantiteTotale < capaciteVehiculeSelectionne
+                                "
+                            >
+                                —
+                                {{
+                                    capaciteVehiculeSelectionne - quantiteTotale
+                                }}
+                                pack(s) manquant(s)</span
+                            >
+                            <span v-else>
+                                —
+                                {{
+                                    quantiteTotale - capaciteVehiculeSelectionne
+                                }}
+                                pack(s) en trop</span
+                            >
+                        </template>
                     </p>
 
                     <!-- Table desktop -->

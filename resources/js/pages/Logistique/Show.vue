@@ -11,12 +11,13 @@ import {
     CheckCircle2,
     ChevronRight,
     FileEdit,
-    HandCoins,
     History,
     MapPin,
     Package,
     PackageCheck,
     Pencil,
+    ShieldCheck,
+    ShieldX,
     Truck,
     XCircle,
 } from 'lucide-vue-next';
@@ -109,6 +110,10 @@ interface Transfert {
     date_arrivee_reelle: string | null;
     notes: string | null;
     createur: string | null;
+    validation_reception: 'accord' | 'refus' | null;
+    validated_by_nom: string | null;
+    validated_at: string | null;
+    validation_motif: string | null;
     lignes: Ligne[];
     commission: Commission | null;
     is_brouillon: boolean;
@@ -149,6 +154,7 @@ const props = defineProps<{
     can_annuler: boolean;
     can_update: boolean;
     can_generer_commission: boolean;
+    can_valider_reception_admin: boolean;
     activites: Activite[];
 }>();
 
@@ -401,7 +407,7 @@ function annulerTransfert() {
 // ── Commission ────────────────────────────────────────────────────────────────
 
 const commissionForm = useForm({
-    base_calcul: 'forfait',
+    base_calcul: 'par_pack',
     valeur_base: 0 as number,
     quantite_reference: null as number | null,
 });
@@ -409,6 +415,23 @@ const commissionForm = useForm({
 const needsQuantite = computed(() =>
     ['par_pack', 'par_km'].includes(commissionForm.base_calcul),
 );
+
+const totalQuantiteRecue = computed(() =>
+    props.transfert.lignes.reduce((sum, l) => sum + (l.quantite_recue ?? 0), 0),
+);
+
+const gainPreview = computed(() => {
+    const base = commissionForm.valeur_base ?? 0;
+    if (commissionForm.base_calcul === 'forfait') return base;
+    const qte = commissionForm.quantite_reference ?? 0;
+    return base * qte;
+});
+
+watch(showCommissionDialog, (open) => {
+    if (open) {
+        commissionForm.quantite_reference = totalQuantiteRecue.value;
+    }
+});
 
 function submitCommission() {
     commissionForm.post(`/logistique/${props.transfert.id}/commission`, {
@@ -521,6 +544,65 @@ function aggregateParts(parts: CommissionPart[]) {
 
 const livreurTotals = computed(() => aggregateParts(livreurParts.value));
 const partLivreurTotal = computed(() => livreurTotals.value.net);
+
+// ── Validation admin ──────────────────────────────────────────────────────────
+
+const showRefusDialog = ref(false);
+const refusMotif = ref('');
+const validationProcessing = ref(false);
+const validationErrors = ref<Record<string, string>>({});
+
+function submitValidationAccord() {
+    validationProcessing.value = true;
+    validationErrors.value = {};
+    router.post(
+        `/logistique/${props.transfert.id}/validation-reception`,
+        { decision: 'accord' },
+        {
+            onSuccess: () => {
+                toast.add({
+                    severity: 'success',
+                    summary: 'Réception approuvée',
+                    detail: 'Commission générée automatiquement.',
+                    life: 4000,
+                });
+            },
+            onError: (errors) => {
+                validationErrors.value = errors as Record<string, string>;
+            },
+            onFinish: () => {
+                validationProcessing.value = false;
+            },
+        },
+    );
+}
+
+function submitValidationRefus() {
+    validationProcessing.value = true;
+    validationErrors.value = {};
+    router.post(
+        `/logistique/${props.transfert.id}/validation-reception`,
+        { decision: 'refus', motif: refusMotif.value },
+        {
+            onSuccess: () => {
+                showRefusDialog.value = false;
+                refusMotif.value = '';
+                toast.add({
+                    severity: 'warn',
+                    summary: 'Réception refusée',
+                    detail: 'Aucune commission générée.',
+                    life: 4000,
+                });
+            },
+            onError: (errors) => {
+                validationErrors.value = errors as Record<string, string>;
+            },
+            onFinish: () => {
+                validationProcessing.value = false;
+            },
+        },
+    );
+}
 
 const showHistoriqueDialog = ref(false);
 const historiquePart = ref<CommissionPart | null>(null);
@@ -937,35 +1019,98 @@ function activiteDotClass(action: string): string {
                             >
                                 Commission logistique
                             </h2>
-                            <Button
+                            <!-- Boutons validation admin (statut réception, pas encore accordé) -->
+                            <div
                                 v-if="
-                                    can_generer_commission &&
+                                    can_valider_reception_admin &&
                                     transfert.statut === 'reception' &&
-                                    !(
-                                        transfert.commission &&
-                                        transfert.commission.montant_verse > 0
-                                    )
+                                    transfert.validation_reception !== 'accord'
                                 "
-                                variant="outline"
-                                size="sm"
-                                @click="showCommissionDialog = true"
+                                class="flex gap-2"
                             >
-                                <HandCoins class="mr-1.5 h-3.5 w-3.5" />
-                                {{
-                                    transfert.commission
-                                        ? 'Recalculer'
-                                        : 'Générer'
-                                }}
-                            </Button>
+                                <Button
+                                    size="sm"
+                                    class="bg-emerald-600 text-white hover:bg-emerald-700"
+                                    :disabled="validationProcessing"
+                                    @click="submitValidationAccord"
+                                >
+                                    <ShieldCheck class="mr-1.5 h-3.5 w-3.5" />
+                                    D'accord
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    class="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400"
+                                    :disabled="validationProcessing"
+                                    @click="showRefusDialog = true"
+                                >
+                                    <ShieldX class="mr-1.5 h-3.5 w-3.5" />
+                                    Non
+                                </Button>
+                            </div>
                         </div>
 
-                        <!-- Pas encore de commission -->
+                        <!-- ── Panneau validation admin (avant décision) ──── -->
                         <div
-                            v-if="!transfert.commission"
-                            class="px-5 py-8 text-center text-sm text-muted-foreground"
+                            v-if="
+                                transfert.statut === 'reception' &&
+                                !transfert.commission
+                            "
                         >
-                            Aucune commission générée. Cliquez sur "Générer"
-                            pour calculer les commissions livreur/propriétaire.
+                            <!-- Refus -->
+                            <div
+                                v-if="
+                                    transfert.validation_reception === 'refus'
+                                "
+                                class="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950/30"
+                            >
+                                <div
+                                    class="flex items-center gap-2 text-red-700 dark:text-red-400"
+                                >
+                                    <ShieldX class="h-4 w-4 shrink-0" />
+                                    <span class="text-sm font-semibold"
+                                        >Réception refusée</span
+                                    >
+                                </div>
+                                <p
+                                    class="mt-1 text-xs text-red-600 dark:text-red-400"
+                                >
+                                    Par {{ transfert.validated_by_nom }} le
+                                    {{ transfert.validated_at }}
+                                </p>
+                                <p
+                                    v-if="transfert.validation_motif"
+                                    class="mt-2 text-sm text-red-700 dark:text-red-300"
+                                >
+                                    Motif : {{ transfert.validation_motif }}
+                                </p>
+                                <p
+                                    v-if="can_valider_reception_admin"
+                                    class="mt-2 text-xs text-muted-foreground"
+                                >
+                                    Vous pouvez cliquer "D'accord" pour
+                                    approuver et générer la commission.
+                                </p>
+                            </div>
+
+                            <!-- En attente -->
+                            <div
+                                v-else
+                                class="px-5 py-8 text-center text-sm text-muted-foreground"
+                            >
+                                <ShieldCheck
+                                    class="mx-auto mb-2 h-8 w-8 opacity-30"
+                                />
+                                <p class="font-medium">
+                                    En attente de validation admin
+                                </p>
+                                <p class="mt-1 text-xs">
+                                    Un administrateur doit approuver cette
+                                    réception pour que la commission soit
+                                    générée automatiquement (200 FG × packs
+                                    reçus).
+                                </p>
+                            </div>
                         </div>
 
                         <!-- Commission existante -->
@@ -1441,13 +1586,12 @@ function activiteDotClass(action: string): string {
                     </p>
                 </div>
                 <div v-if="needsQuantite">
-                    <Label class="mb-1.5 block text-sm"
-                        >Quantité de référence</Label
-                    >
+                    <Label class="mb-1.5 block text-sm">Qté réceptionnée</Label>
                     <InputNumber
                         v-model="commissionForm.quantite_reference"
                         :min="1"
                         :use-grouping="false"
+                        :disabled="commissionForm.processing"
                         class="w-full"
                         input-class="w-full"
                     />
@@ -1464,6 +1608,22 @@ function activiteDotClass(action: string): string {
                 >
                     {{ commissionForm.errors.commission }}
                 </p>
+
+                <!-- Aperçu du gain total -->
+                <div
+                    v-if="commissionForm.valeur_base > 0"
+                    class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800 dark:bg-emerald-950/30"
+                >
+                    <p class="text-xs text-emerald-700 dark:text-emerald-400">
+                        Commission totale estimée
+                    </p>
+                    <p
+                        class="mt-0.5 text-lg font-bold text-emerald-700 tabular-nums dark:text-emerald-400"
+                    >
+                        {{ new Intl.NumberFormat('fr-FR').format(gainPreview) }}
+                        GNF
+                    </p>
+                </div>
             </div>
             <template #footer>
                 <Button variant="outline" @click="showCommissionDialog = false"
@@ -1474,6 +1634,66 @@ function activiteDotClass(action: string): string {
                     @click="submitCommission"
                 >
                     {{ commissionForm.processing ? 'Calcul…' : 'Générer' }}
+                </Button>
+            </template>
+        </Dialog>
+
+        <!-- ══ Dialog : Refuser la réception ════════════════════════════════ -->
+        <Dialog
+            v-model:visible="showRefusDialog"
+            modal
+            header="Refuser la réception"
+            :style="{ width: '460px' }"
+            :draggable="false"
+            @hide="
+                refusMotif = '';
+                validationErrors = {};
+            "
+        >
+            <div class="space-y-4 py-2">
+                <p class="text-sm text-muted-foreground">
+                    Indiquez le motif du refus. Aucune commission ne sera
+                    générée.
+                </p>
+                <div>
+                    <Label class="mb-1.5 block text-sm"
+                        >Motif (obligatoire)</Label
+                    >
+                    <InputText
+                        v-model="refusMotif"
+                        placeholder="Ex : quantités non conformes, erreur de saisie…"
+                        class="w-full"
+                    />
+                    <p
+                        v-if="validationErrors.motif"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ validationErrors.motif }}
+                    </p>
+                </div>
+            </div>
+            <template #footer>
+                <Button
+                    variant="outline"
+                    :disabled="validationProcessing"
+                    @click="showRefusDialog = false"
+                >
+                    Annuler
+                </Button>
+                <Button
+                    class="bg-red-600 text-white hover:bg-red-700"
+                    :disabled="validationProcessing || !refusMotif.trim()"
+                    @click="submitValidationRefus"
+                >
+                    <ShieldX
+                        v-if="!validationProcessing"
+                        class="mr-1.5 h-4 w-4"
+                    />
+                    <span
+                        v-else
+                        class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                    />
+                    {{ validationProcessing ? 'Refus…' : 'Confirmer le refus' }}
                 </Button>
             </template>
         </Dialog>
