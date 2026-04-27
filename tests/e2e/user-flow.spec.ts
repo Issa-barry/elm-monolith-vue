@@ -162,7 +162,8 @@ test('status filter → shows only active users', async ({ page }) => {
     await login(page);
     await page.goto('/users');
 
-    await page.getByRole('button', { name: /^actif$/i }).click();
+    const statusSelect = page.locator('[role="combobox"]:visible').first();
+    await selectOptionFromCombobox(page, statusSelect, /^actif$/i);
 
     const rows = page.locator('tbody tr:visible');
     const count = await rows.count();
@@ -171,7 +172,7 @@ test('status filter → shows only active users', async ({ page }) => {
         await expect(rows.nth(i)).not.toContainText(/inactif/i);
     }
 
-    await page.getByRole('button', { name: /^tous$/i }).click();
+    await selectOptionFromCombobox(page, statusSelect, /^tous$/i);
     await expect(page.locator('tbody tr:visible').first()).toBeVisible();
 });
 

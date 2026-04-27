@@ -9,6 +9,7 @@ import {
     openRowActions,
     randomDigits,
     registerCleanup,
+    selectOptionFromCombobox,
 } from './helpers';
 
 const PREFIX = 'e2eusrqual';
@@ -105,7 +106,8 @@ test('inactive filter shows only inactive users', async ({ page }) => {
 
     // Vérifier le filtre "Inactif" sur la liste
     await page.goto('/users');
-    await page.getByRole('button', { name: /^inactif$/i }).click();
+    const statusSelect = page.locator('[role="combobox"]:visible').first();
+    await selectOptionFromCombobox(page, statusSelect, /^inactif$/i);
 
     const rows = page.locator('tbody tr:visible');
     const count = await rows.count();
