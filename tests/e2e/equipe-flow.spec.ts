@@ -38,7 +38,7 @@ test.beforeAll(async ({ browser }) => {
             .locator('#vehicule-form button[type="submit"]:visible')
             .first()
             .click();
-        await page.waitForURL(/\/vehicules$/, { timeout: 20_000 });
+        await page.waitForURL(/\/vehicules\/[a-z0-9]+\/edit$/, { timeout: 20_000 });
 
         // ── Propriétaire ──────────────────────────────────────────────────────
         await page.goto('/proprietaires/create');
@@ -187,7 +187,7 @@ test('create equipe with proprietaire + override taux + verify list', async ({
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/equipes-livraison\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/equipes-livraison\/[a-z0-9]+\/edit$/);
 
     // Vérifier que le taux propriétaire = 55 est bien sauvegardé
     const tauxEditInput = page.locator('#taux_commission_proprietaire input');

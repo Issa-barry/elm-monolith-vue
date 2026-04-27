@@ -21,7 +21,7 @@ async function navigateToEdit(
     const row = await findRowByName(page, name);
     await openRowActions(row);
     await page.getByRole('menuitem', { name: /modifier/i }).first().click();
-    await expect(page).toHaveURL(/\/proprietaires\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/proprietaires\/[a-z0-9]+\/edit$/);
 }
 
 async function createProprietaireInApp(
@@ -120,7 +120,7 @@ test('edit proprietaire → update pays / ville / adresse → data persists on e
     await page.waitForLoadState('networkidle');
 
     // Doit rester sur la page d'édition (pas rediriger vers la liste)
-    await expect(page).toHaveURL(/\/proprietaires\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/proprietaires\/[a-z0-9]+\/edit$/);
 
     // Bannière de succès visible
     await expect(page.locator('text=mis à jour')).toBeVisible();
@@ -154,7 +154,7 @@ test('create proprietaire + toggle status → inactif in list', async ({
         .click();
 
     // Reste sur edit + success
-    await expect(page).toHaveURL(/\/proprietaires\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/proprietaires\/[a-z0-9]+\/edit$/);
     await expect(page.locator('text=mis à jour')).toBeVisible();
 
     // Vérifier dans la liste

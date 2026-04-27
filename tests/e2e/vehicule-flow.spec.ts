@@ -63,7 +63,7 @@ test('login + create vehicule + update status + verify list', async ({
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/vehicules\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+\/edit$/);
 
     await page.locator('label[for="is_active"]').first().click();
 
@@ -72,7 +72,7 @@ test('login + create vehicule + update status + verify list', async ({
     // waitForLoadState ensures the PUT response has arrived before checking the
     // flash banner (toHaveURL alone is a no-op when the URL does not change).
     await page.waitForLoadState('networkidle');
-    await expect(page).toHaveURL(/\/vehicules\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+\/edit$/);
     await expect(
         page.getByText(/Véhicule mis à jour avec succès./i).first(),
     ).toBeVisible();
