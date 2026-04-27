@@ -20,8 +20,7 @@ class DatabaseSeeder extends Seeder
             UserSitesSeeder::class,             // Rattachement utilisateurs → sites
             ProduitsSeeder::class,              // Catalogue produits
             ParametreSeeder::class,             // Paramètres applicatifs
-            ParametreSeeder::class,             // Paramètres applicatifs
- 
+
             // ── Module Véhicules ──────────────────────────────────────────────
             LivreursSeeder::class,              // 16 livreurs (10 externes + 6 internes)
             ProprietairesSeeder::class,         // 4 propriétaires

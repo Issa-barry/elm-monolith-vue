@@ -273,7 +273,7 @@ function confirmDelete(p: Proprietaire) {
                                     class="flex w-full items-center gap-2"
                                 >
                                     <Eye class="h-4 w-4" />
-                                    Details
+                                    Voir le détail
                                 </Link>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator
@@ -558,7 +558,7 @@ function confirmDelete(p: Proprietaire) {
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Eye class="h-4 w-4" />
-                                                Details
+                                                Voir le détail
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator
