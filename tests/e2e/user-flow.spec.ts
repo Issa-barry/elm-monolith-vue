@@ -51,7 +51,7 @@ test('edit user info → data persists', async ({ page }) => {
     await selectOptionFromCombobox(page, editRoleCombo, /comptable/i);
 
     await editForm.locator('button[type="submit"]:visible').first().click();
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
 
     const row = await findUserInList(page, prenom);
     await expect(row).toContainText(/comptable/i);
@@ -81,7 +81,7 @@ test('edit user password → login with new password', async ({ page }) => {
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
 });
 
 // ─── Toggle statut ────────────────────────────────────────────────────────────
@@ -105,14 +105,14 @@ test('toggle user status → inactif in list', async ({ page }) => {
         .getByRole('menuitem', { name: /modifier/i })
         .first()
         .click();
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
 
     await page.locator('label[for="is_active"]').first().click();
     await page
         .locator('#user-form button[type="submit"]:visible')
         .first()
         .click();
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
 
     // Vérifier inactif dans la liste
     const updated = await findUserInList(page, prenom);

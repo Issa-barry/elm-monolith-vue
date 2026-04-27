@@ -3,7 +3,6 @@ import {
     escapeRegExp,
     getVisibleSearchInput,
     login,
-    openRowActions,
     randomDigits,
     registerCleanup,
     selectOptionFromCombobox,
@@ -45,26 +44,10 @@ test('login + create vehicule + update status + verify list', async ({
 
     await submitBtn.click();
 
-    await expect(page).toHaveURL(/\/vehicules$/);
+    // Controller redirects to the edit page after creation (not the list)
+    await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+\/edit$/, { timeout: 15_000 });
 
-    const searchInput = getVisibleSearchInput(page);
-    await searchInput.fill(immatriculation);
-
-    const row = page
-        .locator('tbody tr', {
-            hasText: new RegExp(escapeRegExp(immatriculation), 'i'),
-        })
-        .first();
-    await expect(row).toBeVisible();
-
-    await openRowActions(row);
-    await page
-        .getByRole('menuitem', { name: /modifier/i })
-        .first()
-        .click();
-
-    await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+\/edit$/);
-
+    // Toggle is_active directly on the edit page we landed on
     await page.locator('label[for="is_active"]').first().click();
 
     await submitBtn.click();

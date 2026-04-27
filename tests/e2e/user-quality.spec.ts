@@ -101,7 +101,7 @@ test('inactive filter shows only inactive users', async ({ page }) => {
     // Désactiver via le formulaire d'édition
     await page.locator('label[for="is_active"]').first().click();
     await page.locator('#user-form button[type="submit"]:visible').first().click();
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
 
     // Vérifier le filtre "Inactif" sur la liste
     await page.goto('/users');
@@ -179,7 +179,7 @@ test('edit action in dropdown navigates to edit page', async ({ page }) => {
     await openRowActions(row);
     await page.getByRole('menuitem', { name: /modifier/i }).first().click();
 
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
     await expect(page.locator('#prenom')).toBeVisible();
 });
 
