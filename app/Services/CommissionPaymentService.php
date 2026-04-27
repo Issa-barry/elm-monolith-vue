@@ -31,7 +31,7 @@ class CommissionPaymentService
     public static function payer(
         Vehicule $vehicule,
         string $beneficiaryType,
-        int $beneficiaryId,
+        string $beneficiaryId,
         float $montant,
         string $modePaiement,
         string $paidAt,
@@ -110,7 +110,7 @@ class CommissionPaymentService
      * Soldes agrégés par livreur pour toute une organisation.
      * Utilisé par CommissionVehiculeController::index().
      */
-    public static function soldesParLivreur(int $orgId): Collection
+    public static function soldesParLivreur(string $orgId): Collection
     {
         return CommissionLogistiquePart::query()
             ->selectRaw(
@@ -140,7 +140,7 @@ class CommissionPaymentService
      *
      * @return Collection<CommissionLogistiquePart>
      */
-    public static function partsDisponiblesLivreur(int $livreurId, int $orgId): Collection
+    public static function partsDisponiblesLivreur(string $livreurId, string $orgId): Collection
     {
         return CommissionLogistiquePart::query()
             ->whereIn('statut', [
@@ -161,7 +161,7 @@ class CommissionPaymentService
      *
      * @return Collection<CommissionLogistiquePart>
      */
-    public static function releveLivreur(int $livreurId, int $orgId): Collection
+    public static function releveLivreur(string $livreurId, string $orgId): Collection
     {
         return CommissionLogistiquePart::with([
             'commission.transfert:id,reference,date_arrivee_reelle',
@@ -182,8 +182,8 @@ class CommissionPaymentService
      * @throws InvalidArgumentException
      */
     public static function payerLivreur(
-        int $livreurId,
-        int $orgId,
+        string $livreurId,
+        string $orgId,
         float $montant,
         string $modePaiement,
         string $paidAt,
@@ -259,7 +259,7 @@ class CommissionPaymentService
     public static function partsDisponibles(
         Vehicule $vehicule,
         string $beneficiaryType,
-        int $beneficiaryId
+        string $beneficiaryId
     ): Collection {
         $query = CommissionLogistiquePart::query()
             ->whereIn('statut', [
@@ -322,7 +322,7 @@ class CommissionPaymentService
         foreach ($rows as $row) {
             $key = $row->type_beneficiaire === 'livreur' ? 'livreurs' : 'proprietaires';
             $result[$key][] = [
-                'id' => (int) $row->beneficiary_id,
+                'id' => $row->beneficiary_id,
                 'type' => $row->type_beneficiaire,
                 'nom' => $row->beneficiaire_nom,
                 'pending' => (float) $row->pending,
@@ -341,7 +341,7 @@ class CommissionPaymentService
     public static function releve(
         Vehicule $vehicule,
         string $beneficiaryType,
-        int $beneficiaryId
+        string $beneficiaryId
     ): Collection {
         $query = CommissionLogistiquePart::with([
             'commission.transfert:id,reference,date_arrivee_reelle',

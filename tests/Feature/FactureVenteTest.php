@@ -22,7 +22,8 @@ class FactureVenteTest extends TestCase
 
     private function makeFacture(array $overrides = []): FactureVente
     {
-        $commande = CommandeVente::factory()->create(['organization_id' => $this->org->id]);
+        $siteId = $this->user->sites()->first(['sites.id'])?->id;
+        $commande = CommandeVente::factory()->create(['organization_id' => $this->org->id, 'site_id' => $siteId]);
 
         return FactureVente::factory()->create(array_merge([
             'organization_id' => $this->org->id,

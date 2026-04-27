@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Organization;
 use App\Models\Proprietaire;
+use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -119,6 +121,37 @@ class ProprietaireTest extends TestCase
 
         $this->actingAs($this->user)
             ->get(route('proprietaires.edit', $proprietaire))
+            ->assertStatus(403);
+    }
+
+    // —— show ———————————————————————————————————————————————————————————————————————————————————————————————
+
+    public function test_show_returns_200_for_authorized_user(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'categorie' => 'externe',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('proprietaires.show', $proprietaire))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Proprietaires/Show')
+                ->where('proprietaire.id', $proprietaire->id)
+                ->has('vehicules', 1)
+            );
+    }
+
+    public function test_show_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $otherOrg->id]);
+
+        $this->actingAs($this->user)
+            ->get(route('proprietaires.show', $proprietaire))
             ->assertStatus(403);
     }
 

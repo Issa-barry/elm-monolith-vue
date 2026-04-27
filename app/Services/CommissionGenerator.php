@@ -11,7 +11,7 @@ class CommissionGenerator
 {
     public static function generateForCommandeIfMissing(
         CommandeVente $commande,
-        ?int $factureId = null,
+        ?string $factureId = null,
         string $trigger = 'facture_payee'
     ): void {
         $commande->loadMissing([

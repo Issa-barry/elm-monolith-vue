@@ -3,11 +3,19 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { formatPhoneDisplay } from '@/lib/utils';
-import { AlertTriangle, Pencil, Plus, Save, Trash2 } from 'lucide-vue-next';
+import {
+    AlertTriangle,
+    Building2,
+    Lock,
+    Pencil,
+    Plus,
+    Save,
+    Trash2,
+} from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import InputNumber from 'primevue/inputnumber';
 import { useConfirm } from 'primevue/useconfirm';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import MembreModal, { type MembreFormData } from './MembreModal.vue';
 
 interface VehiculeOption {
@@ -16,6 +24,8 @@ interface VehiculeOption {
     immatriculation: string;
     categorie: string;
     type_label: string;
+    proprietaire_id: number | null;
+    proprietaire_nom: string | null;
 }
 
 type Membre = MembreFormData;
@@ -42,6 +52,7 @@ const props = defineProps<{
     proprietaires: ProprietaireOption[];
     vehicules: VehiculeOption[];
     tauxProprietaireDefaut: number;
+    currentSiteName: string;
 }>();
 const emit = defineEmits<{ submit: [] }>();
 
@@ -68,12 +79,35 @@ function searchVehicule(event: { query: string }) {
 function onVehiculeSelect(v: VehiculeOption | null) {
     // eslint-disable-next-line vue/no-mutating-props
     props.form.vehicule_id = v ? v.value : null;
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.nom = v ? v.label : '';
+    if (v?.categorie === 'interne') {
+        proprietaireSelected.value = null;
+        // eslint-disable-next-line vue/no-mutating-props
+        props.form.proprietaire_id = null;
+    } else if (v?.proprietaire_id) {
+        const prop = props.proprietaires.find(
+            (p) => p.value === v.proprietaire_id,
+        );
+        proprietaireSelected.value = prop ?? null;
+        // eslint-disable-next-line vue/no-mutating-props
+        props.form.proprietaire_id = v.proprietaire_id;
+    } else {
+        proprietaireSelected.value = null;
+        // eslint-disable-next-line vue/no-mutating-props
+        props.form.proprietaire_id = null;
+    }
 }
 
 function onVehiculeClear() {
     vehiculeSelected.value = null;
     // eslint-disable-next-line vue/no-mutating-props
     props.form.vehicule_id = null;
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.nom = '';
+    proprietaireSelected.value = null;
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.proprietaire_id = null;
 }
 
 // ── AutoComplete : Propriétaire ───────────────────────────────────────────────
@@ -84,7 +118,7 @@ const proprietaireSelected = ref<ProprietaireOption | null>(
 );
 const proprietaireSuggests = ref<ProprietaireOption[]>([]);
 
-function searchProprietaire(event: { query: string }) {
+function _searchProprietaire(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
     proprietaireSuggests.value = q
         ? props.proprietaires.filter(
@@ -95,12 +129,12 @@ function searchProprietaire(event: { query: string }) {
         : [...props.proprietaires];
 }
 
-function onProprietaireSelect(p: ProprietaireOption | null) {
+function _onProprietaireSelect(p: ProprietaireOption | null) {
     // eslint-disable-next-line vue/no-mutating-props
     props.form.proprietaire_id = p ? p.value : null;
 }
 
-function onProprietaireClear() {
+function _onProprietaireClear() {
     proprietaireSelected.value = null;
     // eslint-disable-next-line vue/no-mutating-props
     props.form.proprietaire_id = null;
@@ -137,6 +171,21 @@ const principalIndex = computed(() =>
 
 const hasPrincipal = computed(() => principalIndex.value >= 0);
 
+const vehiculeCourant = computed(
+    () =>
+        vehiculeSelected.value ??
+        props.vehicules.find((v) => v.value === props.form.vehicule_id) ??
+        null,
+);
+
+const vehiculeIsInterne = computed(
+    () => vehiculeCourant.value?.categorie === 'interne',
+);
+
+const vehiculeHasProprietaire = computed(
+    () => !!vehiculeCourant.value?.proprietaire_id,
+);
+
 const vehiculeWarning = computed(() => {
     if (!props.form.vehicule_id) {
         return 'Le véhicule est obligatoire.';
@@ -145,10 +194,25 @@ const vehiculeWarning = computed(() => {
 });
 
 const proprietaireWarning = computed(() => {
+    if (vehiculeIsInterne.value) {
+        return null;
+    }
+
     if (!props.form.proprietaire_id) {
         return 'Le propriétaire est obligatoire.';
     }
+
     return null;
+});
+
+watch(vehiculeIsInterne, (isInterne) => {
+    if (!isInterne) {
+        return;
+    }
+
+    proprietaireSelected.value = null;
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.proprietaire_id = null;
 });
 
 const principalWarning = computed(() => {
@@ -356,15 +420,19 @@ function handleSubmit() {
                 Nom de l'équipe
                 <span class="text-destructive">*</span>
             </Label>
-            <!-- eslint-disable vue/no-mutating-props -->
-            <input
-                id="nom"
-                v-model="form.nom"
-                type="text"
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            <div
+                class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
                 :class="{ 'border-destructive': form.errors?.nom }"
-            />
-            <!-- eslint-enable vue/no-mutating-props -->
+            >
+                <span
+                    :class="
+                        form.nom ? 'text-foreground' : 'text-muted-foreground'
+                    "
+                >
+                    {{ form.nom || 'Sélectionnez un véhicule…' }}
+                </span>
+                <Lock class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+            </div>
             <p v-if="form.errors?.nom" class="mt-1 text-xs text-destructive">
                 {{ form.errors.nom }}
             </p>
@@ -382,18 +450,57 @@ function handleSubmit() {
                 <div>
                     <Label for="proprietaire_id" class="mb-1.5 block">
                         Propriétaire
-                        <span class="text-destructive">*</span>
+                        <span v-if="!vehiculeIsInterne" class="text-destructive"
+                            >*</span
+                        >
                     </Label>
+
+                    <!-- Interne : le propriétaire est le site -->
+                    <div
+                        v-if="vehiculeIsInterne"
+                        class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
+                    >
+                        <span
+                            class="inline-flex items-center gap-2 text-foreground"
+                        >
+                            <Building2
+                                class="h-3.5 w-3.5 text-muted-foreground/70"
+                            />
+                            {{ currentSiteName }}
+                        </span>
+                        <Lock
+                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                        />
+                    </div>
+
+                    <!-- Verrouillé : auto-renseigné depuis le véhicule -->
+                    <div
+                        v-else-if="vehiculeHasProprietaire"
+                        class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
+                        :class="{
+                            'border-destructive': form.errors?.proprietaire_id,
+                        }"
+                    >
+                        <span class="text-foreground">{{
+                            proprietaireSelected?.label
+                        }}</span>
+                        <Lock
+                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                        />
+                    </div>
+
+                    <!-- Éditable : le véhicule n'a pas de propriétaire lié -->
                     <AutoComplete
+                        v-else
                         v-model="proprietaireSelected"
                         input-id="proprietaire_id"
                         :suggestions="proprietaireSuggests"
                         option-label="label"
-                        @complete="searchProprietaire"
+                        @complete="_searchProprietaire"
                         @item-select="
-                            onProprietaireSelect(proprietaireSelected)
+                            _onProprietaireSelect(proprietaireSelected)
                         "
-                        @clear="onProprietaireClear"
+                        @clear="_onProprietaireClear"
                         placeholder="Nom ou téléphone…"
                         class="w-full"
                         input-class="w-full"
@@ -422,10 +529,9 @@ function handleSubmit() {
                             </div>
                         </template>
                     </AutoComplete>
+
                     <p
-                        v-if="
-                            proprietaireWarning && form.errors?.proprietaire_id
-                        "
+                        v-if="form.errors?.proprietaire_id"
                         class="mt-1 text-xs text-destructive"
                     >
                         {{ form.errors.proprietaire_id }}

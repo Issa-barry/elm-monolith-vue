@@ -3,11 +3,14 @@
 namespace App\Models;
 
 use App\Enums\TypeEcartLogistique;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TransfertLigne extends Model
 {
+    use HasUlids;
+
     protected $table = 'transfert_lignes';
 
     protected $fillable = [

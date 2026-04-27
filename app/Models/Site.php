@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\SiteStatut;
 use App\Enums\SiteType;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Site extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, HasUlids, SoftDeletes;
 
     protected $fillable = [
         'organization_id',

@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Cache;
 
 class Parametre extends Model
 {
+    use HasUlids;
+
     // ── Groupes ───────────────────────────────────────────────────────────────
     public const GROUPE_GENERAL = 'general';
 
@@ -63,14 +66,14 @@ class Parametre extends Model
 
     // ── Cache ─────────────────────────────────────────────────────────────────
 
-    private static function cacheKey(int $orgId, string $cle): string
+    private static function cacheKey(string $orgId, string $cle): string
     {
         return "parametre_{$orgId}_{$cle}";
     }
 
     // ── Lecture / écriture ────────────────────────────────────────────────────
 
-    public static function get(int $orgId, string $cle, mixed $default = null): mixed
+    public static function get(string $orgId, string $cle, mixed $default = null): mixed
     {
         return Cache::remember(self::cacheKey($orgId, $cle), 3600, function () use ($orgId, $cle, $default) {
             $param = static::where('organization_id', $orgId)->where('cle', $cle)->first();
@@ -82,7 +85,7 @@ class Parametre extends Model
         });
     }
 
-    public static function set(int $orgId, string $cle, mixed $valeur): void
+    public static function set(string $orgId, string $cle, mixed $valeur): void
     {
         static::where('organization_id', $orgId)->where('cle', $cle)->update(['valeur' => (string) $valeur]);
         Cache::forget(self::cacheKey($orgId, $cle));
@@ -103,7 +106,7 @@ class Parametre extends Model
         };
     }
 
-    public static function clearCache(int $orgId): void
+    public static function clearCache(string $orgId): void
     {
         foreach ([
             self::CLE_SEUIL_STOCK_FAIBLE,
@@ -121,44 +124,44 @@ class Parametre extends Model
 
     // ── Accesseurs nommés ─────────────────────────────────────────────────────
 
-    public static function getSeuilStockFaible(int $orgId): int
+    public static function getSeuilStockFaible(string $orgId): int
     {
         return (int) self::get($orgId, self::CLE_SEUIL_STOCK_FAIBLE, 10);
     }
 
-    public static function isNotificationsStockActives(int $orgId): bool
+    public static function isNotificationsStockActives(string $orgId): bool
     {
         return (bool) self::get($orgId, self::CLE_NOTIFICATIONS_STOCK_ACTIVES, true);
     }
 
-    public static function getPrixRouleauDefaut(int $orgId): int
+    public static function getPrixRouleauDefaut(string $orgId): int
     {
         return (int) self::get($orgId, self::CLE_PRIX_ROULEAU_DEFAUT, 500);
     }
 
-    public static function getProduitRouleauId(int $orgId): ?int
+    public static function getProduitRouleauId(string $orgId): ?string
     {
         $val = self::get($orgId, self::CLE_PRODUIT_ROULEAU_ID, null);
 
         return $val !== null ? (int) $val : null;
     }
 
-    public static function getTauxProprietaireDefaut(int $orgId): float
+    public static function getTauxProprietaireDefaut(string $orgId): float
     {
         return (float) self::get($orgId, self::CLE_TAUX_PROPRIETAIRE_DEFAUT, 60);
     }
 
-    public static function getCashbackSeuilAchat(int $orgId): int
+    public static function getCashbackSeuilAchat(string $orgId): int
     {
         return (int) self::get($orgId, self::CLE_CASHBACK_SEUIL_ACHAT, 500000);
     }
 
-    public static function getCashbackMontantGain(int $orgId): int
+    public static function getCashbackMontantGain(string $orgId): int
     {
         return (int) self::get($orgId, self::CLE_CASHBACK_MONTANT_GAIN, 25000);
     }
 
-    public static function getVentesCommissionMode(int $orgId): string
+    public static function getVentesCommissionMode(string $orgId): string
     {
         $default = self::COMMISSION_MODE_COMMANDE_VALIDEE;
         $mode = (string) self::get($orgId, self::CLE_VENTES_COMMISSION_MODE, $default);
@@ -170,7 +173,7 @@ class Parametre extends Model
         return $mode;
     }
 
-    public static function setVentesCommissionMode(int $orgId, string $mode): void
+    public static function setVentesCommissionMode(string $orgId, string $mode): void
     {
         if (! in_array($mode, self::ventesCommissionModes(), true)) {
             throw new \InvalidArgumentException('Mode de commission de vente invalide.');

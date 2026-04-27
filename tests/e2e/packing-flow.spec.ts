@@ -76,7 +76,7 @@ async function createPacking(
     await selectFirstPrestataire(page);
     await selectShift(page, shift);
     await fillAndSubmitPacking(page);
-    await expect(page).toHaveURL(/\/packings\/\d+$/, { timeout: 30_000 });
+    await expect(page).toHaveURL(/\/packings\/[a-z0-9]+$/, { timeout: 30_000 });
 }
 
 test('create packing with shift Jour -> show displays Jour', async ({
@@ -107,7 +107,7 @@ test('edit packing -> change shift Jour to Nuit -> persisted', async ({
     const editLink = page.getByRole('link', { name: /modifier/i }).first();
     await expect(editLink).toBeVisible({ timeout: 10_000 });
     await editLink.click();
-    await expect(page).toHaveURL(/\/packings\/\d+\/edit$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/packings\/[a-z0-9]+\/edit$/, { timeout: 15_000 });
     await page.waitForSelector('#packing-form', { timeout: 15_000 });
 
     await selectShift(page, 'Nuit');
@@ -116,7 +116,7 @@ test('edit packing -> change shift Jour to Nuit -> persisted', async ({
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/packings\/\d+$/, { timeout: 30_000 });
+    await expect(page).toHaveURL(/\/packings\/[a-z0-9]+$/, { timeout: 30_000 });
     await expect(page.locator('body')).toContainText(/nuit/i, {
         timeout: 10_000,
     });

@@ -186,7 +186,7 @@ class CommandeAchatController extends Controller
 
         $data = $request->validate([
             'lignes' => 'required|array',
-            'lignes.*.id' => 'required|integer',
+            'lignes.*.id' => 'required|string',
             'lignes.*.qte_recue' => 'required|integer|min:0',
         ]);
 

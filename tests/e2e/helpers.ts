@@ -430,7 +430,7 @@ export async function createUser(
         .locator('#user-form button[type="submit"]:visible')
         .first()
         .click();
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
 }
 
 export async function findUserInList(

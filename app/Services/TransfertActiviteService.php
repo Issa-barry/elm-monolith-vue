@@ -11,7 +11,7 @@ class TransfertActiviteService
         TransfertLogistique $transfert,
         string $action,
         array $details = [],
-        ?int $userId = null,
+        ?string $userId = null,
     ): void {
         TransfertActivite::create([
             'transfert_logistique_id' => $transfert->id,

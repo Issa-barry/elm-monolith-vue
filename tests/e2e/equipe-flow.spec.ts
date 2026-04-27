@@ -29,7 +29,7 @@ test.beforeAll(async ({ browser }) => {
 
         // ── Véhicule interne ──────────────────────────────────────────────────
         await page.goto('/vehicules/create');
-        await page.locator('#nom_vehicule').fill(`E2E Equipe Vehicule ${unique}`);
+        await page.locator('#nom_vehicule').fill(`E2EEQ-${unique}`);
         await page.locator('#immatriculation').fill(`${SETUP_VH_PREFIX}${unique}`);
         const vhCombos = page.locator('#vehicule-form').getByRole('combobox');
         await selectOptionFromCombobox(page, vhCombos.nth(0), /interne/i); // catégorie
@@ -38,7 +38,7 @@ test.beforeAll(async ({ browser }) => {
             .locator('#vehicule-form button[type="submit"]:visible')
             .first()
             .click();
-        await page.waitForURL(/\/vehicules$/, { timeout: 20_000 });
+        await page.waitForURL(/\/vehicules\/[a-z0-9]+\/edit$/, { timeout: 20_000 });
 
         // ── Propriétaire ──────────────────────────────────────────────────────
         await page.goto('/proprietaires/create');
@@ -57,6 +57,7 @@ test.beforeAll(async ({ browser }) => {
 
 /** Nettoyage du véhicule et du propriétaire créés dans beforeAll. */
 test.afterAll(async ({ browser }) => {
+    test.setTimeout(90_000);
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
@@ -121,24 +122,26 @@ test.afterEach(async ({ browser }) => {
 test('create equipe with proprietaire + override taux + verify list', async ({
     page,
 }) => {
-    const unique = `${Date.now()}-${randomDigits(3)}`;
-    const nomEquipe = `${E2E_EQUIPE_NOM_PREFIX}${unique.slice(-8)}`;
-
     await login(page);
 
     await page.goto('/equipes-livraison/create');
     await expect(page).toHaveURL(/\/equipes-livraison\/create$/);
 
-    // Ordre DOM : Véhicule (first), puis Propriétaire (second) — tous deux obligatoires
+    // Véhicule : premier combobox du formulaire
     const formComboboxes = page.locator('form').getByRole('combobox');
-    await selectOptionFromCombobox(page, formComboboxes.nth(0)); // Véhicule
-    await selectOptionFromCombobox(page, formComboboxes.nth(1)); // Propriétaire
+    await selectOptionFromCombobox(page, formComboboxes.nth(0)); // Véhicule → nom auto-renseigné
+
+    // Propriétaire : AutoComplete éditable uniquement pour les véhicules externes sans
+    // propriétaire lié. Pour les véhicules internes, le site est propriétaire (div verrouillée).
+    const proprietaireInput = page.locator('input#proprietaire_id');
+    if (await proprietaireInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await selectOptionFromCombobox(page, formComboboxes.nth(1));
+    }
 
     // Override du taux propriétaire : 55 % (+ membre 45 % = 100 %)
     await page.locator('#taux_commission_proprietaire input').fill('55');
 
-    // Nom de l'équipe
-    await page.locator('#nom').fill(nomEquipe);
+    // Nom auto-renseigné depuis le véhicule — pas de saisie manuelle
 
     // Ajouter un membre principal (obligatoire)
     await page.locator('button', { hasText: /ajouter un membre/i }).first().click();
@@ -170,15 +173,15 @@ test('create equipe with proprietaire + override taux + verify list', async ({
 
     await expect(page).toHaveURL(/\/equipes-livraison$/, { timeout: 20_000 });
 
-    // Vérifier la présence dans la liste
+    // Nom auto-renseigné depuis le véhicule (préfixe E2EEQ-) — rechercher par préfixe
     const searchInput = page
         .locator('input[placeholder*="recherche" i]:visible')
         .first();
-    await searchInput.fill(nomEquipe);
+    await searchInput.fill(E2E_EQUIPE_NOM_PREFIX);
 
     const row = page
         .locator('tbody tr', {
-            hasText: new RegExp(escapeRegExp(nomEquipe), 'i'),
+            hasText: new RegExp(escapeRegExp(E2E_EQUIPE_NOM_PREFIX), 'i'),
         })
         .first();
     await expect(row).toBeVisible({ timeout: 10_000 });
@@ -190,7 +193,7 @@ test('create equipe with proprietaire + override taux + verify list', async ({
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/equipes-livraison\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/equipes-livraison\/[a-z0-9]+\/edit$/);
 
     // Vérifier que le taux propriétaire = 55 est bien sauvegardé
     const tauxEditInput = page.locator('#taux_commission_proprietaire input');
@@ -203,10 +206,8 @@ test('store equipe echoue sans proprietaire', async ({ page }) => {
     await page.goto('/equipes-livraison/create');
     await expect(page).toHaveURL(/\/equipes-livraison\/create$/);
 
-    // Remplir nom seulement, omettre propriétaire
-    await page.locator('#nom').fill('Équipe Sans Proprio');
-
-    // Le bouton Enregistrer doit rester désactivé tant que propriétaire est absent
+    // Sans véhicule sélectionné, nom et propriétaire ne sont pas renseignés
+    // Le bouton Enregistrer doit rester désactivé
     const submitBtn = page.locator('form button[type="submit"]:visible').first();
     await expect(submitBtn).toBeDisabled();
 });

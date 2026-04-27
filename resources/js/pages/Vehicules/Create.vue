@@ -17,9 +17,10 @@ interface TypeOption {
     capacite_defaut: number;
 }
 
-defineProps<{
+const props = defineProps<{
     proprietaires: Option[];
     types: TypeOption[];
+    initial_proprietaire_id: number | null;
     currentSiteName: string;
 }>();
 
@@ -33,9 +34,11 @@ const form = useForm({
     nom_vehicule: '',
     immatriculation: '',
     type_vehicule: null as string | null,
-    categorie: null as string | null,
+    categorie: props.initial_proprietaire_id
+        ? 'externe'
+        : (null as string | null),
     capacite_packs: null as number | null,
-    proprietaire_id: null as number | null,
+    proprietaire_id: props.initial_proprietaire_id,
     pris_en_charge_par_usine: false,
     photo: null as File | null,
     is_active: true,

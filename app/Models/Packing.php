@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\PackingShift;
 use App\Enums\PackingStatut;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,7 +16,7 @@ use Illuminate\Support\Str;
 
 class Packing extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, HasUlids, SoftDeletes;
 
     private const TEMP_PREFIX = 'TMP-PACK-';
 

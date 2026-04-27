@@ -84,7 +84,7 @@ class PackingController extends Controller
         abort_if(! $orgId, 403, 'Votre compte n\'est associé à aucune organisation.');
 
         $data = $request->validate([
-            'prestataire_id' => ['required', 'integer', Rule::exists('prestataires', 'id')->where('organization_id', $orgId)],
+            'prestataire_id' => ['required', 'string', Rule::exists('prestataires', 'id')->where('organization_id', $orgId)],
             'date' => 'required|date',
             'shift' => ['required', Rule::in(PackingShift::values())],
             'nb_rouleaux' => 'required|integer|min:1|max:9999999',
@@ -165,7 +165,7 @@ class PackingController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $data = $request->validate([
-            'prestataire_id' => ['required', 'integer', Rule::exists('prestataires', 'id')->where('organization_id', $orgId)],
+            'prestataire_id' => ['required', 'string', Rule::exists('prestataires', 'id')->where('organization_id', $orgId)],
             'date' => 'required|date',
             'shift' => ['required', Rule::in(PackingShift::values())],
             'nb_rouleaux' => 'required|integer|min:1|max:9999999',

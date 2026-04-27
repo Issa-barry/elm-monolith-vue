@@ -80,6 +80,28 @@ class CommissionLogistiqueService
     }
 
     /**
+     * Génération automatique après validation admin : 200 FG × packs reçus.
+     * Idempotente : si une commission existe déjà, ne rien faire.
+     */
+    public static function genererAutomatique(TransfertLogistique $transfert): CommissionLogistique
+    {
+        $existing = $transfert->commission()->first();
+        if ($existing) {
+            return $existing->load('parts');
+        }
+
+        $transfert->loadMissing('lignes');
+        $quantiteRecue = (int) $transfert->lignes->sum('quantite_recue');
+
+        return self::genererPourTransfert(
+            $transfert,
+            BaseCalculLogistique::PAR_PACK->value,
+            200.0,
+            $quantiteRecue > 0 ? $quantiteRecue : 0,
+        );
+    }
+
+    /**
      * Versement legacy (retro-compat, utilisé depuis la page Transfert Show).
      * Les nouvelles saisies passent par CommissionPaymentService.
      */

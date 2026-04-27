@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\SiteType;
 use App\Enums\StatutTransfert;
 use App\Models\TransfertLogistique;
 use App\Models\User;
@@ -121,11 +122,19 @@ class TransfertLogistiquePolicy
             && $user->isAssignedToSite($transfert->site_source_id);
     }
 
+    public function validerReceptionAdmin(User $user, TransfertLogistique $transfert): bool
+    {
+        return $this->sameOrganization($user, $transfert)
+            && $transfert->isReception()
+            && $user->hasAnyRole(['super_admin', 'admin_entreprise']);
+    }
+
     public function genererCommission(User $user, TransfertLogistique $transfert): bool
     {
         return $user->can('logistique.commission.verser')
             && $this->sameOrganization($user, $transfert)
-            && ($transfert->isReception() || $transfert->isCloture());
+            && ($transfert->isReception() || $transfert->isCloture())
+            && $user->sites()->where('type', SiteType::SIEGE->value)->exists();
     }
 
     public function voirCommission(User $user, TransfertLogistique $transfert): bool

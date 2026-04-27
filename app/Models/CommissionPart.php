@@ -3,12 +3,15 @@
 namespace App\Models;
 
 use App\Enums\StatutCommission;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CommissionPart extends Model
 {
+    use HasUlids;
+
     protected $table = 'commission_parts';
 
     protected $fillable = [

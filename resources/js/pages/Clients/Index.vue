@@ -29,6 +29,7 @@ import DataTable from 'primevue/datatable';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
@@ -67,7 +68,7 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const search = ref('');
-const statusFilter = ref<boolean | null>(null);
+const statusFilter = ref<string>('tous');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => {
     filters.value.global.value = val;
@@ -83,9 +84,11 @@ const inactiveClients = computed(
 
 function applyFilters(list: Client[]): Client[] {
     const byStatus =
-        statusFilter.value === null
+        statusFilter.value === 'tous'
             ? list
-            : list.filter((c) => c.is_active === statusFilter.value);
+            : list.filter(
+                  (c) => c.is_active === (statusFilter.value === 'actif'),
+              );
     const q = search.value.trim().toLowerCase();
     if (!q) return byStatus;
     return byStatus.filter(
@@ -404,44 +407,17 @@ function confirmDelete(c: Client) {
                                     class="w-full text-sm"
                                 />
                             </IconField>
-                            <div class="flex gap-1">
-                                <button
-                                    type="button"
-                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                                    :class="
-                                        statusFilter === null
-                                            ? 'bg-primary text-primary-foreground'
-                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                    "
-                                    @click="statusFilter = null"
-                                >
-                                    Tous
-                                </button>
-                                <button
-                                    type="button"
-                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                                    :class="
-                                        statusFilter === true
-                                            ? 'bg-emerald-500 text-white'
-                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                    "
-                                    @click="statusFilter = true"
-                                >
-                                    Actif
-                                </button>
-                                <button
-                                    type="button"
-                                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                                    :class="
-                                        statusFilter === false
-                                            ? 'bg-zinc-500 text-white'
-                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                    "
-                                    @click="statusFilter = false"
-                                >
-                                    Inactif
-                                </button>
-                            </div>
+                            <Select
+                                v-model="statusFilter"
+                                :options="[
+                                    { value: 'tous', label: 'Tous' },
+                                    { value: 'actif', label: 'Actif' },
+                                    { value: 'inactif', label: 'Inactif' },
+                                ]"
+                                option-label="label"
+                                option-value="value"
+                                class="w-32"
+                            />
                         </div>
                     </template>
 

@@ -51,7 +51,7 @@ test('edit user info → data persists', async ({ page }) => {
     await selectOptionFromCombobox(page, editRoleCombo, /comptable/i);
 
     await editForm.locator('button[type="submit"]:visible').first().click();
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
 
     const row = await findUserInList(page, prenom);
     await expect(row).toContainText(/comptable/i);
@@ -81,7 +81,7 @@ test('edit user password → login with new password', async ({ page }) => {
         .first()
         .click();
 
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
 });
 
 // ─── Toggle statut ────────────────────────────────────────────────────────────
@@ -105,14 +105,14 @@ test('toggle user status → inactif in list', async ({ page }) => {
         .getByRole('menuitem', { name: /modifier/i })
         .first()
         .click();
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
 
     await page.locator('label[for="is_active"]').first().click();
     await page
         .locator('#user-form button[type="submit"]:visible')
         .first()
         .click();
-    await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+    await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
 
     // Vérifier inactif dans la liste
     const updated = await findUserInList(page, prenom);
@@ -162,7 +162,8 @@ test('status filter → shows only active users', async ({ page }) => {
     await login(page);
     await page.goto('/users');
 
-    await page.getByRole('button', { name: /^actif$/i }).click();
+    const statusSelect = page.locator('[role="combobox"]:visible').first();
+    await selectOptionFromCombobox(page, statusSelect, /^actif$/i);
 
     const rows = page.locator('tbody tr:visible');
     const count = await rows.count();
@@ -171,7 +172,7 @@ test('status filter → shows only active users', async ({ page }) => {
         await expect(rows.nth(i)).not.toContainText(/inactif/i);
     }
 
-    await page.getByRole('button', { name: /^tous$/i }).click();
+    await selectOptionFromCombobox(page, statusSelect, /^tous$/i);
     await expect(page.locator('tbody tr:visible').first()).toBeVisible();
 });
 

@@ -26,7 +26,7 @@ class EquipeLivraisonTest extends TestCase
         ]);
     }
 
-    private function validPayload(int $proprietaireId, array $overrides = []): array
+    private function validPayload(string $proprietaireId, array $overrides = []): array
     {
         return array_merge([
             'nom' => 'Équipe Test',
@@ -148,12 +148,33 @@ class EquipeLivraisonTest extends TestCase
 
     public function test_store_echoue_si_proprietaire_id_absent(): void
     {
-        $payload = $this->validPayload(0);
+        $vehicule = $this->makeVehicule();
+        $payload = $this->validPayload(0, ['vehicule_id' => $vehicule->id]);
         unset($payload['proprietaire_id']);
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $payload)
             ->assertSessionHasErrors('proprietaire_id');
+    }
+
+    public function test_store_autorise_vehicule_interne_sans_proprietaire(): void
+    {
+        $vehiculeInterne = $this->makeVehiculeInterne();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload(0, [
+                'vehicule_id' => $vehiculeInterne->id,
+                'proprietaire_id' => null,
+                'nom' => 'Ã‰quipe Interne',
+            ]))
+            ->assertRedirect(route('equipes-livraison.index'));
+
+        $this->assertDatabaseHas('equipes_livraison', [
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehiculeInterne->id,
+            'proprietaire_id' => null,
+            'nom' => 'Ã‰quipe Interne',
+        ]);
     }
 
     public function test_store_echoue_si_proprietaire_autre_org(): void
@@ -485,7 +506,16 @@ class EquipeLivraisonTest extends TestCase
         ]);
     }
 
-    private function makeEquipe(int $proprietaireId): EquipeLivraison
+    private function makeVehiculeInterne(): Vehicule
+    {
+        return Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => null,
+            'categorie' => 'interne',
+        ]);
+    }
+
+    private function makeEquipe(string $proprietaireId): EquipeLivraison
     {
         return EquipeLivraison::create([
             'organization_id' => $this->org->id,

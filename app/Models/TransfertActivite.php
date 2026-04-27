@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TransfertActivite extends Model
 {
+    use HasUlids;
+
     protected $table = 'transfert_activites';
 
     protected $fillable = [
@@ -43,6 +46,8 @@ class TransfertActivite extends Model
         'annule' => 'a annulé le transfert',
         'commission_generee' => 'a généré la commission logistique',
         'versement_effectue' => 'a effectué un versement',
+        'validation_admin_accord' => 'a approuvé la réception (commission générée)',
+        'validation_admin_refus' => 'a refusé la réception',
     ];
 
     public function getActionLabelAttribute(): string

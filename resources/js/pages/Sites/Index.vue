@@ -16,6 +16,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     Building2,
+    Download,
     Eye,
     MoreVertical,
     Pencil,
@@ -107,6 +108,98 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Sites', href: '/sites' },
 ];
+
+function escapeHtml(value: string): string {
+    return value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+function safeExcelText(value: string): string {
+    const cleaned = value.replace(/\r?\n/g, ' ').trim();
+    return /^[=+\-@]/.test(cleaned) ? `'${cleaned}` : cleaned;
+}
+
+function toExcelValue(value: unknown): string | number {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'boolean') return value ? 1 : 0;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : '';
+    return safeExcelText(String(value));
+}
+
+function toExcelCell(value: unknown): string {
+    const normalized = toExcelValue(value);
+    if (typeof normalized === 'number') return `<td>${normalized}</td>`;
+    return `<td>${escapeHtml(normalized)}</td>`;
+}
+
+function formatExportDate(d: Date): string {
+    const pad = (v: number) => String(v).padStart(2, '0');
+    return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
+function exportExcel(): void {
+    const rows = desktopTypeFiltered.value;
+
+    if (rows.length === 0) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Export impossible',
+            detail: 'Aucun résultat à exporter.',
+            life: 3000,
+        });
+        return;
+    }
+
+    const columns: Array<{ label: string; value: (s: Site) => unknown }> = [
+        { label: 'id', value: (s) => s.id },
+        { label: 'nom', value: (s) => s.nom },
+        { label: 'code', value: (s) => s.code },
+        { label: 'type', value: (s) => s.type_label },
+        { label: 'statut', value: (s) => s.statut_label },
+        { label: 'ville', value: (s) => s.ville },
+        { label: 'quartier', value: (s) => s.quartier },
+        { label: 'localisation', value: (s) => s.localisation },
+        { label: 'telephone', value: (s) => s.telephone },
+        { label: 'description', value: (s) => s.description },
+        { label: 'site_parent', value: (s) => s.parent_nom },
+        { label: 'sites_enfants', value: (s) => s.enfants_count },
+    ];
+
+    const header = columns
+        .map((c) => `<th>${escapeHtml(c.label)}</th>`)
+        .join('');
+    const body = rows
+        .map(
+            (s) =>
+                `<tr>${columns.map((c) => toExcelCell(c.value(s))).join('')}</tr>`,
+        )
+        .join('');
+
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"/></head><body><table border="1"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></body></html>`;
+
+    const blob = new Blob([`\uFEFF${html}`], {
+        type: 'application/vnd.ms-excel;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `sites-${formatExportDate(new Date())}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast.add({
+        severity: 'success',
+        summary: 'Export lancé',
+        detail: `${rows.length} site${rows.length > 1 ? 's' : ''} exporté${rows.length > 1 ? 's' : ''}.`,
+        life: 2500,
+    });
+}
 
 function confirmDelete(s: Site) {
     if (s.enfants_count > 0) {
@@ -310,12 +403,18 @@ function confirmDelete(s: Site) {
                         }}
                     </p>
                 </div>
-                <Link v-if="can('sites.create')" href="/sites/create">
-                    <Button>
-                        <Plus class="mr-2 h-4 w-4" />
-                        Nouveau site
+                <div class="flex items-center gap-2">
+                    <Button variant="outline" @click="exportExcel">
+                        <Download class="mr-2 h-4 w-4" />
+                        Exporter Excel
                     </Button>
-                </Link>
+                    <Link v-if="can('sites.create')" href="/sites/create">
+                        <Button>
+                            <Plus class="mr-2 h-4 w-4" />
+                            Nouveau site
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             <!-- Tableau -->

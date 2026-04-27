@@ -228,7 +228,7 @@ class SiteController extends Controller
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private function parentOptions(?int $excludeId = null): array
+    private function parentOptions(?string $excludeId = null): array
     {
         $query = Site::where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom');

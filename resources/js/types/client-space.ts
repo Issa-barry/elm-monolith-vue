@@ -13,6 +13,7 @@ export interface VehiculeOption {
     immatriculation: string | null;
     type_label: string;
     capacite_packs: number | null;
+    photo_url: string | null;
 }
 
 export interface TypeVehiculeOption {
