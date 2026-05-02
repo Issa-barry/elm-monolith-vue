@@ -40,16 +40,16 @@ class ClientDashboardController extends Controller
     public function earnings(Request $request): Response
     {
         $dateDebut = $request->input('date_debut') ?: null;
-        $dateFin   = $request->input('date_fin')   ?: null;
-        $payload   = $this->dashboardPayload($request->user(), $dateDebut, $dateFin);
+        $dateFin = $request->input('date_fin') ?: null;
+        $payload = $this->dashboardPayload($request->user(), $dateDebut, $dateFin);
 
         return Inertia::render('client/Earnings', [
-            'actor'              => $payload['actor'],
-            'vehicules'          => $payload['vehicules'],
-            'earnings'           => $payload['earnings'],
+            'actor' => $payload['actor'],
+            'vehicules' => $payload['vehicules'],
+            'earnings' => $payload['earnings'],
             'earnings_by_vehicule' => $payload['earnings_by_vehicule'],
-            'statement'          => $payload['statement'],
-            'filters'            => ['date_debut' => $dateDebut, 'date_fin' => $dateFin],
+            'statement' => $payload['statement'],
+            'filters' => ['date_debut' => $dateDebut, 'date_fin' => $dateFin],
         ]);
     }
 
@@ -542,7 +542,7 @@ class ClientDashboardController extends Controller
     }
 
     /**
-     * @return array<string, float>  vehicule_id => frais total approuvé
+     * @return array<string, float> vehicule_id => frais total approuvé
      */
     private function fraisDepensesParVehicule(?string $organizationId, ?Proprietaire $proprietaire, ?string $dateDebut = null, ?string $dateFin = null): array
     {

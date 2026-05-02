@@ -106,9 +106,9 @@ class CommissionVenteController extends Controller
 
                 match ($periode) {
                     'today' => $depQuery->whereDate('date_depense', now()),
-                    'week'  => $depQuery->whereBetween('date_depense', [now()->startOfWeek(), now()->endOfWeek()]),
+                    'week' => $depQuery->whereBetween('date_depense', [now()->startOfWeek(), now()->endOfWeek()]),
                     'month' => $depQuery->whereYear('date_depense', now()->year)
-                                        ->whereMonth('date_depense', now()->month),
+                        ->whereMonth('date_depense', now()->month),
                     default => null,
                 };
 
@@ -125,13 +125,13 @@ class CommissionVenteController extends Controller
         }
 
         $beneficiaires = $rows->map(function ($row) use ($tab, $fraisParProprio) {
-            $totalBrut  = (float) $row->total_brut_cumule;
+            $totalBrut = (float) $row->total_brut_cumule;
             $totalFrais = $tab === 'proprietaires'
                 ? ($fraisParProprio[$row->beneficiaire_id] ?? 0.0)
                 : (float) $row->total_frais;
-            $totalNet   = max(0.0, $totalBrut - $totalFrais);
+            $totalNet = max(0.0, $totalBrut - $totalFrais);
             $totalVerse = (float) $row->total_verse;
-            $solde      = max(0.0, $totalNet - $totalVerse);
+            $solde = max(0.0, $totalNet - $totalVerse);
 
             $statutGlobal = match (true) {
                 $totalNet > 0 && $totalVerse >= $totalNet => StatutCommission::VERSEE->value,
@@ -140,20 +140,20 @@ class CommissionVenteController extends Controller
             };
 
             return [
-                'beneficiaire_id'        => (string) $row->beneficiaire_id,
-                'type_beneficiaire'      => $row->type_beneficiaire,
-                'beneficiaire_nom'       => $row->beneficiaire_nom ?? '—',
-                'telephone'              => $row->telephone,
-                'total_brut_cumule'      => $totalBrut,
-                'total_frais'            => $totalFrais,
-                'total_net_cumule'       => $totalNet,
-                'total_verse'            => $totalVerse,
-                'solde_restant'          => $solde,
-                'nb_commandes'           => (int) $row->nb_commandes,
+                'beneficiaire_id' => (string) $row->beneficiaire_id,
+                'type_beneficiaire' => $row->type_beneficiaire,
+                'beneficiaire_nom' => $row->beneficiaire_nom ?? '—',
+                'telephone' => $row->telephone,
+                'total_brut_cumule' => $totalBrut,
+                'total_frais' => $totalFrais,
+                'total_net_cumule' => $totalNet,
+                'total_verse' => $totalVerse,
+                'solde_restant' => $solde,
+                'nb_commandes' => (int) $row->nb_commandes,
                 'date_derniere_commande' => $row->date_derniere_commande
                     ? Carbon::parse($row->date_derniere_commande)->format(self::DATE_DISPLAY_FORMAT)
                     : null,
-                'statut_global'          => $statutGlobal,
+                'statut_global' => $statutGlobal,
             ];
         });
 
@@ -403,12 +403,12 @@ class CommissionVenteController extends Controller
             'historique_commandes' => $historiqueCommandes,
             'historique_paiements_globaux' => $historiquePaiements,
             'frais_depenses' => $fraisDepenses->map(fn ($d) => [
-                'id'           => $d->id,
-                'date'         => $d->date_depense->toDateString(),
-                'type'         => $d->depenseType?->libelle ?? '—',
-                'vehicule'     => $d->vehicule?->nom_vehicule,
-                'montant'      => (float) $d->montant,
-                'commentaire'  => $d->commentaire,
+                'id' => $d->id,
+                'date' => $d->date_depense->toDateString(),
+                'type' => $d->depenseType?->libelle ?? '—',
+                'vehicule' => $d->vehicule?->nom_vehicule,
+                'montant' => (float) $d->montant,
+                'commentaire' => $d->commentaire,
             ])->values(),
             'modes_paiement' => ModePaiement::options(),
             'filtres' => [

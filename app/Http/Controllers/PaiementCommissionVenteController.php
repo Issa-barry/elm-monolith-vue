@@ -30,15 +30,15 @@ class PaiementCommissionVenteController extends Controller
         abort_unless(in_array($type, ['livreur', 'proprietaire'], true), 422, 'Type bénéficiaire invalide.');
 
         $data = $request->validate([
-            'montant'       => ['required', 'numeric', 'min:0.01'],
+            'montant' => ['required', 'numeric', 'min:0.01'],
             'mode_paiement' => ['required', Rule::in(array_column(ModePaiement::cases(), 'value'))],
-            'paid_at'       => 'required|date',
-            'note'          => 'nullable|string|max:2000',
+            'paid_at' => 'required|date',
+            'note' => 'nullable|string|max:2000',
         ], [
-            'montant.required'       => 'Le montant est obligatoire.',
-            'montant.min'            => 'Le montant doit être supérieur à 0.',
+            'montant.required' => 'Le montant est obligatoire.',
+            'montant.min' => 'Le montant doit être supérieur à 0.',
             'mode_paiement.required' => 'Le mode de paiement est obligatoire.',
-            'paid_at.required'       => 'La date de paiement est obligatoire.',
+            'paid_at.required' => 'La date de paiement est obligatoire.',
         ]);
 
         $erreur = $this->verifierSoldeProprietaire($type, $beneficiaireId, (float) $data['montant']);

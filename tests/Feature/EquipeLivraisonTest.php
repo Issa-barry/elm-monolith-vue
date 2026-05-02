@@ -32,7 +32,8 @@ class EquipeLivraisonTest extends TestCase
             'nom' => 'Équipe Test',
             'is_active' => true,
             'proprietaire_id' => $proprietaireId,
-            'taux_commission_proprietaire' => 70,
+            'commission_unitaire_par_pack' => 100,
+            'montant_par_pack_proprietaire' => 70,
             'membres' => [
                 [
                     'livreur_id' => null,
@@ -40,7 +41,7 @@ class EquipeLivraisonTest extends TestCase
                     'prenom' => 'Mamadou',
                     'telephone' => '+224620000001',
                     'role' => 'chauffeur',
-                    'taux_commission' => 30,
+                    'montant_par_pack' => 30,
                     'ordre' => 0,
                 ],
             ],
@@ -123,7 +124,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
                     'telephone' => '+224abc123456', 'role' => 'chauffeur',
-                    'taux_commission' => 30, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertSessionHasErrors('membres.0.telephone');
@@ -140,7 +141,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
                     'telephone' => '+22462012345', 'role' => 'chauffeur',
-                    'taux_commission' => 30, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertSessionHasErrors('membres.0.telephone');
@@ -166,6 +167,14 @@ class EquipeLivraisonTest extends TestCase
                 'vehicule_id' => $vehiculeInterne->id,
                 'proprietaire_id' => null,
                 'nom' => 'Ã‰quipe Interne',
+                'commission_unitaire_par_pack' => 30,
+                'montant_par_pack_proprietaire' => null,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'telephone' => '+224620000001', 'role' => 'chauffeur',
+                    'montant_par_pack' => 30, 'ordre' => 0,
+                ]],
             ]))
             ->assertRedirect(route('equipes-livraison.index'));
 
@@ -195,12 +204,13 @@ class EquipeLivraisonTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
                 'vehicule_id' => $vehicule->id,
-                'taux_commission_proprietaire' => 75.50,
+                'commission_unitaire_par_pack' => 100,
+                'montant_par_pack_proprietaire' => 75.50,
                 'membres' => [[
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
-                    'taux_commission' => 24.50, 'ordre' => 0,
+                    'montant_par_pack' => 24.50, 'ordre' => 0,
                 ]],
             ]))
             ->assertRedirect(route('equipes-livraison.index'));
@@ -213,43 +223,56 @@ class EquipeLivraisonTest extends TestCase
         $this->assertEquals(75.50, (float) $equipe->taux_commission_proprietaire);
     }
 
-    public function test_store_echoue_si_taux_superieur_100(): void
-    {
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-
-        $this->actingAs($this->user)
-            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
-                'taux_commission_proprietaire' => 101,
-            ]))
-            ->assertSessionHasErrors('taux_commission_proprietaire');
-    }
-
-    public function test_store_echoue_si_taux_negatif(): void
-    {
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-
-        $this->actingAs($this->user)
-            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
-                'taux_commission_proprietaire' => -1,
-            ]))
-            ->assertSessionHasErrors('taux_commission_proprietaire');
-    }
-
-    public function test_store_echoue_si_total_taux_different_de_100(): void
+    public function test_store_echoue_si_montants_depassent_commission(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = $this->makeVehicule();
 
-        // propriétaire 60 + livreur 30 = 90 % → doit échouer
+        // proprietaire 80 + livreur 30 = 110 ≠ commission 100
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
                 'vehicule_id' => $vehicule->id,
-                'taux_commission_proprietaire' => 60,
+                'commission_unitaire_par_pack' => 100,
+                'montant_par_pack_proprietaire' => 80,
                 'membres' => [[
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
-                    'taux_commission' => 30, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertStatus(422);
+    }
+
+    public function test_store_echoue_si_montant_proprietaire_negatif(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'montant_par_pack_proprietaire' => -1,
+            ]))
+            ->assertSessionHasErrors('montant_par_pack_proprietaire');
+    }
+
+    public function test_store_echoue_si_total_montants_different_de_commission(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
+
+        // propriétaire 60 + livreur 30 = 90 ≠ commission 100 → doit échouer
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'commission_unitaire_par_pack' => 100,
+                'montant_par_pack_proprietaire' => 60,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'telephone' => '+224620000001', 'role' => 'chauffeur',
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertStatus(422);
@@ -282,7 +305,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => null,
                     'nom' => 'Barry', 'prenom' => 'Ibrahima',
                     'telephone' => '+224620000002', 'role' => 'chauffeur',
-                    'taux_commission' => 30, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertSessionHasErrors('nom');
@@ -312,7 +335,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
                     'telephone' => '+224620000002', 'role' => 'chauffeur',
-                    'taux_commission' => 30, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertRedirect(route('equipes-livraison.index'));
@@ -338,7 +361,7 @@ class EquipeLivraisonTest extends TestCase
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
                     'telephone' => '+224620000001',
                     'role' => 'chauffeur',
-                    'taux_commission' => 30, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertSessionHasErrors('membres.0.telephone');
@@ -381,7 +404,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => null,
                     'nom' => 'Barry', 'prenom' => 'Ibrahima',
                     'telephone' => '+224620000002', 'role' => 'chauffeur',
-                    'taux_commission' => 30, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertRedirect(route('equipes-livraison.index'));
@@ -399,7 +422,7 @@ class EquipeLivraisonTest extends TestCase
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
                     'telephone' => '+224620000001',
                     'role' => 'chauffeur',
-                    'taux_commission' => 30, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertSessionHasErrors('membres.0.telephone');
@@ -448,12 +471,13 @@ class EquipeLivraisonTest extends TestCase
             ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($nouveauProprietaire->id, [
                 'vehicule_id' => $vehicule->id,
                 'nom' => 'Équipe Modifiée',
-                'taux_commission_proprietaire' => 55,
+                'commission_unitaire_par_pack' => 100,
+                'montant_par_pack_proprietaire' => 55,
                 'membres' => [[
                     'livreur_id' => null,
                     'nom' => 'Diallo', 'prenom' => 'Mamadou',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
-                    'taux_commission' => 45, 'ordre' => 0,
+                    'montant_par_pack' => 45, 'ordre' => 0,
                 ]],
             ]))
             ->assertRedirect(route('equipes-livraison.edit', $equipe));

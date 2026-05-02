@@ -261,7 +261,7 @@ class EquipeLivraisonController extends Controller
         $commission = (float) $e->commission_unitaire_par_pack;
 
         $roleCounts = [];
-        $membresData = $sorted->map(function (EquipeLivreur $m) use (&$roleCounts, $commission) {
+        $membresData = $sorted->map(function (EquipeLivreur $m) use (&$roleCounts) {
             $role = $m->role;
             $roleCounts[$role] = ($roleCounts[$role] ?? 0) + 1;
             $montant = (float) $m->montant_par_pack;
@@ -377,7 +377,7 @@ class EquipeLivraisonController extends Controller
      */
     private function resolveOrCreateLivreur(array $m, string $orgId): Livreur
     {
-        $nom    = $this->normalizeNom($m['nom']);
+        $nom = $this->normalizeNom($m['nom']);
         $prenom = $this->normalizePrenom($m['prenom']);
 
         if (! empty($m['livreur_id'])) {
@@ -386,8 +386,8 @@ class EquipeLivraisonController extends Controller
                 ->firstOrFail();
 
             $livreur->update([
-                'nom'       => $nom,
-                'prenom'    => $prenom,
+                'nom' => $nom,
+                'prenom' => $prenom,
                 'telephone' => $m['telephone'],
             ]);
 

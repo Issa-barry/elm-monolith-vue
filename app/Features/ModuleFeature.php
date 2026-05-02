@@ -76,7 +76,7 @@ class ModuleFeature
             self::INSCRIPTION => 'Inscription',
             self::CASHBACK => 'Cashback clients',
             self::LOGISTIQUE => 'Logistique inter-sites',
-            self::DEPENSES   => 'Dépenses opérationnelles',
+            self::DEPENSES => 'Dépenses opérationnelles',
         ];
     }
 }

@@ -23,14 +23,14 @@ class DepenseTypeController extends Controller
             ->ordered()
             ->get()
             ->map(fn (DepenseType $t) => [
-                'id'               => $t->id,
-                'code'             => $t->code,
-                'libelle'          => $t->libelle,
-                'description'      => $t->description,
+                'id' => $t->id,
+                'code' => $t->code,
+                'libelle' => $t->libelle,
+                'description' => $t->description,
                 'requires_vehicle' => $t->requires_vehicle,
                 'requires_comment' => $t->requires_comment,
-                'is_active'        => $t->is_active,
-                'sort_order'       => $t->sort_order,
+                'is_active' => $t->is_active,
+                'sort_order' => $t->sort_order,
             ]);
 
         return Inertia::render('settings/DepenseTypes/Index', [
@@ -45,7 +45,7 @@ class DepenseTypeController extends Controller
         DepenseType::create([
             ...$request->validated(),
             'organization_id' => auth()->user()->organization_id,
-            'code'            => strtolower(trim($request->code)),
+            'code' => strtolower(trim($request->code)),
         ]);
 
         return back()->with('success', 'Type de dépense créé.');

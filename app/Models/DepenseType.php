@@ -30,8 +30,8 @@ class DepenseType extends Model
         return [
             'requires_vehicle' => 'boolean',
             'requires_comment' => 'boolean',
-            'is_active'        => 'boolean',
-            'sort_order'       => 'integer',
+            'is_active' => 'boolean',
+            'sort_order' => 'integer',
         ];
     }
 

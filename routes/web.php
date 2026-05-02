@@ -8,11 +8,11 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
 use App\Http\Controllers\CommissionLogistiqueController;
-use App\Http\Controllers\DepenseController;
 use App\Http\Controllers\CommissionPaymentController;
 use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\CommissionVenteController;
 use App\Http\Controllers\ContactController;
+use App\Http\Controllers\DepenseController;
 use App\Http\Controllers\EncaissementVenteController;
 use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
@@ -193,7 +193,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     Route::middleware('module:'.ModuleFeature::DEPENSES)->group(function () {
         Route::resource('depenses', DepenseController::class)->except(['show']);
         Route::patch('depenses/{depense}/approuver', [DepenseController::class, 'approuver'])->name('depenses.approuver');
-        Route::patch('depenses/{depense}/rejeter',   [DepenseController::class, 'rejeter'])->name('depenses.rejeter');
+        Route::patch('depenses/{depense}/rejeter', [DepenseController::class, 'rejeter'])->name('depenses.rejeter');
     });
 
     // ── Module : Logistique inter-sites ───────────────────────────────────────
