@@ -8,6 +8,7 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
 use App\Http\Controllers\CommissionLogistiqueController;
+use App\Http\Controllers\DepenseController;
 use App\Http\Controllers\CommissionPaymentController;
 use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\CommissionVenteController;
@@ -186,6 +187,13 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::get('cashback', [CashbackController::class, 'index'])->name('cashback.index');
         Route::patch('cashback/{cashbackTransaction}/valider', [CashbackController::class, 'valider'])->name('cashback.valider');
         Route::patch('cashback/{cashbackTransaction}/verser', [CashbackController::class, 'verser'])->name('cashback.verser');
+    });
+
+    // ── Module : Dépenses opérationnelles ────────────────────────────────────
+    Route::middleware('module:'.ModuleFeature::DEPENSES)->group(function () {
+        Route::resource('depenses', DepenseController::class)->except(['show']);
+        Route::patch('depenses/{depense}/approuver', [DepenseController::class, 'approuver'])->name('depenses.approuver');
+        Route::patch('depenses/{depense}/rejeter',   [DepenseController::class, 'rejeter'])->name('depenses.rejeter');
     });
 
     // ── Module : Logistique inter-sites ───────────────────────────────────────

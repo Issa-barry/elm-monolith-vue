@@ -3,28 +3,30 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed, reactive, ref, watch } from 'vue';
 
 export interface MembreFormData {
-    livreur_id: number | null;
+    livreur_id: string | null;
     nom: string;
     prenom: string;
     telephone: string;
     role: string;
-    taux_commission: number;
     ordre: number;
+    montant_par_pack: number;
 }
 
 const GUINEA_PREFIX = '+224';
 const GUINEA_LOCAL_LENGTH = 9;
 
+const roles = [
+    { value: 'chauffeur', label: 'Chauffeur' },
+    { value: 'convoyeur', label: 'Convoyeur' },
+];
+
 const props = defineProps<{
     visible: boolean;
     membre?: MembreFormData | null;
-    hasPrincipal?: boolean;
-    maxTaux?: number;
     telephoneError?: string | null;
 }>();
 
@@ -32,11 +34,6 @@ const emit = defineEmits<{
     'update:visible': [boolean];
     confirm: [MembreFormData];
 }>();
-
-const roles = [
-    { value: 'chauffeur', label: 'Chauffeur' },
-    { value: 'convoyeur', label: 'Convoyeur' },
-];
 
 const isEdit = computed(() => !!props.membre);
 const title = computed(() =>
@@ -48,11 +45,6 @@ const canSubmit = computed(
         form.nom.trim().length > 0 &&
         /^\d{9}$/.test(phoneLocal.value),
 );
-const maxTauxSafe = computed(() => {
-    const raw = Number(props.maxTaux ?? 100);
-    if (!Number.isFinite(raw)) return 100;
-    return Math.max(0, Math.min(100, raw));
-});
 
 const form = reactive<MembreFormData>({
     livreur_id: null,
@@ -60,11 +52,10 @@ const form = reactive<MembreFormData>({
     prenom: '',
     telephone: '',
     role: 'chauffeur',
-    taux_commission: 0,
     ordre: 0,
+    montant_par_pack: 0,
 });
 
-// Local 9-digit input (E.164 prefix is fixed and not editable)
 const phoneLocal = ref('');
 
 const errors = reactive<Partial<Record<keyof MembreFormData, string>>>({});
@@ -73,7 +64,6 @@ function extractLocalDigits(phone: string): string {
     if (phone.startsWith(GUINEA_PREFIX)) {
         return phone.slice(GUINEA_PREFIX.length);
     }
-    // Strip all non-digits and take last 9 if only digits provided
     return phone.replace(/\D/g, '').slice(-GUINEA_LOCAL_LENGTH);
 }
 
@@ -95,8 +85,8 @@ watch(
                 prenom: '',
                 telephone: '',
                 role: 'chauffeur',
-                taux_commission: 0,
                 ordre: 0,
+                montant_par_pack: 0,
             });
             phoneLocal.value = '';
         }
@@ -144,15 +134,6 @@ function validate(): boolean {
         errors.telephone = 'Le téléphone est obligatoire.';
     } else if (!/^\d{9}$/.test(phoneLocal.value)) {
         errors.telephone = `Le téléphone doit comporter exactement ${GUINEA_LOCAL_LENGTH} chiffres.`;
-    }
-
-    const taux = Number(form.taux_commission);
-    if (!Number.isFinite(taux)) {
-        errors.taux_commission = 'Le taux est obligatoire.';
-    } else if (taux < 0) {
-        errors.taux_commission = 'Le taux ne peut pas être négatif.';
-    } else if (taux > maxTauxSafe.value) {
-        errors.taux_commission = `Le taux ne peut pas dépasser ${maxTauxSafe.value} %.`;
     }
 
     return Object.keys(errors).length === 0;
@@ -271,53 +252,21 @@ function handleConfirm() {
                 </p>
             </div>
 
-            <!-- Rôle + Taux -->
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <Label
-                        for="membre-role"
-                        class="mb-1 block text-xs font-medium"
-                        >Rôle</Label
-                    >
-                    <Dropdown
-                        v-model="form.role"
-                        input-id="membre-role"
-                        :options="roles"
-                        option-label="label"
-                        option-value="value"
-                        class="w-full"
-                    />
-                </div>
-                <div>
-                    <Label
-                        for="membre-taux"
-                        class="mb-1 block text-xs font-medium"
-                    >
-                        Taux (%) <span class="text-destructive">*</span>
-                    </Label>
-                    <InputNumber
-                        v-model="form.taux_commission"
-                        input-id="membre-taux"
-                        :min="0"
-                        :max="maxTauxSafe"
-                        :max-fraction-digits="2"
-                        suffix=" %"
-                        class="w-full"
-                        :input-style="{ textAlign: 'right', width: '100%' }"
-                    />
-                    <p
-                        v-if="maxTauxSafe < 100"
-                        class="mt-1 text-xs text-muted-foreground"
-                    >
-                        Maximum disponible : {{ maxTauxSafe }}%
-                    </p>
-                    <p
-                        v-if="errors.taux_commission"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ errors.taux_commission }}
-                    </p>
-                </div>
+            <!-- Rôle -->
+            <div>
+                <Label
+                    for="membre-role"
+                    class="mb-1 block text-xs font-medium"
+                    >Rôle</Label
+                >
+                <Dropdown
+                    v-model="form.role"
+                    input-id="membre-role"
+                    :options="roles"
+                    option-label="label"
+                    option-value="value"
+                    class="w-full"
+                />
             </div>
         </div>
 

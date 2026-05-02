@@ -7,7 +7,7 @@ import type {
     StatementLine,
     VehiculeOption,
 } from '@/types/client-space';
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
@@ -16,23 +16,44 @@ const props = defineProps<{
     earnings: EarningsPayload;
     earnings_by_vehicule: EarningsVehiculePayload[];
     statement: StatementLine[];
+    filters: { date_debut: string | null; date_fin: string | null };
 }>();
 
-const selectedVehiculeId = ref<number | 'all'>('all');
+const selectedVehiculeId = ref<string | 'all'>('all');
+const dateDebut = ref<string>(props.filters.date_debut ?? '');
+const dateFin = ref<string>(props.filters.date_fin ?? '');
 
 const filteredStatement = computed(() => {
     if (selectedVehiculeId.value === 'all') {
         return props.statement;
     }
-
     return props.statement.filter(
         (line) => line.vehicule_id === selectedVehiculeId.value,
     );
 });
 
+function applyFilters() {
+    router.get(
+        '/client/gains',
+        {
+            date_debut: dateDebut.value || undefined,
+            date_fin: dateFin.value || undefined,
+        },
+        { preserveScroll: true },
+    );
+}
+
+function resetFilters() {
+    dateDebut.value = '';
+    dateFin.value = '';
+    router.get('/client/gains', {}, { preserveScroll: true });
+}
+
 function formatMoney(value: number): string {
     return `${new Intl.NumberFormat('fr-FR').format(value ?? 0)} GNF`;
 }
+
+const hasActiveFilter = computed(() => !!props.filters.date_debut || !!props.filters.date_fin);
 </script>
 
 <template>
@@ -40,29 +61,58 @@ function formatMoney(value: number): string {
         <Head title="Mon espace - Gains" />
 
         <div class="space-y-6">
-            <div>
-                <h1 class="text-2xl font-semibold">Gains et releve</h1>
-                <p class="mt-1 text-muted-foreground">
-                    Detail des commissions par operation et par vehicule.
-                </p>
-            </div>
-
-            <div class="rounded-xl border border-border bg-card p-5">
-                <div class="flex flex-wrap items-center gap-2">
-                    <span
-                        v-for="profile in actor.profiles"
-                        :key="profile"
-                        class="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
+            <div class="space-y-3">
+                <div>
+                    <h1 class="text-2xl font-semibold">Gains et releve</h1>
+                    
+                </div>
+                <div class="flex flex-wrap justify-end gap-2">
+                    <div>
+                        <label class="block text-xs font-medium text-foreground mb-1">
+                            Vehicule
+                        </label>
+                        <select
+                            v-model="selectedVehiculeId"
+                            class="w-52 rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                        >
+                            <option value="all">Tous les vehicules</option>
+                            <option
+                                v-for="vehicule in vehicules"
+                                :key="vehicule.id"
+                                :value="vehicule.id"
+                            >
+                                {{ vehicule.nom_vehicule }} ({{
+                                    vehicule.immatriculation ?? '-'
+                                }})
+                            </option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-foreground mb-1">Du</label>
+                        <input
+                            v-model="dateDebut"
+                            type="date"
+                            class="rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                            @change="applyFilters"
+                        />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-foreground mb-1">Au</label>
+                        <input
+                            v-model="dateFin"
+                            type="date"
+                            class="rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                            @change="applyFilters"
+                        />
+                    </div>
+                    <button
+                        v-if="hasActiveFilter"
+                        type="button"
+                        class="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+                        @click="resetFilters"
                     >
-                        {{ profile }}
-                    </span>
-                    <span class="text-sm text-muted-foreground">
-                        {{
-                            actor.organization_name
-                                ? `Organisation: ${actor.organization_name}`
-                                : 'Organisation non rattachee'
-                        }}
-                    </span>
+                        Réinitialiser
+                    </button>
                 </div>
             </div>
 
@@ -87,6 +137,12 @@ function formatMoney(value: number): string {
                     <p class="mt-1 text-xs text-muted-foreground">
                         {{ earnings.operations_count }} operation(s)
                     </p>
+                    <p
+                        v-if="earnings.frais_depenses_total > 0"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        dont {{ formatMoney(earnings.frais_depenses_total) }} de frais déduits
+                    </p>
                 </div>
             </div>
 
@@ -95,27 +151,6 @@ function formatMoney(value: number): string {
                 <p class="mt-1 text-sm text-muted-foreground">
                     Historique des commissions generees via vos vehicules.
                 </p>
-
-                <div class="mt-4 max-w-xs">
-                    <label class="text-sm font-medium text-foreground"
-                        >Filtrer par vehicule</label
-                    >
-                    <select
-                        v-model="selectedVehiculeId"
-                        class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                    >
-                        <option value="all">Tous les vehicules</option>
-                        <option
-                            v-for="vehicule in vehicules"
-                            :key="vehicule.id"
-                            :value="vehicule.id"
-                        >
-                            {{ vehicule.nom_vehicule }} ({{
-                                vehicule.immatriculation ?? '-'
-                            }})
-                        </option>
-                    </select>
-                </div>
 
                 <div class="mt-4 overflow-x-auto">
                     <table class="min-w-full text-sm">
@@ -202,6 +237,7 @@ function formatMoney(value: number): string {
                                     Immatriculation
                                 </th>
                                 <th class="py-2 pr-4 font-medium">Gains</th>
+                                <th class="py-2 pr-4 font-medium text-destructive">Frais</th>
                                 <th class="py-2 pr-4 font-medium">Verses</th>
                                 <th class="py-2 pr-0 font-medium">
                                     Reste à payer
@@ -223,6 +259,13 @@ function formatMoney(value: number): string {
                                 <td class="py-2 pr-4">
                                     {{ formatMoney(row.total_earned) }}
                                 </td>
+                                <td class="py-2 pr-4 text-destructive">
+                                    {{
+                                        row.frais_depenses > 0
+                                            ? `- ${formatMoney(row.frais_depenses)}`
+                                            : '-'
+                                    }}
+                                </td>
                                 <td class="py-2 pr-4">
                                     {{ formatMoney(row.total_paid) }}
                                 </td>
@@ -232,7 +275,7 @@ function formatMoney(value: number): string {
                             </tr>
                             <tr v-if="earnings_by_vehicule.length === 0">
                                 <td
-                                    colspan="5"
+                                    colspan="6"
                                     class="py-4 text-center text-muted-foreground"
                                 >
                                     Aucun vehicule partenaire detecte pour ce

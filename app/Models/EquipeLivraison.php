@@ -22,6 +22,8 @@ class EquipeLivraison extends Model
         'proprietaire_id',
         'nom',
         'is_active',
+        'commission_unitaire_par_pack',
+        'montant_par_pack_proprietaire',
         'taux_commission_proprietaire',
     ];
 
@@ -29,6 +31,8 @@ class EquipeLivraison extends Model
     {
         return [
             'is_active' => 'boolean',
+            'commission_unitaire_par_pack' => 'decimal:2',
+            'montant_par_pack_proprietaire' => 'decimal:2',
             'taux_commission_proprietaire' => 'decimal:2',
         ];
     }
@@ -46,12 +50,12 @@ class EquipeLivraison extends Model
     }
 
     /**
-     * Membres de l'équipe avec leur taux (via pivot equipe_livreurs).
+     * Membres de l'équipe (via pivot equipe_livreurs).
      */
     public function livreurs(): BelongsToMany
     {
         return $this->belongsToMany(Livreur::class, 'equipe_livreurs', 'equipe_id', 'livreur_id')
-            ->withPivot(['role', 'taux_commission', 'ordre'])
+            ->withPivot(['role', 'montant_par_pack', 'taux_commission', 'ordre'])
             ->withTimestamps()
             ->orderByPivot('ordre');
     }
@@ -72,7 +76,7 @@ class EquipeLivraison extends Model
     // ── Métier ────────────────────────────────────────────────────────────────
 
     /**
-     * Somme des taux de tous les membres (hors propriétaire).
+     * Somme des taux dérivés de tous les membres (hors propriétaire).
      */
     public function sommeTaux(): float
     {

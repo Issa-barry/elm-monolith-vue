@@ -25,6 +25,7 @@ export interface TypeVehiculeOption {
 export interface EarningsPayload {
     total_earned: number;
     total_paid: number;
+    frais_depenses_total: number;
     balance: number;
     operations_count: number;
 }
@@ -33,6 +34,7 @@ export interface EarningsVehiculePayload {
     vehicule_id: number;
     nom_vehicule: string;
     immatriculation: string | null;
+    frais_depenses: number;
     total_earned: number;
     total_paid: number;
     balance: number;

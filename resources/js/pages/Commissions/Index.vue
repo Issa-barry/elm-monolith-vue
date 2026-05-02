@@ -35,7 +35,7 @@ import { computed, reactive, ref } from 'vue';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface BeneficiaireRow {
-    beneficiaire_id: number;
+    beneficiaire_id: string;
     type_beneficiaire: 'livreur' | 'proprietaire';
     beneficiaire_nom: string;
     telephone: string | null;

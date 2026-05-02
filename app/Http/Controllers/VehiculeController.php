@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\TypeVehicule;
+use App\Models\Depense;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Models\VehiculeFrais;
@@ -156,10 +157,25 @@ class VehiculeController extends Controller
     {
         $this->authorize('view', $vehicule);
 
-        $vehicule->load(['proprietaire', 'equipe.membres.livreur', 'frais.createur:id,name']);
+        $vehicule->load(['proprietaire', 'equipe.membres.livreur']);
+
+        $depenses = Depense::where('vehicule_id', $vehicule->id)
+            ->where('organization_id', $vehicule->organization_id)
+            ->with('depenseType:id,libelle')
+            ->orderByDesc('date_depense')
+            ->get()
+            ->map(fn (Depense $d) => [
+                'id' => $d->id,
+                'libelle' => $d->depenseType?->libelle ?? '—',
+                'montant' => (float) $d->montant,
+                'date_depense' => $d->date_depense?->format('d/m/Y'),
+                'statut' => $d->statut,
+                'commentaire' => $d->commentaire,
+            ]);
 
         return Inertia::render('Vehicules/Show', [
             'vehicule' => $this->vehiculeData($vehicule),
+            'depenses' => $depenses,
         ]);
     }
 

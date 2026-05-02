@@ -7,38 +7,39 @@ import { computed } from 'vue';
 import EquipeForm from './partials/EquipeForm.vue';
 
 interface MembreData {
-    livreur_id: number | null;
+    livreur_id: string | null;
     nom: string;
     prenom: string;
     telephone: string;
     role: string;
-    taux_commission: number;
+    montant_par_pack: number;
     ordre: number;
 }
 
 interface EquipeData {
-    id: number;
+    id: string;
     nom: string;
     is_active: boolean;
-    vehicule_id: number | null;
-    proprietaire_id: number | null;
-    taux_commission_proprietaire: number | null;
+    vehicule_id: string | null;
+    proprietaire_id: string | null;
+    commission_unitaire_par_pack: number;
+    montant_par_pack_proprietaire: number | null;
     membres: MembreData[];
 }
 
 interface ProprietaireOption {
-    value: number;
+    value: string;
     label: string;
     telephone?: string | null;
 }
 
 interface VehiculeOption {
-    value: number;
+    value: string;
     label: string;
     immatriculation: string;
     categorie: string;
     type_label: string;
-    proprietaire_id: number | null;
+    proprietaire_id: string | null;
     proprietaire_nom: string | null;
 }
 
@@ -46,7 +47,6 @@ const props = defineProps<{
     equipe: EquipeData;
     proprietaires: ProprietaireOption[];
     vehicules: VehiculeOption[];
-    tauxProprietaireDefaut: number;
     currentSiteName: string;
 }>();
 
@@ -66,16 +66,15 @@ const form = useForm({
     is_active: Boolean(props.equipe.is_active),
     vehicule_id: props.equipe.vehicule_id,
     proprietaire_id: props.equipe.proprietaire_id,
-    taux_commission_proprietaire:
-        props.equipe.taux_commission_proprietaire ??
-        props.tauxProprietaireDefaut,
+    commission_unitaire_par_pack: props.equipe.commission_unitaire_par_pack,
+    montant_par_pack_proprietaire: props.equipe.montant_par_pack_proprietaire,
     membres: props.equipe.membres.map((m) => ({
         livreur_id: m.livreur_id,
         nom: m.nom,
         prenom: m.prenom,
         telephone: m.telephone,
         role: m.role,
-        taux_commission: m.taux_commission,
+        montant_par_pack: m.montant_par_pack,
         ordre: m.ordre,
     })),
 });
@@ -117,7 +116,6 @@ function submit() {
                 :form="form"
                 :proprietaires="proprietaires"
                 :vehicules="vehicules"
-                :taux-proprietaire-defaut="tauxProprietaireDefaut"
                 :current-site-name="currentSiteName"
                 @submit="submit"
             />
