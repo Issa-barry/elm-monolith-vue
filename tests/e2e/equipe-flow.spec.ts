@@ -119,7 +119,7 @@ test.afterEach(async ({ browser }) => {
     }
 });
 
-test('create equipe with proprietaire + override taux + verify list', async ({
+test('create equipe with chauffeur and partage config + verify list', async ({
     page,
 }) => {
     await login(page);
@@ -127,9 +127,13 @@ test('create equipe with proprietaire + override taux + verify list', async ({
     await page.goto('/equipes-livraison/create');
     await expect(page).toHaveURL(/\/equipes-livraison\/create$/);
 
-    // Véhicule : premier combobox du formulaire
+    // Véhicule : sélectionner le véhicule interne créé dans beforeAll
     const formComboboxes = page.locator('form').getByRole('combobox');
-    await selectOptionFromCombobox(page, formComboboxes.nth(0)); // Véhicule → nom auto-renseigné
+    await selectOptionFromCombobox(
+        page,
+        formComboboxes.nth(0),
+        new RegExp(escapeRegExp(E2E_EQUIPE_NOM_PREFIX), 'i'),
+    );
 
     // Propriétaire : AutoComplete éditable uniquement pour les véhicules externes sans
     // propriétaire lié. Pour les véhicules internes, le site est propriétaire (div verrouillée).
@@ -138,38 +142,61 @@ test('create equipe with proprietaire + override taux + verify list', async ({
         await selectOptionFromCombobox(page, formComboboxes.nth(1));
     }
 
-    // Override du taux propriétaire : 55 % (+ membre 45 % = 100 %)
-    await page.locator('#taux_commission_proprietaire input').fill('55');
-
-    // Nom auto-renseigné depuis le véhicule — pas de saisie manuelle
-
-    // Ajouter un membre principal (obligatoire)
+    // Ajouter un membre chauffeur (obligatoire avant de configurer le partage)
     await page.locator('button', { hasText: /ajouter un membre/i }).first().click();
 
-    const dialog = page.locator('[role="dialog"]');
-    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    const membreDialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /nouveau membre/i });
+    await expect(membreDialog).toBeVisible({ timeout: 10_000 });
 
     // Vérifier la présence du préfixe +224 dans la modale
-    await expect(dialog.locator('text=+224')).toBeVisible();
+    await expect(membreDialog.locator('text=+224')).toBeVisible();
 
-    await dialog.locator('#membre-prenom').fill('Mamadou');
-    await dialog.locator('#membre-nom').fill('Diallo');
+    await membreDialog.locator('#membre-prenom').fill('Mamadou');
+    await membreDialog.locator('#membre-nom').fill('Diallo');
 
     // Saisie locale uniquement (9 chiffres, sans le +224)
-    await dialog.locator('#membre-telephone').fill('620111222');
+    await membreDialog.locator('#membre-telephone').fill('620111222');
 
-    // Taux membre dans la modale : 45 % pour que total = 100 %
-    await dialog.locator('#membre-taux').fill('45');
+    // Confirmer le membre — le montant sera défini dans la PartageModal
+    await membreDialog.locator('button', { hasText: /ajouter/i }).click();
+    await expect(membreDialog).toBeHidden({ timeout: 5_000 });
 
-    // Confirmer le membre
-    await dialog.locator('button', { hasText: /ajouter/i }).click();
-    await expect(dialog).toBeHidden({ timeout: 5_000 });
-
-    // Soumettre le formulaire
+    // Configurer le partage de commission via PartageModal
     await page
-        .locator('form button[type="submit"]:visible')
+        .locator('button', { hasText: /configurer le partage/i })
         .first()
         .click();
+
+    const partageDialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /configurer le partage/i });
+    await expect(partageDialog).toBeVisible({ timeout: 10_000 });
+
+    // Commission par défaut = 200 GNF ; affecter 200 au premier bénéficiaire (total = commission)
+    const premierMontantInput = partageDialog
+        .locator('tbody tr')
+        .first()
+        .locator('td')
+        .nth(1)
+        .locator('input');
+    await premierMontantInput.click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('200');
+    await page.keyboard.press('Tab');
+
+    // Attendre que le bouton "Valider le partage" soit actif (somme = commission)
+    const validerBtn = partageDialog.locator('button', {
+        hasText: /valider le partage/i,
+    });
+    await expect(validerBtn).toBeEnabled({ timeout: 5_000 });
+    await validerBtn.click();
+
+    await expect(partageDialog).toBeHidden({ timeout: 5_000 });
+
+    // Soumettre le formulaire
+    await page.locator('form button[type="submit"]:visible').first().click();
 
     await expect(page).toHaveURL(/\/equipes-livraison$/, { timeout: 20_000 });
 
@@ -188,16 +215,14 @@ test('create equipe with proprietaire + override taux + verify list', async ({
 
     // Vérifier que l'équipe est modifiable (edit)
     await openRowActions(row);
-    await page
-        .getByRole('menuitem', { name: /modifier/i })
-        .first()
-        .click();
+    await page.getByRole('menuitem', { name: /modifier/i }).first().click();
 
     await expect(page).toHaveURL(/\/equipes-livraison\/[a-z0-9]+\/edit$/);
 
-    // Vérifier que le taux propriétaire = 55 est bien sauvegardé
-    const tauxEditInput = page.locator('#taux_commission_proprietaire input');
-    await expect(tauxEditInput).toHaveValue(/55/);
+    // Vérifier que le partage est correctement enregistré (commission validée)
+    await expect(page.getByText(/répartition validée/i)).toBeVisible({
+        timeout: 5_000,
+    });
 });
 
 test('store equipe echoue sans proprietaire', async ({ page }) => {

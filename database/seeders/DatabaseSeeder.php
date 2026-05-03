@@ -27,6 +27,9 @@ class DatabaseSeeder extends Seeder
             EquipesLivraisonSeeder::class,      // 7 equipes : 4 externes + 3 internes (elm)
             VehiculesSeeder::class,             // 6 vehicules : 3 externes + 3 internes (elm-1/2/3)
 
+            // ── Paramétrage métier ────────────────────────────────────────────
+            DepenseTypesSeeder::class,              // 5 types de dépense par défaut
+
             // ── Module Commissions ────────────────────────────────────────────
             // CommissionsSeeder::class,           // 6 commissions : EN_ATTENTE / PARTIELLE / VERSÉE
         ]);

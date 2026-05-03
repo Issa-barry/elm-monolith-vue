@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPart;
+use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PropositionVehicule;
@@ -38,7 +39,9 @@ class ClientDashboardController extends Controller
 
     public function earnings(Request $request): Response
     {
-        $payload = $this->dashboardPayload($request->user());
+        $dateDebut = $request->input('date_debut') ?: null;
+        $dateFin = $request->input('date_fin') ?: null;
+        $payload = $this->dashboardPayload($request->user(), $dateDebut, $dateFin);
 
         return Inertia::render('client/Earnings', [
             'actor' => $payload['actor'],
@@ -46,6 +49,7 @@ class ClientDashboardController extends Controller
             'earnings' => $payload['earnings'],
             'earnings_by_vehicule' => $payload['earnings_by_vehicule'],
             'statement' => $payload['statement'],
+            'filters' => ['date_debut' => $dateDebut, 'date_fin' => $dateFin],
         ]);
     }
 
@@ -154,14 +158,16 @@ class ClientDashboardController extends Controller
             ->with('success', 'Votre proposition de vehicule a ete envoyee.');
     }
 
-    private function dashboardPayload(User $user): array
+    private function dashboardPayload(User $user, ?string $dateDebut = null, ?string $dateFin = null): array
     {
         [$organizationId, $client, $proprietaire, $livreur] = $this->resolveActorContext($user);
 
         $vehicules = $this->vehiculesPartenaires($organizationId, $proprietaire, $livreur);
         $ownerVehicules = $this->vehiculesDuProprietaire($organizationId, $proprietaire);
-        $partsVentes = $this->partsVentes($organizationId, $proprietaire, $livreur);
-        $partsLogistiques = $this->partsLogistiques($organizationId, $proprietaire, $livreur);
+        $partsVentes = $this->partsVentes($organizationId, $proprietaire, $livreur, $dateDebut, $dateFin);
+        $partsLogistiques = $this->partsLogistiques($organizationId, $proprietaire, $livreur, $dateDebut, $dateFin);
+        $fraisParVehicule = $this->fraisDepensesParVehicule($organizationId, $proprietaire, $dateDebut, $dateFin);
+        $fraisTotal = (float) array_sum($fraisParVehicule);
 
         $profileLabels = collect();
         if ($client !== null) {
@@ -214,8 +220,8 @@ class ClientDashboardController extends Controller
             'type_vehicule_options' => TypeVehicule::options(),
             'vehicules' => $mappedVehicules,
             'owner_vehicules' => $mappedOwnerVehicules,
-            'earnings' => $this->calculateEarnings($partsVentes, $partsLogistiques),
-            'earnings_by_vehicule' => $this->earningsByVehicule($vehicules, $partsVentes, $partsLogistiques),
+            'earnings' => $this->calculateEarnings($partsVentes, $partsLogistiques, $fraisTotal),
+            'earnings_by_vehicule' => $this->earningsByVehicule($vehicules, $partsVentes, $partsLogistiques, $fraisParVehicule),
             'statement' => $this->releve($partsVentes, $partsLogistiques),
             'vehicle_proposals' => $this->userProposals($user->id, $organizationId),
         ];
@@ -373,7 +379,7 @@ class ClientDashboardController extends Controller
     /**
      * @return Collection<int, CommissionPart>
      */
-    private function partsVentes(?string $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur): Collection
+    private function partsVentes(?string $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur, ?string $dateDebut = null, ?string $dateFin = null): Collection
     {
         if ($organizationId === null || ($proprietaire === null && $livreur === null)) {
             return collect();
@@ -386,6 +392,8 @@ class ClientDashboardController extends Controller
             ])
             ->whereHas('commission', fn ($query) => $query->where('organization_id', $organizationId))
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
+            ->when($dateDebut, fn ($q) => $q->whereDate('created_at', '>=', $dateDebut))
+            ->when($dateFin, fn ($q) => $q->whereDate('created_at', '<=', $dateFin))
             ->where(function ($query) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {
                     $query->orWhere(function ($sq) use ($proprietaire) {
@@ -408,7 +416,7 @@ class ClientDashboardController extends Controller
     /**
      * @return Collection<int, CommissionLogistiquePart>
      */
-    private function partsLogistiques(?string $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur): Collection
+    private function partsLogistiques(?string $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur, ?string $dateDebut = null, ?string $dateFin = null): Collection
     {
         if ($organizationId === null || ($proprietaire === null && $livreur === null)) {
             return collect();
@@ -421,6 +429,8 @@ class ClientDashboardController extends Controller
             ])
             ->whereHas('commission', fn ($query) => $query->where('organization_id', $organizationId))
             ->where('statut', '!=', StatutPartCommission::CANCELLED->value)
+            ->when($dateDebut, fn ($q) => $q->whereDate('created_at', '>=', $dateDebut))
+            ->when($dateFin, fn ($q) => $q->whereDate('created_at', '<=', $dateFin))
             ->where(function ($query) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {
                     $query->orWhere(function ($sq) use ($proprietaire) {
@@ -440,7 +450,7 @@ class ClientDashboardController extends Controller
             ->get();
     }
 
-    private function calculateEarnings(Collection $partsVentes, Collection $partsLogistiques): array
+    private function calculateEarnings(Collection $partsVentes, Collection $partsLogistiques, float $fraisDepensesTotal = 0.0): array
     {
         $totalEarned = round(
             (float) $partsVentes->sum('montant_net') + (float) $partsLogistiques->sum('montant_net'),
@@ -450,16 +460,18 @@ class ClientDashboardController extends Controller
             (float) $partsVentes->sum('montant_verse') + (float) $partsLogistiques->sum('montant_verse'),
             2
         );
+        $frais = round($fraisDepensesTotal, 2);
 
         return [
             'total_earned' => $totalEarned,
             'total_paid' => $totalPaid,
-            'balance' => max(0, round($totalEarned - $totalPaid, 2)),
+            'frais_depenses_total' => $frais,
+            'balance' => max(0, round($totalEarned - $frais - $totalPaid, 2)),
             'operations_count' => $partsVentes->count() + $partsLogistiques->count(),
         ];
     }
 
-    private function earningsByVehicule(Collection $vehicules, Collection $partsVentes, Collection $partsLogistiques): array
+    private function earningsByVehicule(Collection $vehicules, Collection $partsVentes, Collection $partsLogistiques, array $fraisParVehicule = []): array
     {
         $stats = [];
 
@@ -468,6 +480,7 @@ class ClientDashboardController extends Controller
                 'vehicule_id' => $vehicule->id,
                 'nom_vehicule' => $vehicule->nom_vehicule,
                 'immatriculation' => $vehicule->immatriculation,
+                'frais_depenses' => (float) ($fraisParVehicule[$vehicule->id] ?? 0.0),
                 'total_earned' => 0.0,
                 'total_paid' => 0.0,
                 'balance' => 0.0,
@@ -484,6 +497,7 @@ class ClientDashboardController extends Controller
                     'vehicule_id' => $vehicule->id,
                     'nom_vehicule' => $vehicule->nom_vehicule,
                     'immatriculation' => $vehicule->immatriculation,
+                    'frais_depenses' => (float) ($fraisParVehicule[$vehicule->id] ?? 0.0),
                     'total_earned' => 0.0,
                     'total_paid' => 0.0,
                     'balance' => 0.0,
@@ -503,6 +517,7 @@ class ClientDashboardController extends Controller
                     'vehicule_id' => $vehicule->id,
                     'nom_vehicule' => $vehicule->nom_vehicule,
                     'immatriculation' => $vehicule->immatriculation,
+                    'frais_depenses' => (float) ($fraisParVehicule[$vehicule->id] ?? 0.0),
                     'total_earned' => 0.0,
                     'total_paid' => 0.0,
                     'balance' => 0.0,
@@ -516,13 +531,39 @@ class ClientDashboardController extends Controller
             ->map(function (array $row) {
                 $row['total_earned'] = round((float) $row['total_earned'], 2);
                 $row['total_paid'] = round((float) $row['total_paid'], 2);
-                $row['balance'] = max(0, round($row['total_earned'] - $row['total_paid'], 2));
+                $row['frais_depenses'] = round((float) $row['frais_depenses'], 2);
+                $row['balance'] = max(0, round($row['total_earned'] - $row['frais_depenses'] - $row['total_paid'], 2));
 
                 return $row;
             })
             ->sortByDesc('total_earned')
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array<string, float> vehicule_id => frais total approuvé
+     */
+    private function fraisDepensesParVehicule(?string $organizationId, ?Proprietaire $proprietaire, ?string $dateDebut = null, ?string $dateFin = null): array
+    {
+        if ($organizationId === null || $proprietaire === null) {
+            return [];
+        }
+
+        $vehiculeIds = Vehicule::where('proprietaire_id', $proprietaire->id)
+            ->where('organization_id', $organizationId)
+            ->pluck('id');
+
+        return Depense::whereIn('vehicule_id', $vehiculeIds)
+            ->where('statut', 'approuve')
+            ->where('organization_id', $organizationId)
+            ->when($dateDebut, fn ($q) => $q->whereDate('date_depense', '>=', $dateDebut))
+            ->when($dateFin, fn ($q) => $q->whereDate('date_depense', '<=', $dateFin))
+            ->selectRaw('vehicule_id, SUM(montant) as total')
+            ->groupBy('vehicule_id')
+            ->pluck('total', 'vehicule_id')
+            ->map(fn ($v) => (float) $v)
+            ->toArray();
     }
 
     private function releve(Collection $partsVentes, Collection $partsLogistiques): array

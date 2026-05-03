@@ -22,6 +22,7 @@ import {
     LayoutGrid,
     Package,
     PackageCheck,
+    Receipt,
     ShoppingCart,
     Truck,
     UserCog,
@@ -141,6 +142,9 @@ const mainNavItems = computed((): NavItem[] => {
             ],
         });
     }
+
+    if (canSee('depenses.read', 'depenses'))
+        items.push({ title: 'Dépenses', href: '/depenses', icon: Receipt });
 
     if (canSee('sites.read', 'sites'))
         items.push({ title: 'Sites', href: '/sites', icon: Building2 });

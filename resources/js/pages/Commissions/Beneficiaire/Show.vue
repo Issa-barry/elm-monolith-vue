@@ -38,7 +38,7 @@ import { computed, reactive, ref, watch } from 'vue';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface ResumeGlobal {
-    id: number;
+    id: string;
     type: 'livreur' | 'proprietaire';
     nom: string;
     telephone: string | null;
@@ -97,12 +97,22 @@ interface Filtres {
     periode: string | null;
 }
 
+interface FraisDepense {
+    id: string;
+    date: string;
+    type: string;
+    vehicule: string | null;
+    montant: number;
+    commentaire: string | null;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 const props = defineProps<{
     resume_global: ResumeGlobal;
     historique_commandes: CommandeRow[];
     historique_paiements_globaux: PaiementRow[];
+    frais_depenses: FraisDepense[];
     modes_paiement: ModePaiementOption[];
     filtres: Filtres;
     periode_courante: string;
@@ -246,11 +256,18 @@ const commandesFiltrees = computed(() => {
 
 // ── KPI filtrés (adaptés à la recherche locale + filtre période) ──────────────
 
+const totalFraisDepenses = computed(() =>
+    (props.frais_depenses ?? []).reduce((s, d) => s + d.montant, 0),
+);
+
 const kpis = computed(() => {
     const rows = commandesFiltrees.value;
     const brut = rows.reduce((s, c) => s + c.montant_brut, 0);
-    const frais = rows.reduce((s, c) => s + c.frais, 0);
-    const net = rows.reduce((s, c) => s + c.montant_net, 0);
+    // Pour les propriétaires, les frais viennent des dépenses, pas des parts
+    const frais = isLivreur.value
+        ? rows.reduce((s, c) => s + c.frais, 0)
+        : totalFraisDepenses.value;
+    const net = Math.max(0, brut - frais);
     const verse = rows.reduce((s, c) => s + c.montant_verse, 0);
     return {
         nb_commandes: rows.length,
@@ -522,6 +539,7 @@ function closeDetailDialog() {
                 <Button
                     v-if="can('ventes.update')"
                     class="flex-1 gap-2"
+                    :disabled="resume_global.solde_global <= 0"
                     @click="openPaiementDialog"
                 >
                     <Plus class="h-4 w-4" />
@@ -695,6 +713,12 @@ function closeDetailDialog() {
                     <Button
                         v-if="can('ventes.update')"
                         class="gap-2"
+                        :disabled="resume_global.solde_global <= 0"
+                        :title="
+                            resume_global.solde_global <= 0
+                                ? 'Aucun montant restant à payer'
+                                : undefined
+                        "
                         @click="openPaiementDialog"
                     >
                         <Plus class="h-4 w-4" />
@@ -1041,6 +1065,96 @@ function closeDetailDialog() {
                         </div>
                     </template>
                 </DataTable>
+            </div>
+            <!-- Bloc dépenses (propriétaires uniquement) -->
+            <div
+                v-if="!isLivreur"
+                class="overflow-x-auto rounded-xl border bg-card"
+            >
+                <div
+                    class="flex items-center justify-between border-b bg-muted/30 px-4 py-3"
+                >
+                    <h2 class="text-sm font-semibold">
+                        Frais déduits (dépenses approuvées liées au véhicule)
+                    </h2>
+                    <span
+                        class="text-sm font-bold text-destructive tabular-nums"
+                    >
+                        {{
+                            totalFraisDepenses > 0
+                                ? '− ' + formatGNF(totalFraisDepenses)
+                                : '—'
+                        }}
+                    </span>
+                </div>
+                <table v-if="frais_depenses.length > 0" class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b bg-muted/10">
+                            <th
+                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Date
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Type
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Véhicule
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Commentaire
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                            >
+                                Montant
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr
+                            v-for="d in frais_depenses"
+                            :key="d.id"
+                            class="hover:bg-muted/20"
+                        >
+                            <td
+                                class="px-4 py-2.5 text-xs text-muted-foreground tabular-nums"
+                            >
+                                {{ d.date }}
+                            </td>
+                            <td class="px-4 py-2.5 font-medium">
+                                {{ d.type }}
+                            </td>
+                            <td
+                                class="px-4 py-2.5 text-xs text-muted-foreground"
+                            >
+                                {{ d.vehicule ?? '—' }}
+                            </td>
+                            <td
+                                class="px-4 py-2.5 text-xs text-muted-foreground italic"
+                            >
+                                {{ d.commentaire ?? '—' }}
+                            </td>
+                            <td
+                                class="px-4 py-2.5 text-right font-mono font-semibold text-destructive tabular-nums"
+                            >
+                                − {{ formatGNF(d.montant) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p
+                    v-else
+                    class="px-4 py-8 text-center text-sm text-muted-foreground"
+                >
+                    Aucune dépense approuvée pour ce véhicule.
+                </p>
             </div>
         </div>
 

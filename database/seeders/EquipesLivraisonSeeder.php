@@ -10,27 +10,30 @@ use App\Models\Proprietaire;
 use Illuminate\Database\Seeder;
 
 /**
- * Cree les equipes de livraison avec leurs membres, taux et proprietaire.
+ * Cree les equipes de livraison avec leurs membres et la répartition par montant/pack.
  *
- * Regle: taux_proprietaire + SUM(taux membres) = 100 %.
+ * Règle: somme(montants membres) + montant_proprietaire = commission_unitaire_par_pack
+ *        taux = montant / commission * 100 (calculé et stocké à la sauvegarde)
  *
- * Équipes EXTERNES (véhicule appartient à un propriétaire privé) :
- * | Equipe        | Proprietaire      | Taux prop | Principal         | Taux | Assistant(s)                    | Taux   |
- * |---------------|-------------------|-----------|-------------------|------|---------------------------------|--------|
- * | Nen Dow       | Mamadou BARRY     | 60 %      | Ibrahima CAMARA   | 25 % | Sekou KOUYATE                   | 15 %   |
- * | Auto Dogomet  | Fatoumata DIALLO  | 60 %      | Mariama BAH       | 40 % | -                               | -      |
- * | Baba Ousou    | Mamadou BARRY     | 60 %      | Oumar CAMARA      | 20 % | Abdoulaye SYLLA, Kadiatou TOURE | 15%+5% |
- * | Kaloum Express| Issa TOUNKARA     | 65 %      | Mamadou SOUMAH    | 25 % | Fatoumata KOUROUMA              | 10 %   |
+ * Équipes EXTERNES (commission 200 GNF/pack) :
+ * | Equipe        | Proprietaire      | Prop GNF | Chauffeur         | GNF | Convoyeur(s)          | GNF   |
+ * |---------------|-------------------|----------|-------------------|-----|-----------------------|-------|
+ * | Nen Dow       | Amadou DIALLO     | 120      | Ibrahima CAMARA   | 50  | Sekou KOUYATE         | 30    |
+ * | Auto Dogomet  | Fatoumata DIALLO  | 120      | Mariama BAH       | 80  | -                     | -     |
+ * | Baba Ousou    | Amadou DIALLO     | 120      | Oumar CAMARA      | 40  | A. SYLLA, K. TOURE    | 30+10 |
+ * | Kaloum Express| Issa TOUNKARA     | 130      | Mamadou SOUMAH    | 50  | Fatoumata KOUROUMA    | 20    |
  *
- * Équipes INTERNES (véhicule appartient à l'organisation — 100 % aux livreurs) :
- * | Equipe           | Taux prop | Principal          | Taux | Assistant(s)                     | Taux   |
- * |------------------|-----------|--------------------|------|----------------------------------|--------|
- * | ELM Logistique 1 | 0 %       | Boubacar KONATÉ    | 100% | -                                | -      |
- * | ELM Logistique 2 | 0 %       | Aissatou BALDÉ     | 70%  | Thierno SALL                     | 30 %   |
- * | ELM Logistique 3 | 0 %       | Mamadou KEÏTA      | 50%  | Djénabou TRAORÉ, Lamine FOFANA   | 30%+20%|
+ * Équipes INTERNES (commission 200 GNF/pack — 100 % aux membres) :
+ * | Equipe           | Prop GNF | Chauffeur          | GNF | Convoyeur(s)                  | GNF    |
+ * |------------------|---------|--------------------|-----|-------------------------------|--------|
+ * | ELM Logistique 1 | 0       | Boubacar KONATÉ    | 200 | -                             | -      |
+ * | ELM Logistique 2 | 0       | Aissatou BALDÉ     | 140 | Thierno SALL                  | 60     |
+ * | ELM Logistique 3 | 0       | Mamadou KEÏTA      | 100 | Djénabou TRAORÉ, Lamine FOFANA| 60+40  |
  */
 class EquipesLivraisonSeeder extends Seeder
 {
+    private const COMMISSION = 200; // GNF par pack
+
     public function run(): void
     {
         $org = Organization::where('slug', 'elm')->firstOrFail();
@@ -45,87 +48,96 @@ class EquipesLivraisonSeeder extends Seeder
             ->where('organization_id', $org->id)
             ->firstOrFail();
 
-        // ── Équipes EXTERNES (propriétaire privé, taux_prop calculé) ─────────
+        // ── Équipes EXTERNES ──────────────────────────────────────────────────
 
         $equipesExternes = [
             [
                 'nom' => 'Nen Dow',
-                'proprietaire_tel' => '+33754158797', // Amadou DIALLO
+                'proprietaire_tel' => '+33754158797',
                 'membres' => [
-                    ['telephone' => '+224622000001', 'role' => 'principal', 'taux' => 25, 'ordre' => 0],
-                    ['telephone' => '+224622000002', 'role' => 'assistant', 'taux' => 15, 'ordre' => 1],
+                    ['telephone' => '+224622000001', 'role' => 'chauffeur', 'montant' => 50, 'ordre' => 0],
+                    ['telephone' => '+224622000002', 'role' => 'convoyeur', 'montant' => 30, 'ordre' => 1],
                 ],
             ],
             [
                 'nom' => 'Auto Dogomet',
-                'proprietaire_tel' => '+224621000002', // Fatoumata DIALLO
+                'proprietaire_tel' => '+224621000002',
                 'membres' => [
-                    ['telephone' => '+224622000003', 'role' => 'principal', 'taux' => 40, 'ordre' => 0],
+                    ['telephone' => '+224622000003', 'role' => 'chauffeur', 'montant' => 80, 'ordre' => 0],
                 ],
             ],
             [
                 'nom' => 'Baba Ousou',
-                'proprietaire_tel' => '+33754158797', // Amadou DIALLO
+                'proprietaire_tel' => '+33754158797',
                 'membres' => [
-                    ['telephone' => '+224622000008', 'role' => 'principal', 'taux' => 20, 'ordre' => 0],
-                    ['telephone' => '+224622000009', 'role' => 'assistant', 'taux' => 15, 'ordre' => 1],
-                    ['telephone' => '+224622000010', 'role' => 'assistant', 'taux' => 5,  'ordre' => 2],
+                    ['telephone' => '+224622000008', 'role' => 'chauffeur', 'montant' => 40, 'ordre' => 0],
+                    ['telephone' => '+224622000009', 'role' => 'convoyeur', 'montant' => 30, 'ordre' => 1],
+                    ['telephone' => '+224622000010', 'role' => 'convoyeur', 'montant' => 10, 'ordre' => 2],
                 ],
             ],
             [
-                // Sans véhicule — disponible pour tests
                 'nom' => 'Kaloum Express',
-                'proprietaire_tel' => '+224621000003', // Issa TOUNKARA
+                'proprietaire_tel' => '+224621000003',
                 'membres' => [
-                    ['telephone' => '+224622000004', 'role' => 'principal', 'taux' => 25, 'ordre' => 0],
-                    ['telephone' => '+224622000005', 'role' => 'assistant', 'taux' => 10, 'ordre' => 1],
+                    ['telephone' => '+224622000004', 'role' => 'chauffeur', 'montant' => 50, 'ordre' => 0],
+                    ['telephone' => '+224622000005', 'role' => 'convoyeur', 'montant' => 20, 'ordre' => 1],
                 ],
             ],
         ];
 
         foreach ($equipesExternes as $equipeData) {
             $proprietaire = $prop($equipeData['proprietaire_tel']);
-            $sommeMembres = array_sum(array_column($equipeData['membres'], 'taux'));
+            $sommeMembres = array_sum(array_column($equipeData['membres'], 'montant'));
+            $montantProp = self::COMMISSION - $sommeMembres;
+            $tauxProp = round($montantProp / self::COMMISSION * 100, 2);
 
             $equipe = EquipeLivraison::updateOrCreate(
                 ['nom' => $equipeData['nom'], 'organization_id' => $org->id],
                 [
                     'is_active' => true,
                     'proprietaire_id' => $proprietaire->id,
-                    'taux_commission_proprietaire' => 100 - $sommeMembres,
+                    'commission_unitaire_par_pack' => self::COMMISSION,
+                    'montant_par_pack_proprietaire' => $montantProp,
+                    'taux_commission_proprietaire' => $tauxProp,
                 ]
             );
 
             foreach ($equipeData['membres'] as $m) {
+                $taux = round($m['montant'] / self::COMMISSION * 100, 2);
                 EquipeLivreur::updateOrCreate(
                     ['equipe_id' => $equipe->id, 'livreur_id' => $lv($m['telephone'])->id],
-                    ['role' => $m['role'], 'taux_commission' => $m['taux'], 'ordre' => $m['ordre']]
+                    [
+                        'role' => $m['role'],
+                        'montant_par_pack' => $m['montant'],
+                        'taux_commission' => $taux,
+                        'ordre' => $m['ordre'],
+                    ]
                 );
             }
         }
 
-        // ── Équipes INTERNES (véhicule org — 100 % aux livreurs, pas de propriétaire) ──
+        // ── Équipes INTERNES ──────────────────────────────────────────────────
 
         $equipesInternes = [
             [
                 'nom' => 'ELM Logistique 1',
                 'membres' => [
-                    ['telephone' => '+224622000011', 'role' => 'principal', 'taux' => 100, 'ordre' => 0],
+                    ['telephone' => '+224622000011', 'role' => 'chauffeur', 'montant' => 200, 'ordre' => 0],
                 ],
             ],
             [
                 'nom' => 'ELM Logistique 2',
                 'membres' => [
-                    ['telephone' => '+224622000012', 'role' => 'principal', 'taux' => 70, 'ordre' => 0],
-                    ['telephone' => '+224622000013', 'role' => 'assistant', 'taux' => 30, 'ordre' => 1],
+                    ['telephone' => '+224622000012', 'role' => 'chauffeur', 'montant' => 140, 'ordre' => 0],
+                    ['telephone' => '+224622000013', 'role' => 'convoyeur', 'montant' => 60, 'ordre' => 1],
                 ],
             ],
             [
                 'nom' => 'ELM Logistique 3',
                 'membres' => [
-                    ['telephone' => '+224622000014', 'role' => 'principal', 'taux' => 50, 'ordre' => 0],
-                    ['telephone' => '+224622000015', 'role' => 'assistant', 'taux' => 30, 'ordre' => 1],
-                    ['telephone' => '+224622000016', 'role' => 'assistant', 'taux' => 20, 'ordre' => 2],
+                    ['telephone' => '+224622000014', 'role' => 'chauffeur', 'montant' => 100, 'ordre' => 0],
+                    ['telephone' => '+224622000015', 'role' => 'convoyeur', 'montant' => 60, 'ordre' => 1],
+                    ['telephone' => '+224622000016', 'role' => 'convoyeur', 'montant' => 40, 'ordre' => 2],
                 ],
             ],
         ];
@@ -135,15 +147,23 @@ class EquipesLivraisonSeeder extends Seeder
                 ['nom' => $equipeData['nom'], 'organization_id' => $org->id],
                 [
                     'is_active' => true,
-                    'proprietaire_id' => null, // véhicule interne : pas de propriétaire
+                    'proprietaire_id' => null,
+                    'commission_unitaire_par_pack' => self::COMMISSION,
+                    'montant_par_pack_proprietaire' => null,
                     'taux_commission_proprietaire' => 0,
                 ]
             );
 
             foreach ($equipeData['membres'] as $m) {
+                $taux = round($m['montant'] / self::COMMISSION * 100, 2);
                 EquipeLivreur::updateOrCreate(
                     ['equipe_id' => $equipe->id, 'livreur_id' => $lv($m['telephone'])->id],
-                    ['role' => $m['role'], 'taux_commission' => $m['taux'], 'ordre' => $m['ordre']]
+                    [
+                        'role' => $m['role'],
+                        'montant_par_pack' => $m['montant'],
+                        'taux_commission' => $taux,
+                        'ordre' => $m['ordre'],
+                    ]
                 );
             }
         }

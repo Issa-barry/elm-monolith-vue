@@ -31,6 +31,7 @@ const sidebarNavItems = computed((): NavItem[] => {
         items.push(
             { title: 'Parametrage systeme', href: editParametres().url },
             { title: 'Parametrage ventes', href: '/settings/ventes' },
+            { title: 'Types de dépense', href: '/settings/depense-types' },
             { title: 'Modules metier', href: '/settings/modules' },
         );
     }

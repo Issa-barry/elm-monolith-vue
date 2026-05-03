@@ -42,7 +42,7 @@ class Livreur extends Model
     public function equipes(): BelongsToMany
     {
         return $this->belongsToMany(EquipeLivraison::class, 'equipe_livreurs', 'livreur_id', 'equipe_id')
-            ->withPivot(['role', 'taux_commission', 'ordre'])
+            ->withPivot(['role', 'montant_par_pack', 'taux_commission', 'ordre'])
             ->withTimestamps();
     }
 }

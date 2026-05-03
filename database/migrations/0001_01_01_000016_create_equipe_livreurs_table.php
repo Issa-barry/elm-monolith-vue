@@ -12,7 +12,9 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('equipe_id')->constrained('equipes_livraison')->cascadeOnDelete();
             $table->foreignUlid('livreur_id')->constrained('livreurs')->restrictOnDelete();
-            $table->string('role', 20)->default('principal');
+            $table->string('role', 20)->default('chauffeur');
+            $table->decimal('montant_par_pack', 10, 2)->default(0);
+            // Taux dérivé (calculé depuis montant_par_pack à la sauvegarde)
             $table->decimal('taux_commission', 5, 2)->default(0);
             $table->unsignedSmallInteger('ordre')->default(0);
             $table->timestamps();

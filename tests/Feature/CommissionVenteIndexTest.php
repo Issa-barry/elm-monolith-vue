@@ -73,8 +73,8 @@ class CommissionVenteIndexTest extends TestCase
         $commission = CommissionVente::factory()->create(['organization_id' => $this->org->id]);
 
         $commission->parts()->createMany([
-            array_merge($this->livreurPartData('principal', 'Oumar CAMARA', 27_000), ['livreur_id' => $livreur1->id]),
-            array_merge($this->livreurPartData('assistant', 'Abdoulaye SYLLA', 20_250), ['livreur_id' => $livreur2->id]),
+            array_merge($this->livreurPartData('chauffeur', 'Oumar CAMARA', 27_000), ['livreur_id' => $livreur1->id]),
+            array_merge($this->livreurPartData('convoyeur', 'Abdoulaye SYLLA', 20_250), ['livreur_id' => $livreur2->id]),
         ]);
 
         $this->actingAs($this->user)
