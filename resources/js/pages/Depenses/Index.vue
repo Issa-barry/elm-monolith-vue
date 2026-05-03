@@ -113,6 +113,17 @@ function fmt(n: number) {
         }) + ' GNF'
     );
 }
+
+function formatPaginationLabel(label: string) {
+    return label
+        .replaceAll('&laquo;', '«')
+        .replaceAll('&raquo;', '»')
+        .replaceAll('&lsaquo;', '‹')
+        .replaceAll('&rsaquo;', '›')
+        .replaceAll('&amp;', '&')
+        .replace(/<[^>]*>/g, '')
+        .trim();
+}
 </script>
 
 <template>
@@ -345,13 +356,15 @@ function fmt(n: number) {
                             'border-primary bg-primary text-primary-foreground hover:bg-primary/90':
                                 link.active,
                         }"
-                        v-html="link.label"
-                    />
+                    >
+                        {{ formatPaginationLabel(link.label) }}
+                    </Link>
                     <span
                         v-else
                         class="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm opacity-50"
-                        v-html="link.label"
-                    />
+                    >
+                        {{ formatPaginationLabel(link.label) }}
+                    </span>
                 </template>
             </div>
         </div>

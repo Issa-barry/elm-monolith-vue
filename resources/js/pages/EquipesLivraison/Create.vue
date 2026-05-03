@@ -21,7 +21,7 @@ interface VehiculeOption {
     proprietaire_nom: string | null;
 }
 
-const props = defineProps<{
+defineProps<{
     proprietaires: ProprietaireOption[];
     vehicules: VehiculeOption[];
     currentSiteName: string;

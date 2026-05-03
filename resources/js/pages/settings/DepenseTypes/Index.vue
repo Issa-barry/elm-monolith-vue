@@ -24,7 +24,7 @@ interface DepenseType {
     sort_order: number;
 }
 
-const props = defineProps<{
+defineProps<{
     types: DepenseType[];
 }>();
 

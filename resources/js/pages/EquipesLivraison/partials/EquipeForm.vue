@@ -278,6 +278,7 @@ function onPartageConfirm(result: PartageResult) {
         result.montant_par_pack_proprietaire;
     result.membres_montants.forEach((montant, i) => {
         if (props.form.membres[i]) {
+            // eslint-disable-next-line vue/no-mutating-props
             props.form.membres[i].montant_par_pack = montant;
         }
     });
