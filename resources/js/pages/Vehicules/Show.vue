@@ -339,15 +339,22 @@ function formatGNF(val: number): string {
                             </div>
                             <div class="text-xs text-muted-foreground">
                                 {{ d.libelle }}
-                                <span v-if="d.commentaire"> · {{ d.commentaire }}</span>
+                                <span v-if="d.commentaire">
+                                    · {{ d.commentaire }}</span
+                                >
                             </div>
                         </div>
-                        <div class="hidden text-xs text-muted-foreground sm:block">
+                        <div
+                            class="hidden text-xs text-muted-foreground sm:block"
+                        >
                             {{ d.date_depense ?? '—' }}
                         </div>
                         <span
                             class="shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
-                            :class="statutBadge[d.statut] ?? 'bg-muted text-muted-foreground'"
+                            :class="
+                                statutBadge[d.statut] ??
+                                'bg-muted text-muted-foreground'
+                            "
                         >
                             {{ statutLabel[d.statut] ?? d.statut }}
                         </span>

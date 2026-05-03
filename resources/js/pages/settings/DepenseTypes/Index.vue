@@ -8,10 +8,10 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, useForm, router } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
+import { Pencil, Plus, Power, Trash2 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import { computed, ref } from 'vue';
-import { Pencil, Plus, Power, Trash2 } from 'lucide-vue-next';
 
 interface DepenseType {
     id: string;
@@ -61,24 +61,29 @@ function openCreate() {
 
 function openEdit(type: DepenseType) {
     editingType.value = type;
-    form.code             = type.code;
-    form.libelle          = type.libelle;
-    form.description      = type.description ?? '';
+    form.code = type.code;
+    form.libelle = type.libelle;
+    form.description = type.description ?? '';
     form.requires_vehicle = type.requires_vehicle;
     form.requires_comment = type.requires_comment;
-    form.is_active        = type.is_active;
-    form.sort_order       = type.sort_order;
+    form.is_active = type.is_active;
+    form.sort_order = type.sort_order;
     showDialog.value = true;
 }
 
 function handleSubmit() {
     if (editingType.value) {
         form.put(`/settings/depense-types/${editingType.value.id}`, {
-            onSuccess: () => { showDialog.value = false; },
+            onSuccess: () => {
+                showDialog.value = false;
+            },
         });
     } else {
         form.post('/settings/depense-types', {
-            onSuccess: () => { showDialog.value = false; form.reset(); },
+            onSuccess: () => {
+                showDialog.value = false;
+                form.reset();
+            },
         });
     }
 }
@@ -86,14 +91,20 @@ function handleSubmit() {
 // ── Actions ───────────────────────────────────────────────────────────────────
 
 function toggle(type: DepenseType) {
-    router.patch(`/settings/depense-types/${type.id}/toggle`, {}, {
-        preserveScroll: true,
-    });
+    router.patch(
+        `/settings/depense-types/${type.id}/toggle`,
+        {},
+        {
+            preserveScroll: true,
+        },
+    );
 }
 
 function destroy(type: DepenseType) {
     if (!confirm(`Supprimer le type « ${type.libelle} » ?`)) return;
-    router.delete(`/settings/depense-types/${type.id}`, { preserveScroll: true });
+    router.delete(`/settings/depense-types/${type.id}`, {
+        preserveScroll: true,
+    });
 }
 </script>
 
@@ -119,19 +130,29 @@ function destroy(type: DepenseType) {
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="border-b bg-muted/40">
-                                <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">
+                                <th
+                                    class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                >
                                     Libellé / Code
                                 </th>
-                                <th class="px-4 py-2.5 text-center font-medium text-muted-foreground">
+                                <th
+                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                >
                                     Véhicule
                                 </th>
-                                <th class="px-4 py-2.5 text-center font-medium text-muted-foreground">
+                                <th
+                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                >
                                     Commentaire
                                 </th>
-                                <th class="px-4 py-2.5 text-center font-medium text-muted-foreground">
+                                <th
+                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                >
                                     Statut
                                 </th>
-                                <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">
+                                <th
+                                    class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                >
                                     Actions
                                 </th>
                             </tr>
@@ -140,12 +161,16 @@ function destroy(type: DepenseType) {
                             <tr
                                 v-for="type in types"
                                 :key="type.id"
-                                class="border-b last:border-b-0 transition-colors hover:bg-muted/30"
+                                class="border-b transition-colors last:border-b-0 hover:bg-muted/30"
                                 :class="{ 'opacity-50': !type.is_active }"
                             >
                                 <td class="px-4 py-3">
-                                    <div class="font-medium">{{ type.libelle }}</div>
-                                    <div class="font-mono text-xs text-muted-foreground">
+                                    <div class="font-medium">
+                                        {{ type.libelle }}
+                                    </div>
+                                    <div
+                                        class="font-mono text-xs text-muted-foreground"
+                                    >
                                         {{ type.code }}
                                     </div>
                                     <div
@@ -162,7 +187,11 @@ function destroy(type: DepenseType) {
                                     >
                                         Requis
                                     </span>
-                                    <span v-else class="text-xs text-muted-foreground">—</span>
+                                    <span
+                                        v-else
+                                        class="text-xs text-muted-foreground"
+                                        >—</span
+                                    >
                                 </td>
                                 <td class="px-4 py-3 text-center">
                                     <span
@@ -171,18 +200,34 @@ function destroy(type: DepenseType) {
                                     >
                                         Requis
                                     </span>
-                                    <span v-else class="text-xs text-muted-foreground">—</span>
+                                    <span
+                                        v-else
+                                        class="text-xs text-muted-foreground"
+                                        >—</span
+                                    >
                                 </td>
                                 <td class="px-4 py-3 text-center">
-                                    <Badge :variant="type.is_active ? 'default' : 'secondary'">
-                                        {{ type.is_active ? 'Actif' : 'Inactif' }}
+                                    <Badge
+                                        :variant="
+                                            type.is_active
+                                                ? 'default'
+                                                : 'secondary'
+                                        "
+                                    >
+                                        {{
+                                            type.is_active ? 'Actif' : 'Inactif'
+                                        }}
                                     </Badge>
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="flex justify-end gap-0.5">
                                         <button
                                             type="button"
-                                            :title="type.is_active ? 'Désactiver' : 'Activer'"
+                                            :title="
+                                                type.is_active
+                                                    ? 'Désactiver'
+                                                    : 'Activer'
+                                            "
                                             class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                             @click="toggle(type)"
                                         >
@@ -234,7 +279,10 @@ function destroy(type: DepenseType) {
             <!-- Code + Libellé -->
             <div class="grid grid-cols-2 gap-3">
                 <div>
-                    <Label for="dt-code" class="mb-1.5 block text-xs font-medium">
+                    <Label
+                        for="dt-code"
+                        class="mb-1.5 block text-xs font-medium"
+                    >
                         Code <span class="text-destructive">*</span>
                     </Label>
                     <Input
@@ -244,15 +292,24 @@ function destroy(type: DepenseType) {
                         :class="{ 'border-destructive': form.errors.code }"
                         :disabled="!!editingType"
                     />
-                    <p v-if="form.errors.code" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="form.errors.code"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ form.errors.code }}
                     </p>
-                    <p v-if="!editingType" class="mt-1 text-xs text-muted-foreground">
+                    <p
+                        v-if="!editingType"
+                        class="mt-1 text-xs text-muted-foreground"
+                    >
                         Non modifiable après création.
                     </p>
                 </div>
                 <div>
-                    <Label for="dt-libelle" class="mb-1.5 block text-xs font-medium">
+                    <Label
+                        for="dt-libelle"
+                        class="mb-1.5 block text-xs font-medium"
+                    >
                         Libellé <span class="text-destructive">*</span>
                     </Label>
                     <Input
@@ -261,7 +318,10 @@ function destroy(type: DepenseType) {
                         placeholder="ex: Carburant"
                         :class="{ 'border-destructive': form.errors.libelle }"
                     />
-                    <p v-if="form.errors.libelle" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="form.errors.libelle"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ form.errors.libelle }}
                     </p>
                 </div>
@@ -269,7 +329,10 @@ function destroy(type: DepenseType) {
 
             <!-- Description -->
             <div>
-                <Label for="dt-description" class="mb-1.5 block text-xs font-medium">
+                <Label
+                    for="dt-description"
+                    class="mb-1.5 block text-xs font-medium"
+                >
                     Description
                 </Label>
                 <textarea
@@ -277,7 +340,7 @@ function destroy(type: DepenseType) {
                     v-model="form.description"
                     placeholder="Description optionnelle…"
                     rows="2"
-                    class="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    class="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
                 />
             </div>
 
@@ -287,14 +350,20 @@ function destroy(type: DepenseType) {
                     <Checkbox
                         id="dt-requires-vehicle"
                         :model-value="form.requires_vehicle"
-                        @update:model-value="form.requires_vehicle = $event === true"
+                        @update:model-value="
+                            form.requires_vehicle = $event === true
+                        "
                     />
                     <div>
-                        <Label for="dt-requires-vehicle" class="cursor-pointer text-sm font-medium">
+                        <Label
+                            for="dt-requires-vehicle"
+                            class="cursor-pointer text-sm font-medium"
+                        >
                             Véhicule obligatoire
                         </Label>
                         <p class="text-xs text-muted-foreground">
-                            Le champ véhicule sera requis sur les dépenses de ce type.
+                            Le champ véhicule sera requis sur les dépenses de ce
+                            type.
                         </p>
                     </div>
                 </div>
@@ -302,10 +371,15 @@ function destroy(type: DepenseType) {
                     <Checkbox
                         id="dt-requires-comment"
                         :model-value="form.requires_comment"
-                        @update:model-value="form.requires_comment = $event === true"
+                        @update:model-value="
+                            form.requires_comment = $event === true
+                        "
                     />
                     <div>
-                        <Label for="dt-requires-comment" class="cursor-pointer text-sm font-medium">
+                        <Label
+                            for="dt-requires-comment"
+                            class="cursor-pointer text-sm font-medium"
+                        >
                             Commentaire obligatoire
                         </Label>
                         <p class="text-xs text-muted-foreground">
@@ -320,11 +394,15 @@ function destroy(type: DepenseType) {
                         @update:model-value="form.is_active = $event === true"
                     />
                     <div>
-                        <Label for="dt-is-active" class="cursor-pointer text-sm font-medium">
+                        <Label
+                            for="dt-is-active"
+                            class="cursor-pointer text-sm font-medium"
+                        >
                             Actif
                         </Label>
                         <p class="text-xs text-muted-foreground">
-                            Un type inactif ne peut pas être utilisé sur une nouvelle dépense.
+                            Un type inactif ne peut pas être utilisé sur une
+                            nouvelle dépense.
                         </p>
                     </div>
                 </div>
@@ -345,11 +423,22 @@ function destroy(type: DepenseType) {
             </div>
 
             <div class="flex justify-between pt-2">
-                <Button type="button" variant="outline" size="sm" @click="showDialog = false">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    @click="showDialog = false"
+                >
                     Annuler
                 </Button>
                 <Button type="submit" size="sm" :disabled="form.processing">
-                    {{ form.processing ? 'Enregistrement…' : editingType ? 'Enregistrer' : 'Créer' }}
+                    {{
+                        form.processing
+                            ? 'Enregistrement…'
+                            : editingType
+                              ? 'Enregistrer'
+                              : 'Créer'
+                    }}
                 </Button>
             </div>
         </form>

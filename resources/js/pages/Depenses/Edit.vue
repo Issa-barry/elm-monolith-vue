@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
@@ -14,8 +14,16 @@ interface DepenseType {
     requires_vehicle: boolean;
     requires_comment: boolean;
 }
-interface Vehicule { id: string; nom_vehicule: string; immatriculation: string; }
-interface Site { id: string; nom: string; type: string; }
+interface Vehicule {
+    id: string;
+    nom_vehicule: string;
+    immatriculation: string;
+}
+interface Site {
+    id: string;
+    nom: string;
+    type: string;
+}
 interface DepenseData {
     id: string;
     depense_type_id: string;
@@ -41,16 +49,16 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const form = useForm({
     depense_type_id: props.depense.depense_type_id,
-    vehicule_id:     props.depense.vehicule_id ?? '',
-    site_id:         props.depense.site_id ?? '',
-    montant:         props.depense.montant,
-    date_depense:    props.depense.date_depense,
-    commentaire:     props.depense.commentaire,
-    statut:          props.depense.statut,
+    vehicule_id: props.depense.vehicule_id ?? '',
+    site_id: props.depense.site_id ?? '',
+    montant: props.depense.montant,
+    date_depense: props.depense.date_depense,
+    commentaire: props.depense.commentaire,
+    statut: props.depense.statut,
 });
 
-const selectedType = computed(() =>
-    props.types.find(t => t.id === form.depense_type_id) ?? null,
+const selectedType = computed(
+    () => props.types.find((t) => t.id === form.depense_type_id) ?? null,
 );
 
 function submit() {
@@ -71,19 +79,35 @@ function submit() {
                 <form class="space-y-5" @submit.prevent="submit">
                     <!-- Type de dépense -->
                     <div>
-                        <Label for="dep-type" class="mb-1.5 block text-xs font-medium">
-                            Type de dépense <span class="text-destructive">*</span>
+                        <Label
+                            for="dep-type"
+                            class="mb-1.5 block text-xs font-medium"
+                        >
+                            Type de dépense
+                            <span class="text-destructive">*</span>
                         </Label>
                         <select
                             id="dep-type"
                             v-model="form.depense_type_id"
                             class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                            :class="{ 'border-destructive': form.errors.depense_type_id }"
+                            :class="{
+                                'border-destructive':
+                                    form.errors.depense_type_id,
+                            }"
                         >
                             <option value="">Sélectionner un type…</option>
-                            <option v-for="t in types" :key="t.id" :value="t.id">{{ t.libelle }}</option>
+                            <option
+                                v-for="t in types"
+                                :key="t.id"
+                                :value="t.id"
+                            >
+                                {{ t.libelle }}
+                            </option>
                         </select>
-                        <p v-if="form.errors.depense_type_id" class="mt-1 text-xs text-destructive">
+                        <p
+                            v-if="form.errors.depense_type_id"
+                            class="mt-1 text-xs text-destructive"
+                        >
                             {{ form.errors.depense_type_id }}
                         </p>
                     </div>
@@ -91,8 +115,12 @@ function submit() {
                     <!-- Montant + Date -->
                     <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <Label for="dep-montant" class="mb-1.5 block text-xs font-medium">
-                                Montant (GNF) <span class="text-destructive">*</span>
+                            <Label
+                                for="dep-montant"
+                                class="mb-1.5 block text-xs font-medium"
+                            >
+                                Montant (GNF)
+                                <span class="text-destructive">*</span>
                             </Label>
                             <Input
                                 id="dep-montant"
@@ -100,23 +128,37 @@ function submit() {
                                 type="number"
                                 min="1"
                                 step="1"
-                                :class="{ 'border-destructive': form.errors.montant }"
+                                :class="{
+                                    'border-destructive': form.errors.montant,
+                                }"
                             />
-                            <p v-if="form.errors.montant" class="mt-1 text-xs text-destructive">
+                            <p
+                                v-if="form.errors.montant"
+                                class="mt-1 text-xs text-destructive"
+                            >
                                 {{ form.errors.montant }}
                             </p>
                         </div>
                         <div>
-                            <Label for="dep-date" class="mb-1.5 block text-xs font-medium">
+                            <Label
+                                for="dep-date"
+                                class="mb-1.5 block text-xs font-medium"
+                            >
                                 Date <span class="text-destructive">*</span>
                             </Label>
                             <Input
                                 id="dep-date"
                                 v-model="form.date_depense"
                                 type="date"
-                                :class="{ 'border-destructive': form.errors.date_depense }"
+                                :class="{
+                                    'border-destructive':
+                                        form.errors.date_depense,
+                                }"
                             />
-                            <p v-if="form.errors.date_depense" class="mt-1 text-xs text-destructive">
+                            <p
+                                v-if="form.errors.date_depense"
+                                class="mt-1 text-xs text-destructive"
+                            >
                                 {{ form.errors.date_depense }}
                             </p>
                         </div>
@@ -124,60 +166,100 @@ function submit() {
 
                     <!-- Véhicule -->
                     <div>
-                        <Label for="dep-vehicule" class="mb-1.5 block text-xs font-medium">
+                        <Label
+                            for="dep-vehicule"
+                            class="mb-1.5 block text-xs font-medium"
+                        >
                             Véhicule
-                            <span v-if="selectedType?.requires_vehicle" class="text-destructive">*</span>
+                            <span
+                                v-if="selectedType?.requires_vehicle"
+                                class="text-destructive"
+                                >*</span
+                            >
                         </Label>
                         <select
                             id="dep-vehicule"
                             v-model="form.vehicule_id"
                             class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                            :class="{ 'border-destructive': form.errors.vehicule_id }"
+                            :class="{
+                                'border-destructive': form.errors.vehicule_id,
+                            }"
                         >
                             <option value="">Aucun véhicule</option>
-                            <option v-for="v in vehicules" :key="v.id" :value="v.id">
+                            <option
+                                v-for="v in vehicules"
+                                :key="v.id"
+                                :value="v.id"
+                            >
                                 {{ v.nom_vehicule }} ({{ v.immatriculation }})
                             </option>
                         </select>
-                        <p v-if="form.errors.vehicule_id" class="mt-1 text-xs text-destructive">
+                        <p
+                            v-if="form.errors.vehicule_id"
+                            class="mt-1 text-xs text-destructive"
+                        >
                             {{ form.errors.vehicule_id }}
                         </p>
                     </div>
 
                     <!-- Site -->
                     <div>
-                        <Label for="dep-site" class="mb-1.5 block text-xs font-medium">Site</Label>
+                        <Label
+                            for="dep-site"
+                            class="mb-1.5 block text-xs font-medium"
+                            >Site</Label
+                        >
                         <select
                             id="dep-site"
                             v-model="form.site_id"
                             class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
                         >
                             <option value="">Aucun site</option>
-                            <option v-for="s in sites" :key="s.id" :value="s.id">{{ s.nom }}</option>
+                            <option
+                                v-for="s in sites"
+                                :key="s.id"
+                                :value="s.id"
+                            >
+                                {{ s.nom }}
+                            </option>
                         </select>
                     </div>
 
                     <!-- Commentaire -->
                     <div>
-                        <Label for="dep-comment" class="mb-1.5 block text-xs font-medium">
+                        <Label
+                            for="dep-comment"
+                            class="mb-1.5 block text-xs font-medium"
+                        >
                             Commentaire
-                            <span v-if="selectedType?.requires_comment" class="text-destructive">*</span>
+                            <span
+                                v-if="selectedType?.requires_comment"
+                                class="text-destructive"
+                                >*</span
+                            >
                         </Label>
                         <textarea
                             id="dep-comment"
                             v-model="form.commentaire"
                             rows="3"
-                            class="flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            :class="{ 'border-destructive': form.errors.commentaire }"
+                            class="flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+                            :class="{
+                                'border-destructive': form.errors.commentaire,
+                            }"
                         />
-                        <p v-if="form.errors.commentaire" class="mt-1 text-xs text-destructive">
+                        <p
+                            v-if="form.errors.commentaire"
+                            class="mt-1 text-xs text-destructive"
+                        >
                             {{ form.errors.commentaire }}
                         </p>
                     </div>
 
                     <!-- Statut -->
                     <div>
-                        <Label class="mb-2 block text-xs font-medium">Statut</Label>
+                        <Label class="mb-2 block text-xs font-medium"
+                            >Statut</Label
+                        >
                         <select
                             v-model="form.statut"
                             class="flex h-9 w-48 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
@@ -190,11 +272,24 @@ function submit() {
                     </div>
 
                     <div class="flex justify-between pt-1">
-                        <Button type="button" variant="outline" size="sm" as-child>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            as-child
+                        >
                             <a href="/depenses">Annuler</a>
                         </Button>
-                        <Button type="submit" size="sm" :disabled="form.processing">
-                            {{ form.processing ? 'Enregistrement…' : 'Enregistrer' }}
+                        <Button
+                            type="submit"
+                            size="sm"
+                            :disabled="form.processing"
+                        >
+                            {{
+                                form.processing
+                                    ? 'Enregistrement…'
+                                    : 'Enregistrer'
+                            }}
                         </Button>
                     </div>
                 </form>

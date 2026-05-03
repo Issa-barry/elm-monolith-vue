@@ -53,7 +53,9 @@ function formatMoney(value: number): string {
     return `${new Intl.NumberFormat('fr-FR').format(value ?? 0)} GNF`;
 }
 
-const hasActiveFilter = computed(() => !!props.filters.date_debut || !!props.filters.date_fin);
+const hasActiveFilter = computed(
+    () => !!props.filters.date_debut || !!props.filters.date_fin,
+);
 </script>
 
 <template>
@@ -64,11 +66,12 @@ const hasActiveFilter = computed(() => !!props.filters.date_debut || !!props.fil
             <div class="space-y-3">
                 <div>
                     <h1 class="text-2xl font-semibold">Gains et releve</h1>
-                    
                 </div>
                 <div class="flex flex-wrap justify-end gap-2">
                     <div>
-                        <label class="block text-xs font-medium text-foreground mb-1">
+                        <label
+                            class="mb-1 block text-xs font-medium text-foreground"
+                        >
                             Vehicule
                         </label>
                         <select
@@ -88,7 +91,10 @@ const hasActiveFilter = computed(() => !!props.filters.date_debut || !!props.fil
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-foreground mb-1">Du</label>
+                        <label
+                            class="mb-1 block text-xs font-medium text-foreground"
+                            >Du</label
+                        >
                         <input
                             v-model="dateDebut"
                             type="date"
@@ -97,7 +103,10 @@ const hasActiveFilter = computed(() => !!props.filters.date_debut || !!props.fil
                         />
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-foreground mb-1">Au</label>
+                        <label
+                            class="mb-1 block text-xs font-medium text-foreground"
+                            >Au</label
+                        >
                         <input
                             v-model="dateFin"
                             type="date"
@@ -141,7 +150,8 @@ const hasActiveFilter = computed(() => !!props.filters.date_debut || !!props.fil
                         v-if="earnings.frais_depenses_total > 0"
                         class="mt-1 text-xs text-destructive"
                     >
-                        dont {{ formatMoney(earnings.frais_depenses_total) }} de frais déduits
+                        dont {{ formatMoney(earnings.frais_depenses_total) }} de
+                        frais déduits
                     </p>
                 </div>
             </div>
@@ -237,7 +247,11 @@ const hasActiveFilter = computed(() => !!props.filters.date_debut || !!props.fil
                                     Immatriculation
                                 </th>
                                 <th class="py-2 pr-4 font-medium">Gains</th>
-                                <th class="py-2 pr-4 font-medium text-destructive">Frais</th>
+                                <th
+                                    class="py-2 pr-4 font-medium text-destructive"
+                                >
+                                    Frais
+                                </th>
                                 <th class="py-2 pr-4 font-medium">Verses</th>
                                 <th class="py-2 pr-0 font-medium">
                                     Reste à payer

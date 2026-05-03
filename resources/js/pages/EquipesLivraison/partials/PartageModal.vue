@@ -57,7 +57,8 @@ watch(
     () => props.visible,
     (val) => {
         if (!val) return;
-        commission.value = props.commissionInitiale > 0 ? props.commissionInitiale : 200;
+        commission.value =
+            props.commissionInitiale > 0 ? props.commissionInitiale : 200;
 
         const newLignes: LignePartage[] = [];
 
@@ -116,16 +117,16 @@ const total = computed(() =>
 
 const isValid = computed(
     () =>
-        commission.value > 0 &&
-        Math.abs(total.value - commission.value) < 0.01,
+        commission.value > 0 && Math.abs(total.value - commission.value) < 0.01,
 );
 
 function handleConfirm() {
     if (!isValid.value) return;
 
-    const propLigne = props.proprietaireNom !== null
-        ? lignes.value.find((l) => l.id === 'proprietaire')
-        : null;
+    const propLigne =
+        props.proprietaireNom !== null
+            ? lignes.value.find((l) => l.id === 'proprietaire')
+            : null;
 
     const membreMontants = props.membres.map((_, i) => {
         const ligne = lignes.value.find((l) => l.id === `membre-${i}`);
@@ -180,13 +181,19 @@ function handleConfirm() {
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
-                            <th class="px-3 py-2 text-left font-medium text-muted-foreground">
+                            <th
+                                class="px-3 py-2 text-left font-medium text-muted-foreground"
+                            >
                                 Bénéficiaire
                             </th>
-                            <th class="px-3 py-2 text-right font-medium text-muted-foreground">
+                            <th
+                                class="px-3 py-2 text-right font-medium text-muted-foreground"
+                            >
                                 Montant (GNF)
                             </th>
-                            <th class="w-28 px-3 py-2 text-right font-medium text-muted-foreground">
+                            <th
+                                class="w-28 px-3 py-2 text-right font-medium text-muted-foreground"
+                            >
                                 %
                             </th>
                         </tr>
@@ -207,8 +214,13 @@ function handleConfirm() {
                                     :max="commission"
                                     :max-fraction-digits="0"
                                     class="w-full"
-                                    :input-style="{ textAlign: 'right', width: '100%' }"
-                                    @update:model-value="onMontantChange(ligne, $event)"
+                                    :input-style="{
+                                        textAlign: 'right',
+                                        width: '100%',
+                                    }"
+                                    @update:model-value="
+                                        onMontantChange(ligne, $event)
+                                    "
                                 />
                             </td>
                             <td class="px-3 py-2">
@@ -220,8 +232,13 @@ function handleConfirm() {
                                     suffix=" %"
                                     :disabled="!commission || commission <= 0"
                                     class="w-full"
-                                    :input-style="{ textAlign: 'right', width: '100%' }"
-                                    @update:model-value="onTauxChange(ligne, $event)"
+                                    :input-style="{
+                                        textAlign: 'right',
+                                        width: '100%',
+                                    }"
+                                    @update:model-value="
+                                        onTauxChange(ligne, $event)
+                                    "
                                 />
                             </td>
                         </tr>
@@ -233,11 +250,17 @@ function handleConfirm() {
                             </td>
                             <td
                                 class="px-3 py-2.5 text-right font-mono text-sm font-semibold"
-                                :class="isValid ? 'text-emerald-600' : 'text-destructive'"
+                                :class="
+                                    isValid
+                                        ? 'text-emerald-600'
+                                        : 'text-destructive'
+                                "
                             >
                                 {{ total }} GNF
                             </td>
-                            <td class="px-3 py-2.5 text-right font-mono text-xs">
+                            <td
+                                class="px-3 py-2.5 text-right font-mono text-xs"
+                            >
                                 <span
                                     v-if="isValid"
                                     class="font-semibold text-emerald-600"

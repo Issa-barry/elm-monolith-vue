@@ -254,9 +254,7 @@ function handleConfirm() {
 
             <!-- Rôle -->
             <div>
-                <Label
-                    for="membre-role"
-                    class="mb-1 block text-xs font-medium"
+                <Label for="membre-role" class="mb-1 block text-xs font-medium"
                     >Rôle</Label
                 >
                 <Dropdown

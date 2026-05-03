@@ -714,7 +714,11 @@ function closeDetailDialog() {
                         v-if="can('ventes.update')"
                         class="gap-2"
                         :disabled="resume_global.solde_global <= 0"
-                        :title="resume_global.solde_global <= 0 ? 'Aucun montant restant à payer' : undefined"
+                        :title="
+                            resume_global.solde_global <= 0
+                                ? 'Aucun montant restant à payer'
+                                : undefined
+                        "
                         @click="openPaiementDialog"
                     >
                         <Plus class="h-4 w-4" />
@@ -1063,38 +1067,92 @@ function closeDetailDialog() {
                 </DataTable>
             </div>
             <!-- Bloc dépenses (propriétaires uniquement) -->
-            <div v-if="!isLivreur" class="overflow-x-auto rounded-xl border bg-card">
-                <div class="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
+            <div
+                v-if="!isLivreur"
+                class="overflow-x-auto rounded-xl border bg-card"
+            >
+                <div
+                    class="flex items-center justify-between border-b bg-muted/30 px-4 py-3"
+                >
                     <h2 class="text-sm font-semibold">
                         Frais déduits (dépenses approuvées liées au véhicule)
                     </h2>
-                    <span class="text-sm font-bold text-destructive tabular-nums">
-                        {{ totalFraisDepenses > 0 ? '− ' + formatGNF(totalFraisDepenses) : '—' }}
+                    <span
+                        class="text-sm font-bold text-destructive tabular-nums"
+                    >
+                        {{
+                            totalFraisDepenses > 0
+                                ? '− ' + formatGNF(totalFraisDepenses)
+                                : '—'
+                        }}
                     </span>
                 </div>
                 <table v-if="frais_depenses.length > 0" class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/10">
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Date</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Type</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Véhicule</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Commentaire</th>
-                            <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Montant</th>
+                            <th
+                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Date
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Type
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Véhicule
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Commentaire
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                            >
+                                Montant
+                            </th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
-                        <tr v-for="d in frais_depenses" :key="d.id" class="hover:bg-muted/20">
-                            <td class="px-4 py-2.5 text-xs text-muted-foreground tabular-nums">{{ d.date }}</td>
-                            <td class="px-4 py-2.5 font-medium">{{ d.type }}</td>
-                            <td class="px-4 py-2.5 text-xs text-muted-foreground">{{ d.vehicule ?? '—' }}</td>
-                            <td class="px-4 py-2.5 text-xs text-muted-foreground italic">{{ d.commentaire ?? '—' }}</td>
-                            <td class="px-4 py-2.5 text-right font-mono font-semibold text-destructive tabular-nums">
+                        <tr
+                            v-for="d in frais_depenses"
+                            :key="d.id"
+                            class="hover:bg-muted/20"
+                        >
+                            <td
+                                class="px-4 py-2.5 text-xs text-muted-foreground tabular-nums"
+                            >
+                                {{ d.date }}
+                            </td>
+                            <td class="px-4 py-2.5 font-medium">
+                                {{ d.type }}
+                            </td>
+                            <td
+                                class="px-4 py-2.5 text-xs text-muted-foreground"
+                            >
+                                {{ d.vehicule ?? '—' }}
+                            </td>
+                            <td
+                                class="px-4 py-2.5 text-xs text-muted-foreground italic"
+                            >
+                                {{ d.commentaire ?? '—' }}
+                            </td>
+                            <td
+                                class="px-4 py-2.5 text-right font-mono font-semibold text-destructive tabular-nums"
+                            >
                                 − {{ formatGNF(d.montant) }}
                             </td>
                         </tr>
                     </tbody>
                 </table>
-                <p v-else class="px-4 py-8 text-center text-sm text-muted-foreground">
+                <p
+                    v-else
+                    class="px-4 py-8 text-center text-sm text-muted-foreground"
+                >
                     Aucune dépense approuvée pour ce véhicule.
                 </p>
             </div>

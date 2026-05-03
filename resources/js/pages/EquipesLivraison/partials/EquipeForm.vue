@@ -181,7 +181,10 @@ watch(vehiculeIsInterne, (isInterne) => {
 
 const partageWarning = computed(() => {
     if (props.form.membres.length === 0) return null;
-    if (!props.form.commission_unitaire_par_pack || props.form.commission_unitaire_par_pack <= 0) {
+    if (
+        !props.form.commission_unitaire_par_pack ||
+        props.form.commission_unitaire_par_pack <= 0
+    ) {
         return 'Configurez le partage (commission par pack non définie).';
     }
     const totalMembres = props.form.membres.reduce(
@@ -255,8 +258,9 @@ const partageProprietaireNom = computed(() =>
     vehiculeIsInterne.value
         ? null
         : (proprietaireSelected.value?.label ??
-          props.proprietaires.find((p) => p.value === props.form.proprietaire_id)
-              ?.label ??
+          props.proprietaires.find(
+              (p) => p.value === props.form.proprietaire_id,
+          )?.label ??
           null),
 );
 
@@ -267,9 +271,11 @@ const montantsInitiaux = computed(() => ({
 
 function onPartageConfirm(result: PartageResult) {
     // eslint-disable-next-line vue/no-mutating-props
-    props.form.commission_unitaire_par_pack = result.commission_unitaire_par_pack;
+    props.form.commission_unitaire_par_pack =
+        result.commission_unitaire_par_pack;
     // eslint-disable-next-line vue/no-mutating-props
-    props.form.montant_par_pack_proprietaire = result.montant_par_pack_proprietaire;
+    props.form.montant_par_pack_proprietaire =
+        result.montant_par_pack_proprietaire;
     result.membres_montants.forEach((montant, i) => {
         if (props.form.membres[i]) {
             props.form.membres[i].montant_par_pack = montant;
@@ -302,7 +308,11 @@ function setIsActive(val: boolean | string) {
 // ── Submit ────────────────────────────────────────────────────────────────────
 
 function handleSubmit() {
-    if (vehiculeWarning.value || proprietaireWarning.value || partageWarning.value)
+    if (
+        vehiculeWarning.value ||
+        proprietaireWarning.value ||
+        partageWarning.value
+    )
         return;
     emit('submit');
 }
@@ -347,16 +357,22 @@ function handleSubmit() {
                                 <div
                                     class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground"
                                 >
-                                    <span class="font-mono">{{ option.immatriculation }}</span>
+                                    <span class="font-mono">{{
+                                        option.immatriculation
+                                    }}</span>
                                     <span>·</span>
                                     <span>{{ option.type_label }}</span>
                                     <span>·</span>
-                                    <span class="capitalize">{{ option.categorie }}</span>
+                                    <span class="capitalize">{{
+                                        option.categorie
+                                    }}</span>
                                 </div>
                             </div>
                         </template>
                         <template #empty>
-                            <div class="px-1 py-0.5 text-sm text-muted-foreground">
+                            <div
+                                class="px-1 py-0.5 text-sm text-muted-foreground"
+                            >
                                 Aucun véhicule disponible
                             </div>
                         </template>
@@ -386,12 +402,23 @@ function handleSubmit() {
                         class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
                         :class="{ 'border-destructive': form.errors?.nom }"
                     >
-                        <span :class="form.nom ? 'text-foreground' : 'text-muted-foreground'">
+                        <span
+                            :class="
+                                form.nom
+                                    ? 'text-foreground'
+                                    : 'text-muted-foreground'
+                            "
+                        >
                             {{ form.nom || 'Sélectionnez un véhicule…' }}
                         </span>
-                        <Lock class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                        <Lock
+                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                        />
                     </div>
-                    <p v-if="form.errors?.nom" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="form.errors?.nom"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ form.errors.nom }}
                     </p>
                 </div>
@@ -400,7 +427,9 @@ function handleSubmit() {
                 <div>
                     <Label for="proprietaire_id" class="mb-1.5 block">
                         Propriétaire
-                        <span v-if="!vehiculeIsInterne" class="text-destructive">*</span>
+                        <span v-if="!vehiculeIsInterne" class="text-destructive"
+                            >*</span
+                        >
                     </Label>
 
                     <!-- Interne : le propriétaire est le site -->
@@ -408,21 +437,33 @@ function handleSubmit() {
                         v-if="vehiculeIsInterne"
                         class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
                     >
-                        <span class="inline-flex items-center gap-2 text-foreground">
-                            <Building2 class="h-3.5 w-3.5 text-muted-foreground/70" />
+                        <span
+                            class="inline-flex items-center gap-2 text-foreground"
+                        >
+                            <Building2
+                                class="h-3.5 w-3.5 text-muted-foreground/70"
+                            />
                             {{ currentSiteName }}
                         </span>
-                        <Lock class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                        <Lock
+                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                        />
                     </div>
 
                     <!-- Verrouillé : auto-renseigné depuis le véhicule -->
                     <div
                         v-else-if="vehiculeHasProprietaire"
                         class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
-                        :class="{ 'border-destructive': form.errors?.proprietaire_id }"
+                        :class="{
+                            'border-destructive': form.errors?.proprietaire_id,
+                        }"
                     >
-                        <span class="text-foreground">{{ proprietaireSelected?.label }}</span>
-                        <Lock class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                        <span class="text-foreground">{{
+                            proprietaireSelected?.label
+                        }}</span>
+                        <Lock
+                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                        />
                     </div>
 
                     <!-- Éditable -->
@@ -439,12 +480,16 @@ function handleSubmit() {
                         dropdown
                         force-selection
                         @complete="_searchProprietaire"
-                        @item-select="_onProprietaireSelect(proprietaireSelected)"
+                        @item-select="
+                            _onProprietaireSelect(proprietaireSelected)
+                        "
                         @clear="_onProprietaireClear"
                     >
                         <template #option="{ option }">
                             <div class="py-0.5">
-                                <div class="leading-tight font-medium">{{ option.label }}</div>
+                                <div class="leading-tight font-medium">
+                                    {{ option.label }}
+                                </div>
                                 <div
                                     v-if="option.telephone"
                                     class="mt-0.5 font-mono text-xs text-muted-foreground"
@@ -454,7 +499,11 @@ function handleSubmit() {
                             </div>
                         </template>
                         <template #empty>
-                            <div class="px-1 py-0.5 text-sm text-muted-foreground">Aucun résultat</div>
+                            <div
+                                class="px-1 py-0.5 text-sm text-muted-foreground"
+                            >
+                                Aucun résultat
+                            </div>
                         </template>
                     </AutoComplete>
 
@@ -465,7 +514,9 @@ function handleSubmit() {
                         {{ form.errors.proprietaire_id }}
                     </p>
                     <div
-                        v-if="proprietaireWarning && !form.errors?.proprietaire_id"
+                        v-if="
+                            proprietaireWarning && !form.errors?.proprietaire_id
+                        "
                         class="mt-2 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300"
                     >
                         <AlertTriangle class="h-3.5 w-3.5 shrink-0" />
@@ -489,7 +540,9 @@ function handleSubmit() {
                     @update:model-value="setIsActive($event)"
                 />
                 <div>
-                    <Label for="is_active" class="cursor-pointer font-medium">Actif</Label>
+                    <Label for="is_active" class="cursor-pointer font-medium"
+                        >Actif</Label
+                    >
                     <p class="text-xs text-muted-foreground">
                         Décochez pour désactiver l'équipe.
                     </p>
