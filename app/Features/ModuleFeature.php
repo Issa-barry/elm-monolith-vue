@@ -28,6 +28,8 @@ class ModuleFeature
 
     public const LOGISTIQUE = 'module.logistique';
 
+    public const DEPENSES = 'module.depenses';
+
     public const ALL = [
         self::VENTES,
         self::ACHATS,
@@ -40,6 +42,7 @@ class ModuleFeature
         self::INSCRIPTION,
         self::CASHBACK,
         self::LOGISTIQUE,
+        self::DEPENSES,
     ];
 
     /**
@@ -73,6 +76,7 @@ class ModuleFeature
             self::INSCRIPTION => 'Inscription',
             self::CASHBACK => 'Cashback clients',
             self::LOGISTIQUE => 'Logistique inter-sites',
+            self::DEPENSES => 'Dépenses opérationnelles',
         ];
     }
 }

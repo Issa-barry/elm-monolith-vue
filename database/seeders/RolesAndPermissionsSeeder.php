@@ -15,7 +15,7 @@ class RolesAndPermissionsSeeder extends Seeder
     private const RESOURCES = [
         'clients', 'prestataires', 'livreurs', 'proprietaires',
         'vehicules', 'equipes-livraison', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres',
-        'logistique',
+        'logistique', 'depenses',
     ];
 
     private const ACTIONS = ['create', 'read', 'update', 'delete'];
@@ -68,6 +68,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'parametres.read',          'parametres.update',
             'logistique.create',        'logistique.read',        'logistique.update',      'logistique.delete',
             'logistique.commission.verser',
+            'depenses.create',          'depenses.read',          'depenses.update',        'depenses.delete',
         ]);
 
         $manager->syncPermissions([
@@ -88,6 +89,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'parametres.read',
             'logistique.create',        'logistique.read',        'logistique.update',
             'logistique.commission.verser',
+            'depenses.create',          'depenses.read',          'depenses.update',
         ]);
 
         $commerciale->syncPermissions([

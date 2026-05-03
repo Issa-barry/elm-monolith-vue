@@ -6,9 +6,11 @@ use App\Enums\ModePaiement;
 use App\Enums\StatutCommission;
 use App\Models\CommissionPart;
 use App\Models\CommissionVente;
+use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\PaiementCommissionVente;
 use App\Models\Proprietaire;
+use App\Models\Vehicule;
 use App\Services\PeriodeComptableService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -49,7 +51,7 @@ class CommissionVenteController extends Controller
         if ($tab === 'livreurs') {
             $query
                 ->whereNotNull('cp.livreur_id')
-                ->where('cp.role', 'principal')
+                ->where('cp.role', 'chauffeur')
                 ->leftJoin('livreurs', 'livreurs.id', '=', 'cp.livreur_id')
                 ->select(['cp.livreur_id AS beneficiaire_id'])
                 ->selectRaw(
@@ -85,8 +87,49 @@ class CommissionVenteController extends Controller
 
         $rows = $query->orderByRaw('SUM(cp.montant_net) - SUM(cp.montant_verse) DESC')->get();
 
-        $beneficiaires = $rows->map(function ($row) {
-            $totalNet = (float) $row->total_net_cumule;
+        // ── Frais depuis Dépenses (propriétaires uniquement) ──────────────────
+        $fraisParProprio = [];
+        if ($tab === 'proprietaires') {
+            $proprioIds = $rows->pluck('beneficiaire_id')->filter()->unique()->values();
+
+            $vehiculesByProprio = Vehicule::whereIn('proprietaire_id', $proprioIds)
+                ->where('organization_id', $orgId)
+                ->get(['id', 'proprietaire_id'])
+                ->groupBy('proprietaire_id');
+
+            $allVehiculeIds = $vehiculesByProprio->flatten()->pluck('id');
+
+            if ($allVehiculeIds->isNotEmpty()) {
+                $depQuery = Depense::whereIn('vehicule_id', $allVehiculeIds)
+                    ->where('statut', 'approuve')
+                    ->where('organization_id', $orgId);
+
+                match ($periode) {
+                    'today' => $depQuery->whereDate('date_depense', now()),
+                    'week' => $depQuery->whereBetween('date_depense', [now()->startOfWeek(), now()->endOfWeek()]),
+                    'month' => $depQuery->whereYear('date_depense', now()->year)
+                        ->whereMonth('date_depense', now()->month),
+                    default => null,
+                };
+
+                $fraisParVehicule = $depQuery->get(['vehicule_id', 'montant'])->groupBy('vehicule_id');
+
+                foreach ($vehiculesByProprio as $proprioId => $vehicules) {
+                    $total = 0.0;
+                    foreach ($vehicules as $v) {
+                        $total += (float) $fraisParVehicule->get($v->id, collect())->sum('montant');
+                    }
+                    $fraisParProprio[$proprioId] = $total;
+                }
+            }
+        }
+
+        $beneficiaires = $rows->map(function ($row) use ($tab, $fraisParProprio) {
+            $totalBrut = (float) $row->total_brut_cumule;
+            $totalFrais = $tab === 'proprietaires'
+                ? ($fraisParProprio[$row->beneficiaire_id] ?? 0.0)
+                : (float) $row->total_frais;
+            $totalNet = max(0.0, $totalBrut - $totalFrais);
             $totalVerse = (float) $row->total_verse;
             $solde = max(0.0, $totalNet - $totalVerse);
 
@@ -97,12 +140,12 @@ class CommissionVenteController extends Controller
             };
 
             return [
-                'beneficiaire_id' => (int) $row->beneficiaire_id,
+                'beneficiaire_id' => (string) $row->beneficiaire_id,
                 'type_beneficiaire' => $row->type_beneficiaire,
                 'beneficiaire_nom' => $row->beneficiaire_nom ?? '—',
                 'telephone' => $row->telephone,
-                'total_brut_cumule' => (float) $row->total_brut_cumule,
-                'total_frais' => (float) $row->total_frais,
+                'total_brut_cumule' => $totalBrut,
+                'total_frais' => $totalFrais,
                 'total_net_cumule' => $totalNet,
                 'total_verse' => $totalVerse,
                 'solde_restant' => $solde,
@@ -189,10 +232,32 @@ class CommissionVenteController extends Controller
 
         $allParts = $baseQuery->orderByDesc('commission_vente_id')->get();
 
+        // ── Frais depuis Dépenses (propriétaires uniquement) ─────────────────
+        $fraisDepenses = collect();
+        $totalFraisDepenses = 0.0;
+        if ($type === 'proprietaire') {
+            $vehiculeIds = Vehicule::where('proprietaire_id', $beneficiaireId)
+                ->where('organization_id', $orgId)
+                ->pluck('id');
+
+            if ($vehiculeIds->isNotEmpty()) {
+                $fraisDepenses = Depense::with(['depenseType:id,libelle', 'vehicule:id,nom_vehicule'])
+                    ->whereIn('vehicule_id', $vehiculeIds)
+                    ->where('statut', 'approuve')
+                    ->where('organization_id', $orgId)
+                    ->orderByDesc('date_depense')
+                    ->get();
+
+                $totalFraisDepenses = (float) $fraisDepenses->sum('montant');
+            }
+        }
+
         // ── Totaux globaux ──────────────────────────────────────────────────────
         $totalBrut = (float) $allParts->sum('montant_brut');
-        $totalFrais = (float) $allParts->sum('frais_supplementaires');
-        $totalNet = (float) $allParts->sum('montant_net');
+        $totalFrais = $type === 'proprietaire'
+            ? $totalFraisDepenses
+            : (float) $allParts->sum('frais_supplementaires');
+        $totalNet = max(0.0, $totalBrut - $totalFrais);
         $totalVerse = (float) $allParts->sum('montant_verse');
         $solde = max(0.0, $totalNet - $totalVerse);
 
@@ -337,6 +402,14 @@ class CommissionVenteController extends Controller
             'resume_global' => $resumeGlobal,
             'historique_commandes' => $historiqueCommandes,
             'historique_paiements_globaux' => $historiquePaiements,
+            'frais_depenses' => $fraisDepenses->map(fn ($d) => [
+                'id' => $d->id,
+                'date' => $d->date_depense->toDateString(),
+                'type' => $d->depenseType?->libelle ?? '—',
+                'vehicule' => $d->vehicule?->nom_vehicule,
+                'montant' => (float) $d->montant,
+                'commentaire' => $d->commentaire,
+            ])->values(),
             'modes_paiement' => ModePaiement::options(),
             'filtres' => [
                 'date_from' => $dateFrom,

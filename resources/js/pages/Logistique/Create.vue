@@ -135,6 +135,9 @@ function searchVehicule(event: { query: string }) {
 function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
     form.equipe_livraison_id = v?.equipe_livraison_id ?? null;
+    if (v?.capacite_packs != null && form.lignes.length === 1) {
+        form.lignes[0].quantite_demandee = v.capacite_packs;
+    }
 }
 
 function onVehiculeClear() {
@@ -170,7 +173,18 @@ function onProduitSelect(index: number, p: ProduitOption | null) {
 // ── Gestion des lignes ────────────────────────────────────────────────────────
 
 function ajouterLigne() {
-    form.lignes.push({ produit_id: null, quantite_demandee: 1, notes: '' });
+    const remaining =
+        capaciteVehiculeSelectionne.value != null
+            ? Math.max(
+                  0,
+                  capaciteVehiculeSelectionne.value - quantiteTotale.value,
+              )
+            : 1;
+    form.lignes.push({
+        produit_id: null,
+        quantite_demandee: remaining,
+        notes: '',
+    });
     produitSelected.value.push(null);
 }
 

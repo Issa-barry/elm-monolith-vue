@@ -6,25 +6,24 @@ import { ArrowLeft } from 'lucide-vue-next';
 import EquipeForm from './partials/EquipeForm.vue';
 
 interface ProprietaireOption {
-    value: number;
+    value: string;
     label: string;
     telephone?: string | null;
 }
 
 interface VehiculeOption {
-    value: number;
+    value: string;
     label: string;
     immatriculation: string;
     categorie: string;
     type_label: string;
-    proprietaire_id: number | null;
+    proprietaire_id: string | null;
     proprietaire_nom: string | null;
 }
 
-const props = defineProps<{
+defineProps<{
     proprietaires: ProprietaireOption[];
     vehicules: VehiculeOption[];
-    tauxProprietaireDefaut: number;
     currentSiteName: string;
 }>();
 
@@ -37,16 +36,17 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: '',
     is_active: true,
-    vehicule_id: null as number | null,
-    proprietaire_id: null as number | null,
-    taux_commission_proprietaire: props.tauxProprietaireDefaut as number | null,
+    vehicule_id: null as string | null,
+    proprietaire_id: null as string | null,
+    commission_unitaire_par_pack: 0 as number,
+    montant_par_pack_proprietaire: null as number | null,
     membres: [] as {
-        livreur_id: number | null;
+        livreur_id: string | null;
         nom: string;
         prenom: string;
         telephone: string;
         role: string;
-        taux_commission: number;
+        montant_par_pack: number;
         ordre: number;
     }[],
 });
@@ -80,7 +80,6 @@ function submit() {
                 :form="form"
                 :proprietaires="proprietaires"
                 :vehicules="vehicules"
-                :taux-proprietaire-defaut="tauxProprietaireDefaut"
                 :current-site-name="currentSiteName"
                 @submit="submit"
             />

@@ -19,6 +19,7 @@ class EquipeLivreur extends Model
         'equipe_id',
         'livreur_id',
         'role',
+        'montant_par_pack',
         'taux_commission',
         'ordre',
     ];
@@ -26,6 +27,7 @@ class EquipeLivreur extends Model
     protected function casts(): array
     {
         return [
+            'montant_par_pack' => 'decimal:2',
             'taux_commission' => 'decimal:2',
             'ordre' => 'integer',
         ];

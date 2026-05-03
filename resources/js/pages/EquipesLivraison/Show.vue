@@ -16,6 +16,7 @@ interface Membre {
     role: string;
     taux_commission: number;
     ordre: number;
+    numero?: number;
 }
 
 interface EquipeData {
@@ -30,10 +31,10 @@ interface EquipeData {
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     taux_commission_proprietaire: number | null;
-    principal_nom: string | null;
-    principal_telephone: string | null;
+    premier_chauffeur_nom: string | null;
+    premier_chauffeur_telephone: string | null;
     nb_membres: number;
-    nb_assistants: number;
+    nb_convoyeurs: number;
     somme_taux: number;
     membres: Membre[];
 }
@@ -48,16 +49,14 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: props.equipe.nom, href: '#' },
 ];
 
-function roleLabel(role: string): string {
-    if (role === 'principal') {
-        return 'Principal';
-    }
-
-    if (role === 'assistant') {
-        return 'Assistant';
-    }
-
-    return role;
+function roleLabel(role: string, numero?: number): string {
+    const label =
+        role === 'chauffeur'
+            ? 'Chauffeur'
+            : role === 'convoyeur'
+              ? 'Convoyeur'
+              : role;
+    return numero !== undefined ? `${label} ${numero}` : label;
 }
 </script>
 
@@ -154,15 +153,17 @@ function roleLabel(role: string): string {
 
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
                     <p class="text-xs text-muted-foreground uppercase">
-                        Principal
+                        Chauffeur
                     </p>
                     <p class="mt-2 text-sm font-medium">
-                        {{ equipe.principal_nom || '—' }}
+                        {{ equipe.premier_chauffeur_nom || '—' }}
                     </p>
                     <p class="mt-1 text-xs text-muted-foreground">
                         {{
-                            equipe.principal_telephone
-                                ? formatPhoneDisplay(equipe.principal_telephone)
+                            equipe.premier_chauffeur_telephone
+                                ? formatPhoneDisplay(
+                                      equipe.premier_chauffeur_telephone,
+                                  )
                                 : 'Aucun numéro'
                         }}
                     </p>
@@ -195,7 +196,7 @@ function roleLabel(role: string): string {
                     <h2 class="font-semibold">Membres de l'équipe</h2>
                     <p class="text-sm text-muted-foreground">
                         {{ equipe.nb_membres }} membre(s) ·
-                        {{ equipe.nb_assistants }} assistant(s)
+                        {{ equipe.nb_convoyeurs }} convoyeur(s)
                     </p>
                 </div>
 
@@ -237,7 +238,7 @@ function roleLabel(role: string): string {
                                     {{ formatPhoneDisplay(membre.telephone) }}
                                 </td>
                                 <td class="px-6 py-3 text-sm">
-                                    {{ roleLabel(membre.role) }}
+                                    {{ roleLabel(membre.role, membre.numero) }}
                                 </td>
                                 <td
                                     class="px-6 py-3 text-right font-mono text-sm"

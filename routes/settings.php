@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\DepenseTypeController;
 use App\Http\Controllers\Settings\ModuleController;
 use App\Http\Controllers\Settings\ParametreController;
 use App\Http\Controllers\Settings\PasswordController;
@@ -39,4 +40,12 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/ventes', [VenteParametrageController::class, 'edit'])->name('settings.ventes.edit');
     Route::put('settings/ventes', [VenteParametrageController::class, 'update'])->name('settings.ventes.update');
+
+    Route::prefix('settings/depense-types')->name('settings.depense-types.')->group(function () {
+        Route::get('/', [DepenseTypeController::class, 'index'])->name('index');
+        Route::post('/', [DepenseTypeController::class, 'store'])->name('store');
+        Route::put('/{depense_type}', [DepenseTypeController::class, 'update'])->name('update');
+        Route::patch('/{depense_type}/toggle', [DepenseTypeController::class, 'toggle'])->name('toggle');
+        Route::delete('/{depense_type}', [DepenseTypeController::class, 'destroy'])->name('destroy');
+    });
 });
