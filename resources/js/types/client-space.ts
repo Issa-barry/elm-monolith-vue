@@ -8,12 +8,22 @@ export interface ActorPayload {
 }
 
 export interface VehiculeOption {
-    id: number;
+    id: string | number;
     nom_vehicule: string;
     immatriculation: string | null;
     type_label: string;
+    categorie?: 'interne' | 'externe' | null;
+    is_active?: boolean;
     capacite_packs: number | null;
     photo_url: string | null;
+}
+
+export interface DashboardFiltersPayload {
+    period: '7j' | '30j' | 'ce_mois' | 'mois_passe' | 'custom';
+    date_debut: string | null;
+    date_fin: string | null;
+    vehicule_id: string | null;
+    statut: string | null;
 }
 
 export interface TypeVehiculeOption {
@@ -31,7 +41,7 @@ export interface EarningsPayload {
 }
 
 export interface EarningsVehiculePayload {
-    vehicule_id: number;
+    vehicule_id: string | number;
     nom_vehicule: string;
     immatriculation: string | null;
     frais_depenses: number;
@@ -43,7 +53,7 @@ export interface EarningsVehiculePayload {
 export interface StatementLine {
     id: string;
     reference: string;
-    vehicule_id: number | null;
+    vehicule_id: string | number | null;
     vehicule_nom: string;
     immatriculation: string | null;
     date_label: string | null;

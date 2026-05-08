@@ -39,7 +39,9 @@ const HOVER_VARS = [
 
 function setColorOptions() {
     const s = getComputedStyle(document.documentElement);
-    const textColor = s.getPropertyValue('--text-color');
+    const textColor =
+        s.getPropertyValue('--p-text-color').trim() ||
+        (isDarkTheme.value ? '#e2e8f0' : '#0f172a');
 
     doughnutData.value = {
         labels: props.caParSite.map((d) => d.nom),
