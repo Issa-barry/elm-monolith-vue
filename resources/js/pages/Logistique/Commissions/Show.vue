@@ -45,7 +45,7 @@ interface CommissionPart {
     statut: string;
     statut_label: string;
     statut_dot_class: string;
-    is_versee: boolean;
+    is_paye: boolean;
     versements: Versement[];
 }
 
@@ -68,7 +68,7 @@ interface Commission {
     statut: string;
     statut_label: string;
     statut_dot_class: string;
-    is_versee: boolean;
+    is_paye: boolean;
     parts: CommissionPart[];
     created_at: string | null;
 }
@@ -206,6 +206,7 @@ function formatGNF(val: number): string {
 function formatModePaiement(mode: string): string {
     return props.modes_paiement.find((m) => m.value === mode)?.label ?? mode;
 }
+
 </script>
 
 <template>
@@ -475,20 +476,20 @@ function formatModePaiement(mode: string): string {
                                             Hist. ({{ part.versements.length }})
                                         </Button>
                                         <Button
-                                            v-if="can_verser && !part.is_versee"
+                                            v-if="can_verser && !part.is_paye"
                                             size="sm"
                                             @click="openVersementDialog(part)"
                                         >
                                             Verser
                                         </Button>
                                         <span
-                                            v-else-if="part.is_versee"
+                                            v-else-if="part.is_paye"
                                             class="text-xs font-medium text-emerald-600 dark:text-emerald-400"
                                             >Versé ✓</span
                                         >
                                         <span
                                             v-else-if="
-                                                !can_verser && !part.is_versee
+                                                !can_verser && !part.is_paye
                                             "
                                             class="text-xs text-muted-foreground"
                                             >—</span
@@ -675,20 +676,20 @@ function formatModePaiement(mode: string): string {
                                             Hist. ({{ part.versements.length }})
                                         </Button>
                                         <Button
-                                            v-if="can_verser && !part.is_versee"
+                                            v-if="can_verser && !part.is_paye"
                                             size="sm"
                                             @click="openVersementDialog(part)"
                                         >
                                             Verser
                                         </Button>
                                         <span
-                                            v-else-if="part.is_versee"
+                                            v-else-if="part.is_paye"
                                             class="text-xs font-medium text-emerald-600 dark:text-emerald-400"
                                             >Versé ✓</span
                                         >
                                         <span
                                             v-else-if="
-                                                !can_verser && !part.is_versee
+                                                !can_verser && !part.is_paye
                                             "
                                             class="text-xs text-muted-foreground"
                                             >—</span

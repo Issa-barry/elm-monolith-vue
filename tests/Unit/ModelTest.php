@@ -896,7 +896,7 @@ class ModelTest extends TestCase
             'frais_supplementaires' => 0,
             'montant_net' => 5000,
             'montant_verse' => 0,
-            'statut' => \App\Enums\StatutCommission::EN_ATTENTE,
+            'statut' => \App\Enums\StatutCommission::IMPAYE,
         ]);
 
         $vc = VersementCommission::create([

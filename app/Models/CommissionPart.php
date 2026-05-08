@@ -16,7 +16,7 @@ class CommissionPart extends Model
 
     protected $fillable = [
         'commission_vente_id',
-        'type_beneficiaire',    // livreur | proprietaire
+        'type_beneficiaire',
         'livreur_id',
         'proprietaire_id',
         'beneficiaire_nom',
@@ -31,17 +31,17 @@ class CommissionPart extends Model
         'statut',
     ];
 
-    protected $appends = ['montant_restant', 'statut_label'];
+    protected $appends = ['montant_restant', 'statut_label', 'statut_dot_class'];
 
     protected function casts(): array
     {
         return [
-            'taux_commission' => 'decimal:2',
-            'montant_brut' => 'decimal:2',
-            'frais_supplementaires' => 'decimal:2',
-            'montant_net' => 'decimal:2',
-            'montant_verse' => 'decimal:2',
-            'statut' => StatutCommission::class,
+            'taux_commission'      => 'decimal:2',
+            'montant_brut'         => 'decimal:2',
+            'frais_supplementaires'=> 'decimal:2',
+            'montant_net'          => 'decimal:2',
+            'montant_verse'        => 'decimal:2',
+            'statut'               => StatutCommission::class,
         ];
     }
 
@@ -84,11 +84,29 @@ class CommissionPart extends Model
         return $this->statut instanceof StatutCommission ? $this->statut->label() : '';
     }
 
+    public function getStatutDotClassAttribute(): string
+    {
+        return $this->statut instanceof StatutCommission
+            ? $this->statut->dotClass()
+            : 'bg-zinc-400 dark:bg-zinc-500';
+    }
+
     // ── Métier ────────────────────────────────────────────────────────────────
 
+    public function isPaye(): bool
+    {
+        return $this->statut === StatutCommission::PAYE;
+    }
+
+    /** @deprecated use isPaye() */
     public function isVersee(): bool
     {
-        return $this->statut === StatutCommission::VERSEE;
+        return $this->isPaye();
+    }
+
+    public function isPayable(): bool
+    {
+        return $this->statut instanceof StatutCommission && $this->statut->isPayable();
     }
 
     /**
@@ -97,26 +115,20 @@ class CommissionPart extends Model
      */
     public function recalculStatut(): bool
     {
-        // Cumul ancien système (versements unitaires par part)
-        $verseAncien = (float) $this->versements()->sum('montant');
-        // Cumul nouveau système (paiements groupés bénéficiaire, items alloués)
+        $verseAncien  = (float) $this->versements()->sum('montant');
         $verseNouveau = (float) $this->paiementItems()->sum('amount_allocated');
         $verse = $verseAncien + $verseNouveau;
-        $net = (float) $this->montant_net;
+        $net   = (float) $this->montant_net;
 
         $this->montant_verse = $verse;
 
-        if ($verse <= 0) {
-            $this->statut = StatutCommission::EN_ATTENTE;
-        } elseif ($net > 0 && $verse >= $net) {
-            $this->statut = StatutCommission::VERSEE;
-        } else {
-            $this->statut = StatutCommission::PARTIELLE;
-        }
+        $this->statut = match (true) {
+            $net > 0 && $verse >= $net => StatutCommission::PAYE,
+            $verse > 0                 => StatutCommission::PARTIEL,
+            default                    => StatutCommission::IMPAYE,
+        };
 
         $saved = $this->saveQuietly();
-
-        // Propager au header
         $this->commission->recalculStatutGlobal();
 
         return $saved;

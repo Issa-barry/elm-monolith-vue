@@ -39,6 +39,7 @@ interface BeneficiaireRow {
     type_beneficiaire: 'livreur' | 'proprietaire';
     beneficiaire_nom: string;
     telephone: string | null;
+    vehicules: string | null;
     total_brut_cumule: number;
     total_frais: number;
     total_net_cumule: number;
@@ -46,7 +47,7 @@ interface BeneficiaireRow {
     solde_restant: number;
     nb_commandes: number;
     date_derniere_commande: string | null;
-    statut_global: 'en_attente' | 'partielle' | 'versee';
+    statut_global: 'impaye' | 'partiel' | 'paye';
 }
 
 interface Totaux {
@@ -54,9 +55,9 @@ interface Totaux {
     total_brut: number;
     total_verse: number;
     solde_total: number;
-    nb_en_attente: number;
-    nb_partielle: number;
-    nb_versee: number;
+    nb_impaye: number;
+    nb_partiel: number;
+    nb_paye: number;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -99,9 +100,9 @@ function setPeriode(p: string) {
 
 const filtresStatut = [
     { value: 'all', label: 'Tous statuts' },
-    { value: 'en_attente', label: 'En attente' },
-    { value: 'partielle', label: 'Partielles' },
-    { value: 'versee', label: 'Versées' },
+    { value: 'impaye', label: 'Impayé' },
+    { value: 'partiel', label: 'Partiel' },
+    { value: 'paye', label: 'Payé' },
 ];
 
 const periodes = [
@@ -121,15 +122,26 @@ function filterList(list: BeneficiaireRow[], q: string): BeneficiaireRow[] {
     if (filtreStatut.value && filtreStatut.value !== 'all') {
         list = list.filter((b) => b.statut_global === filtreStatut.value);
     }
-    const query = q.toLowerCase().trim();
-    if (query) {
-        list = list.filter(
-            (b) =>
-                b.beneficiaire_nom.toLowerCase().includes(query) ||
-                (b.telephone && b.telephone.includes(query)),
-        );
-    }
-    return list;
+    const query = q.trim();
+    if (!query) return list;
+
+    const lowerQuery = query.toLowerCase();
+    const phoneDigits = query.replace(/\D/g, '');
+    const amountStr = query.replace(/[\s,]+/g, '').replace(/gnf$/i, '');
+    const isPureNumeric = /^\d+$/.test(amountStr) && amountStr.length > 0;
+
+    return list.filter((b) => {
+        if (b.beneficiaire_nom.toLowerCase().includes(lowerQuery)) return true;
+        if (phoneDigits.length >= 6 && b.telephone) {
+            if (b.telephone.replace(/\D/g, '').includes(phoneDigits)) return true;
+        }
+        if (b.vehicules && b.vehicules.toLowerCase().includes(lowerQuery)) return true;
+        if (isPureNumeric) {
+            const amounts = [b.total_net_cumule, b.total_verse, b.solde_restant, b.total_brut_cumule];
+            if (amounts.some((a) => String(Math.round(a)).includes(amountStr))) return true;
+        }
+        return false;
+    });
 }
 
 const listeFiltree = computed(() =>
@@ -148,25 +160,27 @@ const kpi = computed(() => {
         total_verse: list.reduce((s, b) => s + b.total_verse, 0),
         solde_total: list.reduce((s, b) => s + b.solde_restant, 0),
         nb_total: list.length,
-        nb_en_attente: list.filter((b) => b.statut_global === 'en_attente')
-            .length,
-        nb_partielle: list.filter((b) => b.statut_global === 'partielle')
-            .length,
+        nb_impaye: list.filter((b) => b.statut_global === 'impaye').length,
+        nb_partiel: list.filter((b) => b.statut_global === 'partiel').length,
     };
 });
 
 // ── Couleurs statut ───────────────────────────────────────────────────────────
 
 const statutDotColor: Record<string, string> = {
-    en_attente: 'bg-amber-500',
-    partielle: 'bg-blue-500',
-    versee: 'bg-emerald-500',
+    impaye:  'bg-red-500',
+    partiel: 'bg-amber-500',
+    paye:    'bg-emerald-500',
+    a_verser: 'bg-red-500',
+    solde:    'bg-emerald-500',
 };
 
 const statutLabel: Record<string, string> = {
-    en_attente: 'En attente',
-    partielle: 'Partielle',
-    versee: 'Versée',
+    impaye:  'Impayé',
+    partiel: 'Partiel',
+    paye:    'Payé',
+    a_verser: 'Impayé',
+    solde: 'Payé',
 };
 
 // ── Paiement ──────────────────────────────────────────────────────────────────
@@ -335,7 +349,7 @@ function detailUrl(b: BeneficiaireRow): string {
                     <input
                         v-model="mobileSearch"
                         type="text"
-                        placeholder="Nom, téléphone…"
+                        placeholder="Nom, téléphone, véhicule, montant…"
                         class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
                     />
                 </div>
@@ -433,7 +447,7 @@ function detailUrl(b: BeneficiaireRow): string {
                         {{ formatGNF(kpi.solde_total) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ kpi.nb_en_attente + kpi.nb_partielle }} non soldé{{ kpi.nb_en_attente + kpi.nb_partielle > 1 ? 's' : '' }}
+                        {{ kpi.nb_impaye + kpi.nb_partiel }} non soldé{{ kpi.nb_impaye + kpi.nb_partiel > 1 ? 's' : '' }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
@@ -516,7 +530,7 @@ function detailUrl(b: BeneficiaireRow): string {
                                 </InputIcon>
                                 <InputText
                                     v-model="search"
-                                    placeholder="Nom, téléphone…"
+                                    placeholder="Nom, téléphone, véhicule, montant…"
                                     class="w-full text-sm"
                                 />
                             </IconField>

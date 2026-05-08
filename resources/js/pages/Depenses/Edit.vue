@@ -5,7 +5,8 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import AutoComplete from 'primevue/autocomplete';
+import { computed, ref } from 'vue';
 
 interface DepenseType {
     id: string;
@@ -60,6 +61,31 @@ const form = useForm({
 const selectedType = computed(
     () => props.types.find((t) => t.id === form.depense_type_id) ?? null,
 );
+
+const vehiculeSelected = ref<Vehicule | null>(
+    props.vehicules.find((v) => v.id === props.depense.vehicule_id) ?? null,
+);
+const vehiculeSuggests = ref<Vehicule[]>([]);
+
+function searchVehicule(event: { query: string }) {
+    const q = event.query.toLowerCase().trim();
+    vehiculeSuggests.value = q
+        ? props.vehicules.filter(
+              (v) =>
+                  v.nom_vehicule.toLowerCase().includes(q) ||
+                  v.immatriculation.toLowerCase().includes(q),
+          )
+        : [...props.vehicules];
+}
+
+function onVehiculeSelect(v: Vehicule | null) {
+    form.vehicule_id = v ? v.id : '';
+}
+
+function onVehiculeClear() {
+    vehiculeSelected.value = null;
+    form.vehicule_id = '';
+}
 
 function submit() {
     form.put(`/depenses/${props.depense.id}`);
@@ -177,23 +203,31 @@ function submit() {
                                 >*</span
                             >
                         </Label>
-                        <select
-                            id="dep-vehicule"
-                            v-model="form.vehicule_id"
-                            class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                            :class="{
-                                'border-destructive': form.errors.vehicule_id,
-                            }"
+                        <AutoComplete
+                            v-model="vehiculeSelected"
+                            input-id="dep-vehicule"
+                            :suggestions="vehiculeSuggests"
+                            option-label="nom_vehicule"
+                            placeholder="Rechercher un véhicule…"
+                            class="w-full"
+                            input-class="w-full"
+                            :class="{ 'p-invalid': form.errors.vehicule_id }"
+                            dropdown
+                            force-selection
+                            @complete="searchVehicule"
+                            @item-select="onVehiculeSelect(vehiculeSelected)"
+                            @clear="onVehiculeClear"
                         >
-                            <option value="">Aucun véhicule</option>
-                            <option
-                                v-for="v in vehicules"
-                                :key="v.id"
-                                :value="v.id"
-                            >
-                                {{ v.nom_vehicule }} ({{ v.immatriculation }})
-                            </option>
-                        </select>
+                            <template #option="{ option }">
+                                <div class="py-0.5">
+                                    <div class="font-medium leading-tight">{{ option.nom_vehicule }}</div>
+                                    <div class="mt-0.5 font-mono text-xs text-muted-foreground">{{ option.immatriculation }}</div>
+                                </div>
+                            </template>
+                            <template #empty>
+                                <div class="px-1 py-0.5 text-sm text-muted-foreground">Aucun véhicule trouvé</div>
+                            </template>
+                        </AutoComplete>
                         <p
                             v-if="form.errors.vehicule_id"
                             class="mt-1 text-xs text-destructive"

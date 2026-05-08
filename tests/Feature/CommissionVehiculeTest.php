@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Enums\StatutPartCommission;
+use App\Enums\StatutCommission;
 use App\Features\ModuleFeature;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
@@ -81,7 +81,7 @@ class CommissionVehiculeTest extends TestCase
             'valeur_base' => 5000,
             'montant_total' => 5000,
             'montant_verse' => 0,
-            'statut' => 'en_attente',
+            'statut' => 'impaye',
         ]);
     }
 
@@ -119,7 +119,7 @@ class CommissionVehiculeTest extends TestCase
             'frais_supplementaires' => 0,
             'montant_net' => 3000,
             'montant_verse' => 0,
-            'statut' => StatutPartCommission::AVAILABLE,
+            'statut' => StatutCommission::IMPAYE,
             'earned_at' => now()->subDays(15)->toDateString(),
         ], $overrides));
     }
@@ -220,7 +220,7 @@ class CommissionVehiculeTest extends TestCase
                 ->component('Logistique/Commissions/Vehicule/Show')
                 ->has('livreurs', 1)
                 ->where('livreurs.0.id', $livreur->id)
-                ->where('livreurs.0.available', fn ($v) => (float) $v === 3000.0)
+                ->where('livreurs.0.impaye', fn ($v) => (float) $v === 3000.0)
             );
     }
 
@@ -282,7 +282,7 @@ class CommissionVehiculeTest extends TestCase
                 ->component('Logistique/Commissions/Beneficiaire/Show')
                 ->has('parts', 1)
                 ->has('parts.0.payments', 1)
-                ->where('parts.0.statut', StatutPartCommission::PARTIAL->value)
+                ->where('parts.0.statut', StatutCommission::PARTIEL->value)
             );
     }
 
@@ -320,7 +320,7 @@ class CommissionVehiculeTest extends TestCase
             'amount_allocated' => 2000,
         ]);
 
-        $this->assertEquals(StatutPartCommission::PARTIAL, $part->fresh()->statut);
+        $this->assertEquals(StatutCommission::PARTIEL, $part->fresh()->statut);
         $this->assertEquals(2000.0, (float) $part->fresh()->montant_verse);
     }
 
@@ -342,7 +342,7 @@ class CommissionVehiculeTest extends TestCase
                 'mode_paiement' => 'virement',
             ]);
 
-        $this->assertEquals(StatutPartCommission::PAID, $part->fresh()->statut);
+        $this->assertEquals(StatutCommission::PAYE, $part->fresh()->statut);
     }
 
     public function test_store_paiement_retourne_erreur_si_montant_depasse_solde(): void
@@ -434,14 +434,157 @@ class CommissionVehiculeTest extends TestCase
             ->assertRedirect();
 
         // Part la plus ancienne doit être soldée en premier
-        $this->assertEquals(StatutPartCommission::PAID, $partA->fresh()->statut);
+        $this->assertEquals(StatutCommission::PAYE, $partA->fresh()->statut);
         $this->assertEquals(1000.0, (float) $partA->fresh()->montant_verse);
 
-        $this->assertEquals(StatutPartCommission::PARTIAL, $partB->fresh()->statut);
+        $this->assertEquals(StatutCommission::PARTIEL, $partB->fresh()->statut);
         $this->assertEquals(500.0, (float) $partB->fresh()->montant_verse);
 
         // Un seul paiement doit avoir été créé, avec 2 items
         $this->assertDatabaseCount('commission_payments', 1);
         $this->assertDatabaseCount('commission_payment_items', 2);
+    }
+
+    // ── Recherche globale ─────────────────────────────────────────────────────
+
+    public function test_recherche_par_nom(): void
+    {
+        $org = $this->makeOrg();
+        $user = $this->makeUser($org);
+        $vehicule = $this->makeVehicule($org);
+
+        $livreurA = Livreur::factory()->create(['organization_id' => $org->id, 'prenom' => 'Mamadou', 'nom' => 'Barry']);
+        $livreurB = Livreur::factory()->create(['organization_id' => $org->id, 'prenom' => 'Ibrahima', 'nom' => 'Diallo']);
+
+        $comm = $this->makeCommission($org, $vehicule);
+        $this->makePart($comm, $livreurA, ['beneficiaire_nom' => 'Mamadou Barry', 'montant_net' => 2000]);
+        $this->makePart($comm, $livreurB, ['beneficiaire_nom' => 'Ibrahima Diallo', 'montant_net' => 3000]);
+
+        $this->actingAs($user)
+            ->get('/logistique/commissions?search=Mamadou')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('livreurs', 1)
+                ->where('livreurs.0.nom', 'Mamadou Barry')
+            );
+    }
+
+    public function test_recherche_par_telephone(): void
+    {
+        $org = $this->makeOrg();
+        $user = $this->makeUser($org);
+        $vehicule = $this->makeVehicule($org);
+
+        $livreurA = Livreur::factory()->create(['organization_id' => $org->id, 'telephone' => '+224622000001']);
+        $livreurB = Livreur::factory()->create(['organization_id' => $org->id, 'telephone' => '+224633000002']);
+
+        $comm = $this->makeCommission($org, $vehicule);
+        $this->makePart($comm, $livreurA, ['beneficiaire_nom' => 'Livreur A', 'montant_net' => 2000]);
+        $this->makePart($comm, $livreurB, ['beneficiaire_nom' => 'Livreur B', 'montant_net' => 1500]);
+
+        $this->actingAs($user)
+            ->get('/logistique/commissions?search=622000001')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('livreurs', 1)
+                ->where('livreurs.0.telephone', '+224622000001')
+            );
+    }
+
+    public function test_recherche_par_telephone_avec_prefixe_international(): void
+    {
+        $org = $this->makeOrg();
+        $user = $this->makeUser($org);
+        $vehicule = $this->makeVehicule($org);
+
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id, 'telephone' => '+224622000012']);
+        $comm = $this->makeCommission($org, $vehicule);
+        $this->makePart($comm, $livreur, ['beneficiaire_nom' => 'Test', 'montant_net' => 1000]);
+
+        // Format "+224 622 000 012" doit trouver le même livreur
+        $this->actingAs($user)
+            ->get('/logistique/commissions?search=+224+622+000+012')
+            ->assertInertia(fn (Assert $page) => $page->has('livreurs', 1));
+    }
+
+    public function test_recherche_par_montant(): void
+    {
+        $org = $this->makeOrg();
+        $user = $this->makeUser($org);
+        $vehicule = $this->makeVehicule($org);
+
+        $livreurA = Livreur::factory()->create(['organization_id' => $org->id]);
+        $livreurB = Livreur::factory()->create(['organization_id' => $org->id]);
+
+        $comm = $this->makeCommission($org, $vehicule);
+        $this->makePart($comm, $livreurA, ['beneficiaire_nom' => 'Livreur A', 'montant_net' => 4800]);
+        $this->makePart($comm, $livreurB, ['beneficiaire_nom' => 'Livreur B', 'montant_net' => 7500]);
+
+        $this->actingAs($user)
+            ->get('/logistique/commissions?search=4800')
+            ->assertInertia(fn (Assert $page) => $page->has('livreurs', 1));
+    }
+
+    public function test_recherche_par_montant_format_gnf(): void
+    {
+        $org = $this->makeOrg();
+        $user = $this->makeUser($org);
+        $vehicule = $this->makeVehicule($org);
+
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
+        $comm = $this->makeCommission($org, $vehicule);
+        $this->makePart($comm, $livreur, ['beneficiaire_nom' => 'Test', 'montant_net' => 4800]);
+
+        // "4 800 GNF" et "4800" doivent tous deux trouver la même ligne
+        $this->actingAs($user)
+            ->get('/logistique/commissions?search=4800+GNF')
+            ->assertInertia(fn (Assert $page) => $page->has('livreurs', 1));
+    }
+
+    public function test_recherche_combinee_statut_et_texte(): void
+    {
+        $org = $this->makeOrg();
+        $user = $this->makeUser($org);
+        $vehicule = $this->makeVehicule($org);
+
+        $livreurA = Livreur::factory()->create(['organization_id' => $org->id]);
+        $livreurB = Livreur::factory()->create(['organization_id' => $org->id]);
+
+        $comm = $this->makeCommission($org, $vehicule);
+        $this->makePart($comm, $livreurA, [
+            'beneficiaire_nom' => 'Alpha Diallo',
+            'montant_net' => 2000,
+            'statut' => StatutCommission::IMPAYE,
+        ]);
+        $this->makePart($comm, $livreurB, [
+            'beneficiaire_nom' => 'Alpha Bah',
+            'montant_net' => 2000,
+            'montant_verse' => 2000,
+            'statut' => StatutCommission::PAYE,
+        ]);
+
+        // Filtre statut=impaye + search=Alpha → uniquement livreurA
+        $this->actingAs($user)
+            ->get('/logistique/commissions?statut=impaye&search=Alpha')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('livreurs', 1)
+                ->where('livreurs.0.nom', 'Alpha Diallo')
+            );
+    }
+
+    public function test_recherche_sans_resultats(): void
+    {
+        $org = $this->makeOrg();
+        $user = $this->makeUser($org);
+        $vehicule = $this->makeVehicule($org);
+
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
+        $comm = $this->makeCommission($org, $vehicule);
+        $this->makePart($comm, $livreur, ['beneficiaire_nom' => 'Mamadou Barry', 'montant_net' => 1000]);
+
+        $this->actingAs($user)
+            ->get('/logistique/commissions?search=Inexistant')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('livreurs', 0)
+                ->where('kpis.nb_livreurs', 0)
+            );
     }
 }

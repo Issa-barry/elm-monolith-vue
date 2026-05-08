@@ -60,7 +60,7 @@ interface CommissionPart {
     montant_restant: number;
     statut: string;
     statut_label: string;
-    is_versee: boolean;
+    is_paye: boolean;
     versements: VersementItem[];
 }
 
@@ -80,8 +80,7 @@ interface CommissionItem {
     montant_restant: number;
     statut: string;
     statut_label: string;
-    is_versee: boolean;
-    is_annulee: boolean;
+    is_paye: boolean;
     created_at: string;
     parts: CommissionPart[];
 }
@@ -113,10 +112,9 @@ function formatGNF(val: number): string {
 }
 
 const statutDotColor: Record<string, string> = {
-    en_attente: 'bg-amber-500',
-    partielle: 'bg-blue-500',
-    versee: 'bg-emerald-500',
-    annulee: 'bg-zinc-400 dark:bg-zinc-500',
+    impaye:  'bg-red-500',
+    partiel: 'bg-amber-500',
+    paye:    'bg-emerald-500',
 };
 
 const roleLabels: Record<string, string> = {
@@ -239,10 +237,10 @@ function deleteVersement(versementId: number) {
 function isVersementDisabled(part: CommissionPart): boolean {
     return (
         part.montant_restant <= 0 ||
-        props.commission.is_annulee ||
         !can('ventes.update')
     );
 }
+
 </script>
 
 <template>
@@ -716,7 +714,7 @@ function isVersementDisabled(part: CommissionPart): boolean {
                                         <div
                                             v-else-if="
                                                 commission.vehicule_frais_total >
-                                                    0 && !part.is_versee
+                                                    0 && !part.is_paye
                                             "
                                             class="space-y-0.5"
                                         >

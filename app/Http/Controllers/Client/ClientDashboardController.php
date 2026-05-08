@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Client;
 
 use App\Enums\StatutCommission;
-use App\Enums\StatutPartCommission;
 use App\Enums\StatutPropositionVehicule;
 use App\Enums\TypeVehicule;
 use App\Http\Controllers\Controller;
@@ -391,7 +390,7 @@ class ClientDashboardController extends Controller
                 'commission.vehicule:id,nom_vehicule,immatriculation',
             ])
             ->whereHas('commission', fn ($query) => $query->where('organization_id', $organizationId))
-            ->where('statut', '!=', StatutCommission::ANNULEE->value)
+            // tous les statuts sont actifs (impaye/partiel/paye)
             ->when($dateDebut, fn ($q) => $q->whereDate('created_at', '>=', $dateDebut))
             ->when($dateFin, fn ($q) => $q->whereDate('created_at', '<=', $dateFin))
             ->where(function ($query) use ($proprietaire, $livreur) {
@@ -428,7 +427,7 @@ class ClientDashboardController extends Controller
                 'commission.vehicule:id,nom_vehicule,immatriculation',
             ])
             ->whereHas('commission', fn ($query) => $query->where('organization_id', $organizationId))
-            ->where('statut', '!=', StatutPartCommission::CANCELLED->value)
+            // tous les statuts sont actifs (impaye/partiel/paye)
             ->when($dateDebut, fn ($q) => $q->whereDate('created_at', '>=', $dateDebut))
             ->when($dateFin, fn ($q) => $q->whereDate('created_at', '<=', $dateFin))
             ->where(function ($query) use ($proprietaire, $livreur) {

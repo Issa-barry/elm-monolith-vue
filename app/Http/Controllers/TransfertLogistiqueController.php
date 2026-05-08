@@ -74,6 +74,8 @@ class TransfertLogistiqueController extends Controller
             'vehicule:id,nom_vehicule,immatriculation',
             'equipeLivraison:id,nom',
             'commission:id,transfert_logistique_id,statut,montant_total,montant_verse',
+            'lignes:id,transfert_logistique_id,produit_id,quantite_chargee,quantite_recue,ecart_type,ecart_motif',
+            'lignes.produit:id,nom',
         ])->where('organization_id', $orgId);
 
         if ($vue === 'receptions') {
@@ -129,6 +131,16 @@ class TransfertLogistiqueController extends Controller
             fn ($o) => in_array($o['value'], $statutsVue, true)
         ));
 
+        // Dans la vue réceptions, TRANSIT s'affiche "À réceptionner" (perspective destinataire)
+        if ($vue === 'receptions') {
+            $statutsFiltre = array_map(function ($o) {
+                if ($o['value'] === StatutTransfert::TRANSIT->value) {
+                    $o['label'] = 'À réceptionner';
+                }
+                return $o;
+            }, $statutsFiltre);
+        }
+
         // ── KPIs ──────────────────────────────────────────────────────────────
         if ($vue === 'receptions') {
             $clotureQuery = TransfertLogistique::where('organization_id', $orgId)
@@ -163,6 +175,7 @@ class TransfertLogistiqueController extends Controller
             'filtre_site_destination_id' => $siteDestinationId,
             'vue' => $vue,
             'can_create' => auth()->user()->can('create', TransfertLogistique::class),
+            'types_ecart' => TypeEcartLogistique::options(),
         ]);
     }
 
@@ -499,6 +512,16 @@ class TransfertLogistiqueController extends Controller
             'can_annuler' => $user->can('annuler', $t),
             'can_valider_reception' => $user->can('validerReception', $t),
             'created_at' => $t->created_at?->format(self::DATE_DISPLAY_FORMAT),
+            'lignes_reception' => $t->statut === StatutTransfert::TRANSIT
+                ? $t->lignes->map(fn ($l) => [
+                    'id' => $l->id,
+                    'produit_nom' => $l->produit?->nom,
+                    'quantite_chargee' => $l->quantite_chargee,
+                    'quantite_recue' => $l->quantite_recue,
+                    'ecart_type' => $l->ecart_type?->value,
+                    'ecart_motif' => $l->ecart_motif,
+                ])->values()->all()
+                : [],
         ];
     }
 

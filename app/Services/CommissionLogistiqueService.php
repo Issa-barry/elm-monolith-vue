@@ -3,8 +3,7 @@
 namespace App\Services;
 
 use App\Enums\BaseCalculLogistique;
-use App\Enums\StatutCommissionLogistique;
-use App\Enums\StatutPartCommission;
+use App\Enums\StatutCommission;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\TransfertLogistique;
@@ -47,7 +46,6 @@ class CommissionLogistiqueService
 
         $montantTotal = self::calculerMontant($baseCalcul, $valeurBase, $quantiteReference);
 
-        // earned_at = date de réception réelle si disponible, sinon maintenant
         $earnedAt = $transfert->date_arrivee_reelle
             ? Carbon::instance($transfert->date_arrivee_reelle)
             : now();
@@ -59,18 +57,18 @@ class CommissionLogistiqueService
             $commission = CommissionLogistique::updateOrCreate(
                 ['transfert_logistique_id' => $transfert->id],
                 [
-                    'organization_id' => $transfert->organization_id,
-                    'vehicule_id' => $transfert->vehicule_id,
-                    'base_calcul' => $baseCalcul,
-                    'valeur_base' => $valeurBase,
+                    'organization_id'    => $transfert->organization_id,
+                    'vehicule_id'        => $transfert->vehicule_id,
+                    'base_calcul'        => $baseCalcul,
+                    'valeur_base'        => $valeurBase,
                     'quantite_reference' => $quantiteReference,
-                    'montant_total' => $montantTotal,
-                    'montant_verse' => 0,
-                    'statut' => StatutCommissionLogistique::EN_ATTENTE,
+                    'montant_total'      => $montantTotal,
+                    'montant_verse'      => 0,
+                    'statut'             => StatutCommission::IMPAYE,
                 ]
             );
 
-            if ($commission->wasRecentlyCreated || $commission->isEnAttente()) {
+            if ($commission->wasRecentlyCreated || $commission->isImpaye()) {
                 $commission->parts()->delete();
                 self::creerParts($commission, $transfert, $montantTotal, $earnedAt);
             }
@@ -103,7 +101,6 @@ class CommissionLogistiqueService
 
     /**
      * Versement legacy (retro-compat, utilisé depuis la page Transfert Show).
-     * Les nouvelles saisies passent par CommissionPaymentService.
      */
     public static function verser(
         CommissionLogistiquePart $part,
@@ -112,18 +109,18 @@ class CommissionLogistiqueService
         string $modePaiement,
         ?string $note = null
     ): VersementCommissionLogistique {
-        if ($part->isVersee()) {
+        if ($part->isPaye()) {
             throw new InvalidArgumentException('Cette part est déjà entièrement versée.');
         }
 
         return DB::transaction(function () use ($part, $montant, $dateVersement, $modePaiement, $note) {
             $versement = VersementCommissionLogistique::create([
                 'commission_logistique_part_id' => $part->id,
-                'montant' => $montant,
-                'date_versement' => $dateVersement,
-                'mode_paiement' => $modePaiement,
-                'note' => $note,
-                'created_by' => Auth::id(),
+                'montant'         => $montant,
+                'date_versement'  => $dateVersement,
+                'mode_paiement'   => $modePaiement,
+                'note'            => $note,
+                'created_by'      => Auth::id(),
             ]);
 
             $part->recalculStatut();
@@ -137,9 +134,9 @@ class CommissionLogistiqueService
     private static function calculerMontant(string $baseCalcul, float $valeurBase, ?int $quantite): float
     {
         return match ($baseCalcul) {
-            BaseCalculLogistique::FORFAIT->value => $valeurBase,
+            BaseCalculLogistique::FORFAIT->value  => $valeurBase,
             BaseCalculLogistique::PAR_PACK->value,
-            BaseCalculLogistique::PAR_KM->value => $valeurBase * ($quantite ?? 0),
+            BaseCalculLogistique::PAR_KM->value   => $valeurBase * ($quantite ?? 0),
             default => $valeurBase,
         };
     }
@@ -155,30 +152,30 @@ class CommissionLogistiqueService
             return;
         }
 
-        // ── Parts livreurs ────────────────────────────────────────────────────
         $equipe = $vehicule->equipe;
         if ($equipe) {
             $membres = $equipe->membres()->with('livreur')->get();
             foreach ($membres as $membre) {
-                $taux = (float) ($membre->taux_commission ?? 0);
-                $brut = round($montantTotal * $taux / 100, 2);
+                $taux      = (float) ($membre->taux_commission ?? 0);
+                $brut      = round($montantTotal * $taux / 100, 2);
                 $nomLivreur = $membre->livreur
                     ? trim(($membre->livreur->prenom ?? '').' '.($membre->livreur->nom ?? ''))
                     : "Livreur #{$membre->livreur_id}";
+
                 CommissionLogistiquePart::create([
                     'commission_logistique_id' => $commission->id,
-                    'type_beneficiaire' => 'livreur',
-                    'livreur_id' => $membre->livreur_id,
-                    'proprietaire_id' => null,
-                    'beneficiaire_nom' => $nomLivreur ?: "Livreur #{$membre->livreur_id}",
-                    'taux_commission' => $taux,
-                    'montant_brut' => $brut,
-                    'frais_supplementaires' => 0,
-                    'montant_net' => $brut,
-                    'montant_verse' => 0,
-                    'statut' => StatutPartCommission::AVAILABLE,
-                    'earned_at' => $earnedAt->toDateString(),
-                    'periode' => PeriodeComptableService::codeForLivreur($earnedAt),
+                    'type_beneficiaire'        => 'livreur',
+                    'livreur_id'               => $membre->livreur_id,
+                    'proprietaire_id'          => null,
+                    'beneficiaire_nom'         => $nomLivreur ?: "Livreur #{$membre->livreur_id}",
+                    'taux_commission'          => $taux,
+                    'montant_brut'             => $brut,
+                    'frais_supplementaires'    => 0,
+                    'montant_net'              => $brut,
+                    'montant_verse'            => 0,
+                    'statut'                   => StatutCommission::IMPAYE,
+                    'earned_at'                => $earnedAt->toDateString(),
+                    'periode'                  => PeriodeComptableService::codeForLivreur($earnedAt),
                 ]);
             }
         }

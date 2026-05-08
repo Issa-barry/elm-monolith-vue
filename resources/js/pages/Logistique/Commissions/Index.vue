@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -25,16 +26,14 @@ interface LivreurRow {
     nom: string;
     telephone: string | null;
     vehicules: string | null;
-    pending: number;
-    available: number;
-    paid: number;
+    impaye: number;
+    paye: number;
 }
 
 interface Kpis {
     nb_livreurs: number;
-    total_pending: number;
-    total_available: number;
-    total_paid: number;
+    total_impaye: number;
+    total_paye: number;
 }
 
 interface SelectOption {
@@ -66,9 +65,8 @@ const statutFiltre = ref<string | null>(props.filtre_statut || null);
 
 const STATUT_OPTIONS: SelectOption[] = [
     { value: null, label: 'Tous les statuts' },
-    { value: 'available', label: 'Disponible à payer' },
-    { value: 'pending', label: 'En attente de déblocage' },
-    { value: 'paid', label: 'Entièrement versé' },
+    { value: 'impaye', label: 'Impayé' },
+    { value: 'paye', label: 'Payé' },
 ];
 
 function appliquerFiltres() {
@@ -92,10 +90,7 @@ watch(statutFiltre, appliquerFiltres);
 // ── KPIs calculés ─────────────────────────────────────────────────────────────
 
 const kpiTotalCumule = computed(
-    () =>
-        props.kpis.total_pending +
-        props.kpis.total_available +
-        props.kpis.total_paid,
+    () => props.kpis.total_impaye + props.kpis.total_paye,
 );
 
 // ── Paiement ──────────────────────────────────────────────────────────────────
@@ -126,7 +121,7 @@ const paiementForm = reactive<PaiementForm>({
 
 function openPaiement(livreur: LivreurRow) {
     selectedLivreur.value = livreur;
-    paiementForm.montant = livreur.available > 0 ? livreur.available : null;
+    paiementForm.montant = livreur.impaye > 0 ? livreur.impaye : null;
     paiementForm.mode_paiement = 'especes';
     paiementForm.processing = false;
     paiementForm.errors = {};
@@ -161,6 +156,22 @@ function submitPaiement() {
             },
         },
     );
+}
+
+// ── Statuts ────────────────────────────────────────────────────────────────────
+
+interface StatutBadge {
+    label: string;
+    dotClass: string;
+}
+
+function livreurStatuts(l: LivreurRow): StatutBadge[] {
+    const badges: StatutBadge[] = [];
+    if (l.impaye > 0)
+        badges.push({ label: 'Impayé', dotClass: 'bg-red-500' });
+    if (l.paye > 0)
+        badges.push({ label: 'Payé', dotClass: 'bg-emerald-500' });
+    return badges;
 }
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
@@ -219,7 +230,7 @@ function formatPhone(tel: string | null): string {
                 <div
                     class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
                     :class="
-                        kpis.total_available > 0
+                        kpis.total_impaye > 0
                             ? 'border-amber-200 dark:border-amber-900'
                             : ''
                     "
@@ -232,12 +243,12 @@ function formatPhone(tel: string | null): string {
                     <p
                         class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
                         :class="
-                            kpis.total_available > 0
+                            kpis.total_impaye > 0
                                 ? 'text-amber-600 dark:text-amber-400'
                                 : 'text-foreground'
                         "
                     >
-                        {{ formatGNF(kpis.total_available) }}
+                        {{ formatGNF(kpis.total_impaye) }}
                     </p>
                 </div>
                 <div
@@ -251,7 +262,7 @@ function formatPhone(tel: string | null): string {
                     <p
                         class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
                     >
-                        {{ formatGNF(kpis.total_paid) }}
+                        {{ formatGNF(kpis.total_paye) }}
                     </p>
                 </div>
             </div>
@@ -260,8 +271,8 @@ function formatPhone(tel: string | null): string {
             <div class="flex flex-wrap items-center gap-3">
                 <InputText
                     v-model="searchVal"
-                    placeholder="Rechercher un livreur…"
-                    class="w-64 text-sm"
+                    placeholder="Rechercher nom, téléphone, véhicule, montant…"
+                    class="w-72 text-sm"
                 />
                 <PvDropdown
                     :options="STATUT_OPTIONS"
@@ -293,6 +304,11 @@ function formatPhone(tel: string | null): string {
                                 class="px-4 py-3 text-left font-medium text-muted-foreground"
                             >
                                 Véhicule(s)
+                            </th>
+                            <th
+                                class="px-4 py-3 text-left font-medium text-muted-foreground"
+                            >
+                                Statut
                             </th>
                             <th
                                 class="px-4 py-3 text-right font-medium text-muted-foreground"
@@ -348,23 +364,34 @@ function formatPhone(tel: string | null): string {
                                     >—</span
                                 >
                             </td>
+                            <td class="px-4 py-3">
+                                <div class="flex flex-col gap-1">
+                                    <StatusDot
+                                        v-for="s in livreurStatuts(l)"
+                                        :key="s.label"
+                                        :label="s.label"
+                                        :dot-class="s.dotClass"
+                                        class="text-xs text-muted-foreground"
+                                    />
+                                </div>
+                            </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{
-                                    formatGNF(l.pending + l.available + l.paid)
+                                    formatGNF(l.impaye + l.paye)
                                 }}
                             </td>
                             <td
                                 class="px-4 py-3 text-right font-semibold tabular-nums"
                                 :class="
-                                    l.available > 0
+                                    l.impaye > 0
                                         ? 'text-amber-600 dark:text-amber-400'
                                         : 'text-muted-foreground'
                                 "
                             >
-                                {{ formatGNF(l.available) }}
+                                {{ formatGNF(l.impaye) }}
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
-                                {{ formatGNF(l.paid) }}
+                                {{ formatGNF(l.paye) }}
                             </td>
                             <td class="px-4 py-3 text-right">
                                 <DropdownMenu>
@@ -387,7 +414,7 @@ function formatPhone(tel: string | null): string {
                                             </Link>
                                         </DropdownMenuItem>
                                         <template
-                                            v-if="can_payer && l.available > 0"
+                                            v-if="can_payer && l.impaye > 0"
                                         >
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem
@@ -433,14 +460,14 @@ function formatPhone(tel: string | null): string {
                 class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
             >
                 Solde à payer :
-                <strong>{{ formatGNF(selectedLivreur.available) }}</strong>
+                <strong>{{ formatGNF(selectedLivreur.impaye) }}</strong>
             </div>
             <div>
                 <Label class="mb-1.5 block text-sm">Montant (GNF)</Label>
                 <InputNumber
                     v-model="paiementForm.montant"
                     :min="1"
-                    :max="selectedLivreur.available"
+                    :max="selectedLivreur.impaye"
                     class="w-full"
                     input-class="w-full"
                 />

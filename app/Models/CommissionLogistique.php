@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use App\Enums\BaseCalculLogistique;
-use App\Enums\StatutCommissionLogistique;
+use App\Enums\StatutCommission;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -32,12 +32,12 @@ class CommissionLogistique extends Model
     protected function casts(): array
     {
         return [
-            'base_calcul' => BaseCalculLogistique::class,
-            'valeur_base' => 'decimal:2',
-            'montant_total' => 'decimal:2',
-            'montant_verse' => 'decimal:2',
+            'base_calcul'        => BaseCalculLogistique::class,
+            'valeur_base'        => 'decimal:2',
+            'montant_total'      => 'decimal:2',
+            'montant_verse'      => 'decimal:2',
             'quantite_reference' => 'integer',
-            'statut' => StatutCommissionLogistique::class,
+            'statut'             => StatutCommission::class,
         ];
     }
 
@@ -72,33 +72,32 @@ class CommissionLogistique extends Model
 
     public function getStatutLabelAttribute(): string
     {
-        return $this->statut instanceof StatutCommissionLogistique
-            ? $this->statut->label()
-            : '';
+        return $this->statut instanceof StatutCommission ? $this->statut->label() : '';
     }
 
     public function getStatutDotClassAttribute(): string
     {
-        return $this->statut instanceof StatutCommissionLogistique
+        return $this->statut instanceof StatutCommission
             ? $this->statut->dotClass()
             : 'bg-zinc-400 dark:bg-zinc-500';
     }
 
     // ── Méthodes d'état ───────────────────────────────────────────────────────
 
+    public function isPaye(): bool
+    {
+        return $this->statut === StatutCommission::PAYE;
+    }
+
+    public function isImpaye(): bool
+    {
+        return $this->statut === StatutCommission::IMPAYE;
+    }
+
+    /** @deprecated use isPaye() */
     public function isVersee(): bool
     {
-        return $this->statut === StatutCommissionLogistique::VERSEE;
-    }
-
-    public function isEnAttente(): bool
-    {
-        return $this->statut === StatutCommissionLogistique::EN_ATTENTE;
-    }
-
-    public function isAnnulee(): bool
-    {
-        return $this->statut === StatutCommissionLogistique::ANNULEE;
+        return $this->isPaye();
     }
 
     // ── Métier ────────────────────────────────────────────────────────────────
@@ -106,36 +105,29 @@ class CommissionLogistique extends Model
     public function calculerMontantTotal(): float
     {
         return match ($this->base_calcul) {
-            BaseCalculLogistique::FORFAIT => (float) $this->valeur_base,
+            BaseCalculLogistique::FORFAIT  => (float) $this->valeur_base,
             BaseCalculLogistique::PAR_PACK,
-            BaseCalculLogistique::PAR_KM => (float) $this->valeur_base * ($this->quantite_reference ?? 0),
+            BaseCalculLogistique::PAR_KM   => (float) $this->valeur_base * ($this->quantite_reference ?? 0),
         };
     }
 
     /**
      * Recalcule montant_verse + statut global depuis les parts.
-     * Miroir exact de CommissionVente::recalculStatutGlobal().
      */
     public function recalculStatutGlobal(): bool
     {
-        if ($this->isAnnulee()) {
-            return false;
-        }
-
         $parts = $this->parts()->get();
 
         $totalVerse = (float) $parts->sum('montant_verse');
-        $totalNet = (float) $parts->sum('montant_net');
+        $totalNet   = (float) $parts->sum('montant_net');
 
         $this->montant_verse = $totalVerse;
 
-        if ($totalVerse <= 0) {
-            $this->statut = StatutCommissionLogistique::EN_ATTENTE;
-        } elseif ($totalNet > 0 && $totalVerse >= $totalNet) {
-            $this->statut = StatutCommissionLogistique::VERSEE;
-        } else {
-            $this->statut = StatutCommissionLogistique::PARTIELLEMENT_VERSEE;
-        }
+        $this->statut = match (true) {
+            $totalNet > 0 && $totalVerse >= $totalNet => StatutCommission::PAYE,
+            $totalVerse > 0                           => StatutCommission::PARTIEL,
+            default                                   => StatutCommission::IMPAYE,
+        };
 
         return $this->saveQuietly();
     }

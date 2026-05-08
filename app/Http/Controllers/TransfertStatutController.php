@@ -28,7 +28,7 @@ class TransfertStatutController extends Controller
         // Données optionnelles pour les étapes qui nécessitent des saisies
         $request->validate([
             'lignes' => ['sometimes', 'array'],
-            'lignes.*.id' => ['required_with:lignes', 'integer'],
+            'lignes.*.id' => ['required_with:lignes', 'string'],
             // Chargement (CHARGEMENT → TRANSIT) : optionnel, présent seulement pour cette étape
             'lignes.*.quantite_chargee' => ['sometimes', 'nullable', 'integer', 'min:0'],
             // Réception (TRANSIT → RECEPTION) : optionnel, présent seulement pour cette étape

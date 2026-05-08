@@ -2,7 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Enums\StatutPartCommission;
+use App\Enums\StatutCommission;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\Organization;
@@ -33,69 +33,40 @@ class CommissionLogistiquePartTest extends TestCase
         $this->assertEquals(0.0, $part->montant_restant);
     }
 
-    // ── isUnlocked ────────────────────────────────────────────────────────────
+    // ── isPaye / isImpaye ─────────────────────────────────────────────────────
 
-    public function test_is_unlocked_retourne_true_pour_part_pending(): void
+    public function test_is_impaye_retourne_true_pour_statut_impaye(): void
     {
-        $part = $this->makePart([
-            'statut' => StatutPartCommission::PENDING,
-        ]);
+        $part = $this->makePart(['statut' => StatutCommission::IMPAYE]);
 
-        $this->assertTrue($part->isUnlocked());
+        $this->assertTrue($part->isImpaye());
+        $this->assertFalse($part->isPaye());
     }
 
-    public function test_is_unlocked_retourne_false_si_annule(): void
+    public function test_is_paye_retourne_true_pour_statut_paye(): void
     {
-        $part = $this->makePart([
-            'statut' => StatutPartCommission::CANCELLED,
-        ]);
+        $part = $this->makePart(['statut' => StatutCommission::PAYE]);
 
-        $this->assertFalse($part->isUnlocked());
+        $this->assertTrue($part->isPaye());
+        $this->assertFalse($part->isImpaye());
     }
 
-    public function test_is_unlocked_retourne_false_si_paye(): void
+    public function test_is_paye_retourne_false_pour_statut_partiel(): void
     {
-        $part = $this->makePart([
-            'statut' => StatutPartCommission::PAID,
-        ]);
+        $part = $this->makePart(['statut' => StatutCommission::PARTIEL]);
 
-        $this->assertFalse($part->isUnlocked());
-    }
-
-    // ── tenterDeblocage ───────────────────────────────────────────────────────
-
-    public function test_tenter_deblocage_passe_pending_a_available(): void
-    {
-        $part = $this->makePart([
-            'statut' => StatutPartCommission::PENDING,
-            'earned_at' => now()->subDays(15)->toDateString(),
-        ]);
-
-        $result = $part->tenterDeblocage();
-
-        $this->assertTrue($result);
-        $this->assertEquals(StatutPartCommission::AVAILABLE, $part->fresh()->statut);
-    }
-
-    public function test_tenter_deblocage_ignore_part_non_pending(): void
-    {
-        $part = $this->makePart([
-            'statut' => StatutPartCommission::AVAILABLE,
-        ]);
-
-        $result = $part->tenterDeblocage();
-
-        $this->assertFalse($result);
+        $this->assertFalse($part->isPaye());
+        $this->assertFalse($part->isImpaye());
     }
 
     // ── recalculStatut ────────────────────────────────────────────────────────
 
-    public function test_recalcul_statut_passe_a_paid_si_totalement_verse(): void
+    public function test_recalcul_statut_passe_a_paye_si_totalement_verse(): void
     {
         $part = $this->makePart([
             'montant_net' => 3000,
             'montant_verse' => 0,
-            'statut' => StatutPartCommission::AVAILABLE,
+            'statut' => StatutCommission::IMPAYE,
             'earned_at' => now()->subDays(15)->toDateString(),
         ]);
 
@@ -104,16 +75,16 @@ class CommissionLogistiquePartTest extends TestCase
 
         $part->recalculStatut();
 
-        $this->assertEquals(StatutPartCommission::PAID, $part->fresh()->statut);
+        $this->assertEquals(StatutCommission::PAYE, $part->fresh()->statut);
         $this->assertEquals(3000.0, (float) $part->fresh()->montant_verse);
     }
 
-    public function test_recalcul_statut_passe_a_partial_si_partiellement_verse(): void
+    public function test_recalcul_statut_passe_a_partiel_si_partiellement_verse(): void
     {
         $part = $this->makePart([
             'montant_net' => 3000,
             'montant_verse' => 0,
-            'statut' => StatutPartCommission::AVAILABLE,
+            'statut' => StatutCommission::IMPAYE,
             'earned_at' => now()->subDays(15)->toDateString(),
         ]);
 
@@ -121,8 +92,21 @@ class CommissionLogistiquePartTest extends TestCase
 
         $part->recalculStatut();
 
-        $this->assertEquals(StatutPartCommission::PARTIAL, $part->fresh()->statut);
+        $this->assertEquals(StatutCommission::PARTIEL, $part->fresh()->statut);
         $this->assertEquals(1000.0, (float) $part->fresh()->montant_verse);
+    }
+
+    public function test_recalcul_statut_reste_impaye_si_rien_verse(): void
+    {
+        $part = $this->makePart([
+            'montant_net' => 3000,
+            'montant_verse' => 0,
+            'statut' => StatutCommission::IMPAYE,
+        ]);
+
+        $part->recalculStatut();
+
+        $this->assertEquals(StatutCommission::IMPAYE, $part->fresh()->statut);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -140,7 +124,7 @@ class CommissionLogistiquePartTest extends TestCase
             'valeur_base' => 5000,
             'montant_total' => 5000,
             'montant_verse' => 0,
-            'statut' => 'en_attente',
+            'statut' => 'impaye',
         ]);
 
         return CommissionLogistiquePart::create(array_merge([
@@ -152,7 +136,7 @@ class CommissionLogistiquePartTest extends TestCase
             'frais_supplementaires' => 0,
             'montant_net' => 5000,
             'montant_verse' => 0,
-            'statut' => StatutPartCommission::PENDING,
+            'statut' => StatutCommission::IMPAYE,
             'earned_at' => now()->toDateString(),
         ], $overrides));
     }
