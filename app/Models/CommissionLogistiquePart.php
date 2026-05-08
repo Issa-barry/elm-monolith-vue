@@ -37,13 +37,13 @@ class CommissionLogistiquePart extends Model
     protected function casts(): array
     {
         return [
-            'taux_commission'       => 'decimal:2',
-            'montant_brut'          => 'decimal:2',
+            'taux_commission' => 'decimal:2',
+            'montant_brut' => 'decimal:2',
             'frais_supplementaires' => 'decimal:2',
-            'montant_net'           => 'decimal:2',
-            'montant_verse'         => 'decimal:2',
-            'statut'                => StatutCommission::class,
-            'earned_at'             => 'date',
+            'montant_net' => 'decimal:2',
+            'montant_verse' => 'decimal:2',
+            'statut' => StatutCommission::class,
+            'earned_at' => 'date',
         ];
     }
 
@@ -126,16 +126,16 @@ class CommissionLogistiquePart extends Model
     public function recalculStatut(): bool
     {
         $versePayments = (float) $this->paymentItems()->sum('amount_allocated');
-        $verseLegacy   = (float) $this->versements()->sum('montant');
+        $verseLegacy = (float) $this->versements()->sum('montant');
         $verse = $versePayments + $verseLegacy;
-        $net   = (float) $this->montant_net;
+        $net = (float) $this->montant_net;
 
         $this->montant_verse = $verse;
 
         $this->statut = match (true) {
             $net > 0 && $verse >= $net => StatutCommission::PAYE,
-            $verse > 0                 => StatutCommission::PARTIEL,
-            default                    => StatutCommission::IMPAYE,
+            $verse > 0 => StatutCommission::PARTIEL,
+            default => StatutCommission::IMPAYE,
         };
 
         $saved = $this->saveQuietly();

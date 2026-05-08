@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Client;
 
-use App\Enums\StatutCommission;
 use App\Enums\StatutPropositionVehicule;
 use App\Enums\TypeVehicule;
 use App\Http\Controllers\Controller;

@@ -19,9 +19,8 @@ class CommissionPaymentService
      * Allocation FIFO : les parts dont earned_at est le plus ancien sont soldées en premier.
      *
      * @param  string  $beneficiaryType  livreur|proprietaire
-     * @param  string  $beneficiaryId
-     * @param  float   $montant          montant total à payer
-     * @param  string  $paidAt           date ISO Y-m-d
+     * @param  float  $montant  montant total à payer
+     * @param  string  $paidAt  date ISO Y-m-d
      *
      * @throws InvalidArgumentException
      */
@@ -58,17 +57,17 @@ class CommissionPaymentService
             $montant, $modePaiement, $paidAt, $note, $parts
         ) {
             $payment = CommissionPayment::create([
-                'organization_id'  => $vehicule->organization_id,
-                'vehicule_id'      => $vehicule->id,
-                'livreur_id'       => $beneficiaryType === 'livreur' ? $beneficiaryId : null,
-                'proprietaire_id'  => $beneficiaryType === 'proprietaire' ? $beneficiaryId : null,
+                'organization_id' => $vehicule->organization_id,
+                'vehicule_id' => $vehicule->id,
+                'livreur_id' => $beneficiaryType === 'livreur' ? $beneficiaryId : null,
+                'proprietaire_id' => $beneficiaryType === 'proprietaire' ? $beneficiaryId : null,
                 'beneficiary_type' => $beneficiaryType,
-                'beneficiary_nom'  => $beneficiaryNom,
-                'montant'          => $montant,
-                'mode_paiement'    => $modePaiement,
-                'note'             => $note,
-                'paid_at'          => $paidAt,
-                'created_by'       => Auth::id(),
+                'beneficiary_nom' => $beneficiaryNom,
+                'montant' => $montant,
+                'mode_paiement' => $modePaiement,
+                'note' => $note,
+                'paid_at' => $paidAt,
+                'created_by' => Auth::id(),
             ]);
 
             $restant = $montant;
@@ -78,8 +77,8 @@ class CommissionPaymentService
                 }
                 $alloue = min($restant, (float) $part->montant_restant);
                 CommissionPaymentItem::create([
-                    'payment_id'       => $payment->id,
-                    'part_id'          => $part->id,
+                    'payment_id' => $payment->id,
+                    'part_id' => $part->id,
                     'amount_allocated' => round($alloue, 2),
                 ]);
                 $part->recalculStatut();
@@ -193,17 +192,17 @@ class CommissionPaymentService
             $livreurId, $orgId, $beneficiaryNom, $montant, $modePaiement, $paidAt, $note, $parts
         ) {
             $payment = CommissionPayment::create([
-                'organization_id'  => $orgId,
-                'vehicule_id'      => null,
-                'livreur_id'       => $livreurId,
-                'proprietaire_id'  => null,
+                'organization_id' => $orgId,
+                'vehicule_id' => null,
+                'livreur_id' => $livreurId,
+                'proprietaire_id' => null,
                 'beneficiary_type' => 'livreur',
-                'beneficiary_nom'  => $beneficiaryNom,
-                'montant'          => $montant,
-                'mode_paiement'    => $modePaiement,
-                'note'             => $note,
-                'paid_at'          => $paidAt,
-                'created_by'       => Auth::id(),
+                'beneficiary_nom' => $beneficiaryNom,
+                'montant' => $montant,
+                'mode_paiement' => $modePaiement,
+                'note' => $note,
+                'paid_at' => $paidAt,
+                'created_by' => Auth::id(),
             ]);
 
             $restant = $montant;
@@ -213,8 +212,8 @@ class CommissionPaymentService
                 }
                 $alloue = min($restant, (float) $part->montant_restant);
                 CommissionPaymentItem::create([
-                    'payment_id'       => $payment->id,
-                    'part_id'          => $part->id,
+                    'payment_id' => $payment->id,
+                    'part_id' => $part->id,
                     'amount_allocated' => round($alloue, 2),
                 ]);
                 $part->recalculStatut();
@@ -290,11 +289,11 @@ class CommissionPaymentService
         foreach ($rows as $row) {
             $key = $row->type_beneficiaire === 'livreur' ? 'livreurs' : 'proprietaires';
             $result[$key][] = [
-                'id'     => $row->beneficiary_id,
-                'type'   => $row->type_beneficiaire,
-                'nom'    => $row->beneficiaire_nom,
+                'id' => $row->beneficiary_id,
+                'type' => $row->type_beneficiaire,
+                'nom' => $row->beneficiaire_nom,
                 'impaye' => (float) $row->impaye,
-                'paye'   => (float) $row->paye,
+                'paye' => (float) $row->paye,
             ];
         }
 

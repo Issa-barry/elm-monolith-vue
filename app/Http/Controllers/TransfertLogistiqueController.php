@@ -137,6 +137,7 @@ class TransfertLogistiqueController extends Controller
                 if ($o['value'] === StatutTransfert::TRANSIT->value) {
                     $o['label'] = 'À réceptionner';
                 }
+
                 return $o;
             }, $statutsFiltre);
         }
