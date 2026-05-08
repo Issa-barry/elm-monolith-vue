@@ -64,7 +64,7 @@ interface PeriodeOption {
 
 const props = defineProps<{
     livreur: { id: number; nom: string; telephone: string | null };
-    kpis: { pending: number; available: number; paid: number };
+    kpis: { impaye: number; paye: number };
     parts: PartRow[];
     periode_stats: PeriodeStats | null;
     payments: PaymentRow[];
@@ -114,13 +114,13 @@ interface PeriodeGroup {
 }
 
 function groupStatut(parts: PartRow[]): { label: string; dot: string } {
-    if (parts.every((p) => p.statut === 'paid'))
+    if (parts.every((p) => p.statut === 'paye'))
         return { label: 'Soldée', dot: 'bg-emerald-500' };
-    if (parts.every((p) => p.statut === 'pending'))
-        return { label: 'En attente', dot: 'bg-zinc-400 dark:bg-zinc-500' };
-    if (parts.every((p) => p.statut === 'available'))
-        return { label: 'Non versée', dot: 'bg-amber-500' };
-    return { label: 'Partiellement versée', dot: 'bg-blue-500' };
+    if (parts.every((p) => p.statut === 'impaye'))
+        return { label: 'Non versée', dot: 'bg-red-500' };
+    if (parts.every((p) => p.statut === 'partiel'))
+        return { label: 'Partiellement versée', dot: 'bg-amber-500' };
+    return { label: 'Partiellement versée', dot: 'bg-amber-500' };
 }
 
 const partsGrouped = computed<PeriodeGroup[]>(() => {
@@ -171,7 +171,7 @@ const paiementForm = reactive<PaiementForm>({
 
 function openPaiement() {
     paiementForm.montant =
-        props.kpis.available > 0 ? props.kpis.available : null;
+        props.kpis.impaye > 0 ? props.kpis.impaye : null;
     paiementForm.mode_paiement = 'especes';
     paiementForm.note = '';
     paiementForm.processing = false;
@@ -276,7 +276,7 @@ function formatMode(mode: string): string {
                         >
                     </Button>
                     <Button
-                        v-if="can_payer && kpis.available > 0"
+                        v-if="can_payer && kpis.impaye > 0"
                         size="sm"
                         class="h-8 px-3 text-xs"
                         @click="openPaiement"
@@ -334,12 +334,12 @@ function formatMode(mode: string): string {
                         >
                     </Button>
                     <Button
-                        v-if="can_payer && kpis.available > 0"
+                        v-if="can_payer && kpis.impaye > 0"
                         size="sm"
                         @click="openPaiement"
                     >
                         <HandCoins class="mr-1.5 h-4 w-4" />
-                        Payer {{ formatGNF(kpis.available) }}
+                        Payer {{ formatGNF(kpis.impaye) }}
                     </Button>
                 </div>
             </div>
@@ -409,18 +409,18 @@ function formatMode(mode: string): string {
                         <p
                             class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
                         >
-                            En attente
+                            Total cumulé
                         </p>
                         <p
-                            class="mt-0.5 text-sm font-semibold text-zinc-500 tabular-nums sm:text-base dark:text-zinc-400"
+                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
                         >
-                            {{ formatGNF(kpis.pending) }}
+                            {{ formatGNF(kpis.impaye + kpis.paye) }}
                         </p>
                     </div>
                     <div
                         class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
                         :class="
-                            kpis.available > 0
+                            kpis.impaye > 0
                                 ? 'border-amber-200 dark:border-amber-900'
                                 : ''
                         "
@@ -428,17 +428,17 @@ function formatMode(mode: string): string {
                         <p
                             class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
                         >
-                            A payer
+                            Reste à payer
                         </p>
                         <p
                             class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
                             :class="
-                                kpis.available > 0
+                                kpis.impaye > 0
                                     ? 'text-amber-600 dark:text-amber-400'
                                     : 'text-foreground'
                             "
                         >
-                            {{ formatGNF(kpis.available) }}
+                            {{ formatGNF(kpis.impaye) }}
                         </p>
                     </div>
                     <div
@@ -450,9 +450,9 @@ function formatMode(mode: string): string {
                             Déjà payé
                         </p>
                         <p
-                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base dark:text-zinc-400"
+                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
                         >
-                            {{ formatGNF(kpis.paid) }}
+                            {{ formatGNF(kpis.paye) }}
                         </p>
                     </div>
                 </template>
@@ -729,15 +729,15 @@ function formatMode(mode: string): string {
                 <div
                     class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
                 >
-                    Solde A payer (toutes périodes) :
-                    <strong>{{ formatGNF(kpis.available) }}</strong>
+                    Solde à payer (toutes périodes) :
+                    <strong>{{ formatGNF(kpis.impaye) }}</strong>
                 </div>
                 <div>
                     <Label class="mb-1.5 block text-sm">Montant (GNF)</Label>
                     <InputNumber
                         v-model="paiementForm.montant"
                         :min="1"
-                        :max="kpis.available"
+                        :max="kpis.impaye"
                         class="w-full"
                         input-class="w-full"
                     />
