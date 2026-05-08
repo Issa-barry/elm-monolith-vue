@@ -107,8 +107,17 @@ class CommissionVenteIndexTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('commissions.index', ['periode' => 'all']))
             ->assertInertia(fn ($page) => $page
-                ->where('totaux.nb_en_attente', 0)
-                ->where('totaux.nb_versee', 0)
+                ->where('totaux.nb_impaye', 0)
+                ->where('totaux.nb_paye', 0)
+            );
+    }
+
+    public function test_index_statuts_option_ne_contient_pas_annule(): void
+    {
+        $this->actingAs($this->user)
+            ->get(route('commissions.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('statuts', fn ($statuts) => collect($statuts)->pluck('value')->doesntContain('annule'))
             );
     }
 
@@ -123,7 +132,7 @@ class CommissionVenteIndexTest extends TestCase
             'frais_supplementaires' => 0,
             'montant_net' => $montant,
             'montant_verse' => 0,
-            'statut' => 'en_attente',
+            'statut' => 'impaye',
         ];
     }
 }

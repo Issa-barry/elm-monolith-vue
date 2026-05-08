@@ -49,7 +49,7 @@ class CommissionGenerator
             'montant_commande' => (float) $commande->total_commande,
             'montant_commission_totale' => $calc['commission_totale'],
             'montant_verse' => 0,
-            'statut' => 'en_attente',
+            'statut' => 'impaye',
         ]);
 
         foreach ($calc['parts'] as $part) {
@@ -65,7 +65,7 @@ class CommissionGenerator
                 'frais_supplementaires' => $part['frais_supplementaires'],
                 'montant_net' => $part['montant_net'],
                 'montant_verse' => 0,
-                'statut' => 'en_attente',
+                'statut' => 'impaye',
             ]);
         }
     }

@@ -156,7 +156,7 @@ class ClientDashboardTest extends TestCase
             'montant_commande' => 100000,
             'montant_commission_totale' => 15000,
             'montant_verse' => 3000,
-            'statut' => StatutCommission::PARTIELLE->value,
+            'statut' => StatutCommission::PARTIEL->value,
         ]);
 
         CommissionPart::create([
@@ -168,7 +168,7 @@ class ClientDashboardTest extends TestCase
             'montant_brut' => 15000,
             'montant_net' => 15000,
             'montant_verse' => 3000,
-            'statut' => StatutCommission::PARTIELLE->value,
+            'statut' => StatutCommission::PARTIEL->value,
         ]);
 
         $this->actingAs($user)

@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Enums\StatutPartCommission;
+use App\Enums\StatutCommission;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,7 +16,7 @@ class CommissionLogistiquePart extends Model
 
     protected $fillable = [
         'commission_logistique_id',
-        'type_beneficiaire',       // livreur | proprietaire
+        'type_beneficiaire',
         'livreur_id',
         'proprietaire_id',
         'beneficiaire_nom',
@@ -42,7 +42,7 @@ class CommissionLogistiquePart extends Model
             'frais_supplementaires' => 'decimal:2',
             'montant_net' => 'decimal:2',
             'montant_verse' => 'decimal:2',
-            'statut' => StatutPartCommission::class,
+            'statut' => StatutCommission::class,
             'earned_at' => 'date',
         ];
     }
@@ -64,13 +64,11 @@ class CommissionLogistiquePart extends Model
         return $this->belongsTo(Proprietaire::class);
     }
 
-    /** Versements legacy (retro-compat — deprecated pour les nouvelles saisies). */
     public function versements(): HasMany
     {
         return $this->hasMany(VersementCommissionLogistique::class, 'commission_logistique_part_id');
     }
 
-    /** Allocations issues des paiements groupés (nouveau système). */
     public function paymentItems(): HasMany
     {
         return $this->hasMany(CommissionPaymentItem::class, 'part_id');
@@ -85,45 +83,37 @@ class CommissionLogistiquePart extends Model
 
     public function getStatutLabelAttribute(): string
     {
-        return $this->statut instanceof StatutPartCommission
-            ? $this->statut->label()
-            : '';
+        return $this->statut instanceof StatutCommission ? $this->statut->label() : '';
     }
 
     public function getStatutDotClassAttribute(): string
     {
-        return $this->statut instanceof StatutPartCommission
+        return $this->statut instanceof StatutCommission
             ? $this->statut->dotClass()
             : 'bg-zinc-400 dark:bg-zinc-500';
     }
 
     // ── État ──────────────────────────────────────────────────────────────────
 
-    public function isVersee(): bool
+    public function isPaye(): bool
     {
-        return $this->statut === StatutPartCommission::PAID;
+        return $this->statut === StatutCommission::PAYE;
     }
 
-    public function isAvailable(): bool
+    public function isImpaye(): bool
     {
-        return $this->statut === StatutPartCommission::AVAILABLE
-            || $this->statut === StatutPartCommission::PARTIAL;
+        return $this->statut === StatutCommission::IMPAYE;
+    }
+
+    /** @deprecated use isPaye() */
+    public function isVersee(): bool
+    {
+        return $this->isPaye();
     }
 
     public function isPayable(): bool
     {
-        return $this->statut instanceof StatutPartCommission && $this->statut->isPayable();
-    }
-
-    public function isCancelled(): bool
-    {
-        return $this->statut === StatutPartCommission::CANCELLED;
-    }
-
-    /** La commission est disponible dès qu'elle n'est pas annulée/payée. */
-    public function isUnlocked(): bool
-    {
-        return ! $this->isCancelled() && ! $this->isVersee();
+        return $this->statut instanceof StatutCommission && $this->statut->isPayable();
     }
 
     // ── Métier ────────────────────────────────────────────────────────────────
@@ -142,38 +132,16 @@ class CommissionLogistiquePart extends Model
 
         $this->montant_verse = $verse;
 
-        if ($verse <= 0) {
-            $this->statut = $this->isUnlocked()
-                ? StatutPartCommission::AVAILABLE
-                : StatutPartCommission::PENDING;
-        } elseif ($net > 0 && $verse >= $net) {
-            $this->statut = StatutPartCommission::PAID;
-        } else {
-            $this->statut = StatutPartCommission::PARTIAL;
-        }
+        $this->statut = match (true) {
+            $net > 0 && $verse >= $net => StatutCommission::PAYE,
+            $verse > 0 => StatutCommission::PARTIEL,
+            default => StatutCommission::IMPAYE,
+        };
 
         $saved = $this->saveQuietly();
         $this->commission->recalculStatutGlobal();
 
         return $saved;
-    }
-
-    /**
-     * Passe la part de PENDING → AVAILABLE.
-     * Appelé par le job UnlockAvailableCommissionsJob.
-     */
-    public function tenterDeblocage(): bool
-    {
-        if ($this->statut !== StatutPartCommission::PENDING) {
-            return false;
-        }
-        if (! $this->isUnlocked()) {
-            return false;
-        }
-
-        $this->statut = StatutPartCommission::AVAILABLE;
-
-        return $this->saveQuietly();
     }
 
     /**

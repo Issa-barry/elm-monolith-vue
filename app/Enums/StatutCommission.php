@@ -4,18 +4,58 @@ namespace App\Enums;
 
 enum StatutCommission: string
 {
-    case EN_ATTENTE = 'en_attente';
-    case PARTIELLE = 'partielle';
-    case VERSEE = 'versee';
-    case ANNULEE = 'annulee';
+    case IMPAYE = 'impaye';
+    case PARTIEL = 'partiel';
+    case PAYE = 'paye';
 
     public function label(): string
     {
         return match ($this) {
-            self::EN_ATTENTE => 'En attente',
-            self::PARTIELLE => 'Partielle',
-            self::VERSEE => 'Versée',
-            self::ANNULEE => 'Annulée',
+            self::IMPAYE => 'Impayé',
+            self::PARTIEL => 'Partiel',
+            self::PAYE => 'Payé',
         };
+    }
+
+    public function dotClass(): string
+    {
+        return match ($this) {
+            self::IMPAYE => 'bg-red-500',
+            self::PARTIEL => 'bg-amber-500',
+            self::PAYE => 'bg-emerald-500',
+        };
+    }
+
+    public function color(): string
+    {
+        return match ($this) {
+            self::IMPAYE => 'danger',
+            self::PARTIEL => 'warn',
+            self::PAYE => 'success',
+        };
+    }
+
+    public function isPaye(): bool
+    {
+        return $this === self::PAYE;
+    }
+
+    public function isPartiel(): bool
+    {
+        return $this === self::PARTIEL;
+    }
+
+    public function isPayable(): bool
+    {
+        return $this !== self::PAYE;
+    }
+
+    /** @return array<array{value:string,label:string}> */
+    public static function options(): array
+    {
+        return array_map(
+            fn (self $case) => ['value' => $case->value, 'label' => $case->label()],
+            self::cases()
+        );
     }
 }

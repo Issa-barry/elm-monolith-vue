@@ -3,6 +3,7 @@ import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
+import ReceptionDialog from '@/pages/Logistique/partials/ReceptionDialog.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
@@ -24,9 +25,8 @@ import {
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
-import InputText from 'primevue/inputtext';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -256,17 +256,7 @@ interface ChargementLigne {
     quantite_demandee: number;
     quantite_chargee: number;
 }
-interface ReceptionLigne {
-    id: number;
-    produit_nom: string;
-    quantite_chargee: number;
-    quantite_recue: number;
-    ecart_type: string;
-    ecart_motif: string;
-}
-
 const chargementLignes = ref<ChargementLigne[]>([]);
-const receptionLignes = ref<ReceptionLigne[]>([]);
 
 // Réinitialiser depuis les props courantes à chaque ouverture du dialog
 watch(showChargementDialog, (open) => {
@@ -276,19 +266,6 @@ watch(showChargementDialog, (open) => {
             produit_nom: l.produit_nom,
             quantite_demandee: l.quantite_demandee,
             quantite_chargee: l.quantite_chargee ?? l.quantite_demandee,
-        }));
-    }
-});
-
-watch(showReceptionDialog, (open) => {
-    if (open) {
-        receptionLignes.value = props.transfert.lignes.map((l) => ({
-            id: l.id,
-            produit_nom: l.produit_nom,
-            quantite_chargee: l.quantite_chargee ?? 0,
-            quantite_recue: l.quantite_recue ?? l.quantite_chargee ?? 0,
-            ecart_type: l.ecart_type ?? 'conforme',
-            ecart_motif: l.ecart_motif ?? '',
         }));
     }
 });
@@ -345,39 +322,6 @@ function submitChargement() {
                     severity: 'success',
                     summary: 'Chargement validé',
                     detail: 'Le transfert est en cours de livraison.',
-                    life: 4000,
-                });
-            },
-            onError: (errors) => {
-                dialogErrors.value = Object.values(errors).flat() as string[];
-            },
-            onFinish: () => {
-                processing.value = false;
-            },
-        },
-    );
-}
-
-function submitReception() {
-    processing.value = true;
-    dialogErrors.value = [];
-    router.post(
-        `/logistique/${props.transfert.id}/statut/avancer`,
-        {
-            lignes: receptionLignes.value.map((l) => ({
-                id: l.id,
-                quantite_recue: l.quantite_recue,
-                ecart_type: l.ecart_type,
-                ecart_motif: l.ecart_motif,
-            })),
-        },
-        {
-            onSuccess: () => {
-                showReceptionDialog.value = false;
-                toast.add({
-                    severity: 'success',
-                    summary: 'Réception validée',
-                    detail: 'Le transfert est maintenant réceptionné.',
                     life: 4000,
                 });
             },
@@ -483,12 +427,6 @@ function formatModePaiement(mode: string): string {
     return mode.replaceAll('_', ' ');
 }
 
-// Calcul local écart dans le dialog réception
-function ecartReception(idx: number): number {
-    const l = receptionLignes.value[idx];
-    return (l.quantite_recue ?? 0) - (l.quantite_chargee ?? 0);
-}
-
 // Badge couleur statut
 const statutBadgeClass = computed(() => {
     const map: Record<string, string> = {
@@ -547,28 +485,45 @@ const partLivreurTotal = computed(() => livreurTotals.value.net);
 
 // ── Validation admin ──────────────────────────────────────────────────────────
 
-const showRefusDialog = ref(false);
-const refusMotif = ref('');
+const showValidationCommissionDialog = ref(false);
+const validationEtape = ref<'review' | 'montant'>('review');
+const montantParPack = ref<number>(200);
 const validationProcessing = ref(false);
-const validationErrors = ref<Record<string, string>>({});
+const validationErrors = ref<string[]>([]);
 
-function submitValidationAccord() {
+const totalCommissionPreview = computed(
+    () => montantParPack.value * totalQuantiteRecue.value,
+);
+
+watch(showValidationCommissionDialog, (open) => {
+    if (open) {
+        validationEtape.value = 'review';
+        montantParPack.value = 200;
+        validationErrors.value = [];
+    }
+});
+
+function submitValiderAccord() {
     validationProcessing.value = true;
-    validationErrors.value = {};
+    validationErrors.value = [];
     router.post(
         `/logistique/${props.transfert.id}/validation-reception`,
-        { decision: 'accord' },
+        { decision: 'accord', montant_par_pack: montantParPack.value },
         {
             onSuccess: () => {
+                showValidationCommissionDialog.value = false;
                 toast.add({
                     severity: 'success',
                     summary: 'Réception approuvée',
                     detail: 'Commission générée automatiquement.',
                     life: 4000,
                 });
+                nextTick(() => setActiveDetailTab('commission'));
             },
             onError: (errors) => {
-                validationErrors.value = errors as Record<string, string>;
+                validationErrors.value = Object.values(
+                    errors,
+                ).flat() as string[];
             },
             onFinish: () => {
                 validationProcessing.value = false;
@@ -577,25 +532,26 @@ function submitValidationAccord() {
     );
 }
 
-function submitValidationRefus() {
+function submitValiderInvalider() {
     validationProcessing.value = true;
-    validationErrors.value = {};
+    validationErrors.value = [];
     router.post(
         `/logistique/${props.transfert.id}/validation-reception`,
-        { decision: 'refus', motif: refusMotif.value },
+        { decision: 'invalider' },
         {
             onSuccess: () => {
-                showRefusDialog.value = false;
-                refusMotif.value = '';
+                showValidationCommissionDialog.value = false;
                 toast.add({
-                    severity: 'warn',
-                    summary: 'Réception refusée',
-                    detail: 'Aucune commission générée.',
+                    severity: 'info',
+                    summary: 'Réception renvoyée',
+                    detail: 'Le transfert est de nouveau en livraison.',
                     life: 4000,
                 });
             },
             onError: (errors) => {
-                validationErrors.value = errors as Record<string, string>;
+                validationErrors.value = Object.values(
+                    errors,
+                ).flat() as string[];
             },
             onFinish: () => {
                 validationProcessing.value = false;
@@ -609,6 +565,20 @@ const historiquePart = ref<CommissionPart | null>(null);
 
 const showActivitesDialog = ref(false);
 const activitesTriees = computed(() => [...props.activites].reverse());
+
+type DetailTabKey = 'informations' | 'lignes' | 'commission';
+const activeDetailTab = ref<DetailTabKey>('informations');
+
+function setActiveDetailTab(tab: DetailTabKey) {
+    if (tab === 'commission' && !showCommissionSection.value) return;
+    activeDetailTab.value = tab;
+}
+
+watch(showCommissionSection, (visible) => {
+    if (!visible && activeDetailTab.value === 'commission') {
+        activeDetailTab.value = 'informations';
+    }
+});
 
 function activiteDotClass(action: string): string {
     if (action === 'annule') return 'bg-amber-500';
@@ -667,6 +637,19 @@ function activiteDotClass(action: string): string {
                         >
                             {{ activites.length }}
                         </span>
+                    </Button>
+                    <Button
+                        v-if="
+                            can_valider_reception_admin &&
+                            transfert.statut === 'reception' &&
+                            transfert.validation_reception !== 'accord'
+                        "
+                        size="sm"
+                        class="bg-emerald-600 text-white hover:bg-emerald-700"
+                        @click="showValidationCommissionDialog = true"
+                    >
+                        <ShieldCheck class="mr-1.5 h-3.5 w-3.5" />
+                        Générer commission
                     </Button>
 
                     <Link
@@ -772,10 +755,53 @@ function activiteDotClass(action: string): string {
             </div>
 
             <!-- ══ Contenu principal (2 colonnes) ═════════════════════════════ -->
-            <div class="grid grid-cols-1 gap-5 lg:grid-cols-5">
+            <div class="rounded-xl border bg-card p-1.5 shadow-sm">
+                <div class="grid grid-cols-1 gap-1 sm:grid-cols-3">
+                    <button
+                        type="button"
+                        class="rounded-lg px-4 py-2.5 text-left text-sm font-medium transition-colors"
+                        :class="
+                            activeDetailTab === 'informations'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        "
+                        @click="setActiveDetailTab('informations')"
+                    >
+                        Informations
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-lg px-4 py-2.5 text-left text-sm font-medium transition-colors"
+                        :class="
+                            activeDetailTab === 'lignes'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        "
+                        @click="setActiveDetailTab('lignes')"
+                    >
+                        Lignes produits
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-lg px-4 py-2.5 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                        :class="
+                            activeDetailTab === 'commission'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        "
+                        :disabled="!showCommissionSection"
+                        @click="setActiveDetailTab('commission')"
+                    >
+                        Commission logistique
+                    </button>
+                </div>
+            </div>
+
+            <div class="space-y-4">
                 <!-- Colonne gauche : Informations ────────────────────────────── -->
                 <div
-                    class="space-y-4 rounded-xl border bg-card p-5 shadow-sm lg:col-span-2"
+                    v-if="activeDetailTab === 'informations'"
+                    class="space-y-4 rounded-xl border bg-card p-5 shadow-sm"
                 >
                     <h2
                         class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
@@ -861,8 +887,12 @@ function activiteDotClass(action: string): string {
                 </div>
 
                 <!-- Colonne droite : Lignes produits ─────────────────────────── -->
-                <div class="space-y-4 lg:col-span-3">
+                <div
+                    v-if="activeDetailTab !== 'informations'"
+                    class="space-y-4"
+                >
                     <div
+                        v-if="activeDetailTab === 'lignes'"
                         class="overflow-hidden rounded-xl border bg-card shadow-sm"
                     >
                         <div
@@ -1008,7 +1038,10 @@ function activiteDotClass(action: string): string {
 
                     <!-- ══ Commission logistique ═══════════════════════════════════════ -->
                     <div
-                        v-if="showCommissionSection"
+                        v-if="
+                            activeDetailTab === 'commission' &&
+                            showCommissionSection
+                        "
                         class="overflow-hidden rounded-xl border bg-card shadow-sm"
                     >
                         <div
@@ -1019,35 +1052,6 @@ function activiteDotClass(action: string): string {
                             >
                                 Commission logistique
                             </h2>
-                            <!-- Boutons validation admin (statut réception, pas encore accordé) -->
-                            <div
-                                v-if="
-                                    can_valider_reception_admin &&
-                                    transfert.statut === 'reception' &&
-                                    transfert.validation_reception !== 'accord'
-                                "
-                                class="flex gap-2"
-                            >
-                                <Button
-                                    size="sm"
-                                    class="bg-emerald-600 text-white hover:bg-emerald-700"
-                                    :disabled="validationProcessing"
-                                    @click="submitValidationAccord"
-                                >
-                                    <ShieldCheck class="mr-1.5 h-3.5 w-3.5" />
-                                    D'accord
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    class="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400"
-                                    :disabled="validationProcessing"
-                                    @click="showRefusDialog = true"
-                                >
-                                    <ShieldX class="mr-1.5 h-3.5 w-3.5" />
-                                    Non
-                                </Button>
-                            </div>
                         </div>
 
                         <!-- ── Panneau validation admin (avant décision) ──── -->
@@ -1152,6 +1156,18 @@ function activiteDotClass(action: string): string {
                                         </p>
                                     </div>
                                 </div>
+                                <div class="mt-4 border-t pt-4">
+                                    <StatusDot
+                                        :label="
+                                            transfert.commission.statut_label
+                                        "
+                                        :dot-class="
+                                            transfert.commission
+                                                .statut_dot_class
+                                        "
+                                        class="text-sm font-medium"
+                                    />
+                                </div>
                             </div>
 
                             <div
@@ -1246,6 +1262,17 @@ function activiteDotClass(action: string): string {
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <div
+                        v-if="
+                            activeDetailTab === 'commission' &&
+                            !showCommissionSection
+                        "
+                        class="rounded-xl border bg-card px-5 py-8 text-center text-sm text-muted-foreground shadow-sm"
+                    >
+                        La commission logistique sera disponible après la
+                        réception du transfert.
                     </div>
                 </div>
             </div>
@@ -1399,149 +1426,12 @@ function activiteDotClass(action: string): string {
         </Dialog>
 
         <!-- ══ Dialog : Valider la réception ══════════════════════════════════ -->
-        <Dialog
+        <ReceptionDialog
             v-model:visible="showReceptionDialog"
-            modal
-            header="Valider la réception"
-            :style="{ width: 'min(1050px, 94vw)' }"
-            :draggable="true"
-            :resizable="false"
-            @hide="dialogErrors = []"
-        >
-            <p class="mb-4 text-sm text-muted-foreground">
-                Renseignez les quantités reçues et les écarts constatés à
-                destination.
-            </p>
-            <div
-                v-if="dialogErrors.length"
-                class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950"
-            >
-                <p
-                    v-for="err in dialogErrors"
-                    :key="err"
-                    class="text-sm text-red-700 dark:text-red-400"
-                >
-                    {{ err }}
-                </p>
-            </div>
-            <table class="w-full text-sm">
-                <colgroup>
-                    <col />
-                    <!-- Produit : flexible -->
-                    <col style="width: 90px" />
-                    <!-- Chargé -->
-                    <col style="width: 130px" />
-                    <!-- Reçu -->
-                    <col style="width: 70px" />
-                    <!-- Écart -->
-                    <col style="width: 180px" />
-                    <!-- Type -->
-                    <col style="width: 220px" />
-                    <!-- Motif -->
-                </colgroup>
-                <thead>
-                    <tr class="border-b text-xs text-muted-foreground">
-                        <th class="pb-3 text-left font-medium">Produit</th>
-                        <th class="pb-3 text-center font-medium">Chargé</th>
-                        <th class="pb-3 text-center font-medium">Reçu</th>
-                        <th class="pb-3 text-center font-medium">Écart</th>
-                        <th class="px-2 pb-3 text-left font-medium">Type</th>
-                        <th class="px-2 pb-3 text-left font-medium">Motif</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y">
-                    <tr
-                        v-for="(l, idx) in receptionLignes"
-                        :key="l.id"
-                        class="align-middle"
-                    >
-                        <td class="py-3 pr-4 font-medium">
-                            {{ l.produit_nom }}
-                        </td>
-                        <td
-                            class="py-3 text-center text-muted-foreground tabular-nums"
-                        >
-                            {{ l.quantite_chargee }}
-                        </td>
-                        <td class="px-2 py-3">
-                            <InputNumber
-                                v-model="receptionLignes[idx].quantite_recue"
-                                :min="0"
-                                :use-grouping="false"
-                                class="w-full"
-                                input-class="w-full text-center"
-                                @update:model-value="
-                                    () => {
-                                        if (
-                                            receptionLignes[idx]
-                                                .quantite_recue ===
-                                            l.quantite_chargee
-                                        )
-                                            receptionLignes[idx].ecart_type =
-                                                'conforme';
-                                        else if (
-                                            (receptionLignes[idx]
-                                                .quantite_recue ?? 0) <
-                                            (l.quantite_chargee ?? 0)
-                                        )
-                                            receptionLignes[idx].ecart_type =
-                                                'manquant';
-                                        else
-                                            receptionLignes[idx].ecart_type =
-                                                'surplus';
-                                    }
-                                "
-                            />
-                        </td>
-                        <td
-                            class="py-3 text-center font-semibold tabular-nums"
-                            :class="
-                                ecartReception(idx) === 0
-                                    ? 'text-muted-foreground'
-                                    : ecartReception(idx) < 0
-                                      ? 'text-red-600'
-                                      : 'text-amber-600'
-                            "
-                        >
-                            {{ ecartReception(idx) > 0 ? '+' : ''
-                            }}{{ ecartReception(idx) }}
-                        </td>
-                        <td class="px-2 py-3">
-                            <Dropdown
-                                v-model="receptionLignes[idx].ecart_type"
-                                :options="types_ecart"
-                                option-label="label"
-                                option-value="value"
-                                class="w-full"
-                            />
-                        </td>
-                        <td class="px-2 py-3">
-                            <InputText
-                                v-model="receptionLignes[idx].ecart_motif"
-                                placeholder="Motif (optionnel)…"
-                                class="w-full"
-                            />
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-            <template #footer>
-                <Button
-                    variant="outline"
-                    :disabled="processing"
-                    @click="showReceptionDialog = false"
-                    >Annuler</Button
-                >
-                <Button :disabled="processing" @click="submitReception">
-                    <PackageCheck v-if="!processing" class="mr-2 h-4 w-4" />
-                    <span
-                        v-if="processing"
-                        class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-                    />
-                    {{ processing ? 'Validation…' : 'Valider la réception' }}
-                </Button>
-            </template>
-        </Dialog>
+            :transfert-id="transfert.id"
+            :lignes="transfert.lignes"
+            :types-ecart="types_ecart"
+        />
 
         <!-- ══ Dialog : Générer la commission ════════════════════════════════ -->
         <Dialog
@@ -1638,63 +1528,173 @@ function activiteDotClass(action: string): string {
             </template>
         </Dialog>
 
-        <!-- ══ Dialog : Refuser la réception ════════════════════════════════ -->
+        <!-- ══ Dialog : Générer commission (validation admin) ══════════════ -->
         <Dialog
-            v-model:visible="showRefusDialog"
+            v-model:visible="showValidationCommissionDialog"
             modal
-            header="Refuser la réception"
-            :style="{ width: '460px' }"
+            header="Valider la réception"
+            :style="{ width: 'min(700px, 94vw)' }"
             :draggable="false"
-            @hide="
-                refusMotif = '';
-                validationErrors = {};
-            "
         >
-            <div class="space-y-4 py-2">
-                <p class="text-sm text-muted-foreground">
-                    Indiquez le motif du refus. Aucune commission ne sera
-                    générée.
+            <!-- Erreurs -->
+            <div
+                v-if="validationErrors.length"
+                class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950"
+            >
+                <p
+                    v-for="err in validationErrors"
+                    :key="err"
+                    class="text-sm text-red-700 dark:text-red-400"
+                >
+                    {{ err }}
                 </p>
-                <div>
-                    <Label class="mb-1.5 block text-sm"
-                        >Motif (obligatoire)</Label
-                    >
-                    <InputText
-                        v-model="refusMotif"
-                        placeholder="Ex : quantités non conformes, erreur de saisie…"
-                        class="w-full"
-                    />
-                    <p
-                        v-if="validationErrors.motif"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ validationErrors.motif }}
-                    </p>
-                </div>
             </div>
+
+            <!-- Tableau des lignes reçues (toujours visible) -->
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b text-xs text-muted-foreground">
+                        <th class="pb-2 text-left font-medium">Produit</th>
+                        <th class="pb-2 text-center font-medium">Chargé</th>
+                        <th class="pb-2 text-center font-medium">Reçu</th>
+                        <th class="px-2 pb-2 text-left font-medium">Écart</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    <tr
+                        v-for="l in transfert.lignes"
+                        :key="l.id"
+                        class="align-middle"
+                    >
+                        <td class="py-2.5 font-medium">
+                            {{ l.produit_nom }}
+                        </td>
+                        <td
+                            class="py-2.5 text-center text-muted-foreground tabular-nums"
+                        >
+                            {{ l.quantite_chargee }}
+                        </td>
+                        <td
+                            class="py-2.5 text-center font-semibold tabular-nums"
+                        >
+                            {{ l.quantite_recue }}
+                        </td>
+                        <td class="px-2 py-2.5">
+                            <StatusDot
+                                :label="l.ecart_label"
+                                :dot-class="l.ecart_dot_class"
+                                class="text-xs"
+                            />
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- Étape 2 : saisie du montant par pack -->
+            <div
+                v-if="validationEtape === 'montant'"
+                class="mt-5 space-y-4 rounded-xl border bg-muted/30 p-4"
+            >
+                <p class="text-sm font-medium">Calcul de la commission</p>
+                <div class="flex items-end gap-4">
+                    <div class="flex-1">
+                        <Label
+                            for="val-montant-pack"
+                            class="mb-1.5 block text-xs font-medium"
+                        >
+                            Montant par pack (GNF)
+                            <span class="text-destructive">*</span>
+                        </Label>
+                        <InputNumber
+                            v-model="montantParPack"
+                            input-id="val-montant-pack"
+                            :min="1"
+                            :use-grouping="false"
+                            class="w-full"
+                            input-class="w-full"
+                        />
+                    </div>
+                    <div
+                        class="rounded-lg border bg-background px-4 py-2 text-center"
+                    >
+                        <p
+                            class="text-[10px] tracking-wide text-muted-foreground uppercase"
+                        >
+                            Total commission
+                        </p>
+                        <p class="mt-0.5 text-lg font-bold tabular-nums">
+                            {{
+                                new Intl.NumberFormat('fr-FR').format(
+                                    totalCommissionPreview,
+                                )
+                            }}
+                            <span class="text-sm font-normal">GNF</span>
+                        </p>
+                        <p class="mt-0.5 text-[10px] text-muted-foreground">
+                            {{ totalQuantiteRecue }} packs ×
+                            {{ montantParPack }} GNF
+                        </p>
+                    </div>
+                </div>
+                <p class="text-xs text-muted-foreground">
+                    La commission sera répartie selon les pourcentages définis
+                    dans l'équipe.
+                </p>
+            </div>
+
             <template #footer>
-                <Button
-                    variant="outline"
-                    :disabled="validationProcessing"
-                    @click="showRefusDialog = false"
-                >
-                    Annuler
-                </Button>
-                <Button
-                    class="bg-red-600 text-white hover:bg-red-700"
-                    :disabled="validationProcessing || !refusMotif.trim()"
-                    @click="submitValidationRefus"
-                >
-                    <ShieldX
-                        v-if="!validationProcessing"
-                        class="mr-1.5 h-4 w-4"
-                    />
-                    <span
-                        v-else
-                        class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-                    />
-                    {{ validationProcessing ? 'Refus…' : 'Confirmer le refus' }}
-                </Button>
+                <!-- Étape 1 : review -->
+                <template v-if="validationEtape === 'review'">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400"
+                        :disabled="validationProcessing"
+                        @click="submitValiderInvalider"
+                    >
+                        <ShieldX class="mr-1.5 h-3.5 w-3.5" />
+                        Non, renvoyer pour correction
+                    </Button>
+                    <Button size="sm" @click="validationEtape = 'montant'">
+                        <ShieldCheck class="mr-1.5 h-3.5 w-3.5" />
+                        Oui, générer la commission
+                    </Button>
+                </template>
+
+                <!-- Étape 2 : saisie montant -->
+                <template v-else>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        :disabled="validationProcessing"
+                        @click="validationEtape = 'review'"
+                    >
+                        ← Retour
+                    </Button>
+                    <Button
+                        size="sm"
+                        :disabled="
+                            validationProcessing ||
+                            !montantParPack ||
+                            montantParPack < 1
+                        "
+                        @click="submitValiderAccord"
+                    >
+                        <ShieldCheck
+                            v-if="!validationProcessing"
+                            class="mr-1.5 h-3.5 w-3.5"
+                        />
+                        <span
+                            v-else
+                            class="mr-2 inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"
+                        />
+                        {{
+                            validationProcessing
+                                ? 'Génération…'
+                                : 'Confirmer et générer'
+                        }}
+                    </Button>
+                </template>
             </template>
         </Dialog>
 

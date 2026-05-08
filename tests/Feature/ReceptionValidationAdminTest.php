@@ -164,7 +164,7 @@ class ReceptionValidationAdminTest extends TestCase
         $transfert = $this->makeTransfertEnReception(qteRecue: 100);
 
         $this->actingAs($this->admin)
-            ->post($this->urlValidation($transfert), ['decision' => 'accord'])
+            ->post($this->urlValidation($transfert), ['decision' => 'accord', 'montant_par_pack' => 200])
             ->assertRedirect("/logistique/{$transfert->id}");
 
         $transfert->refresh();
@@ -206,8 +206,8 @@ class ReceptionValidationAdminTest extends TestCase
     {
         $transfert = $this->makeTransfertEnReception(qteRecue: 50);
 
-        $this->actingAs($this->admin)->post($this->urlValidation($transfert), ['decision' => 'accord']);
-        $this->actingAs($this->admin)->post($this->urlValidation($transfert), ['decision' => 'accord']);
+        $this->actingAs($this->admin)->post($this->urlValidation($transfert), ['decision' => 'accord', 'montant_par_pack' => 200]);
+        $this->actingAs($this->admin)->post($this->urlValidation($transfert), ['decision' => 'accord', 'montant_par_pack' => 200]);
 
         $this->assertEquals(
             1,
@@ -228,7 +228,7 @@ class ReceptionValidationAdminTest extends TestCase
 
         $this->assertDatabaseMissing('commissions_logistiques', ['transfert_logistique_id' => $transfert->id]);
 
-        $this->actingAs($this->admin)->post($this->urlValidation($transfert), ['decision' => 'accord']);
+        $this->actingAs($this->admin)->post($this->urlValidation($transfert), ['decision' => 'accord', 'montant_par_pack' => 200]);
 
         $commission = CommissionLogistique::where('transfert_logistique_id', $transfert->id)->first();
         $this->assertNotNull($commission);
@@ -240,7 +240,7 @@ class ReceptionValidationAdminTest extends TestCase
     {
         $transfert = $this->makeTransfertEnReception(qteDemandee: 1850, qteRecue: 1850);
 
-        $this->actingAs($this->admin)->post($this->urlValidation($transfert), ['decision' => 'accord']);
+        $this->actingAs($this->admin)->post($this->urlValidation($transfert), ['decision' => 'accord', 'montant_par_pack' => 200]);
 
         $commission = CommissionLogistique::where('transfert_logistique_id', $transfert->id)->first();
         $this->assertEquals(370000.0, (float) $commission->montant_total);
@@ -251,7 +251,7 @@ class ReceptionValidationAdminTest extends TestCase
     {
         $transfert = $this->makeTransfertEnReception(qteRecue: 100); // 20 000 FG total
 
-        $this->actingAs($this->admin)->post($this->urlValidation($transfert), ['decision' => 'accord']);
+        $this->actingAs($this->admin)->post($this->urlValidation($transfert), ['decision' => 'accord', 'montant_par_pack' => 200]);
 
         $commission = CommissionLogistique::where('transfert_logistique_id', $transfert->id)
             ->with('parts')
@@ -273,7 +273,7 @@ class ReceptionValidationAdminTest extends TestCase
         $transfert = $this->makeTransfertEnReception();
 
         $this->actingAs($this->operateur)
-            ->post($this->urlValidation($transfert), ['decision' => 'accord'])
+            ->post($this->urlValidation($transfert), ['decision' => 'accord', 'montant_par_pack' => 200])
             ->assertStatus(403);
     }
 
@@ -300,7 +300,7 @@ class ReceptionValidationAdminTest extends TestCase
         ]);
 
         $this->actingAs($this->admin)
-            ->post($this->urlValidation($transfert), ['decision' => 'accord'])
+            ->post($this->urlValidation($transfert), ['decision' => 'accord', 'montant_par_pack' => 200])
             ->assertStatus(403);
     }
 
@@ -309,7 +309,7 @@ class ReceptionValidationAdminTest extends TestCase
     {
         $transfert = $this->makeTransfertEnReception();
 
-        $this->actingAs($this->admin)->post($this->urlValidation($transfert), ['decision' => 'accord']);
+        $this->actingAs($this->admin)->post($this->urlValidation($transfert), ['decision' => 'accord', 'montant_par_pack' => 200]);
 
         $this->assertDatabaseHas('transfert_activites', [
             'transfert_logistique_id' => $transfert->id,

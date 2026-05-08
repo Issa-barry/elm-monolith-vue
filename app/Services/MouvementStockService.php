@@ -68,6 +68,23 @@ class MouvementStockService
         }
     }
 
+    /**
+     * Supprime les entrées de stock destination créées lors de la réception.
+     * Appelé quand un admin invalide une réception pour la renvoyer en transit.
+     */
+    public static function supprimerEntreeDestination(TransfertLogistique $transfert): void
+    {
+        $transfert->loadMissing('lignes');
+
+        foreach ($transfert->lignes as $ligne) {
+            MouvementStock::where('source_type', TransfertLigne::class)
+                ->where('source_id', $ligne->id)
+                ->where('site_id', $transfert->site_destination_id)
+                ->where('type', 'entree')
+                ->delete();
+        }
+    }
+
     // ── Private ───────────────────────────────────────────────────────────────
 
     /**

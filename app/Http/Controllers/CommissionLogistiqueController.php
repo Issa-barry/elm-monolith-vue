@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\BaseCalculLogistique;
-use App\Enums\StatutCommissionLogistique;
+use App\Enums\StatutCommission;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\TransfertLogistique;
@@ -41,7 +41,6 @@ class CommissionLogistiqueController extends Controller
             'parts',
         ])->where('organization_id', $orgId);
 
-        // Non-admins : uniquement les commissions des transferts impliquant leurs sites
         if (! $isAdmin && $siteIds->isNotEmpty()) {
             $query->whereHas('transfert', function ($q) use ($siteIds) {
                 $q->where(function ($sub) use ($siteIds) {
@@ -51,34 +50,30 @@ class CommissionLogistiqueController extends Controller
             });
         }
 
-        // Filtre statut
         if ($statut = $request->input('statut')) {
             $query->where('statut', $statut);
         }
 
-        // Filtre référence transfert
         if ($ref = $request->input('reference')) {
             $query->whereHas('transfert', fn ($q) => $q->where('reference', 'like', "%{$ref}%"));
         }
 
         $commissions = $query->orderByDesc('created_at')->get();
 
-        $actives = $commissions->filter(fn ($c) => ! $c->isAnnulee());
-
         $kpis = [
             'total' => $commissions->count(),
-            'montant_total' => (float) $actives->sum('montant_total'),
-            'montant_verse' => (float) $actives->sum('montant_verse'),
-            'montant_restant' => (float) $actives->sum('montant_restant'),
-            'nb_en_attente' => $commissions->where('statut', StatutCommissionLogistique::EN_ATTENTE)->count(),
-            'nb_partiellement' => $commissions->where('statut', StatutCommissionLogistique::PARTIELLEMENT_VERSEE)->count(),
-            'nb_versees' => $commissions->where('statut', StatutCommissionLogistique::VERSEE)->count(),
+            'montant_total' => (float) $commissions->sum('montant_total'),
+            'montant_verse' => (float) $commissions->sum('montant_verse'),
+            'montant_restant' => (float) $commissions->sum('montant_restant'),
+            'nb_impaye' => $commissions->where('statut', StatutCommission::IMPAYE)->count(),
+            'nb_partiel' => $commissions->where('statut', StatutCommission::PARTIEL)->count(),
+            'nb_paye' => $commissions->where('statut', StatutCommission::PAYE)->count(),
         ];
 
         return Inertia::render('Logistique/Commissions/Index', [
             'commissions' => $commissions->map(fn ($c) => $this->mapIndex($c))->values(),
             'kpis' => $kpis,
-            'statuts' => StatutCommissionLogistique::options(),
+            'statuts' => StatutCommission::options(),
             'filtre_statut' => $request->input('statut'),
             'filtre_reference' => $request->input('reference'),
         ]);
@@ -139,9 +134,7 @@ class CommissionLogistiqueController extends Controller
             'base_calcul' => ['required', Rule::in(array_column(BaseCalculLogistique::cases(), 'value'))],
             'valeur_base' => ['required', 'numeric', 'min:0'],
             'quantite_reference' => [
-                'nullable',
-                'integer',
-                'min:1',
+                'nullable', 'integer', 'min:1',
                 Rule::requiredIf(in_array($baseCalcul, [
                     BaseCalculLogistique::PAR_PACK->value,
                     BaseCalculLogistique::PAR_KM->value,
@@ -218,7 +211,7 @@ class CommissionLogistiqueController extends Controller
             'statut' => $c->statut?->value,
             'statut_label' => $c->statut_label,
             'statut_dot_class' => $c->statut_dot_class,
-            'is_versee' => $c->isVersee(),
+            'is_paye' => $c->isPaye(),
             'parts' => $c->parts->map(fn (CommissionLogistiquePart $p) => [
                 'id' => $p->id,
                 'type_beneficiaire' => $p->type_beneficiaire,
@@ -232,7 +225,7 @@ class CommissionLogistiqueController extends Controller
                 'statut' => $p->statut?->value,
                 'statut_label' => $p->statut_label,
                 'statut_dot_class' => $p->statut_dot_class,
-                'is_versee' => $p->isVersee(),
+                'is_paye' => $p->isPaye(),
                 'versements' => $p->versements->sortByDesc('created_at')->values()->map(fn ($v) => [
                     'id' => $v->id,
                     'montant' => (float) $v->montant,

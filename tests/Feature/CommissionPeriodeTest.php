@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Enums\StatutPartCommission;
+use App\Enums\StatutCommission;
 use App\Features\ModuleFeature;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
@@ -101,7 +101,7 @@ class CommissionPeriodeTest extends TestCase
             'valeur_base' => $montantNet,
             'montant_total' => $montantNet,
             'montant_verse' => 0,
-            'statut' => 'en_attente',
+            'statut' => 'impaye',
         ]);
 
         $periode = PeriodeComptableService::codeForLivreur(Carbon::parse($earnedAt));
@@ -116,7 +116,7 @@ class CommissionPeriodeTest extends TestCase
             'frais_supplementaires' => 0,
             'montant_net' => $montantNet,
             'montant_verse' => 0,
-            'statut' => StatutPartCommission::AVAILABLE,
+            'statut' => StatutCommission::IMPAYE,
             'earned_at' => $earnedAt,
             'periode' => $periode,
         ]);
@@ -195,7 +195,7 @@ class CommissionPeriodeTest extends TestCase
 
         // La période NE doit PAS changer
         $this->assertSame('2026-04-P2', $part->periode);
-        $this->assertSame(StatutPartCommission::PAID, $part->statut);
+        $this->assertSame(StatutCommission::PAYE, $part->statut);
     }
 
     /** @test */
@@ -222,7 +222,7 @@ class CommissionPeriodeTest extends TestCase
         $part->refresh();
 
         $this->assertSame('2026-04-P1', $part->periode);
-        $this->assertSame(StatutPartCommission::PAID, $part->statut);
+        $this->assertSame(StatutCommission::PAYE, $part->statut);
     }
 
     // ── Tests : filtre période dans le contrôleur ─────────────────────────────

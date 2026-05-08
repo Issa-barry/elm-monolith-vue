@@ -28,7 +28,7 @@ class CommissionVenteController extends Controller
         $this->authorize('viewAny', \App\Models\CommandeVente::class);
 
         $orgId = auth()->user()->organization_id;
-        $tab = $request->input('tab', 'livreurs'); // livreurs | proprietaires
+        $tab = $request->input('tab', 'livreurs');
         $periodeDefault = $tab === 'proprietaires' ? 'month' : 'week';
         $periode = $request->input('periode', $periodeDefault);
         $typeBeneficiaire = $tab === 'proprietaires' ? 'proprietaire' : 'livreur';
@@ -37,8 +37,7 @@ class CommissionVenteController extends Controller
             ->from('commission_parts AS cp')
             ->join('commissions_ventes AS cv', 'cv.id', '=', 'cp.commission_vente_id')
             ->where('cv.organization_id', $orgId)
-            ->where('cp.type_beneficiaire', $typeBeneficiaire)
-            ->where('cp.statut', '!=', StatutCommission::ANNULEE->value);
+            ->where('cp.type_beneficiaire', $typeBeneficiaire);
 
         match ($periode) {
             'today' => $query->whereDate('cv.created_at', now()),
@@ -124,7 +123,32 @@ class CommissionVenteController extends Controller
             }
         }
 
-        $beneficiaires = $rows->map(function ($row) use ($tab, $fraisParProprio) {
+        // Build vehicule lookup per beneficiaire for search
+        $beneficiaireIds = $rows->pluck('beneficiaire_id')->filter()->unique()->values();
+        $vehiculesParBeneficiaire = collect();
+
+        if ($tab === 'livreurs' && $beneficiaireIds->isNotEmpty()) {
+            $vehiculesParBeneficiaire = CommissionPart::query()
+                ->from('commission_parts AS cp')
+                ->join('commissions_ventes AS cv', 'cv.id', '=', 'cp.commission_vente_id')
+                ->join('vehicules AS v', 'v.id', '=', 'cv.vehicule_id')
+                ->where('cv.organization_id', $orgId)
+                ->where('cp.type_beneficiaire', 'livreur')
+                ->whereIn('cp.livreur_id', $beneficiaireIds)
+                ->select('cp.livreur_id AS bid', 'v.nom_vehicule', 'v.immatriculation')
+                ->distinct()
+                ->get()
+                ->groupBy('bid')
+                ->map(fn ($vs) => $vs->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))->implode(' '));
+        } elseif ($tab === 'proprietaires' && $beneficiaireIds->isNotEmpty()) {
+            $vehiculesParBeneficiaire = Vehicule::whereIn('proprietaire_id', $beneficiaireIds)
+                ->where('organization_id', $orgId)
+                ->get(['proprietaire_id', 'nom_vehicule', 'immatriculation'])
+                ->groupBy('proprietaire_id')
+                ->map(fn ($vs) => $vs->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))->implode(' '));
+        }
+
+        $beneficiaires = $rows->map(function ($row) use ($tab, $fraisParProprio, $vehiculesParBeneficiaire) {
             $totalBrut = (float) $row->total_brut_cumule;
             $totalFrais = $tab === 'proprietaires'
                 ? ($fraisParProprio[$row->beneficiaire_id] ?? 0.0)
@@ -134,9 +158,9 @@ class CommissionVenteController extends Controller
             $solde = max(0.0, $totalNet - $totalVerse);
 
             $statutGlobal = match (true) {
-                $totalNet > 0 && $totalVerse >= $totalNet => StatutCommission::VERSEE->value,
-                $totalVerse > 0 => StatutCommission::PARTIELLE->value,
-                default => StatutCommission::EN_ATTENTE->value,
+                $totalNet > 0 && $totalVerse >= $totalNet => StatutCommission::PAYE->value,
+                $totalVerse > 0 => StatutCommission::PARTIEL->value,
+                default => StatutCommission::IMPAYE->value,
             };
 
             return [
@@ -144,6 +168,7 @@ class CommissionVenteController extends Controller
                 'type_beneficiaire' => $row->type_beneficiaire,
                 'beneficiaire_nom' => $row->beneficiaire_nom ?? '—',
                 'telephone' => $row->telephone,
+                'vehicules' => $vehiculesParBeneficiaire[(string) $row->beneficiaire_id] ?? null,
                 'total_brut_cumule' => $totalBrut,
                 'total_frais' => $totalFrais,
                 'total_net_cumule' => $totalNet,
@@ -167,10 +192,8 @@ class CommissionVenteController extends Controller
         }
 
         if ($search) {
-            $q = mb_strtolower($search);
             $beneficiaires = $beneficiaires->filter(
-                fn ($b) => str_contains(mb_strtolower($b['beneficiaire_nom']), $q) ||
-                    ($b['telephone'] && str_contains($b['telephone'], $q))
+                fn ($b) => $this->beneficiaireMatchesSearch($b, $search)
             );
         }
 
@@ -181,9 +204,9 @@ class CommissionVenteController extends Controller
             'total_brut' => (float) $list->sum('total_brut_cumule'),
             'total_verse' => (float) $list->sum('total_verse'),
             'solde_total' => (float) $list->sum('solde_restant'),
-            'nb_en_attente' => $list->where('statut_global', StatutCommission::EN_ATTENTE->value)->count(),
-            'nb_partielle' => $list->where('statut_global', StatutCommission::PARTIELLE->value)->count(),
-            'nb_versee' => $list->where('statut_global', StatutCommission::VERSEE->value)->count(),
+            'nb_impaye' => $list->where('statut_global', StatutCommission::IMPAYE->value)->count(),
+            'nb_partiel' => $list->where('statut_global', StatutCommission::PARTIEL->value)->count(),
+            'nb_paye' => $list->where('statut_global', StatutCommission::PAYE->value)->count(),
         ];
 
         return Inertia::render('Commissions/Index', [
@@ -193,6 +216,7 @@ class CommissionVenteController extends Controller
             'tab' => $tab,
             'filtre_statut' => $filtreStatut,
             'search' => $search,
+            'statuts' => StatutCommission::options(),
             'can_payer' => auth()->user()->can('viewAny', \App\Models\CommandeVente::class),
         ]);
     }
@@ -218,11 +242,9 @@ class CommissionVenteController extends Controller
             $telephone = $model?->telephone;
         }
 
-        // ── Récupération toutes les parts (totaux globaux sans filtre de date) ─
         $baseQuery = CommissionPart::with(['commission.commande.site', 'commission.vehicule'])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
-            ->where('type_beneficiaire', $type)
-            ->where('statut', '!=', StatutCommission::ANNULEE->value);
+            ->where('type_beneficiaire', $type);
 
         if ($type === 'livreur') {
             $baseQuery->where('livreur_id', $beneficiaireId);
@@ -252,7 +274,6 @@ class CommissionVenteController extends Controller
             }
         }
 
-        // ── Totaux globaux ──────────────────────────────────────────────────────
         $totalBrut = (float) $allParts->sum('montant_brut');
         $totalFrais = $type === 'proprietaire'
             ? $totalFraisDepenses
@@ -261,7 +282,6 @@ class CommissionVenteController extends Controller
         $totalVerse = (float) $allParts->sum('montant_verse');
         $solde = max(0.0, $totalNet - $totalVerse);
 
-        // Statut global bénéficiaire
         $statutGlobal = match (true) {
             $solde <= 0 && $totalVerse > 0 => 'solde',
             $totalVerse > 0 => 'partielle',
@@ -282,13 +302,10 @@ class CommissionVenteController extends Controller
             'statut_global' => $statutGlobal,
         ];
 
-        // ── Périodes comptables ─────────────────────────────────────────────────
-        // Calcul de la période courante
         $periodeCourante = $type === 'livreur'
             ? PeriodeComptableService::periodeCouranteLivreur()
             : PeriodeComptableService::periodeCouranteProprietaire();
 
-        // Liste des périodes disponibles (depuis la 1re commission du bénéficiaire)
         $earliestCommission = $allParts
             ->filter(fn ($p) => $p->commission?->created_at !== null)
             ->sortBy(fn ($p) => $p->commission->created_at)
@@ -298,7 +315,6 @@ class CommissionVenteController extends Controller
             ? PeriodeComptableService::periodesDisponibles(Carbon::instance($earliestDate))
             : [];
 
-        // ── Filtres sur l'historique commandes ──────────────────────────────────
         $dateFrom = $request->input('date_from');
         $dateTo = $request->input('date_to');
         $commandeSearch = $request->input('commande');
@@ -308,26 +324,18 @@ class CommissionVenteController extends Controller
 
         if ($dateFrom) {
             $from = Carbon::parse($dateFrom)->startOfDay();
-            $filteredParts = $filteredParts->filter(
-                fn ($p) => $p->commission?->created_at?->gte($from)
-            );
+            $filteredParts = $filteredParts->filter(fn ($p) => $p->commission?->created_at?->gte($from));
         }
         if ($dateTo) {
             $to = Carbon::parse($dateTo)->endOfDay();
-            $filteredParts = $filteredParts->filter(
-                fn ($p) => $p->commission?->created_at?->lte($to)
-            );
+            $filteredParts = $filteredParts->filter(fn ($p) => $p->commission?->created_at?->lte($to));
         }
         if ($commandeSearch) {
             $q = mb_strtolower($commandeSearch);
             $filteredParts = $filteredParts->filter(
-                fn ($p) => str_contains(
-                    mb_strtolower($p->commission?->commande?->reference ?? ''),
-                    $q
-                )
+                fn ($p) => str_contains(mb_strtolower($p->commission?->commande?->reference ?? ''), $q)
             );
         }
-
         if ($periodeFilter !== '' && $type === 'livreur') {
             $filteredParts = $filteredParts->filter(function ($p) use ($periodeFilter) {
                 $createdAt = $p->commission?->created_at;
@@ -339,7 +347,6 @@ class CommissionVenteController extends Controller
             });
         }
 
-        // ── Historique commandes (lecture comptable, sans colonnes paiement) ───
         $historiqueCommandes = $filteredParts
             ->groupBy('commission_vente_id')
             ->map(function ($partsGroup) use ($type) {
@@ -364,7 +371,6 @@ class CommissionVenteController extends Controller
                     'montant_verse' => (float) $partsGroup->sum('montant_verse'),
                     'periode' => $periodeCode,
                     'periode_label' => $periodeCode ? PeriodeComptableService::labelForCode($periodeCode) : null,
-                    // Pour la saisie de frais côté livreur
                     'part_id' => $first->id,
                     'type_frais' => $first->type_frais,
                     'commentaire_frais' => $first->commentaire_frais,
@@ -372,7 +378,6 @@ class CommissionVenteController extends Controller
             })
             ->values();
 
-        // ── Historique paiements globaux ────────────────────────────────────────
         $paiementsQuery = PaiementCommissionVente::with('creator')
             ->where('organization_id', $orgId)
             ->where('type_beneficiaire', $type);
@@ -450,6 +455,42 @@ class CommissionVenteController extends Controller
         ]);
     }
 
+    private function beneficiaireMatchesSearch(array $b, string $search): bool
+    {
+        $s = trim($search);
+
+        // Name
+        if (str_contains(mb_strtolower((string) $b['beneficiaire_nom']), mb_strtolower($s))) {
+            return true;
+        }
+
+        // Vehicle (nom + immatriculation string)
+        if ($b['vehicules'] && str_contains(mb_strtolower((string) $b['vehicules']), mb_strtolower($s))) {
+            return true;
+        }
+
+        // Phone: strip non-digits, require >= 6 digits
+        $digits = preg_replace('/\D/', '', $s);
+        if (strlen($digits) >= 6) {
+            $telDigits = preg_replace('/\D/', '', (string) ($b['telephone'] ?? ''));
+            if ($telDigits !== '' && str_contains($telDigits, $digits)) {
+                return true;
+            }
+        }
+
+        // Amount: strip GNF/spaces/commas → if purely numeric → check amounts
+        $amountStr = preg_replace('/[\s,]+/', '', str_ireplace('gnf', '', $s));
+        if ($amountStr !== '' && ctype_digit($amountStr)) {
+            foreach (['total_net_cumule', 'total_verse', 'solde_restant', 'total_brut_cumule'] as $field) {
+                if (str_contains((string) (int) round((float) $b[$field]), $amountStr)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private function mapCommission(CommissionVente $c, bool $withParts = false): array
     {
         $data = [
@@ -472,8 +513,7 @@ class CommissionVenteController extends Controller
             'montant_restant' => (float) $c->montant_restant,
             'statut' => $c->statut?->value,
             'statut_label' => $c->statut_label,
-            'is_versee' => $c->isVersee(),
-            'is_annulee' => $c->isAnnulee(),
+            'is_paye' => $c->isPaye(),
             'created_at' => $c->created_at?->format(self::DATE_DISPLAY_FORMAT),
             'nb_parts' => $c->relationLoaded('parts') ? $c->parts->count() : null,
         ];
@@ -497,7 +537,7 @@ class CommissionVenteController extends Controller
                 'montant_restant' => (float) $p->montant_restant,
                 'statut' => $p->statut?->value,
                 'statut_label' => $p->statut_label,
-                'is_versee' => $p->isVersee(),
+                'is_paye' => $p->isPaye(),
                 'versements' => $p->versements
                     ->sortByDesc(fn ($v) => $v->created_at?->timestamp ?? 0)
                     ->values()

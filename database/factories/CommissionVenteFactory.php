@@ -23,7 +23,7 @@ class CommissionVenteFactory extends Factory
             'montant_commande' => $montantCommande,
             'montant_commission_totale' => $montantCommissionTotale,
             'montant_verse' => 0,
-            'statut' => StatutCommission::EN_ATTENTE,
+            'statut' => StatutCommission::IMPAYE,
         ];
     }
 }

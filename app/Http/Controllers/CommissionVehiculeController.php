@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\StatutPartCommission;
+use App\Enums\StatutCommission;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPayment;
 use App\Models\Livreur;
@@ -27,41 +27,18 @@ class CommissionVehiculeController extends Controller
         $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
 
         $orgId = auth()->user()->organization_id;
-        $search = (string) $request->input('search', '');
+        $search = trim((string) $request->input('search', ''));
         $filtreStatut = (string) $request->input('statut', '');
 
         $rows = CommissionPaymentService::soldesParLivreur($orgId);
 
-        if ($search !== '') {
-            $q = mb_strtolower($search);
-            $rows = $rows->filter(
-                fn ($r) => str_contains(mb_strtolower((string) $r->beneficiaire_nom), $q)
-            );
-        }
+        // Fetch telephone + vehicule data for ALL livreurs upfront (needed for search)
+        $allLivreurIds = $rows->pluck('livreur_id')->filter()->unique()->values()->toArray();
 
-        if ($filtreStatut !== '') {
-            $rows = match ($filtreStatut) {
-                'pending' => $rows->filter(fn ($r) => $r->pending > 0 && $r->available <= 0),
-                'available' => $rows->filter(fn ($r) => $r->available > 0),
-                'paid' => $rows->filter(fn ($r) => $r->paid > 0),
-                default => $rows,
-            };
-        }
+        $telephones = Livreur::whereIn('id', $allLivreurIds)->pluck('telephone', 'id');
 
-        $list = $rows->values();
-
-        $kpis = [
-            'nb_livreurs' => $list->count(),
-            'total_pending' => (float) $list->sum('pending'),
-            'total_available' => (float) $list->sum('available'),
-            'total_paid' => (float) $list->sum('paid'),
-        ];
-
-        $livreurIds = $list->pluck('livreur_id')->filter()->unique()->values()->toArray();
-        $telephones = Livreur::whereIn('id', $livreurIds)->pluck('telephone', 'id');
-
-        $vehiculesParLivreur = CommissionLogistiquePart::with('commission.vehicule:id,nom_vehicule')
-            ->whereIn('livreur_id', $livreurIds)
+        $vehiculesParLivreur = CommissionLogistiquePart::with('commission.vehicule:id,nom_vehicule,immatriculation')
+            ->whereIn('livreur_id', $allLivreurIds)
             ->where('type_beneficiaire', 'livreur')
             ->whereNotNull('livreur_id')
             ->get()
@@ -70,28 +47,86 @@ class CommissionVehiculeController extends Controller
                 ->pluck('commission.vehicule')
                 ->filter()
                 ->unique('id')
-                ->pluck('nom_vehicule')
+                ->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))
                 ->values()
-                ->implode(', ')
+                ->implode(' ')
             );
 
-        $livreurs = $list->map(fn ($row) => [
+        // Build complete list with all searchable fields
+        $livreurs = $rows->map(fn ($row) => [
             'livreur_id' => $row->livreur_id,
             'nom' => $row->beneficiaire_nom,
             'telephone' => $telephones[$row->livreur_id] ?? null,
             'vehicules' => $vehiculesParLivreur[$row->livreur_id] ?? null,
-            'pending' => (float) $row->pending,
-            'available' => (float) $row->available,
-            'paid' => (float) $row->paid,
-        ])->values();
+            'impaye' => (float) $row->impaye,
+            'paye' => (float) $row->paye,
+        ]);
+
+        if ($filtreStatut !== '') {
+            $livreurs = match ($filtreStatut) {
+                'impaye' => $livreurs->filter(fn ($r) => $r['impaye'] > 0),
+                'paye' => $livreurs->filter(fn ($r) => $r['paye'] > 0 && $r['impaye'] <= 0),
+                default => $livreurs,
+            };
+        }
+
+        if ($search !== '') {
+            $livreurs = $livreurs->filter(fn ($l) => $this->livreurMatchesSearch($l, $search));
+        }
+
+        $list = $livreurs->values();
+
+        $kpis = [
+            'nb_livreurs' => $list->count(),
+            'total_impaye' => (float) collect($list)->sum('impaye'),
+            'total_paye' => (float) collect($list)->sum('paye'),
+        ];
 
         return Inertia::render('Logistique/Commissions/Index', [
-            'livreurs' => $livreurs,
+            'livreurs' => $list,
             'kpis' => $kpis,
             'search' => $search,
             'filtre_statut' => $filtreStatut,
+            'statuts' => StatutCommission::options(),
             'can_payer' => auth()->user()->can('logistique.commission.verser'),
         ]);
+    }
+
+    private function livreurMatchesSearch(array $l, string $search): bool
+    {
+        $s = trim($search);
+
+        // Name
+        if (str_contains(mb_strtolower((string) $l['nom']), mb_strtolower($s))) {
+            return true;
+        }
+
+        // Vehicle (nom + immatriculation string)
+        if ($l['vehicules'] && str_contains(mb_strtolower((string) $l['vehicules']), mb_strtolower($s))) {
+            return true;
+        }
+
+        // Phone: strip non-digits, require >= 6 digits
+        $digits = preg_replace('/\D/', '', $s);
+        if (strlen($digits) >= 6) {
+            $telDigits = preg_replace('/\D/', '', (string) ($l['telephone'] ?? ''));
+            if ($telDigits !== '' && str_contains($telDigits, $digits)) {
+                return true;
+            }
+        }
+
+        // Amount: strip GNF/spaces/commas → if purely numeric → check amounts
+        $amountStr = preg_replace('/[\s,]+/', '', str_ireplace('gnf', '', $s));
+        if ($amountStr !== '' && ctype_digit($amountStr)) {
+            $total = (int) round($l['impaye'] + $l['paye']);
+            foreach ([(int) round($l['impaye']), (int) round($l['paye']), $total] as $amt) {
+                if (str_contains((string) $amt, $amountStr)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     // ── Show livreur : cumul global + relevé par transfert ───────────────────
@@ -104,39 +139,28 @@ class CommissionVehiculeController extends Controller
         $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
 
         $orgId = auth()->user()->organization_id;
-
-        // ── Toutes les parts du livreur (tri FIFO earned_at) ─────────────────
         $allParts = CommissionPaymentService::releveLivreur($livreurId, $orgId);
 
         $livreurNom = $allParts->first()?->beneficiaire_nom ?? '—';
         $livreurTelephone = Livreur::find($livreurId)?->telephone;
 
-        // ── KPIs globaux (toutes périodes confondues) ─────────────────────────
-        $totalPending = (float) $allParts
-            ->filter(fn ($p) => $p->statut === StatutPartCommission::PENDING)
-            ->sum('montant_net');
-
-        $totalAvailable = (float) $allParts
-            ->filter(fn ($p) => in_array($p->statut, [
-                StatutPartCommission::AVAILABLE,
-                StatutPartCommission::PARTIAL,
-            ], true))
+        // ── KPIs globaux ──────────────────────────────────────────────────────
+        $totalImpaye = (float) $allParts
+            ->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
             ->sum('montant_restant');
 
-        $totalPaid = (float) $allParts
-            ->filter(fn ($p) => $p->statut === StatutPartCommission::PAID)
+        $totalPaye = (float) $allParts
+            ->filter(fn ($p) => $p->statut === StatutCommission::PAYE)
             ->sum('montant_net');
 
-        // ── Périodes disponibles (depuis la 1re commission jusqu'à aujourd'hui) ─
+        // ── Périodes disponibles ───────────────────────────────────────────────
         $earliestPart = $allParts->whereNotNull('periode')->sortBy('earned_at')->first();
         $earliestDate = $earliestPart?->earned_at ?? now();
         $periodesDisponibles = PeriodeComptableService::periodesDisponibles($earliestDate);
 
-        // Période sélectionnée (filtre URL ?periode=2026-04-P1)
         $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
         $selectedPeriode = $request->input('periode', '');
 
-        // ── Parts filtrées pour l'affichage ───────────────────────────────────
         $filteredParts = $selectedPeriode !== ''
             ? $allParts->filter(fn ($p) => $p->periode === $selectedPeriode)
             : $allParts;
@@ -146,21 +170,15 @@ class CommissionVehiculeController extends Controller
 
         if ($selectedPeriode !== '' && $filteredParts->isNotEmpty()) {
             $totalCommissionPeriode = (float) $filteredParts->sum('montant_net');
-
-            // Total versé = somme des allocations sur les parts de cette période
             $totalVersePeriode = (float) $filteredParts
                 ->flatMap(fn ($p) => $p->paymentItems)
                 ->sum('amount_allocated');
-
             $restePeriode = max(0.0, $totalCommissionPeriode - $totalVersePeriode);
 
-            $allPending = $filteredParts->every(fn ($p) => $p->statut === StatutPartCommission::PENDING);
-
             [$statutVal, $statutLabel, $statutDot] = match (true) {
-                $allPending => ['pending',        'En attente',             'bg-zinc-400 dark:bg-zinc-500'],
-                $totalVersePeriode <= 0 => ['available',   'Non versée',             'bg-amber-500'],
-                $restePeriode < 0.01 => ['paid',           'Soldée',                 'bg-emerald-500'],
-                default => ['partially_paid', 'Partiellement versée',   'bg-blue-500'],
+                $totalVersePeriode <= 0 => [StatutCommission::IMPAYE->value,  'Impayé',  StatutCommission::IMPAYE->dotClass()],
+                $restePeriode < 0.01 => [StatutCommission::PAYE->value,    'Payé',    StatutCommission::PAYE->dotClass()],
+                default => [StatutCommission::PARTIEL->value, 'Partiel', StatutCommission::PARTIEL->dotClass()],
             };
 
             $periodeStats = [
@@ -175,7 +193,7 @@ class CommissionVehiculeController extends Controller
             ];
         }
 
-        // ── Historique des paiements (filtré par période si applicable) ────────
+        // ── Historique des paiements ───────────────────────────────────────────
         $filteredPartIds = $filteredParts->pluck('id')->toArray();
 
         $paymentsQuery = CommissionPayment::with('createur:id,prenom,nom')
@@ -186,7 +204,6 @@ class CommissionVehiculeController extends Controller
             ->orderByDesc('id');
 
         if ($selectedPeriode !== '') {
-            // Uniquement les paiements ayant au moins une allocation sur cette période
             count($filteredPartIds) > 0
                 ? $paymentsQuery->whereHas('items', fn ($q) => $q->whereIn('part_id', $filteredPartIds))
                 : $paymentsQuery->whereRaw('1 = 0');
@@ -210,9 +227,8 @@ class CommissionVehiculeController extends Controller
                 'telephone' => $livreurTelephone,
             ],
             'kpis' => [
-                'pending' => $totalPending,
-                'available' => $totalAvailable,
-                'paid' => $totalPaid,
+                'impaye' => $totalImpaye,
+                'paye' => $totalPaye,
             ],
             'parts' => $filteredParts->map(fn ($p) => [
                 'id' => $p->id,
@@ -301,7 +317,6 @@ class CommissionVehiculeController extends Controller
         abort_unless(in_array($type, ['livreur', 'proprietaire'], true), 422);
 
         $parts = CommissionPaymentService::releve($vehicule, $type, $beneficiaireId);
-
         $nom = $parts->first()?->beneficiaire_nom ?? '—';
 
         return Inertia::render('Logistique/Commissions/Beneficiaire/Show', [

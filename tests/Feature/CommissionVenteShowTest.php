@@ -169,10 +169,10 @@ class CommissionVenteShowTest extends TestCase
         $commission = CommissionVente::factory()->create(['organization_id' => $this->org->id]);
 
         $commission->parts()->create(
-            $this->partData('livreur', montant_net: 5_400, montant_verse: 5_400, statut: StatutCommission::VERSEE),
+            $this->partData('livreur', montant_net: 5_400, montant_verse: 5_400, statut: StatutCommission::PAYE),
         );
         $commission->parts()->create(
-            $this->partData('livreur', montant_net: 4_050, montant_verse: 0, statut: StatutCommission::EN_ATTENTE),
+            $this->partData('livreur', montant_net: 4_050, montant_verse: 0, statut: StatutCommission::IMPAYE),
         );
 
         $this->actingAs($this->user)
@@ -193,7 +193,7 @@ class CommissionVenteShowTest extends TestCase
         float $frais = 0,
         float $montant_net = 5_000,
         float $montant_verse = 0,
-        StatutCommission $statut = StatutCommission::EN_ATTENTE,
+        StatutCommission $statut = StatutCommission::IMPAYE,
     ): array {
         return [
             'type_beneficiaire' => $type,
