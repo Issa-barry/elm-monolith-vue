@@ -21,8 +21,7 @@ class VersementCommissionController extends Controller
     {
         abort_unless($commission->organization_id === auth()->user()->organization_id, 403, 'Accès refusé.');
         abort_unless($part->commission_vente_id === $commission->id, 403, 'Part invalide.');
-        abort_if($commission->isAnnulee(), 422, 'Cette commission est annulée.');
-        abort_if($part->isVersee(), 422, 'Cette part est déjà entièrement versée.');
+        abort_if($part->isPaye(), 422, 'Cette part est déjà entièrement versée.');
 
         // ── Frais véhicule : déduction automatique au 1er versement ─────────────
         $fraisAAppliquer = 0.0;

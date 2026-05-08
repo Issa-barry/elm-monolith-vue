@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Enums\StatutPartCommission;
+use App\Enums\StatutCommission;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPayment;
 use App\Models\CommissionPaymentItem;
@@ -16,13 +16,9 @@ class CommissionPaymentService
 {
     /**
      * Enregistre un paiement groupé pour un bénéficiaire + véhicule.
-     *
-     * L'allocation suit un ordre FIFO : les parts dont earned_at est le plus
-     * ancien sont soldées en premier. Le montant saisi peut couvrir plusieurs
-     * parts ou seulement une fraction d'une part.
+     * Allocation FIFO : les parts dont earned_at est le plus ancien sont soldées en premier.
      *
      * @param  string  $beneficiaryType  livreur|proprietaire
-     * @param  int  $beneficiaryId  livreur_id ou proprietaire_id
      * @param  float  $montant  montant total à payer
      * @param  string  $paidAt  date ISO Y-m-d
      *
@@ -41,13 +37,10 @@ class CommissionPaymentService
             throw new InvalidArgumentException('Le montant doit être supérieur à 0.');
         }
 
-        // Récupère les parts disponibles (available | partially_paid) pour ce bénéficiaire,
-        // triées FIFO par earned_at.
         $parts = self::partsDisponibles($vehicule, $beneficiaryType, $beneficiaryId);
-
         $totalDisponible = $parts->sum(fn ($p) => $p->montant_restant);
 
-        if ($montant > $totalDisponible + 0.009) { // tolérance flottant
+        if ($montant > $totalDisponible + 0.009) {
             throw new InvalidArgumentException(
                 sprintf(
                     'Le montant saisi (%.2f GNF) dépasse le solde disponible (%.2f GNF).',
@@ -57,7 +50,6 @@ class CommissionPaymentService
             );
         }
 
-        // Nom du bénéficiaire (depuis la première part disponible)
         $beneficiaryNom = $parts->first()?->beneficiaire_nom ?? 'Inconnu';
 
         return DB::transaction(function () use (
@@ -78,25 +70,18 @@ class CommissionPaymentService
                 'created_by' => Auth::id(),
             ]);
 
-            // ── Allocation FIFO ───────────────────────────────────────────────
             $restant = $montant;
-
             foreach ($parts as $part) {
                 if ($restant <= 0) {
                     break;
                 }
-
-                $montantRestant = (float) $part->montant_restant;
-                $alloue = min($restant, $montantRestant);
-
+                $alloue = min($restant, (float) $part->montant_restant);
                 CommissionPaymentItem::create([
                     'payment_id' => $payment->id,
                     'part_id' => $part->id,
                     'amount_allocated' => round($alloue, 2),
                 ]);
-
                 $part->recalculStatut();
-
                 $restant = round($restant - $alloue, 2);
             }
 
@@ -104,11 +89,11 @@ class CommissionPaymentService
         });
     }
 
-    // ── API globale livreur (sans contrainte de véhicule) ────────────────────────
+    // ── API globale livreur (sans contrainte de véhicule) ────────────────────
 
     /**
      * Soldes agrégés par livreur pour toute une organisation.
-     * Utilisé par CommissionVehiculeController::index().
+     * Retourne les colonnes : livreur_id, beneficiaire_nom, impaye, paye.
      */
     public static function soldesParLivreur(string $orgId): Collection
     {
@@ -116,27 +101,24 @@ class CommissionPaymentService
             ->selectRaw(
                 'livreur_id,
                  MAX(beneficiaire_nom) AS beneficiaire_nom,
-                 SUM(CASE WHEN statut = ? THEN montant_net ELSE 0 END) AS pending,
-                 SUM(CASE WHEN statut IN (?,?) THEN CASE WHEN montant_net > montant_verse THEN montant_net - montant_verse ELSE 0 END ELSE 0 END) AS available,
-                 SUM(CASE WHEN statut = ? THEN montant_net ELSE 0 END) AS paid',
+                 SUM(CASE WHEN statut IN (?,?) THEN CASE WHEN montant_net - montant_verse > 0 THEN montant_net - montant_verse ELSE 0 END ELSE 0 END) AS impaye,
+                 SUM(CASE WHEN statut = ? THEN montant_net ELSE 0 END) AS paye',
                 [
-                    StatutPartCommission::PENDING->value,
-                    StatutPartCommission::AVAILABLE->value,
-                    StatutPartCommission::PARTIAL->value,
-                    StatutPartCommission::PAID->value,
+                    StatutCommission::IMPAYE->value,
+                    StatutCommission::PARTIEL->value,
+                    StatutCommission::PAYE->value,
                 ]
             )
             ->where('type_beneficiaire', 'livreur')
             ->whereNotNull('livreur_id')
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
-            ->where('statut', '!=', StatutPartCommission::CANCELLED->value)
             ->groupBy('livreur_id')
-            ->orderByRaw('available DESC, pending DESC')
+            ->orderByRaw('impaye DESC')
             ->get();
     }
 
     /**
-     * Parts disponibles (payables) pour un livreur sur toute l'org, triées FIFO.
+     * Parts payables (impayé + partiel) pour un livreur sur toute l'org, triées FIFO.
      *
      * @return Collection<CommissionLogistiquePart>
      */
@@ -144,8 +126,8 @@ class CommissionPaymentService
     {
         return CommissionLogistiquePart::query()
             ->whereIn('statut', [
-                StatutPartCommission::AVAILABLE->value,
-                StatutPartCommission::PARTIAL->value,
+                StatutCommission::IMPAYE->value,
+                StatutCommission::PARTIEL->value,
             ])
             ->where('type_beneficiaire', 'livreur')
             ->where('livreur_id', $livreurId)
@@ -157,7 +139,6 @@ class CommissionPaymentService
 
     /**
      * Relevé de toutes les parts d'un livreur sur toute l'org.
-     * Utilisé par CommissionVehiculeController::showLivreur().
      *
      * @return Collection<CommissionLogistiquePart>
      */
@@ -170,7 +151,6 @@ class CommissionPaymentService
             ->where('type_beneficiaire', 'livreur')
             ->where('livreur_id', $livreurId)
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
-            ->where('statut', '!=', StatutPartCommission::CANCELLED->value)
             ->orderBy('earned_at')
             ->orderBy('id')
             ->get();
@@ -226,22 +206,17 @@ class CommissionPaymentService
             ]);
 
             $restant = $montant;
-
             foreach ($parts as $part) {
                 if ($restant <= 0) {
                     break;
                 }
-
                 $alloue = min($restant, (float) $part->montant_restant);
-
                 CommissionPaymentItem::create([
                     'payment_id' => $payment->id,
                     'part_id' => $part->id,
                     'amount_allocated' => round($alloue, 2),
                 ]);
-
                 $part->recalculStatut();
-
                 $restant = round($restant - $alloue, 2);
             }
 
@@ -249,10 +224,10 @@ class CommissionPaymentService
         });
     }
 
-    // ── API par véhicule (retro-compat) ──────────────────────────────────────────
+    // ── API par véhicule (retro-compat) ──────────────────────────────────────
 
     /**
-     * Parts disponibles (payables) pour un bénéficiaire + véhicule, triées FIFO.
+     * Parts payables (impayé + partiel) pour un bénéficiaire + véhicule, triées FIFO.
      *
      * @return Collection<CommissionLogistiquePart>
      */
@@ -263,15 +238,15 @@ class CommissionPaymentService
     ): Collection {
         $query = CommissionLogistiquePart::query()
             ->whereIn('statut', [
-                StatutPartCommission::AVAILABLE->value,
-                StatutPartCommission::PARTIAL->value,
+                StatutCommission::IMPAYE->value,
+                StatutCommission::PARTIEL->value,
             ])
             ->where('type_beneficiaire', $beneficiaryType)
             ->whereHas('commission', function ($q) use ($vehicule) {
                 $q->where('vehicule_id', $vehicule->id)
                     ->where('organization_id', $vehicule->organization_id);
             })
-            ->orderBy('earned_at')   // FIFO
+            ->orderBy('earned_at')
             ->orderBy('id');
 
         if ($beneficiaryType === 'livreur') {
@@ -285,12 +260,7 @@ class CommissionPaymentService
 
     /**
      * Soldes agrégés pour un véhicule, regroupés par bénéficiaire.
-     * Utilisé par CommissionVehiculeController::show().
-     *
-     * @return array{
-     *   livreurs: array<int, array{id:int, nom:string, pending:float, available:float, paid:float}>,
-     *   proprietaires: array<int, array{id:int, nom:string, pending:float, available:float, paid:float}>
-     * }
+     * Retourne impaye + paye par bénéficiaire.
      */
     public static function soldesParVehicule(Vehicule $vehicule): array
     {
@@ -299,21 +269,18 @@ class CommissionPaymentService
                 'type_beneficiaire,
                  COALESCE(livreur_id, proprietaire_id) AS beneficiary_id,
                  beneficiaire_nom,
-                 SUM(CASE WHEN statut = ? THEN montant_net ELSE 0 END)                                       AS pending,
-                 SUM(CASE WHEN statut IN (?,?) THEN CASE WHEN montant_net > montant_verse THEN montant_net - montant_verse ELSE 0 END ELSE 0 END) AS available,
-                 SUM(CASE WHEN statut = ? THEN montant_net ELSE 0 END)                                       AS paid',
+                 SUM(CASE WHEN statut IN (?,?) THEN CASE WHEN montant_net - montant_verse > 0 THEN montant_net - montant_verse ELSE 0 END ELSE 0 END) AS impaye,
+                 SUM(CASE WHEN statut = ? THEN montant_net ELSE 0 END) AS paye',
                 [
-                    StatutPartCommission::PENDING->value,
-                    StatutPartCommission::AVAILABLE->value,
-                    StatutPartCommission::PARTIAL->value,
-                    StatutPartCommission::PAID->value,
+                    StatutCommission::IMPAYE->value,
+                    StatutCommission::PARTIEL->value,
+                    StatutCommission::PAYE->value,
                 ]
             )
             ->whereHas('commission', function ($q) use ($vehicule) {
                 $q->where('vehicule_id', $vehicule->id)
                     ->where('organization_id', $vehicule->organization_id);
             })
-            ->where('statut', '!=', StatutPartCommission::CANCELLED->value)
             ->groupBy('type_beneficiaire', 'beneficiary_id', 'beneficiaire_nom')
             ->get();
 
@@ -325,9 +292,8 @@ class CommissionPaymentService
                 'id' => $row->beneficiary_id,
                 'type' => $row->type_beneficiaire,
                 'nom' => $row->beneficiaire_nom,
-                'pending' => (float) $row->pending,
-                'available' => (float) $row->available,
-                'paid' => (float) $row->paid,
+                'impaye' => (float) $row->impaye,
+                'paye' => (float) $row->paye,
             ];
         }
 
@@ -336,7 +302,6 @@ class CommissionPaymentService
 
     /**
      * Relevé détaillé des parts (accruals) pour un bénéficiaire + véhicule.
-     * Utilisé par CommissionBeneficiaireController::show().
      */
     public static function releve(
         Vehicule $vehicule,
@@ -352,7 +317,6 @@ class CommissionPaymentService
                     ->where('organization_id', $vehicule->organization_id);
             })
             ->where('type_beneficiaire', $beneficiaryType)
-            ->where('statut', '!=', StatutPartCommission::CANCELLED->value)
             ->orderBy('earned_at')
             ->orderBy('id');
 

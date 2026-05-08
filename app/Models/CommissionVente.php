@@ -26,7 +26,7 @@ class CommissionVente extends Model
         'statut',
     ];
 
-    protected $appends = ['montant_restant', 'statut_label'];
+    protected $appends = ['montant_restant', 'statut_label', 'statut_dot_class'];
 
     protected function casts(): array
     {
@@ -71,16 +71,24 @@ class CommissionVente extends Model
         return $this->statut instanceof StatutCommission ? $this->statut->label() : '';
     }
 
-    // ── Métier ────────────────────────────────────────────────────────────────
-
-    public function isVersee(): bool
+    public function getStatutDotClassAttribute(): string
     {
-        return $this->statut === StatutCommission::VERSEE;
+        return $this->statut instanceof StatutCommission
+            ? $this->statut->dotClass()
+            : 'bg-zinc-400 dark:bg-zinc-500';
     }
 
-    public function isAnnulee(): bool
+    // ── Métier ────────────────────────────────────────────────────────────────
+
+    public function isPaye(): bool
     {
-        return $this->statut === StatutCommission::ANNULEE;
+        return $this->statut === StatutCommission::PAYE;
+    }
+
+    /** @deprecated use isPaye() */
+    public function isVersee(): bool
+    {
+        return $this->isPaye();
     }
 
     /**
@@ -88,10 +96,6 @@ class CommissionVente extends Model
      */
     public function recalculStatutGlobal(): bool
     {
-        if ($this->isAnnulee()) {
-            return false;
-        }
-
         $parts = $this->parts()->get();
 
         $totalVerse = $parts->sum('montant_verse');
@@ -99,13 +103,11 @@ class CommissionVente extends Model
 
         $this->montant_verse = $totalVerse;
 
-        if ($totalVerse <= 0) {
-            $this->statut = StatutCommission::EN_ATTENTE;
-        } elseif ($totalNet > 0 && $totalVerse >= $totalNet) {
-            $this->statut = StatutCommission::VERSEE;
-        } else {
-            $this->statut = StatutCommission::PARTIELLE;
-        }
+        $this->statut = match (true) {
+            $totalNet > 0 && (float) $totalVerse >= (float) $totalNet => StatutCommission::PAYE,
+            (float) $totalVerse > 0 => StatutCommission::PARTIEL,
+            default => StatutCommission::IMPAYE,
+        };
 
         return $this->saveQuietly();
     }

@@ -2,7 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Enums\StatutPartCommission;
+use App\Enums\StatutCommission;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\Livreur;
@@ -67,17 +67,17 @@ class CommissionPaymentServiceTest extends TestCase
             'amount_allocated' => 3000,
         ]);
 
-        $this->assertEquals(StatutPartCommission::PAID, $part->fresh()->statut);
+        $this->assertEquals(StatutCommission::PAYE, $part->fresh()->statut);
     }
 
-    public function test_payer_partiel_passe_statut_a_partial(): void
+    public function test_payer_partiel_passe_statut_a_partiel(): void
     {
         ['vehicule' => $vehicule, 'livreur' => $livreur, 'part' => $part] = $this->makeScenario(montantNet: 3000);
 
         $this->actingAs($this->makeUser($vehicule->organization));
         CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 1000, 'especes', now()->toDateString());
 
-        $this->assertEquals(StatutPartCommission::PARTIAL, $part->fresh()->statut);
+        $this->assertEquals(StatutCommission::PARTIEL, $part->fresh()->statut);
         $this->assertEquals(1000.0, (float) $part->fresh()->montant_verse);
     }
 
@@ -89,7 +89,6 @@ class CommissionPaymentServiceTest extends TestCase
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
         $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
 
-        // 2 parts, earned_at différents (partAncienne plus vieille = doit être soldée en premier)
         $commission = $this->makeCommission($org, $vehicule);
 
         $partAncienne = $this->makePart($commission, $livreur, [
@@ -102,13 +101,12 @@ class CommissionPaymentServiceTest extends TestCase
         ]);
 
         $this->actingAs($this->makeUser($org));
-        // Paiement de 1 500 GNF : doit solder la part ancienne (1 000) puis allouer 500 sur la récente
         CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 1500, 'especes', now()->toDateString());
 
-        $this->assertEquals(StatutPartCommission::PAID, $partAncienne->fresh()->statut);
+        $this->assertEquals(StatutCommission::PAYE, $partAncienne->fresh()->statut);
         $this->assertEquals(1000.0, (float) $partAncienne->fresh()->montant_verse);
 
-        $this->assertEquals(StatutPartCommission::PARTIAL, $partRecente->fresh()->statut);
+        $this->assertEquals(StatutCommission::PARTIEL, $partRecente->fresh()->statut);
         $this->assertEquals(500.0, (float) $partRecente->fresh()->montant_verse);
     }
 
@@ -126,23 +124,23 @@ class CommissionPaymentServiceTest extends TestCase
         $this->actingAs($this->makeUser($org));
         CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 3500, 'especes', now()->toDateString());
 
-        $this->assertEquals(StatutPartCommission::PAID, $part1->fresh()->statut);
-        $this->assertEquals(StatutPartCommission::PAID, $part2->fresh()->statut);
-        $this->assertEquals(StatutPartCommission::PAID, $part3->fresh()->statut);
+        $this->assertEquals(StatutCommission::PAYE, $part1->fresh()->statut);
+        $this->assertEquals(StatutCommission::PAYE, $part2->fresh()->statut);
+        $this->assertEquals(StatutCommission::PAYE, $part3->fresh()->statut);
     }
 
     // ── partsDisponibles ──────────────────────────────────────────────────────
 
-    public function test_parts_disponibles_exclut_parts_pending(): void
+    public function test_parts_disponibles_exclut_parts_payees(): void
     {
         $org = Organization::factory()->create();
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
         $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
         $commission = $this->makeCommission($org, $vehicule);
 
-        // Part PENDING (pas encore déblocable)
         $this->makePart($commission, $livreur, [
-            'statut' => StatutPartCommission::PENDING,
+            'statut' => StatutCommission::PAYE,
+            'montant_verse' => 3000,
         ]);
 
         $parts = CommissionPaymentService::partsDisponibles($vehicule, 'livreur', $livreur->id);
@@ -150,16 +148,16 @@ class CommissionPaymentServiceTest extends TestCase
         $this->assertCount(0, $parts);
     }
 
-    public function test_parts_disponibles_inclut_available_et_partial(): void
+    public function test_parts_disponibles_inclut_impaye_et_partiel(): void
     {
         $org = Organization::factory()->create();
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
         $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
         $commission = $this->makeCommission($org, $vehicule);
 
-        $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::AVAILABLE]);
-        $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::PARTIAL]);
-        $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::PAID]);
+        $this->makePart($commission, $livreur, ['statut' => StatutCommission::IMPAYE]);
+        $this->makePart($commission, $livreur, ['statut' => StatutCommission::PARTIEL, 'montant_verse' => 500]);
+        $this->makePart($commission, $livreur, ['statut' => StatutCommission::PAYE, 'montant_verse' => 3000]);
 
         $parts = CommissionPaymentService::partsDisponibles($vehicule, 'livreur', $livreur->id);
 
@@ -175,28 +173,25 @@ class CommissionPaymentServiceTest extends TestCase
         $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
         $commission = $this->makeCommission($org, $vehicule);
 
-        $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::PENDING,   'montant_net' => 1000]);
-        $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::AVAILABLE, 'montant_net' => 2000, 'montant_verse' => 0]);
-        $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::PAID,      'montant_net' => 500,  'montant_verse' => 500]);
+        $this->makePart($commission, $livreur, ['statut' => StatutCommission::IMPAYE,  'montant_net' => 1000, 'montant_verse' => 0]);
+        $this->makePart($commission, $livreur, ['statut' => StatutCommission::PARTIEL, 'montant_net' => 2000, 'montant_verse' => 500]);
+        $this->makePart($commission, $livreur, ['statut' => StatutCommission::PAYE,    'montant_net' => 600,  'montant_verse' => 600]);
 
         $soldes = CommissionPaymentService::soldesParVehicule($vehicule);
 
         $this->assertCount(1, $soldes['livreurs']);
         $livreurRow = $soldes['livreurs'][0];
 
-        $this->assertEquals((float) $livreurRow['pending'], 1000.0);
-        $this->assertEquals((float) $livreurRow['available'], 2000.0);
-        $this->assertEquals((float) $livreurRow['paid'], 500.0);
+        // impaye = restant sur parts IMPAYE + PARTIEL : 1000 + (2000-500) = 2500
+        $this->assertEquals(2500.0, (float) $livreurRow['impaye']);
+        // paye = montant_net des parts PAYE : 600
+        $this->assertEquals(600.0, (float) $livreurRow['paye']);
     }
 
-    public function test_soldes_par_vehicule_exclut_les_annules(): void
+    public function test_soldes_par_vehicule_sans_parts_retourne_vide(): void
     {
         $org = Organization::factory()->create();
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
-        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
-        $commission = $this->makeCommission($org, $vehicule);
-
-        $this->makePart($commission, $livreur, ['statut' => StatutPartCommission::CANCELLED, 'montant_net' => 9999]);
 
         $soldes = CommissionPaymentService::soldesParVehicule($vehicule);
 
@@ -205,9 +200,6 @@ class CommissionPaymentServiceTest extends TestCase
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /**
-     * Crée un scénario simple : vehicule + livreur + 1 part AVAILABLE.
-     */
     private function makeScenario(float $montantNet = 3000): array
     {
         $org = Organization::factory()->create();
@@ -230,7 +222,7 @@ class CommissionPaymentServiceTest extends TestCase
             'valeur_base' => 5000,
             'montant_total' => 5000,
             'montant_verse' => 0,
-            'statut' => 'en_attente',
+            'statut' => 'impaye',
         ]);
     }
 
@@ -272,7 +264,7 @@ class CommissionPaymentServiceTest extends TestCase
             'frais_supplementaires' => 0,
             'montant_net' => 3000,
             'montant_verse' => 0,
-            'statut' => StatutPartCommission::AVAILABLE,
+            'statut' => StatutCommission::IMPAYE,
             'earned_at' => now()->subDays(15)->toDateString(),
         ], $overrides));
     }

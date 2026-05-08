@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import ReceptionDialog from '@/pages/Logistique/partials/ReceptionDialog.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
@@ -32,6 +33,15 @@ import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+interface LigneReception {
+    id: number;
+    produit_nom: string;
+    quantite_chargee: number | null;
+    quantite_recue: number | null;
+    ecart_type: string | null;
+    ecart_motif: string | null;
+}
 
 interface Transfert {
     id: number;
@@ -58,6 +68,7 @@ interface Transfert {
     can_annuler: boolean;
     can_valider_reception: boolean;
     created_at: string;
+    lignes_reception: LigneReception[];
 }
 
 // Kpis : champs optionnels — Transferts et Réceptions n'ont pas les mêmes compteurs
@@ -96,6 +107,7 @@ const props = defineProps<{
     filtre_site_destination_id: number | null;
     vue: 'transferts' | 'receptions';
     can_create: boolean;
+    types_ecart: StatutOption[];
 }>();
 
 const { can } = usePermissions();
@@ -235,6 +247,16 @@ function avancerDirect(t: Transfert) {
             },
         },
     );
+}
+
+// ── Dialog réception (depuis la liste) ───────────────────────────────────────
+
+const receptionDialogVisible = ref(false);
+const receptionDialogTransfert = ref<Transfert | null>(null);
+
+function ouvrirReceptionDialog(t: Transfert) {
+    receptionDialogTransfert.value = t;
+    receptionDialogVisible.value = true;
 }
 
 // ── Commission statut dot class ───────────────────────────────────────────────
@@ -755,15 +777,10 @@ const commStatutDot: Record<string, string> = {
                                                 data.can_valider_reception
                                             "
                                             class="cursor-pointer text-blue-600 focus:text-blue-600"
-                                            as-child
+                                            @click="ouvrirReceptionDialog(data)"
                                         >
-                                            <Link
-                                                :href="`/logistique/${data.id}`"
-                                                class="flex w-full cursor-pointer items-center gap-2"
-                                            >
-                                                <Truck class="h-4 w-4" />
-                                                {{ labelSuivant(data.statut) }}
-                                            </Link>
+                                            <Truck class="h-4 w-4" />
+                                            {{ labelSuivant(data.statut) }}
                                         </DropdownMenuItem>
                                         <!-- Annuler : uniquement BROUILLON ou CHARGEMENT, site source seulement -->
                                         <DropdownMenuItem
@@ -813,5 +830,14 @@ const commStatutDot: Record<string, string> = {
                 </DataTable>
             </div>
         </div>
+
+        <!-- Dialog réception partagé -->
+        <ReceptionDialog
+            v-if="receptionDialogTransfert"
+            v-model:visible="receptionDialogVisible"
+            :transfert-id="receptionDialogTransfert.id"
+            :lignes="receptionDialogTransfert.lignes_reception"
+            :types-ecart="types_ecart"
+        />
     </AppLayout>
 </template>

@@ -36,12 +36,12 @@ interface Equipe {
     nom: string;
     is_active: boolean;
     nb_membres: number;
-    nb_convoyeurs: number;
     somme_taux: number;
     premier_chauffeur_nom: string | null;
     premier_chauffeur_telephone: string | null;
     vehicule_nom: string | null;
     vehicule_immatriculation: string | null;
+    vehicule_categorie: 'interne' | 'externe' | null;
 }
 
 const props = defineProps<{ equipes: Equipe[] }>();
@@ -58,15 +58,24 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const search = ref('');
 const statutFilter = ref<'tous' | 'actif' | 'inactif'>('tous');
+const categorieFilter = ref<'tous' | 'interne' | 'externe'>('tous');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => {
     filters.value.global.value = val;
 });
 
 const equipesFiltrees = computed(() => {
-    if (statutFilter.value === 'tous') return props.equipes;
-    const actif = statutFilter.value === 'actif';
-    return props.equipes.filter((e) => e.is_active === actif);
+    return props.equipes.filter((e) => {
+        const statusMatch =
+            statutFilter.value === 'tous' ||
+            e.is_active === (statutFilter.value === 'actif');
+
+        const categorieMatch =
+            categorieFilter.value === 'tous' ||
+            e.vehicule_categorie === categorieFilter.value;
+
+        return statusMatch && categorieMatch;
+    });
 });
 
 function confirmDelete(equipe: Equipe) {
@@ -125,7 +134,7 @@ function confirmDelete(equipe: Equipe) {
                 </Link>
             </div>
 
-            <!-- Barre de recherche + filtre statut -->
+            <!-- Barre de recherche + filtres -->
             <div class="flex flex-wrap items-center gap-3">
                 <IconField class="max-w-xs flex-1">
                     <InputIcon class="pi pi-search" />
@@ -145,6 +154,17 @@ function confirmDelete(equipe: Equipe) {
                     option-label="label"
                     option-value="value"
                     class="w-32"
+                />
+                <Select
+                    v-model="categorieFilter"
+                    :options="[
+                        { value: 'tous', label: 'Tous véhicules' },
+                        { value: 'interne', label: 'Interne' },
+                        { value: 'externe', label: 'Externe' },
+                    ]"
+                    option-label="label"
+                    option-value="value"
+                    class="w-40"
                 />
             </div>
 
@@ -239,8 +259,8 @@ function confirmDelete(equipe: Equipe) {
                 </Column>
 
                 <Column
-                    field="nb_convoyeurs"
-                    header="Convoyeurs"
+                    field="nb_membres"
+                    header="Membre"
                     sortable
                     style="width: 10%"
                 >
@@ -249,7 +269,7 @@ function confirmDelete(equipe: Equipe) {
                             class="flex items-center gap-1.5 text-sm text-muted-foreground"
                         >
                             <Users class="h-3.5 w-3.5" />
-                            {{ data.nb_convoyeurs }}
+                            {{ data.nb_membres }}
                         </div>
                     </template>
                 </Column>

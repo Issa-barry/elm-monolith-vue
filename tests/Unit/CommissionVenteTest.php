@@ -27,7 +27,7 @@ class CommissionVenteTest extends TestCase
             'frais_supplementaires' => 0,
             'montant_net' => 5000,
             'montant_verse' => 0,
-            'statut' => StatutCommission::EN_ATTENTE,
+            'statut' => StatutCommission::IMPAYE,
         ], $overrides));
     }
 
@@ -43,7 +43,7 @@ class CommissionVenteTest extends TestCase
             'montant_brut' => 3000,
             'montant_net' => 3000,
             'montant_verse' => 1000,
-            'statut' => StatutCommission::PARTIELLE,
+            'statut' => StatutCommission::PARTIEL,
         ]);
         $this->makePart($commission, [
             'type_beneficiaire' => 'proprietaire',
@@ -52,7 +52,7 @@ class CommissionVenteTest extends TestCase
             'montant_brut' => 2000,
             'montant_net' => 2000,
             'montant_verse' => 2000,
-            'statut' => StatutCommission::VERSEE,
+            'statut' => StatutCommission::PAYE,
         ]);
 
         // Livreur restant: 3000-1000=2000, proprietaire restant: 0 → total 2000
@@ -85,17 +85,17 @@ class CommissionVenteTest extends TestCase
 
     // ── recalculStatutGlobal ──────────────────────────────────────────────────
 
-    public function test_statut_global_passe_en_attente_si_aucun_versement(): void
+    public function test_statut_global_passe_impaye_si_aucun_versement(): void
     {
-        $commission = $this->makeCommission(['statut' => StatutCommission::EN_ATTENTE]);
+        $commission = $this->makeCommission(['statut' => StatutCommission::IMPAYE]);
         $this->makePart($commission, ['montant_verse' => 0]);
 
         $commission->recalculStatutGlobal();
 
-        $this->assertEquals(StatutCommission::EN_ATTENTE, $commission->fresh()->statut);
+        $this->assertEquals(StatutCommission::IMPAYE, $commission->fresh()->statut);
     }
 
-    public function test_statut_global_passe_partielle_si_versement_partiel(): void
+    public function test_statut_global_passe_partiel_si_versement_partiel(): void
     {
         $commission = $this->makeCommission();
         $part = $this->makePart($commission, ['montant_net' => 5000, 'montant_verse' => 0]);
@@ -107,11 +107,11 @@ class CommissionVenteTest extends TestCase
         ]);
         $part->recalculStatut();
 
-        $this->assertEquals(StatutCommission::PARTIELLE, $commission->fresh()->statut);
+        $this->assertEquals(StatutCommission::PARTIEL, $commission->fresh()->statut);
         $this->assertEquals(2000.0, (float) $commission->fresh()->montant_verse);
     }
 
-    public function test_statut_global_passe_versee_quand_tout_est_verse(): void
+    public function test_statut_global_passe_paye_quand_tout_est_verse(): void
     {
         $commission = $this->makeCommission();
         $part = $this->makePart($commission, ['montant_net' => 5000, 'montant_verse' => 0]);
@@ -123,7 +123,7 @@ class CommissionVenteTest extends TestCase
         ]);
         $part->recalculStatut();
 
-        $this->assertEquals(StatutCommission::VERSEE, $commission->fresh()->statut);
+        $this->assertEquals(StatutCommission::PAYE, $commission->fresh()->statut);
         $this->assertEquals(5000.0, (float) $commission->fresh()->montant_verse);
     }
 
@@ -152,31 +152,39 @@ class CommissionVenteTest extends TestCase
         $partProp->recalculStatut();
 
         $fresh = $commission->fresh();
-        $this->assertEquals(StatutCommission::PARTIELLE, $fresh->statut);
+        $this->assertEquals(StatutCommission::PARTIEL, $fresh->statut);
         $this->assertEquals(2300.0, (float) $fresh->montant_verse);
     }
 
-    public function test_recalcul_ignore_commission_annulee(): void
+    public function test_statut_global_recalcul_complet_passe_a_paye(): void
     {
-        $commission = $this->makeCommission(['statut' => StatutCommission::ANNULEE]);
+        $commission = $this->makeCommission();
+        $part = $this->makePart($commission, ['montant_net' => 3000, 'montant_verse' => 3000, 'statut' => StatutCommission::PAYE]);
 
-        $result = $commission->recalculStatutGlobal();
+        $commission->recalculStatutGlobal();
 
-        $this->assertFalse($result);
-        $this->assertEquals(StatutCommission::ANNULEE, $commission->fresh()->statut);
+        $this->assertEquals(StatutCommission::PAYE, $commission->fresh()->statut);
     }
 
-    // ── isVersee / isAnnulee ──────────────────────────────────────────────────
+    // ── isPaye / isVersee ─────────────────────────────────────────────────────
 
-    public function test_is_versee_retourne_true_quand_statut_versee(): void
+    public function test_is_paye_retourne_true_quand_statut_paye(): void
     {
-        $commission = $this->makeCommission(['statut' => StatutCommission::VERSEE]);
-        $this->assertTrue($commission->isVersee());
+        $commission = $this->makeCommission(['statut' => StatutCommission::PAYE]);
+        $this->assertTrue($commission->isPaye());
     }
 
-    public function test_is_annulee_retourne_true_quand_statut_annulee(): void
+    public function test_is_paye_retourne_false_quand_statut_impaye(): void
     {
-        $commission = $this->makeCommission(['statut' => StatutCommission::ANNULEE]);
-        $this->assertTrue($commission->isAnnulee());
+        $commission = $this->makeCommission(['statut' => StatutCommission::IMPAYE]);
+        $this->assertFalse($commission->isPaye());
+    }
+
+    public function test_statut_ne_contient_pas_annule(): void
+    {
+        $values = array_column(StatutCommission::cases(), 'value');
+        $this->assertNotContains('annule', $values);
+        $this->assertNotContains('annulee', $values);
+        $this->assertNotContains('cancelled', $values);
     }
 }

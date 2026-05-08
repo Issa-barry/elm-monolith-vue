@@ -113,7 +113,7 @@ class CommissionsSeeder extends Seeder
                     'montant_commande' => $data['montant_commande'],
                     'montant_commission_totale' => $data['montant_commission_totale'],
                     'montant_verse' => 0,
-                    'statut' => StatutCommission::EN_ATTENTE,
+                    'statut' => StatutCommission::IMPAYE,
                 ]
             );
         };
@@ -132,7 +132,7 @@ class CommissionsSeeder extends Seeder
                     'frais_supplementaires' => $data['frais'] ?? 0,
                     'montant_net' => $data['net'] ?? $data['brut'],
                     'montant_verse' => 0,
-                    'statut' => StatutCommission::EN_ATTENTE,
+                    'statut' => StatutCommission::IMPAYE,
                 ]
             );
         };

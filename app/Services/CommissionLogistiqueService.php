@@ -3,8 +3,7 @@
 namespace App\Services;
 
 use App\Enums\BaseCalculLogistique;
-use App\Enums\StatutCommissionLogistique;
-use App\Enums\StatutPartCommission;
+use App\Enums\StatutCommission;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\TransfertLogistique;
@@ -47,7 +46,6 @@ class CommissionLogistiqueService
 
         $montantTotal = self::calculerMontant($baseCalcul, $valeurBase, $quantiteReference);
 
-        // earned_at = date de réception réelle si disponible, sinon maintenant
         $earnedAt = $transfert->date_arrivee_reelle
             ? Carbon::instance($transfert->date_arrivee_reelle)
             : now();
@@ -66,11 +64,11 @@ class CommissionLogistiqueService
                     'quantite_reference' => $quantiteReference,
                     'montant_total' => $montantTotal,
                     'montant_verse' => 0,
-                    'statut' => StatutCommissionLogistique::EN_ATTENTE,
+                    'statut' => StatutCommission::IMPAYE,
                 ]
             );
 
-            if ($commission->wasRecentlyCreated || $commission->isEnAttente()) {
+            if ($commission->wasRecentlyCreated || $commission->isImpaye()) {
                 $commission->parts()->delete();
                 self::creerParts($commission, $transfert, $montantTotal, $earnedAt);
             }
@@ -103,7 +101,6 @@ class CommissionLogistiqueService
 
     /**
      * Versement legacy (retro-compat, utilisé depuis la page Transfert Show).
-     * Les nouvelles saisies passent par CommissionPaymentService.
      */
     public static function verser(
         CommissionLogistiquePart $part,
@@ -112,7 +109,7 @@ class CommissionLogistiqueService
         string $modePaiement,
         ?string $note = null
     ): VersementCommissionLogistique {
-        if ($part->isVersee()) {
+        if ($part->isPaye()) {
             throw new InvalidArgumentException('Cette part est déjà entièrement versée.');
         }
 
@@ -155,7 +152,6 @@ class CommissionLogistiqueService
             return;
         }
 
-        // ── Parts livreurs ────────────────────────────────────────────────────
         $equipe = $vehicule->equipe;
         if ($equipe) {
             $membres = $equipe->membres()->with('livreur')->get();
@@ -165,6 +161,7 @@ class CommissionLogistiqueService
                 $nomLivreur = $membre->livreur
                     ? trim(($membre->livreur->prenom ?? '').' '.($membre->livreur->nom ?? ''))
                     : "Livreur #{$membre->livreur_id}";
+
                 CommissionLogistiquePart::create([
                     'commission_logistique_id' => $commission->id,
                     'type_beneficiaire' => 'livreur',
@@ -176,7 +173,7 @@ class CommissionLogistiqueService
                     'frais_supplementaires' => 0,
                     'montant_net' => $brut,
                     'montant_verse' => 0,
-                    'statut' => StatutPartCommission::AVAILABLE,
+                    'statut' => StatutCommission::IMPAYE,
                     'earned_at' => $earnedAt->toDateString(),
                     'periode' => PeriodeComptableService::codeForLivreur($earnedAt),
                 ]);

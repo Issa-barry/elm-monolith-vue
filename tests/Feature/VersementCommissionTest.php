@@ -43,7 +43,7 @@ class VersementCommissionTest extends TestCase
             'organization_id' => $org->id,
             'montant_commission_totale' => 5000,
             'montant_verse' => 0,
-            'statut' => StatutCommission::EN_ATTENTE,
+            'statut' => StatutCommission::IMPAYE,
         ]);
 
         $partLivreur = $commission->parts()->create([
@@ -54,7 +54,7 @@ class VersementCommissionTest extends TestCase
             'frais_supplementaires' => 0,
             'montant_net' => 3000,
             'montant_verse' => 0,
-            'statut' => StatutCommission::EN_ATTENTE,
+            'statut' => StatutCommission::IMPAYE,
         ]);
 
         $partProp = $commission->parts()->create([
@@ -65,7 +65,7 @@ class VersementCommissionTest extends TestCase
             'frais_supplementaires' => 0,
             'montant_net' => 2000,
             'montant_verse' => 0,
-            'statut' => StatutCommission::EN_ATTENTE,
+            'statut' => StatutCommission::IMPAYE,
         ]);
 
         return compact('commission', 'partLivreur', 'partProp');
@@ -96,7 +96,7 @@ class VersementCommissionTest extends TestCase
         ]);
 
         $this->assertEquals(3000.0, (float) $part->fresh()->montant_verse);
-        $this->assertEquals(StatutCommission::VERSEE, $part->fresh()->statut);
+        $this->assertEquals(StatutCommission::PAYE, $part->fresh()->statut);
     }
 
     public function test_versement_partiel_met_statut_partielle(): void
@@ -114,8 +114,8 @@ class VersementCommissionTest extends TestCase
             ]
         );
 
-        $this->assertEquals(StatutCommission::PARTIELLE, $part->fresh()->statut);
-        $this->assertEquals(StatutCommission::PARTIELLE, $commission->fresh()->statut);
+        $this->assertEquals(StatutCommission::PARTIEL, $part->fresh()->statut);
+        $this->assertEquals(StatutCommission::PARTIEL, $commission->fresh()->statut);
     }
 
     public function test_versement_deux_parts_soldes_met_commission_versee(): void
@@ -134,7 +134,7 @@ class VersementCommissionTest extends TestCase
         );
 
         $this->assertDatabaseCount('versements_commissions', 2);
-        $this->assertEquals(StatutCommission::VERSEE, $commission->fresh()->statut);
+        $this->assertEquals(StatutCommission::PAYE, $commission->fresh()->statut);
         $this->assertEquals(5000.0, (float) $commission->fresh()->montant_verse);
     }
 
@@ -157,31 +157,12 @@ class VersementCommissionTest extends TestCase
         $this->assertDatabaseCount('versements_commissions', 0);
     }
 
-    public function test_versement_refuse_si_commission_annulee(): void
-    {
-        $org = Organization::factory()->create();
-        $user = $this->utilisateur($org);
-        ['commission' => $commission, 'partLivreur' => $part] = $this->makeCommissionAvecParts($org);
-        $commission->update(['statut' => StatutCommission::ANNULEE]);
-
-        $response = $this->actingAs($user)->post(
-            route('commissions.parts.versements.store', [$commission, $part]),
-            [
-                'montant' => 1000,
-                'date_versement' => now()->toDateString(),
-                'mode_paiement' => 'especes',
-            ]
-        );
-
-        $response->assertStatus(422);
-    }
-
     public function test_versement_refuse_si_part_deja_versee(): void
     {
         $org = Organization::factory()->create();
         $user = $this->utilisateur($org);
         ['commission' => $commission, 'partLivreur' => $part] = $this->makeCommissionAvecParts($org);
-        $part->update(['statut' => StatutCommission::VERSEE, 'montant_verse' => 3000]);
+        $part->update(['statut' => StatutCommission::PAYE, 'montant_verse' => 3000]);
 
         $response = $this->actingAs($user)->post(
             route('commissions.parts.versements.store', [$commission, $part]),
@@ -230,13 +211,13 @@ class VersementCommissionTest extends TestCase
         ]);
         $part->recalculStatut();
 
-        $this->assertEquals(StatutCommission::VERSEE, $part->fresh()->statut);
+        $this->assertEquals(StatutCommission::PAYE, $part->fresh()->statut);
 
         $this->actingAs($user)->delete(
             route('commissions.versements.destroy', $versement)
         );
 
-        $this->assertEquals(StatutCommission::EN_ATTENTE, $part->fresh()->statut);
+        $this->assertEquals(StatutCommission::IMPAYE, $part->fresh()->statut);
         $this->assertEquals(0.0, (float) $part->fresh()->montant_verse);
     }
 }
