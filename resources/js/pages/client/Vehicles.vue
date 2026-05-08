@@ -35,23 +35,9 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
         <div class="space-y-6">
             <div>
                 <h1 class="text-2xl font-semibold">Mes vehicules</h1>
-                <p class="mt-1 text-muted-foreground">
-                    Liste des vehicules rattaches a votre profil proprietaire.
-                </p>
+
             </div>
 
-            <div class="rounded-xl border border-border bg-card p-5">
-                <p class="text-sm text-muted-foreground">
-                    Total vehicules proprietaire: {{ owner_vehicules.length }}
-                </p>
-                <p class="mt-1 text-sm text-muted-foreground">
-                    {{
-                        actor.organization_name
-                            ? `Organisation: ${actor.organization_name}`
-                            : 'Organisation non rattachee'
-                    }}
-                </p>
-            </div>
 
             <div
                 v-if="!actor.proprietaire_id"

@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import ClientLayout from '@/layouts/ClientLayout.vue';
-import type { EarningsPayload, VehiculeOption } from '@/types/client-space';
+import type { EarningsPayload } from '@/types/client-space';
 import { Head, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
 defineProps<{
     earnings: EarningsPayload;
-    vehicules: VehiculeOption[];
 }>();
 
 const page = usePage();
@@ -53,18 +52,6 @@ function formatMoney(value: number): string {
                         {{ earnings.operations_count }} operation(s)
                     </p>
                 </div>
-            </div>
-
-            <div class="rounded-xl border border-border bg-card p-5">
-                <h2 class="text-lg font-semibold">Resume rapide</h2>
-                <p class="mt-2 text-sm text-muted-foreground">
-                    Vehicules rattaches a votre compte: {{ vehicules.length }}.
-                </p>
-                <p class="mt-1 text-sm text-muted-foreground">
-                    Utilisez le menu en haut pour proposer un vehicule,
-                    consulter les gains detaillees ou mettre a jour votre
-                    profil.
-                </p>
             </div>
         </div>
     </ClientLayout>

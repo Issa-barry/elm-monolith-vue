@@ -170,8 +170,7 @@ const paiementForm = reactive<PaiementForm>({
 });
 
 function openPaiement() {
-    paiementForm.montant =
-        props.kpis.impaye > 0 ? props.kpis.impaye : null;
+    paiementForm.montant = props.kpis.impaye > 0 ? props.kpis.impaye : null;
     paiementForm.mode_paiement = 'especes';
     paiementForm.note = '';
     paiementForm.processing = false;
