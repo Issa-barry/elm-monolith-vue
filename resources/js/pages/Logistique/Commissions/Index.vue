@@ -167,10 +167,8 @@ interface StatutBadge {
 
 function livreurStatuts(l: LivreurRow): StatutBadge[] {
     const badges: StatutBadge[] = [];
-    if (l.impaye > 0)
-        badges.push({ label: 'Impayé', dotClass: 'bg-red-500' });
-    if (l.paye > 0)
-        badges.push({ label: 'Payé', dotClass: 'bg-emerald-500' });
+    if (l.impaye > 0) badges.push({ label: 'Impayé', dotClass: 'bg-red-500' });
+    if (l.paye > 0) badges.push({ label: 'Payé', dotClass: 'bg-emerald-500' });
     return badges;
 }
 
@@ -376,9 +374,7 @@ function formatPhone(tel: string | null): string {
                                 </div>
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
-                                {{
-                                    formatGNF(l.impaye + l.paye)
-                                }}
+                                {{ formatGNF(l.impaye + l.paye) }}
                             </td>
                             <td
                                 class="px-4 py-3 text-right font-semibold tabular-nums"

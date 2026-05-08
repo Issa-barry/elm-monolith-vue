@@ -112,9 +112,9 @@ function formatGNF(val: number): string {
 }
 
 const statutDotColor: Record<string, string> = {
-    impaye:  'bg-red-500',
+    impaye: 'bg-red-500',
     partiel: 'bg-amber-500',
-    paye:    'bg-emerald-500',
+    paye: 'bg-emerald-500',
 };
 
 const roleLabels: Record<string, string> = {
@@ -235,12 +235,8 @@ function deleteVersement(versementId: number) {
     });
 }
 function isVersementDisabled(part: CommissionPart): boolean {
-    return (
-        part.montant_restant <= 0 ||
-        !can('ventes.update')
-    );
+    return part.montant_restant <= 0 || !can('ventes.update');
 }
-
 </script>
 
 <template>

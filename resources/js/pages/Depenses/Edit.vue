@@ -220,12 +220,22 @@ function submit() {
                         >
                             <template #option="{ option }">
                                 <div class="py-0.5">
-                                    <div class="font-medium leading-tight">{{ option.nom_vehicule }}</div>
-                                    <div class="mt-0.5 font-mono text-xs text-muted-foreground">{{ option.immatriculation }}</div>
+                                    <div class="leading-tight font-medium">
+                                        {{ option.nom_vehicule }}
+                                    </div>
+                                    <div
+                                        class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                    >
+                                        {{ option.immatriculation }}
+                                    </div>
                                 </div>
                             </template>
                             <template #empty>
-                                <div class="px-1 py-0.5 text-sm text-muted-foreground">Aucun véhicule trouvé</div>
+                                <div
+                                    class="px-1 py-0.5 text-sm text-muted-foreground"
+                                >
+                                    Aucun véhicule trouvé
+                                </div>
                             </template>
                         </AutoComplete>
                         <p

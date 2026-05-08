@@ -1655,10 +1655,7 @@ function activiteDotClass(action: string): string {
                         <ShieldX class="mr-1.5 h-3.5 w-3.5" />
                         Non, renvoyer pour correction
                     </Button>
-                    <Button
-                        size="sm"
-                        @click="validationEtape = 'montant'"
-                    >
+                    <Button size="sm" @click="validationEtape = 'montant'">
                         <ShieldCheck class="mr-1.5 h-3.5 w-3.5" />
                         Oui, générer la commission
                     </Button>

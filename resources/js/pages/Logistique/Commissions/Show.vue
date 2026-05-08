@@ -206,7 +206,6 @@ function formatGNF(val: number): string {
 function formatModePaiement(mode: string): string {
     return props.modes_paiement.find((m) => m.value === mode)?.label ?? mode;
 }
-
 </script>
 
 <template>

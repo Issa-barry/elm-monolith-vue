@@ -133,12 +133,20 @@ function filterList(list: BeneficiaireRow[], q: string): BeneficiaireRow[] {
     return list.filter((b) => {
         if (b.beneficiaire_nom.toLowerCase().includes(lowerQuery)) return true;
         if (phoneDigits.length >= 6 && b.telephone) {
-            if (b.telephone.replace(/\D/g, '').includes(phoneDigits)) return true;
+            if (b.telephone.replace(/\D/g, '').includes(phoneDigits))
+                return true;
         }
-        if (b.vehicules && b.vehicules.toLowerCase().includes(lowerQuery)) return true;
+        if (b.vehicules && b.vehicules.toLowerCase().includes(lowerQuery))
+            return true;
         if (isPureNumeric) {
-            const amounts = [b.total_net_cumule, b.total_verse, b.solde_restant, b.total_brut_cumule];
-            if (amounts.some((a) => String(Math.round(a)).includes(amountStr))) return true;
+            const amounts = [
+                b.total_net_cumule,
+                b.total_verse,
+                b.solde_restant,
+                b.total_brut_cumule,
+            ];
+            if (amounts.some((a) => String(Math.round(a)).includes(amountStr)))
+                return true;
         }
         return false;
     });
@@ -168,17 +176,17 @@ const kpi = computed(() => {
 // ── Couleurs statut ───────────────────────────────────────────────────────────
 
 const statutDotColor: Record<string, string> = {
-    impaye:  'bg-red-500',
+    impaye: 'bg-red-500',
     partiel: 'bg-amber-500',
-    paye:    'bg-emerald-500',
+    paye: 'bg-emerald-500',
     a_verser: 'bg-red-500',
-    solde:    'bg-emerald-500',
+    solde: 'bg-emerald-500',
 };
 
 const statutLabel: Record<string, string> = {
-    impaye:  'Impayé',
+    impaye: 'Impayé',
     partiel: 'Partiel',
-    paye:    'Payé',
+    paye: 'Payé',
     a_verser: 'Impayé',
     solde: 'Payé',
 };
