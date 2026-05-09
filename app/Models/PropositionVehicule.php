@@ -30,6 +30,7 @@ class PropositionVehicule extends Model
         'type_vehicule',
         'capacite_packs',
         'commentaire',
+        'photo_path',
         'statut',
         'decision_note',
         'traitee_at',

@@ -164,13 +164,15 @@ function getPeriodeData(): PeriodeResult {
 // ── setColorOptions ── copie exacte de RevenueOverviewWidget.vue (Apollo) ─────
 function setColorOptions() {
     const documentStyle = getComputedStyle(document.documentElement);
-    const textColor = documentStyle.getPropertyValue('--text-color');
-    const textColorSecondary = documentStyle.getPropertyValue(
-        '--text-color-secondary',
-    );
+    const textColor =
+        documentStyle.getPropertyValue('--p-text-color').trim() ||
+        (isDarkTheme.value ? '#e2e8f0' : '#0f172a');
+    const textColorSecondary =
+        documentStyle.getPropertyValue('--p-text-muted-color').trim() ||
+        (isDarkTheme.value ? '#94a3b8' : '#64748b');
     const surfaceBorder =
         documentStyle.getPropertyValue('--p-content-border-color').trim() ||
-        '#e2e8f0';
+        (isDarkTheme.value ? '#334155' : '#e2e8f0');
 
     const data = getPeriodeData();
 

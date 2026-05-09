@@ -1,19 +1,144 @@
 <script setup lang="ts">
 import ClientLayout from '@/layouts/ClientLayout.vue';
-import type { EarningsPayload, VehiculeOption } from '@/types/client-space';
-import { Head, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import type {
+    DashboardFiltersPayload,
+    EarningsPayload,
+    VehiculeOption,
+} from '@/types/client-space';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 
-defineProps<{
+interface StatusOption {
+    value: string;
+    label: string;
+}
+
+const props = defineProps<{
     earnings: EarningsPayload;
     vehicules: VehiculeOption[];
+    filters: DashboardFiltersPayload;
+    status_options: StatusOption[];
 }>();
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
 
+const periodOptions: Array<{
+    value: DashboardFiltersPayload['period'];
+    label: string;
+}> = [
+    { value: '7j', label: '7j' },
+    { value: '30j', label: '30j' },
+    { value: 'ce_mois', label: 'Ce mois' },
+    { value: 'mois_passe', label: 'Mois passe' },
+    { value: 'custom', label: 'Personnalise' },
+];
+
+const selectedPeriod = ref<DashboardFiltersPayload['period']>(
+    props.filters.period ?? 'ce_mois',
+);
+const selectedVehiculeId = ref(props.filters.vehicule_id ?? 'all');
+const selectedStatus = ref(props.filters.statut ?? 'all');
+const dateDebut = ref(props.filters.date_debut ?? '');
+const dateFin = ref(props.filters.date_fin ?? '');
+
+const hasActiveFilters = computed(
+    () =>
+        selectedPeriod.value !== 'ce_mois' ||
+        selectedVehiculeId.value !== 'all' ||
+        selectedStatus.value !== 'all',
+);
+
+const periodLabel = computed(() => {
+    switch (selectedPeriod.value) {
+        case '7j':
+            return '7 derniers jours';
+        case 'ce_mois':
+            return 'Ce mois';
+        case 'mois_passe':
+            return 'Mois passe';
+        case 'custom':
+            if (dateDebut.value && dateFin.value) {
+                return `Du ${formatDateFr(dateDebut.value)} au ${formatDateFr(dateFin.value)}`;
+            }
+            if (dateDebut.value) {
+                return `Depuis ${formatDateFr(dateDebut.value)}`;
+            }
+            if (dateFin.value) {
+                return `Jusqu'au ${formatDateFr(dateFin.value)}`;
+            }
+
+            return 'Periode personnalisee';
+        default:
+            return '30 derniers jours';
+    }
+});
+
+function formatDateFr(value: string): string {
+    return new Intl.DateTimeFormat('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+    }).format(new Date(value));
+}
+
 function formatMoney(value: number): string {
     return `${new Intl.NumberFormat('fr-FR').format(value ?? 0)} GNF`;
+}
+
+function applyFilters() {
+    router.get(
+        '/client/dashboard',
+        {
+            period: selectedPeriod.value,
+            date_debut:
+                selectedPeriod.value === 'custom'
+                    ? dateDebut.value || undefined
+                    : undefined,
+            date_fin:
+                selectedPeriod.value === 'custom'
+                    ? dateFin.value || undefined
+                    : undefined,
+            vehicule_id:
+                selectedVehiculeId.value === 'all'
+                    ? undefined
+                    : selectedVehiculeId.value,
+            statut:
+                selectedStatus.value === 'all'
+                    ? undefined
+                    : selectedStatus.value,
+        },
+        { preserveScroll: true, preserveState: true, replace: true },
+    );
+}
+
+function onPeriodChange(period: DashboardFiltersPayload['period']) {
+    selectedPeriod.value = period;
+    if (period !== 'custom') {
+        dateDebut.value = '';
+        dateFin.value = '';
+    }
+    applyFilters();
+}
+
+function onCustomDateChange() {
+    if (selectedPeriod.value !== 'custom') {
+        selectedPeriod.value = 'custom';
+    }
+    applyFilters();
+}
+
+function resetFilters() {
+    selectedPeriod.value = 'ce_mois';
+    selectedVehiculeId.value = 'all';
+    selectedStatus.value = 'all';
+    dateDebut.value = '';
+    dateFin.value = '';
+    router.get(
+        '/client/dashboard',
+        {},
+        { preserveScroll: true, replace: true },
+    );
 }
 </script>
 
@@ -31,11 +156,118 @@ function formatMoney(value: number): string {
                 </p>
             </div>
 
+            <div class="rounded-xl border border-border bg-card p-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <p class="text-sm font-medium text-foreground">Filtres</p>
+                    <button
+                        v-if="hasActiveFilters"
+                        type="button"
+                        class="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+                        @click="resetFilters"
+                    >
+                        Reinitialiser
+                    </button>
+                </div>
+
+                <div class="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+                    <div class="space-y-1">
+                        <label class="text-xs font-medium text-muted-foreground"
+                            >Periode</label
+                        >
+                        <select
+                            v-model="selectedPeriod"
+                            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                            @change="
+                                onPeriodChange(
+                                    selectedPeriod as DashboardFiltersPayload['period'],
+                                )
+                            "
+                        >
+                            <option
+                                v-for="option in periodOptions"
+                                :key="option.value"
+                                :value="option.value"
+                            >
+                                {{ option.label }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-xs font-medium text-muted-foreground"
+                            >Vehicule</label
+                        >
+                        <select
+                            v-model="selectedVehiculeId"
+                            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                            @change="applyFilters"
+                        >
+                            <option value="all">Tous les vehicules</option>
+                            <option
+                                v-for="vehicule in vehicules"
+                                :key="vehicule.id"
+                                :value="String(vehicule.id)"
+                            >
+                                {{ vehicule.nom_vehicule }} ({{
+                                    vehicule.immatriculation ?? '-'
+                                }})
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-xs font-medium text-muted-foreground"
+                            >Statut paiement</label
+                        >
+                        <select
+                            v-model="selectedStatus"
+                            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                            @change="applyFilters"
+                        >
+                            <option value="all">Tous les statuts</option>
+                            <option
+                                v-for="status in status_options"
+                                :key="status.value"
+                                :value="status.value"
+                            >
+                                {{ status.label }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-xs font-medium text-muted-foreground"
+                            >Du</label
+                        >
+                        <input
+                            v-model="dateDebut"
+                            type="date"
+                            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                            @change="onCustomDateChange"
+                        />
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-medium text-muted-foreground"
+                            >Au</label
+                        >
+                        <input
+                            v-model="dateFin"
+                            type="date"
+                            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                            @change="onCustomDateChange"
+                        />
+                    </div>
+                </div>
+            </div>
+
             <div class="grid gap-4 md:grid-cols-3">
                 <div class="rounded-xl border border-border bg-card p-5">
                     <p class="text-sm text-muted-foreground">Gains cumules</p>
                     <p class="mt-2 text-2xl font-semibold text-foreground">
                         {{ formatMoney(earnings.total_earned) }}
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        {{ periodLabel }}
                     </p>
                 </div>
                 <div class="rounded-xl border border-border bg-card p-5">
@@ -43,28 +275,38 @@ function formatMoney(value: number): string {
                     <p class="mt-2 text-2xl font-semibold text-foreground">
                         {{ formatMoney(earnings.total_paid) }}
                     </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        {{ periodLabel }}
+                    </p>
                 </div>
                 <div class="rounded-xl border border-border bg-card p-5">
-                    <p class="text-sm text-muted-foreground">Reste à payer</p>
+                    <p class="text-sm text-muted-foreground">Reste a payer</p>
                     <p class="mt-2 text-2xl font-semibold text-foreground">
                         {{ formatMoney(earnings.balance) }}
                     </p>
                     <p class="mt-1 text-xs text-muted-foreground">
-                        {{ earnings.operations_count }} operation(s)
+                        {{ earnings.operations_count }} operation(s) -
+                        {{ periodLabel }}
                     </p>
                 </div>
             </div>
 
-            <div class="rounded-xl border border-border bg-card p-5">
-                <h2 class="text-lg font-semibold">Resume rapide</h2>
-                <p class="mt-2 text-sm text-muted-foreground">
-                    Vehicules rattaches a votre compte: {{ vehicules.length }}.
+            <div
+                v-if="earnings.operations_count === 0"
+                class="rounded-xl border border-dashed border-border bg-card p-5"
+            >
+                <p class="text-sm font-medium text-foreground">
+                    Aucune operation sur la periode choisie.
                 </p>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Utilisez le menu en haut pour proposer un vehicule,
-                    consulter les gains detaillees ou mettre a jour votre
-                    profil.
+                    Ajustez les filtres ou consultez le releve detaille.
                 </p>
+                <Link
+                    href="/client/gains"
+                    class="mt-3 inline-flex rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                    Voir tous les gains
+                </Link>
             </div>
         </div>
     </ClientLayout>
