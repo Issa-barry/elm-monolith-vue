@@ -72,25 +72,6 @@ function submitProposal() {
                 </p>
             </div>
 
-            <div class="rounded-xl border border-border bg-card p-5">
-                <div class="flex flex-wrap items-center gap-2">
-                    <span
-                        v-for="profile in actor.profiles"
-                        :key="profile"
-                        class="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
-                    >
-                        {{ profile }}
-                    </span>
-                    <span class="text-sm text-muted-foreground">
-                        {{
-                            actor.organization_name
-                                ? `Organisation: ${actor.organization_name}`
-                                : 'Organisation non rattachee'
-                        }}
-                    </span>
-                </div>
-            </div>
-
             <div
                 v-if="flash?.success"
                 class="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300"

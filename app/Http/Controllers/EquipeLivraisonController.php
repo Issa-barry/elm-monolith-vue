@@ -32,7 +32,7 @@ class EquipeLivraisonController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
         $this->authorize('create', EquipeLivraison::class);
 
@@ -42,6 +42,7 @@ class EquipeLivraisonController extends Controller
             'proprietaires' => $this->proprietairesOptions($orgId),
             'vehicules' => $this->vehiculesOptions($orgId),
             'currentSiteName' => $this->currentSiteName(),
+            'initialVehiculeId' => $request->input('vehicule_id'),
         ]);
     }
 
@@ -108,6 +109,8 @@ class EquipeLivraisonController extends Controller
                 'montant_par_pack_proprietaire' => $isExterne ? $montantProp : null,
                 'taux_commission_proprietaire' => $isExterne ? $tauxProp : 0.0,
             ]);
+
+            Vehicule::whereKey($data['vehicule_id'])->update(['is_active' => true]);
 
             foreach ($data['membres'] as $index => $m) {
                 $livreur = $this->resolveOrCreateLivreur($m, $orgId);
@@ -204,7 +207,9 @@ class EquipeLivraisonController extends Controller
         $this->validateUniquePhones($data['membres']);
         $this->validateMembresExclusivite($data['membres'], $orgId, $equipes_livraison->id);
 
-        DB::transaction(function () use ($data, $orgId, $commission, $montantProp, $isExterne, $equipes_livraison) {
+        $oldVehiculeId = $equipes_livraison->vehicule_id;
+
+        DB::transaction(function () use ($data, $orgId, $commission, $montantProp, $isExterne, $equipes_livraison, $oldVehiculeId) {
             $tauxProp = $commission > 0 ? round($montantProp / $commission * 100, 2) : 0.0;
 
             $equipes_livraison->update([
@@ -216,6 +221,11 @@ class EquipeLivraisonController extends Controller
                 'montant_par_pack_proprietaire' => $isExterne ? $montantProp : null,
                 'taux_commission_proprietaire' => $isExterne ? $tauxProp : 0.0,
             ]);
+
+            if ($oldVehiculeId && $oldVehiculeId !== $data['vehicule_id']) {
+                Vehicule::whereKey($oldVehiculeId)->update(['is_active' => false]);
+            }
+            Vehicule::whereKey($data['vehicule_id'])->update(['is_active' => true]);
 
             $equipes_livraison->membres()->delete();
 
@@ -242,6 +252,10 @@ class EquipeLivraisonController extends Controller
     public function destroy(EquipeLivraison $equipes_livraison): RedirectResponse
     {
         $this->authorize('delete', $equipes_livraison);
+
+        if ($equipes_livraison->vehicule_id) {
+            Vehicule::whereKey($equipes_livraison->vehicule_id)->update(['is_active' => false]);
+        }
 
         $equipes_livraison->membres()->delete();
         $equipes_livraison->delete();
@@ -308,7 +322,6 @@ class EquipeLivraisonController extends Controller
     {
         return Vehicule::with('proprietaire')
             ->where('organization_id', $orgId)
-            ->where('is_active', true)
             ->whereNull('deleted_at')
             ->where(function ($q) use ($currentEquipeId) {
                 $q->whereDoesntHave('equipe');

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Client;
 
+use App\Enums\StatutCommission;
 use App\Enums\StatutPropositionVehicule;
 use App\Enums\TypeVehicule;
 use App\Http\Controllers\Controller;
@@ -15,6 +16,8 @@ use App\Models\PropositionVehicule;
 use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\ImageService;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -26,12 +29,21 @@ class ClientDashboardController extends Controller
 {
     public function index(Request $request): Response
     {
-        $payload = $this->dashboardPayload($request->user());
+        $filters = $this->resolveDashboardFilters($request);
+        $payload = $this->dashboardPayload(
+            $request->user(),
+            $filters['date_debut'],
+            $filters['date_fin'],
+            $filters['vehicule_id'],
+            $filters['statut']
+        );
 
         return Inertia::render('client/Dashboard', [
             'actor' => $payload['actor'],
             'earnings' => $payload['earnings'],
             'vehicules' => $payload['vehicules'],
+            'status_options' => StatutCommission::options(),
+            'filters' => $filters,
         ]);
     }
 
@@ -57,8 +69,8 @@ class ClientDashboardController extends Controller
 
         return Inertia::render('client/VehicleProposals', [
             'actor' => $payload['actor'],
-            'type_vehicule_options' => $payload['type_vehicule_options'],
             'vehicle_proposals' => $payload['vehicle_proposals'],
+            'type_vehicule_options' => $payload['type_vehicule_options'],
         ]);
     }
 
@@ -69,6 +81,7 @@ class ClientDashboardController extends Controller
         return Inertia::render('client/Vehicles', [
             'actor' => $payload['actor'],
             'owner_vehicules' => $payload['owner_vehicules'],
+            'type_vehicule_options' => $payload['type_vehicule_options'],
         ]);
     }
 
@@ -97,23 +110,24 @@ class ClientDashboardController extends Controller
         [$organizationId, $client, $proprietaire, $livreur] = $this->resolveActorContext($user);
 
         $validated = $request->validate([
-            'nom_vehicule' => ['required', 'string', 'max:100'],
+            'nom_vehicule' => ['nullable', 'string', 'max:100'],
             'marque' => ['nullable', 'string', 'max:100'],
             'modele' => ['nullable', 'string', 'max:100'],
             'immatriculation' => ['required', 'string', 'max:30'],
             'type_vehicule' => ['required', Rule::in(TypeVehicule::allowedValues())],
-            'capacite_packs' => ['nullable', 'integer', 'min:1', 'max:99999'],
             'commentaire' => ['nullable', 'string', 'max:500'],
+            'photo' => ['required', 'image', 'max:5120'],
         ], [
-            'nom_vehicule.required' => 'Le nom du vehicule est obligatoire.',
             'immatriculation.required' => "L'immatriculation est obligatoire.",
             'type_vehicule.required' => 'Le type de vehicule est obligatoire.',
             'type_vehicule.in' => 'Le type de vehicule est invalide.',
-            'capacite_packs.min' => 'La capacite doit etre superieure a 0.',
-            'capacite_packs.max' => 'La capacite semble trop elevee.',
+            'photo.required' => 'La photo du vehicule est obligatoire.',
+            'photo.image' => 'Le fichier doit etre une image.',
+            'photo.max' => 'La photo ne doit pas depasser 5 Mo.',
         ]);
 
         $immatriculation = mb_strtoupper(trim((string) $validated['immatriculation']), 'UTF-8');
+        $photoPath = (new ImageService)->storeAsWebp($request->file('photo'), 'propositions-vehicules');
 
         $duplicate = PropositionVehicule::query()
             ->where('immatriculation', $immatriculation)
@@ -141,30 +155,65 @@ class ClientDashboardController extends Controller
             'livreur_id' => $livreur?->id,
             'nom_contact' => $user->name,
             'telephone_contact' => $user->telephone,
-            'nom_vehicule' => trim((string) $validated['nom_vehicule']),
+            'nom_vehicule' => $this->nullableTrim($validated['nom_vehicule'] ?? null),
             'marque' => $this->nullableTrim($validated['marque'] ?? null),
             'modele' => $this->nullableTrim($validated['modele'] ?? null),
             'immatriculation' => $immatriculation,
             'type_vehicule' => $validated['type_vehicule'],
-            'capacite_packs' => $validated['capacite_packs'] ?? null,
+            'capacite_packs' => TypeVehicule::from($validated['type_vehicule'])->defaultCapacitePacks(),
             'commentaire' => $this->nullableTrim($validated['commentaire'] ?? null),
+            'photo_path' => $photoPath,
             'statut' => StatutPropositionVehicule::PENDING->value,
         ]);
 
-        return redirect()
-            ->route('client.propositions.index')
-            ->with('success', 'Votre proposition de vehicule a ete envoyee.');
+        return redirect()->route('client.propositions.index')->with('success', 'Votre proposition de vehicule a ete envoyee.');
     }
 
-    private function dashboardPayload(User $user, ?string $dateDebut = null, ?string $dateFin = null): array
-    {
+    private function dashboardPayload(
+        User $user,
+        ?string $dateDebut = null,
+        ?string $dateFin = null,
+        ?string $vehiculeId = null,
+        ?string $statut = null
+    ): array {
         [$organizationId, $client, $proprietaire, $livreur] = $this->resolveActorContext($user);
 
         $vehicules = $this->vehiculesPartenaires($organizationId, $proprietaire, $livreur);
+        $vehiculeIdsFiltres = $vehicules->pluck('id')->map(fn ($id) => (string) $id)->values()->all();
+        $selectedVehiculeId = $vehiculeId !== null && in_array($vehiculeId, $vehiculeIdsFiltres, true)
+            ? $vehiculeId
+            : null;
+        $vehiculeIdsContrainte = null;
+        if ($selectedVehiculeId !== null) {
+            $vehiculeIdsContrainte = [$selectedVehiculeId];
+        }
+
         $ownerVehicules = $this->vehiculesDuProprietaire($organizationId, $proprietaire);
-        $partsVentes = $this->partsVentes($organizationId, $proprietaire, $livreur, $dateDebut, $dateFin);
-        $partsLogistiques = $this->partsLogistiques($organizationId, $proprietaire, $livreur, $dateDebut, $dateFin);
-        $fraisParVehicule = $this->fraisDepensesParVehicule($organizationId, $proprietaire, $dateDebut, $dateFin);
+        $partsVentes = $this->partsVentes(
+            $organizationId,
+            $proprietaire,
+            $livreur,
+            $dateDebut,
+            $dateFin,
+            $statut,
+            $vehiculeIdsContrainte
+        );
+        $partsLogistiques = $this->partsLogistiques(
+            $organizationId,
+            $proprietaire,
+            $livreur,
+            $dateDebut,
+            $dateFin,
+            $statut,
+            $vehiculeIdsContrainte
+        );
+        $fraisParVehicule = $this->fraisDepensesParVehicule(
+            $organizationId,
+            $proprietaire,
+            $dateDebut,
+            $dateFin,
+            $vehiculeIdsContrainte
+        );
         $fraisTotal = (float) array_sum($fraisParVehicule);
 
         $profileLabels = collect();
@@ -187,7 +236,9 @@ class ClientDashboardController extends Controller
                 'nom_vehicule' => $vehicule->nom_vehicule,
                 'immatriculation' => $vehicule->immatriculation,
                 'type_label' => $vehicule->type_label,
+                'is_active' => (bool) $vehicule->is_active,
                 'capacite_packs' => $vehicule->capacite_packs,
+                'photo_url' => $vehicule->photo_url,
             ])
             ->values()
             ->all();
@@ -198,6 +249,7 @@ class ClientDashboardController extends Controller
                 'nom_vehicule' => $vehicule->nom_vehicule,
                 'immatriculation' => $vehicule->immatriculation,
                 'type_label' => $vehicule->type_label,
+                'is_active' => (bool) $vehicule->is_active,
                 'capacite_packs' => $vehicule->capacite_packs,
                 'photo_url' => $vehicule->photo_url,
             ])
@@ -377,8 +429,15 @@ class ClientDashboardController extends Controller
     /**
      * @return Collection<int, CommissionPart>
      */
-    private function partsVentes(?string $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur, ?string $dateDebut = null, ?string $dateFin = null): Collection
-    {
+    private function partsVentes(
+        ?string $organizationId,
+        ?Proprietaire $proprietaire,
+        ?Livreur $livreur,
+        ?string $dateDebut = null,
+        ?string $dateFin = null,
+        ?string $statut = null,
+        ?array $vehiculeIds = null
+    ): Collection {
         if ($organizationId === null || ($proprietaire === null && $livreur === null)) {
             return collect();
         }
@@ -392,6 +451,15 @@ class ClientDashboardController extends Controller
             // tous les statuts sont actifs (impaye/partiel/paye)
             ->when($dateDebut, fn ($q) => $q->whereDate('created_at', '>=', $dateDebut))
             ->when($dateFin, fn ($q) => $q->whereDate('created_at', '<=', $dateFin))
+            ->when($statut, fn ($q) => $q->where('statut', $statut))
+            ->when($vehiculeIds !== null, function ($q) use ($vehiculeIds) {
+                if ($vehiculeIds === []) {
+                    $q->whereRaw('1 = 0');
+
+                    return;
+                }
+                $q->whereHas('commission', fn ($sq) => $sq->whereIn('vehicule_id', $vehiculeIds));
+            })
             ->where(function ($query) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {
                     $query->orWhere(function ($sq) use ($proprietaire) {
@@ -414,8 +482,15 @@ class ClientDashboardController extends Controller
     /**
      * @return Collection<int, CommissionLogistiquePart>
      */
-    private function partsLogistiques(?string $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur, ?string $dateDebut = null, ?string $dateFin = null): Collection
-    {
+    private function partsLogistiques(
+        ?string $organizationId,
+        ?Proprietaire $proprietaire,
+        ?Livreur $livreur,
+        ?string $dateDebut = null,
+        ?string $dateFin = null,
+        ?string $statut = null,
+        ?array $vehiculeIds = null
+    ): Collection {
         if ($organizationId === null || ($proprietaire === null && $livreur === null)) {
             return collect();
         }
@@ -429,6 +504,15 @@ class ClientDashboardController extends Controller
             // tous les statuts sont actifs (impaye/partiel/paye)
             ->when($dateDebut, fn ($q) => $q->whereDate('created_at', '>=', $dateDebut))
             ->when($dateFin, fn ($q) => $q->whereDate('created_at', '<=', $dateFin))
+            ->when($statut, fn ($q) => $q->where('statut', $statut))
+            ->when($vehiculeIds !== null, function ($q) use ($vehiculeIds) {
+                if ($vehiculeIds === []) {
+                    $q->whereRaw('1 = 0');
+
+                    return;
+                }
+                $q->whereHas('commission', fn ($sq) => $sq->whereIn('vehicule_id', $vehiculeIds));
+            })
             ->where(function ($query) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {
                     $query->orWhere(function ($sq) use ($proprietaire) {
@@ -542,17 +626,33 @@ class ClientDashboardController extends Controller
     /**
      * @return array<string, float> vehicule_id => frais total approuvé
      */
-    private function fraisDepensesParVehicule(?string $organizationId, ?Proprietaire $proprietaire, ?string $dateDebut = null, ?string $dateFin = null): array
-    {
+    private function fraisDepensesParVehicule(
+        ?string $organizationId,
+        ?Proprietaire $proprietaire,
+        ?string $dateDebut = null,
+        ?string $dateFin = null,
+        ?array $vehiculeIds = null
+    ): array {
         if ($organizationId === null || $proprietaire === null) {
             return [];
         }
 
-        $vehiculeIds = Vehicule::where('proprietaire_id', $proprietaire->id)
+        $vehiculeIdsOwner = Vehicule::where('proprietaire_id', $proprietaire->id)
             ->where('organization_id', $organizationId)
-            ->pluck('id');
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->values();
+        $vehiculeIdsCibles = $vehiculeIdsOwner;
 
-        return Depense::whereIn('vehicule_id', $vehiculeIds)
+        if ($vehiculeIds !== null) {
+            $vehiculeIdsCibles = $vehiculeIdsOwner->intersect($vehiculeIds)->values();
+        }
+
+        if ($vehiculeIdsCibles->isEmpty()) {
+            return [];
+        }
+
+        return Depense::whereIn('vehicule_id', $vehiculeIdsCibles->all())
             ->where('statut', 'approuve')
             ->where('organization_id', $organizationId)
             ->when($dateDebut, fn ($q) => $q->whereDate('date_depense', '>=', $dateDebut))
@@ -562,6 +662,60 @@ class ClientDashboardController extends Controller
             ->pluck('total', 'vehicule_id')
             ->map(fn ($v) => (float) $v)
             ->toArray();
+    }
+
+    private function resolveDashboardFilters(Request $request): array
+    {
+        $validated = $request->validate([
+            'period' => ['nullable', Rule::in(['7j', '30j', 'ce_mois', 'mois_passe', 'custom'])],
+            'date_debut' => ['nullable', 'date'],
+            'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],
+            'vehicule_id' => ['nullable', 'string'],
+            'statut' => ['nullable', Rule::in(array_map(fn (StatutCommission $s) => $s->value, StatutCommission::cases()))],
+        ]);
+
+        $period = $validated['period'] ?? 'ce_mois';
+        $dateDebut = $validated['date_debut'] ?? null;
+        $dateFin = $validated['date_fin'] ?? null;
+
+        if ($period !== 'custom') {
+            [$dateDebut, $dateFin] = $this->periodToDates($period);
+        }
+
+        return [
+            'period' => $period,
+            'date_debut' => $dateDebut,
+            'date_fin' => $dateFin,
+            'vehicule_id' => $validated['vehicule_id'] ?? null,
+            'statut' => $validated['statut'] ?? null,
+        ];
+    }
+
+    /**
+     * @return array{0:string,1:string}
+     */
+    private function periodToDates(string $period): array
+    {
+        $today = Carbon::today();
+
+        return match ($period) {
+            '7j' => [
+                $today->copy()->subDays(6)->toDateString(),
+                $today->toDateString(),
+            ],
+            'ce_mois' => [
+                $today->copy()->startOfMonth()->toDateString(),
+                $today->toDateString(),
+            ],
+            'mois_passe' => [
+                $today->copy()->subMonthNoOverflow()->startOfMonth()->toDateString(),
+                $today->copy()->subMonthNoOverflow()->endOfMonth()->toDateString(),
+            ],
+            default => [
+                $today->copy()->subDays(29)->toDateString(),
+                $today->toDateString(),
+            ],
+        };
     }
 
     private function releve(Collection $partsVentes, Collection $partsLogistiques): array

@@ -21,10 +21,11 @@ interface VehiculeOption {
     proprietaire_nom: string | null;
 }
 
-defineProps<{
+const props = defineProps<{
     proprietaires: ProprietaireOption[];
     vehicules: VehiculeOption[];
     currentSiteName: string;
+    initialVehiculeId?: string | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -36,7 +37,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: '',
     is_active: true,
-    vehicule_id: null as string | null,
+    vehicule_id: (props.initialVehiculeId ?? null) as string | null,
     proprietaire_id: null as string | null,
     commission_unitaire_par_pack: 0 as number,
     montant_par_pack_proprietaire: null as number | null,
