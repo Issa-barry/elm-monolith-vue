@@ -61,6 +61,16 @@ const emit = defineEmits<{ submit: [] }>();
 const vehiculeSelected = ref<VehiculeOption | null>(
     props.vehicules.find((v) => v.value === props.form.vehicule_id) ?? null,
 );
+
+if (
+    !props.form.proprietaire_id &&
+    vehiculeSelected.value?.categorie === 'externe' &&
+    vehiculeSelected.value?.proprietaire_id
+) {
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.proprietaire_id = vehiculeSelected.value.proprietaire_id;
+}
+
 const vehiculeSuggests = ref<VehiculeOption[]>([]);
 
 function searchVehicule(event: { query: string }) {

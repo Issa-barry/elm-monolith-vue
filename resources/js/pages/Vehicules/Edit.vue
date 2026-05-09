@@ -28,6 +28,7 @@ interface VehiculeData {
     pris_en_charge_par_usine: boolean;
     photo_url: string | null;
     is_active: boolean;
+    equipe_id: number | null;
 }
 
 const props = defineProps<{
@@ -132,6 +133,7 @@ function submit() {
                 :types="types"
                 :photo-url="vehicule.photo_url"
                 :current-site-name="currentSiteName"
+                :show-status-field="!!vehicule.equipe_id"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />
