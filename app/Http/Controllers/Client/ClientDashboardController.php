@@ -67,7 +67,7 @@ class ClientDashboardController extends Controller
     {
         $payload = $this->dashboardPayload($request->user());
 
-        return Inertia::render('client/Proposals', [
+        return Inertia::render('client/VehicleProposals', [
             'actor' => $payload['actor'],
             'vehicle_proposals' => $payload['vehicle_proposals'],
             'type_vehicule_options' => $payload['type_vehicule_options'],

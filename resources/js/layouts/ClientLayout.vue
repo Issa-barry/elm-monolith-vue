@@ -77,7 +77,9 @@ onMounted(() => {
         <header
             class="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur"
         >
-            <div class="mx-auto grid h-14 max-w-5xl grid-cols-3 items-center px-4">
+            <div
+                class="mx-auto grid h-14 max-w-5xl grid-cols-3 items-center px-4"
+            >
                 <Link
                     :href="home()"
                     class="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-80"
