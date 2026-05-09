@@ -41,6 +41,7 @@ class VehiculeController extends Controller
             'proprietaire_telephone' => $v->proprietaire?->telephone,
             'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
             'agence_nom' => $agence?->nom,
+            'equipe_id' => $equipe?->id,
             'equipe_nom' => $equipe?->nom,
             'livreur_principal_nom' => $membres->first()?->livreur
                 ? trim($membres->first()->livreur->prenom.' '.$membres->first()->livreur->nom)
@@ -147,6 +148,7 @@ class VehiculeController extends Controller
         }
 
         unset($data['photo']);
+        $data['is_active'] = false; // inactif jusqu'à attribution d'une équipe
         $vehicule = Vehicule::create([...$data, 'organization_id' => $orgId]);
 
         return redirect()->route('vehicules.edit', $vehicule)
@@ -330,6 +332,12 @@ class VehiculeController extends Controller
 
         unset($data['photo']);
         $vehicule->update($data);
+
+        // Un véhicule sans équipe ne peut pas être actif
+        $vehicule->load('equipe');
+        if (! $vehicule->equipe) {
+            $vehicule->update(['is_active' => false]);
+        }
 
         return redirect()->route('vehicules.edit', $vehicule)
             ->with('success', 'Véhicule mis à jour avec succès.');

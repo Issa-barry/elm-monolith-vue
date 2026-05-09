@@ -5,7 +5,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/vue3';
-import { ArrowLeft, Car, CheckCircle, Pencil } from 'lucide-vue-next';
+import { ArrowLeft, Car, CheckCircle, Pencil, Plus } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 interface EquipeMembre {
@@ -32,6 +32,7 @@ interface VehiculeData {
     capacite_packs: number | null;
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
+    equipe_id: string | null;
     equipe_nom: string | null;
     equipe_membres: EquipeMembre[];
     pris_en_charge_par_usine: boolean;
@@ -207,11 +208,39 @@ function formatGNF(val: number): string {
             <div class="grid gap-4 sm:grid-cols-2 sm:gap-6">
                 <!-- Affectation -->
                 <div class="rounded-xl border bg-card p-4 sm:p-5">
-                    <h3
-                        class="mb-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                    >
-                        Affectation
-                    </h3>
+                    <div class="mb-4 flex items-center justify-between">
+                        <h3
+                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
+                            Affectation
+                        </h3>
+                        <Link
+                            v-if="can('vehicules.update') && vehicule.equipe_id"
+                            :href="`/equipes-livraison/${vehicule.equipe_id}/edit`"
+                        >
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-7 gap-1 px-2.5 text-xs"
+                            >
+                                <Pencil class="h-3 w-3" />
+                                Modifier l'équipe
+                            </Button>
+                        </Link>
+                        <Link
+                            v-else-if="can('vehicules.update')"
+                            :href="`/equipes-livraison/create?vehicule_id=${vehicule.id}`"
+                        >
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-7 gap-1 px-2.5 text-xs"
+                            >
+                                <Plus class="h-3 w-3" />
+                                Ajouter une équipe
+                            </Button>
+                        </Link>
+                    </div>
                     <dl class="space-y-3">
                         <div>
                             <dt class="text-xs text-muted-foreground">

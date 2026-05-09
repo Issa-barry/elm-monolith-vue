@@ -13,6 +13,8 @@ use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -87,6 +89,8 @@ class ClientDashboardTest extends TestCase
             'telephone' => $user->telephone,
         ]);
 
+        Storage::fake('public');
+
         $this->actingAs($user)
             ->post(route('client.propositions.store'), [
                 'nom_vehicule' => 'Camion Partenaire',
@@ -94,6 +98,7 @@ class ClientDashboardTest extends TestCase
                 'type_vehicule' => 'camion',
                 'capacite_packs' => 180,
                 'commentaire' => 'Disponible immediatement.',
+                'photo' => UploadedFile::fake()->image('vehicule.jpg'),
             ])
             ->assertRedirect(route('client.propositions.index'));
 

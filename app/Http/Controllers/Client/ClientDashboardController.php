@@ -63,9 +63,15 @@ class ClientDashboardController extends Controller
         ]);
     }
 
-    public function proposals(Request $request): RedirectResponse
+    public function proposals(Request $request): Response
     {
-        return redirect()->route('client.vehicles', ['openProposal' => 1]);
+        $payload = $this->dashboardPayload($request->user());
+
+        return Inertia::render('client/Proposals', [
+            'actor' => $payload['actor'],
+            'vehicle_proposals' => $payload['vehicle_proposals'],
+            'type_vehicule_options' => $payload['type_vehicule_options'],
+        ]);
     }
 
     public function vehicles(Request $request): Response
@@ -160,7 +166,7 @@ class ClientDashboardController extends Controller
             'statut' => StatutPropositionVehicule::PENDING->value,
         ]);
 
-        return back()->with('success', 'Votre proposition de vehicule a ete envoyee.');
+        return redirect()->route('client.propositions.index')->with('success', 'Votre proposition de vehicule a ete envoyee.');
     }
 
     private function dashboardPayload(
