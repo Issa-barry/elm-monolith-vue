@@ -99,9 +99,9 @@ class VehiculeTest extends TestCase
     {
         $response = $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
-                'nom_vehicule' => 'Moto 01',
-                'immatriculation' => 'MO-001-GN',
-                'type_vehicule' => 'moto',
+                'nom_vehicule' => 'Tricycle 01',
+                'immatriculation' => 'TC-TEST-GN',
+                'type_vehicule' => 'tricycle',
                 'categorie' => 'interne',
                 'capacite_packs' => 50,
                 'is_active' => true,

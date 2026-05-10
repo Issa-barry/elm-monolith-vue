@@ -102,11 +102,10 @@ class CommissionPaymentService
                 'livreur_id,
                  MAX(beneficiaire_nom) AS beneficiaire_nom,
                  SUM(CASE WHEN statut IN (?,?) THEN CASE WHEN montant_net - montant_verse > 0 THEN montant_net - montant_verse ELSE 0 END ELSE 0 END) AS impaye,
-                 SUM(CASE WHEN statut = ? THEN montant_net ELSE 0 END) AS paye',
+                 SUM(montant_verse) AS paye',
                 [
                     StatutCommission::IMPAYE->value,
                     StatutCommission::PARTIEL->value,
-                    StatutCommission::PAYE->value,
                 ]
             )
             ->where('type_beneficiaire', 'livreur')
@@ -271,11 +270,10 @@ class CommissionPaymentService
                  COALESCE(livreur_id, proprietaire_id) AS beneficiary_id,
                  beneficiaire_nom,
                  SUM(CASE WHEN statut IN (?,?) THEN CASE WHEN montant_net - montant_verse > 0 THEN montant_net - montant_verse ELSE 0 END ELSE 0 END) AS impaye,
-                 SUM(CASE WHEN statut = ? THEN montant_net ELSE 0 END) AS paye',
+                 SUM(montant_verse) AS paye',
                 [
                     StatutCommission::IMPAYE->value,
                     StatutCommission::PARTIEL->value,
-                    StatutCommission::PAYE->value,
                 ]
             )
             ->whereHas('commission', function ($q) use ($vehicule) {
