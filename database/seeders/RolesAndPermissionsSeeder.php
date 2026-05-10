@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\MatriculeService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Permission;
@@ -202,6 +203,7 @@ class RolesAndPermissionsSeeder extends Seeder
             ]);
 
             $user->syncRoles([$data['role']]);
+            app(MatriculeService::class)->assignForUser($user);
         }
 
         // ── 5. Résumé console ─────────────────────────────────────────────────

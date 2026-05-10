@@ -11,8 +11,8 @@ enum TypeVehicule: string
     public function label(): string
     {
         return match ($this) {
-            self::CAMION   => 'Camion',
-            self::MINIBUS  => 'Minibus',
+            self::CAMION => 'Camion',
+            self::MINIBUS => 'Minibus',
             self::TRICYCLE => 'Tricycle',
         };
     }
@@ -20,8 +20,8 @@ enum TypeVehicule: string
     public function defaultCapacitePacks(): int
     {
         return match ($this) {
-            self::CAMION   => 200,
-            self::MINIBUS  => 80,
+            self::CAMION => 200,
+            self::MINIBUS => 80,
             self::TRICYCLE => 30,
         };
     }
@@ -34,8 +34,8 @@ enum TypeVehicule: string
     public static function options(): array
     {
         return array_map(fn ($case) => [
-            'value'           => $case->value,
-            'label'           => $case->label(),
+            'value' => $case->value,
+            'label' => $case->label(),
             'capacite_defaut' => $case->defaultCapacitePacks(),
         ], self::cases());
     }

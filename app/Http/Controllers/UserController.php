@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\MatriculeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -102,6 +103,7 @@ class UserController extends Controller
                     'code_phone_pays' => ($u->code_pays && isset(USER_PAYS[$u->code_pays]))
                         ? USER_PAYS[$u->code_pays][1]
                         : null,
+                    'matricule' => $u->matricule,
                     'is_active' => $u->is_active,
                     'roles' => $u->getRoleNames(),
                     'site' => $defaultSite ? "{$defaultSite->nom} ({$defaultSite->code})" : null,
@@ -186,6 +188,8 @@ class UserController extends Controller
         $user->assignRole($data['role']);
         $user->sites()->attach($data['site_id'], ['role' => 'employe', 'is_default' => true]);
 
+        app(MatriculeService::class)->assignForUser($user);
+
         return redirect()->route('users.edit', $user)
             ->with('success', "{$user->name} a été créé avec succès.");
     }
@@ -210,6 +214,7 @@ class UserController extends Controller
                 'role' => $user->getRoleNames()->first(),
                 'site_id' => $defaultSite?->id,
                 'is_active' => $user->is_active,
+                'matricule' => $user->matricule,
             ],
             'roles' => $this->getRoleOptions(),
             'sites' => $this->getSiteOptions($orgId),

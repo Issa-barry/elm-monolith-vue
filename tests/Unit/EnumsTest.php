@@ -194,27 +194,27 @@ class EnumsTest extends TestCase
 
     public function test_type_vehicule_labels(): void
     {
-        $this->assertSame('Camion',   TypeVehicule::CAMION->label());
-        $this->assertSame('Minibus',  TypeVehicule::MINIBUS->label());
+        $this->assertSame('Camion', TypeVehicule::CAMION->label());
+        $this->assertSame('Minibus', TypeVehicule::MINIBUS->label());
         $this->assertSame('Tricycle', TypeVehicule::TRICYCLE->label());
     }
 
     public function test_type_vehicule_default_capacite_packs(): void
     {
         $this->assertSame(200, TypeVehicule::CAMION->defaultCapacitePacks());
-        $this->assertSame(80,  TypeVehicule::MINIBUS->defaultCapacitePacks());
-        $this->assertSame(30,  TypeVehicule::TRICYCLE->defaultCapacitePacks());
+        $this->assertSame(80, TypeVehicule::MINIBUS->defaultCapacitePacks());
+        $this->assertSame(30, TypeVehicule::TRICYCLE->defaultCapacitePacks());
     }
 
     public function test_type_vehicule_allowed_values(): void
     {
         $values = TypeVehicule::allowedValues();
-        $this->assertContains('camion',   $values);
-        $this->assertContains('minibus',  $values);
+        $this->assertContains('camion', $values);
+        $this->assertContains('minibus', $values);
         $this->assertContains('tricycle', $values);
         $this->assertNotContains('camionnette', $values);
-        $this->assertNotContains('moto',        $values);
-        $this->assertNotContains('voiture',     $values);
+        $this->assertNotContains('moto', $values);
+        $this->assertNotContains('voiture', $values);
     }
 
     public function test_type_vehicule_options(): void
@@ -230,9 +230,9 @@ class EnumsTest extends TestCase
 
     public function test_type_vehicule_normalize_returns_valid_value(): void
     {
-        $this->assertSame('camion',   TypeVehicule::normalize('camion'));
-        $this->assertSame('camion',   TypeVehicule::normalize(' CAMION '));
-        $this->assertSame('minibus',  TypeVehicule::normalize('minibus'));
+        $this->assertSame('camion', TypeVehicule::normalize('camion'));
+        $this->assertSame('camion', TypeVehicule::normalize(' CAMION '));
+        $this->assertSame('minibus', TypeVehicule::normalize('minibus'));
         $this->assertSame('tricycle', TypeVehicule::normalize('tricycle'));
     }
 

@@ -28,6 +28,7 @@ class User extends Authenticatable
         'ville',
         'adresse',
         'organization_id',
+        'matricule',
     ];
 
     public function getNameAttribute(): string
