@@ -69,7 +69,7 @@ test('commande -> validation -> encaissement facture -> visible dans /factures',
     await encaisserItem.click();
 
     // ── 4. Remplir le dialog encaissement ─────────────────────────────────────
-    const dialog = page.locator('[role="dialog"]').filter({ hasText: /encaissement/i });
+    const dialog = page.locator('[role="dialog"]').filter({ hasText: /encaisser/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
     // Remplir le montant (premier input numérique du dialog)
@@ -80,7 +80,7 @@ test('commande -> validation -> encaissement facture -> visible dans /factures',
 
     // Soumettre
     const validerEncaissement = dialog.getByRole('button', {
-        name: /valider l'encaissement/i,
+        name: /confirmer le paiement/i,
     });
     await expect(validerEncaissement).toBeEnabled({ timeout: 5_000 });
     await validerEncaissement.click();

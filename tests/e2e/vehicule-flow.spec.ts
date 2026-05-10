@@ -47,9 +47,8 @@ test('login + create vehicule + update status + verify list', async ({
     // Controller redirects to the edit page after creation (not the list)
     await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+\/edit$/, { timeout: 15_000 });
 
-    // Toggle is_active directly on the edit page we landed on
-    await page.locator('label[for="is_active"]').first().click();
-
+    // A newly created vehicle has no equipe so the is_active toggle is not shown.
+    // The controller forces is_active=false for vehicles without an equipe anyway.
     await submitBtn.click();
 
     // waitForLoadState ensures the PUT response has arrived before checking the
