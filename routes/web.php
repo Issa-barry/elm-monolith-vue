@@ -23,6 +23,7 @@ use App\Http\Controllers\PaiementCommissionVenteController;
 use App\Http\Controllers\PrestataireController;
 use App\Http\Controllers\ProduitController;
 use App\Http\Controllers\ProprietaireController;
+use App\Http\Controllers\PropositionVehiculeController;
 use App\Http\Controllers\ReceptionValidationAdminController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SiteController;
@@ -144,6 +145,17 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 
     // ── Module : Véhicules ────────────────────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::VEHICULES)->group(function () {
+        // Propositions : doit être avant Route::resource('vehicules') pour éviter que
+        // vehicules/{vehicule} intercepte /vehicules/propositions en priorité.
+        Route::prefix('vehicules/propositions')->name('propositions-vehicules.')->group(function () {
+            Route::get('/', [PropositionVehiculeController::class, 'index'])->name('index');
+            Route::get('/{propositionVehicule}', [PropositionVehiculeController::class, 'show'])->name('show');
+            Route::patch('/{propositionVehicule}/prendre-en-charge', [PropositionVehiculeController::class, 'priseEnCharge'])->name('prendre-en-charge');
+            Route::patch('/{propositionVehicule}/demander-complement', [PropositionVehiculeController::class, 'demanderComplement'])->name('demander-complement');
+            Route::patch('/{propositionVehicule}/rejeter', [PropositionVehiculeController::class, 'rejeter'])->name('rejeter');
+            Route::post('/{propositionVehicule}/valider', [PropositionVehiculeController::class, 'valider'])->name('valider');
+        });
+
         Route::resource('vehicules', VehiculeController::class);
         Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
         Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');

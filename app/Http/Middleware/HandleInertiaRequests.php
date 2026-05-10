@@ -99,6 +99,21 @@ class HandleInertiaRequests extends Middleware
         return $query->whereIn('site_destination_id', $siteIds)->count();
     }
 
+    private function propositionsATraiter(Request $request): int
+    {
+        $user = $request->user();
+        if (! $user || ! $user->organization_id) {
+            return 0;
+        }
+        if (! $user->can('propositions.read')) {
+            return 0;
+        }
+
+        return \App\Models\PropositionVehicule::where('organization_id', $user->organization_id)
+            ->whereIn('statut', ['soumise', 'en_revision', 'a_completer'])
+            ->count();
+    }
+
     private function contactMessagesNonLus(Request $request): int
     {
         $user = $request->user();
@@ -171,6 +186,7 @@ class HandleInertiaRequests extends Middleware
             'stock_alertes' => $this->stockAlertes($request),
             'contact_messages_non_lus' => $this->contactMessagesNonLus($request),
             'transferts_a_receptionner' => $this->transfertsAReceptionner($request),
+            'propositions_a_traiter' => $this->propositionsATraiter($request),
             'module_flags' => $this->moduleFlags($request),
             'flash' => ['success' => $request->session()->get('success')],
         ];

@@ -163,7 +163,7 @@ class ClientDashboardController extends Controller
             'capacite_packs' => TypeVehicule::from($validated['type_vehicule'])->defaultCapacitePacks(),
             'commentaire' => $this->nullableTrim($validated['commentaire'] ?? null),
             'photo_path' => $photoPath,
-            'statut' => StatutPropositionVehicule::PENDING->value,
+            'statut' => StatutPropositionVehicule::SOUMISE->value,
         ]);
 
         return redirect()->route('client.propositions.index')->with('success', 'Votre proposition de vehicule a ete envoyee.');

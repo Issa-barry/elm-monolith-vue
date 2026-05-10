@@ -34,17 +34,18 @@ class EncaissementVenteController extends Controller
 
         $data = $request->validate([
             'montant' => ['required', 'numeric', 'min:0.01', "max:{$montantRestant}"],
-            'date_encaissement' => 'required|date',
+            'date_encaissement' => 'nullable|date',
             'mode_paiement' => ['required', Rule::in(array_column(ModePaiement::cases(), 'value'))],
             'note' => 'nullable|string|max:2000',
         ], [
             'montant.required' => 'Le montant est obligatoire.',
             'montant.min' => 'Le montant doit etre superieur a 0.',
             'montant.max' => 'Le montant ne peut pas depasser le restant du.',
-            'date_encaissement.required' => "La date d'encaissement est obligatoire.",
             'mode_paiement.required' => 'Le mode de paiement est obligatoire.',
             'mode_paiement.in' => 'Mode de paiement invalide.',
         ]);
+
+        $data['date_encaissement'] ??= now()->toDateString();
 
         $facture_vente->encaissements()->create([
             'montant' => $data['montant'],
