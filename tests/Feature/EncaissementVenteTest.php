@@ -143,6 +143,24 @@ class EncaissementVenteTest extends TestCase
         $response->assertStatus(422);
     }
 
+    public function test_encaissement_sans_date_utilise_date_du_jour(): void
+    {
+        ['facture' => $facture, 'user' => $user] = $this->creerContexte();
+
+        $this->actingAs($user)->post(
+            route('encaissements.store', $facture),
+            [
+                'montant' => 2000,
+                'mode_paiement' => 'especes',
+                // date_encaissement absent : doit defaulter à today()
+            ]
+        )->assertRedirect();
+
+        $enc = $facture->encaissements()->first();
+        $this->assertNotNull($enc);
+        $this->assertEquals(now()->toDateString(), $enc->date_encaissement->toDateString());
+    }
+
     // ── Encaissement destroy ──────────────────────────────────────────────────
 
     public function test_suppression_encaissement_recalcule_statut_facture(): void

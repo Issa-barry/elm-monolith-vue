@@ -8,6 +8,7 @@ use App\Models\CommissionPayment;
 use App\Models\Livreur;
 use App\Models\Vehicule;
 use App\Services\CommissionPaymentService;
+use App\Services\CommissionSearchService;
 use App\Services\PeriodeComptableService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -29,8 +30,27 @@ class CommissionVehiculeController extends Controller
         $orgId = auth()->user()->organization_id;
         $search = trim((string) $request->input('search', ''));
         $filtreStatut = (string) $request->input('statut', '');
+        $filtrePeriode = trim((string) $request->input('periode', ''));
 
-        $rows = CommissionPaymentService::soldesParLivreur($orgId);
+        $rows = CommissionPaymentService::soldesParLivreur(
+            $orgId,
+            $filtrePeriode !== '' ? $filtrePeriode : null
+        );
+
+        $periodesDisponibles = CommissionLogistiquePart::query()
+            ->where('type_beneficiaire', 'livreur')
+            ->whereNotNull('livreur_id')
+            ->whereNotNull('periode')
+            ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
+            ->select('periode')
+            ->distinct()
+            ->orderByDesc('periode')
+            ->pluck('periode')
+            ->map(fn (string $code) => [
+                'code' => $code,
+                'label' => PeriodeComptableService::labelForCode($code),
+            ])
+            ->values();
 
         // Fetch telephone + vehicule data for ALL livreurs upfront (needed for search)
         $allLivreurIds = $rows->pluck('livreur_id')->filter()->unique()->values()->toArray();
@@ -41,6 +61,7 @@ class CommissionVehiculeController extends Controller
             ->whereIn('livreur_id', $allLivreurIds)
             ->where('type_beneficiaire', 'livreur')
             ->whereNotNull('livreur_id')
+            ->when($filtrePeriode !== '', fn ($q) => $q->where('periode', $filtrePeriode))
             ->get()
             ->groupBy('livreur_id')
             ->map(fn ($parts) => $parts
@@ -70,9 +91,7 @@ class CommissionVehiculeController extends Controller
             };
         }
 
-        if ($search !== '') {
-            $livreurs = $livreurs->filter(fn ($l) => $this->livreurMatchesSearch($l, $search));
-        }
+        $livreurs = CommissionSearchService::filter($livreurs, $search);
 
         $list = $livreurs->values();
 
@@ -87,46 +106,11 @@ class CommissionVehiculeController extends Controller
             'kpis' => $kpis,
             'search' => $search,
             'filtre_statut' => $filtreStatut,
+            'selected_periode' => $filtrePeriode,
+            'periodes_disponibles' => $periodesDisponibles,
             'statuts' => StatutCommission::options(),
             'can_payer' => auth()->user()->can('logistique.commission.verser'),
         ]);
-    }
-
-    private function livreurMatchesSearch(array $l, string $search): bool
-    {
-        $s = trim($search);
-
-        // Name
-        if (str_contains(mb_strtolower((string) $l['nom']), mb_strtolower($s))) {
-            return true;
-        }
-
-        // Vehicle (nom + immatriculation string)
-        if ($l['vehicules'] && str_contains(mb_strtolower((string) $l['vehicules']), mb_strtolower($s))) {
-            return true;
-        }
-
-        // Phone: strip non-digits, require >= 6 digits
-        $digits = preg_replace('/\D/', '', $s);
-        if (strlen($digits) >= 6) {
-            $telDigits = preg_replace('/\D/', '', (string) ($l['telephone'] ?? ''));
-            if ($telDigits !== '' && str_contains($telDigits, $digits)) {
-                return true;
-            }
-        }
-
-        // Amount: strip GNF/spaces/commas → if purely numeric → check amounts
-        $amountStr = preg_replace('/[\s,]+/', '', str_ireplace('gnf', '', $s));
-        if ($amountStr !== '' && ctype_digit($amountStr)) {
-            $total = (int) round($l['impaye'] + $l['paye']);
-            foreach ([(int) round($l['impaye']), (int) round($l['paye']), $total] as $amt) {
-                if (str_contains((string) $amt, $amountStr)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     // ── Show livreur : cumul global + relevé par transfert ───────────────────

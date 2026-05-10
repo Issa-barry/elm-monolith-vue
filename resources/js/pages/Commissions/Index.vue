@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,7 +9,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
@@ -23,14 +23,12 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Dialog from 'primevue/dialog';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
-import { computed, reactive, ref } from 'vue';
+import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -193,64 +191,28 @@ const statutLabel: Record<string, string> = {
 
 // ── Paiement ──────────────────────────────────────────────────────────────────
 
-const MODES_PAIEMENT = [
-    { value: 'especes', label: 'Espèces' },
-    { value: 'virement', label: 'Virement' },
-    { value: 'cheque', label: 'Chèque' },
-    { value: 'mobile_money', label: 'Mobile Money' },
-];
-
 const toast = useToast();
 const showPaiementDialog = ref(false);
 const selectedBeneficiaire = ref<BeneficiaireRow | null>(null);
-
-function todayIso(): string {
-    return new Date().toISOString().slice(0, 10);
-}
-
-interface PaiementForm {
-    montant: number | null;
-    mode_paiement: string;
-    paid_at: string;
-    processing: boolean;
-    errors: Record<string, string>;
-}
-
-const paiementForm = reactive<PaiementForm>({
-    montant: null,
-    mode_paiement: 'especes',
-    paid_at: todayIso(),
-    processing: false,
-    errors: {},
-});
+const paiementProcessing = ref(false);
+const paiementErrors = ref<Record<string, string>>({});
 
 function openPaiement(b: BeneficiaireRow) {
     selectedBeneficiaire.value = b;
-    paiementForm.montant = b.solde_restant > 0 ? b.solde_restant : null;
-    paiementForm.mode_paiement = 'especes';
-    paiementForm.paid_at = todayIso();
-    paiementForm.processing = false;
-    paiementForm.errors = {};
     showPaiementDialog.value = true;
 }
 
-function submitPaiement() {
-    if (
-        !paiementForm.montant ||
-        paiementForm.montant <= 0 ||
-        !selectedBeneficiaire.value
-    )
-        return;
-    paiementForm.processing = true;
-    paiementForm.errors = {};
+function handlePaiementSubmit(payload: {
+    montant: number;
+    mode_paiement: string;
+}) {
+    if (!selectedBeneficiaire.value) return;
+    paiementProcessing.value = true;
+    paiementErrors.value = {};
     const b = selectedBeneficiaire.value;
     router.post(
         `/commissions/beneficiaires/${b.type_beneficiaire}/${b.beneficiaire_id}/paiements`,
-        {
-            montant: paiementForm.montant,
-            mode_paiement: paiementForm.mode_paiement,
-            paid_at: paiementForm.paid_at,
-        },
+        payload,
         {
             preserveScroll: true,
             onSuccess: () => {
@@ -263,10 +225,10 @@ function submitPaiement() {
                 });
             },
             onError: (e) => {
-                paiementForm.errors = e as Record<string, string>;
+                paiementErrors.value = e as Record<string, string>;
             },
             onFinish: () => {
-                paiementForm.processing = false;
+                paiementProcessing.value = false;
             },
         },
     );
@@ -765,75 +727,16 @@ function detailUrl(b: BeneficiaireRow): string {
     </AppLayout>
 
     <!-- ── Dialog paiement ───────────────────────────────────────────────────── -->
-    <Dialog
+    <PaymentDialogCompact
         v-model:visible="showPaiementDialog"
-        modal
-        :header="
+        :title="
             selectedBeneficiaire
                 ? `Payer — ${selectedBeneficiaire.beneficiaire_nom}`
                 : 'Payer'
         "
-        :style="{ width: '420px' }"
-        :draggable="false"
-    >
-        <div v-if="selectedBeneficiaire" class="space-y-4 py-2">
-            <div
-                class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
-            >
-                Solde à payer :
-                <strong>{{
-                    formatGNF(selectedBeneficiaire.solde_restant)
-                }}</strong>
-            </div>
-            <div>
-                <Label class="mb-1.5 block text-sm">Montant (GNF)</Label>
-                <InputNumber
-                    v-model="paiementForm.montant"
-                    :min="1"
-                    :max="selectedBeneficiaire.solde_restant"
-                    class="w-full"
-                    input-class="w-full"
-                />
-                <p
-                    v-if="paiementForm.errors.montant"
-                    class="mt-1 text-xs text-destructive"
-                >
-                    {{ paiementForm.errors.montant }}
-                </p>
-            </div>
-            <div>
-                <Label class="mb-1.5 block text-sm">Mode de paiement</Label>
-                <Select
-                    v-model="paiementForm.mode_paiement"
-                    :options="MODES_PAIEMENT"
-                    option-label="label"
-                    option-value="value"
-                    class="w-full"
-                />
-            </div>
-        </div>
-        <template #footer>
-            <Button
-                variant="outline"
-                :disabled="paiementForm.processing"
-                @click="showPaiementDialog = false"
-            >
-                Annuler
-            </Button>
-            <Button
-                :disabled="paiementForm.processing || !paiementForm.montant"
-                @click="submitPaiement"
-            >
-                <HandCoins
-                    v-if="!paiementForm.processing"
-                    class="mr-1.5 h-4 w-4"
-                />
-                <span
-                    v-else
-                    class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-                />
-                Confirmer le paiement
-            </Button>
-        </template>
-    </Dialog>
+        :solde="selectedBeneficiaire?.solde_restant ?? 0"
+        :processing="paiementProcessing"
+        :errors="paiementErrors"
+        @submit="handlePaiementSubmit"
+    />
 </template>
