@@ -4,8 +4,8 @@ namespace Tests\Feature;
 
 use App\Enums\StatutPropositionVehicule;
 use App\Models\Organization;
-use App\Models\Proprietaire;
 use App\Models\PropositionVehicule;
+use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;

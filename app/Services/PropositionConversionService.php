@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Enums\StatutPropositionVehicule;
-use App\Models\Proprietaire;
 use App\Models\PropositionVehicule;
+use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Support\Facades\DB;
@@ -74,7 +74,7 @@ class PropositionConversionService
     }
 
     /**
-     * @return array{0: Proprietaire, 1: bool}  [proprietaire, existait_deja]
+     * @return array{0: Proprietaire, 1: bool} [proprietaire, existait_deja]
      */
     private function resoudreProprietaire(PropositionVehicule $proposition, ?string $orgId): array
     {

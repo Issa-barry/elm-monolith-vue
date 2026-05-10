@@ -136,7 +136,7 @@ class CommissionSearchService
             return false;
         }
         $impaye = (int) round((float) ($l['impaye'] ?? 0));
-        $paye   = (int) round((float) ($l['paye'] ?? 0));
+        $paye = (int) round((float) ($l['paye'] ?? 0));
 
         foreach ([$impaye, $paye, $impaye + $paye] as $amt) {
             if (str_contains((string) $amt, (string) $amount)) {
@@ -156,13 +156,13 @@ class CommissionSearchService
     private static function matchesStatut(array $l, string $normToken): bool
     {
         $impaye = (float) ($l['impaye'] ?? 0);
-        $paye   = (float) ($l['paye'] ?? 0);
+        $paye = (float) ($l['paye'] ?? 0);
 
         return match ($normToken) {
-            'impaye'  => $impaye > 0,
-            'paye'    => $paye > 0 && $impaye <= 0,
+            'impaye' => $impaye > 0,
+            'paye' => $paye > 0 && $impaye <= 0,
             'partiel' => $impaye > 0 && $paye > 0,
-            default   => false,
+            default => false,
         };
     }
 }
