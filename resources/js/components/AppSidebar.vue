@@ -50,6 +50,10 @@ const canSee = (permission: string, module: string): boolean =>
     can(permission) && moduleActive(module);
 
 /** Sous-items Véhicules (calculés séparément pour limiter la complexité) */
+const propositionsATraiter = computed(
+    () => ((page.props as any).propositions_a_traiter as number) ?? 0,
+);
+
 const vehiculesItems = computed((): NavItem[] => {
     if (!moduleActive('vehicules')) return [];
     const sub: NavItem[] = [];
@@ -59,6 +63,15 @@ const vehiculesItems = computed((): NavItem[] => {
         sub.push({ title: 'Liste de véhicules', href: '/vehicules' });
     if (can('equipes-livraison.read'))
         sub.push({ title: 'Équipes de livraison', href: '/equipes-livraison' });
+    if (can('propositions.read'))
+        sub.push({
+            title: 'Propositions',
+            href: '/vehicules/propositions',
+            badge:
+                propositionsATraiter.value > 0
+                    ? propositionsATraiter.value
+                    : undefined,
+        });
     return sub;
 });
 

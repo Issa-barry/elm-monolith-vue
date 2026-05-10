@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,11 +9,10 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     CreditCard,
@@ -25,7 +25,6 @@ import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
@@ -205,6 +204,8 @@ const mobileFiltered = computed(() => {
 // ── Dialog encaissement ───────────────────────────────────────────────────────
 const dialogVisible = ref(false);
 const factureActive = ref<FactureItem | null>(null);
+const encaissProcessing = ref(false);
+const encaissErrors = ref<Record<string, string>>({});
 
 // ── Dialog historique ─────────────────────────────────────────────────────────
 const historyVisible = ref(false);
@@ -215,26 +216,22 @@ function openHistory(facture: FactureItem) {
     historyVisible.value = true;
 }
 
-const encaissementForm = useForm({
-    montant: 0 as number | null,
-    date_encaissement: new Date().toISOString().slice(0, 10),
-    mode_paiement: 'especes',
-    note: null as string | null,
-});
-
 function openDialog(facture: FactureItem) {
     factureActive.value = facture;
-    encaissementForm.montant = facture.montant_restant;
-    encaissementForm.date_encaissement = new Date().toISOString().slice(0, 10);
-    encaissementForm.mode_paiement = 'especes';
-    encaissementForm.note = null;
-    encaissementForm.clearErrors();
+    encaissProcessing.value = false;
+    encaissErrors.value = {};
     dialogVisible.value = true;
 }
 
-function submitEncaissement() {
+function handleEncaissSubmit(payload: {
+    montant: number;
+    mode_paiement: string;
+}) {
     if (!factureActive.value) return;
-    encaissementForm.post(`/factures/${factureActive.value.id}/encaissements`, {
+    encaissProcessing.value = true;
+    encaissErrors.value = {};
+    router.post(`/factures/${factureActive.value.id}/encaissements`, payload, {
+        preserveScroll: true,
         onSuccess: () => {
             dialogVisible.value = false;
             toast.add({
@@ -243,6 +240,12 @@ function submitEncaissement() {
                 detail: 'Encaissement enregistré avec succès.',
                 life: 3000,
             });
+        },
+        onError: (e) => {
+            encaissErrors.value = e as Record<string, string>;
+        },
+        onFinish: () => {
+            encaissProcessing.value = false;
         },
     });
 }
@@ -840,161 +843,18 @@ function _progressPercent(f: FactureItem): number {
         </Dialog>
 
         <!-- Dialog encaissement ─────────────────────────────────────────────── -->
-        <Dialog
+        <PaymentDialogCompact
             v-model:visible="dialogVisible"
-            modal
-            header="Enregistrer un encaissement"
-            :style="{ width: '520px' }"
-        >
-            <div v-if="factureActive" class="space-y-5">
-                <!-- Résumé facture -->
-                <div class="space-y-2 rounded-lg bg-muted/40 p-4">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs text-muted-foreground"
-                            >Facture</span
-                        >
-                        <span class="font-mono text-sm font-semibold">{{
-                            factureActive.reference
-                        }}</span>
-                    </div>
-                    <div
-                        v-if="
-                            factureActive.vehicule_nom ||
-                            factureActive.client_nom
-                        "
-                        class="flex items-center justify-between"
-                    >
-                        <span class="text-xs text-muted-foreground">{{
-                            factureActive.vehicule_nom ? 'Véhicule' : 'Client'
-                        }}</span>
-                        <span class="text-sm font-medium">{{
-                            factureActive.vehicule_nom ??
-                            factureActive.client_nom
-                        }}</span>
-                    </div>
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs text-muted-foreground"
-                            >Montant total</span
-                        >
-                        <span class="text-sm font-medium tabular-nums">{{
-                            formatGNF(factureActive.montant_net)
-                        }}</span>
-                    </div>
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs text-muted-foreground"
-                            >Déjà encaissé</span
-                        >
-                        <span
-                            class="text-sm font-medium text-emerald-600 tabular-nums dark:text-emerald-400"
-                        >
-                            {{ formatGNF(factureActive.montant_encaisse) }}
-                        </span>
-                    </div>
-                    <div
-                        class="flex items-center justify-between border-t pt-2"
-                    >
-                        <span
-                            class="text-xs font-semibold text-muted-foreground"
-                            >Restant dû</span
-                        >
-                        <span
-                            class="text-base font-bold text-amber-600 tabular-nums dark:text-amber-400"
-                        >
-                            {{ formatGNF(factureActive.montant_restant) }}
-                        </span>
-                    </div>
-                </div>
-
-                <!-- Formulaire -->
-                <div class="grid gap-4 sm:grid-cols-2">
-                    <!-- Montant -->
-                    <div class="sm:col-span-2">
-                        <Label class="mb-1.5 block text-sm"
-                            >Montant
-                            <span class="text-destructive">*</span></Label
-                        >
-                        <InputNumber
-                            :model-value="encaissementForm.montant"
-                            @update:model-value="
-                                encaissementForm.montant = $event
-                            "
-                            :min="0.01"
-                            :max="factureActive.montant_restant"
-                            :use-grouping="true"
-                            locale="fr-FR"
-                            suffix=" GNF"
-                            class="w-full"
-                            input-class="w-full text-right text-lg font-bold"
-                            :class="{
-                                'p-invalid': encaissementForm.errors.montant,
-                            }"
-                        />
-                        <p
-                            v-if="encaissementForm.errors.montant"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ encaissementForm.errors.montant }}
-                        </p>
-                    </div>
-
-                    <!-- Mode paiement -->
-                    <div class="sm:col-span-2">
-                        <Label class="mb-1.5 block text-sm"
-                            >Mode de paiement
-                            <span class="text-destructive">*</span></Label
-                        >
-                        <Select
-                            v-model="encaissementForm.mode_paiement"
-                            :options="modes_paiement"
-                            option-label="label"
-                            option-value="value"
-                            class="w-full"
-                            :class="{
-                                'p-invalid':
-                                    encaissementForm.errors.mode_paiement,
-                            }"
-                        />
-                        <p
-                            v-if="encaissementForm.errors.mode_paiement"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ encaissementForm.errors.mode_paiement }}
-                        </p>
-                    </div>
-
-                    <!-- Note -->
-                    <div class="sm:col-span-2">
-                        <Label class="mb-1.5 block text-sm">Note</Label>
-                        <InputText
-                            v-model="encaissementForm.note as string"
-                            class="w-full"
-                            placeholder="Optionnel…"
-                        />
-                    </div>
-                </div>
-            </div>
-
-            <template #footer>
-                <div class="flex justify-end gap-2">
-                    <Button variant="outline" @click="dialogVisible = false"
-                        >Annuler</Button
-                    >
-                    <Button
-                        :disabled="
-                            encaissementForm.processing ||
-                            !encaissementForm.montant
-                        "
-                        @click="submitEncaissement"
-                    >
-                        <CreditCard class="mr-2 h-4 w-4" />
-                        {{
-                            encaissementForm.processing
-                                ? 'Enregistrement…'
-                                : "Valider l'encaissement"
-                        }}
-                    </Button>
-                </div>
-            </template>
-        </Dialog>
+            :title="
+                factureActive
+                    ? `Encaisser — ${factureActive.reference}`
+                    : 'Encaisser'
+            "
+            :solde="factureActive?.montant_restant ?? 0"
+            :processing="encaissProcessing"
+            :errors="encaissErrors"
+            :modes-paiement="modes_paiement"
+            @submit="handleEncaissSubmit"
+        />
     </AppLayout>
 </template>

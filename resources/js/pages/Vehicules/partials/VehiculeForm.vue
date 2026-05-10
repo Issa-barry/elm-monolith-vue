@@ -47,6 +47,7 @@ const props = defineProps<{
     types: TypeOption[];
     photoUrl?: string | null;
     currentSiteName: string;
+    showStatusField?: boolean;
 }>();
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
@@ -506,26 +507,38 @@ function handleSubmit() {
             >
                 Statut
             </h3>
-            <div class="flex items-center gap-3">
-                <Checkbox
-                    id="is_active"
-                    :model-value="Boolean(form.is_active)"
-                    @update:model-value="
-                        $emit('update:form', {
-                            ...form,
-                            is_active: $event === true,
-                        })
-                    "
-                />
-                <div>
-                    <Label for="is_active" class="cursor-pointer font-medium">
-                        Véhicule actif
-                    </Label>
-                    <p class="text-xs text-muted-foreground">
-                        Décochez pour retirer le véhicule de la flotte active
-                    </p>
+            <template v-if="showStatusField">
+                <div class="flex items-center gap-3">
+                    <Checkbox
+                        id="is_active"
+                        :model-value="Boolean(form.is_active)"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                is_active: $event === true,
+                            })
+                        "
+                    />
+                    <div>
+                        <Label
+                            for="is_active"
+                            class="cursor-pointer font-medium"
+                        >
+                            Véhicule actif
+                        </Label>
+                        <p class="text-xs text-muted-foreground">
+                            Décochez pour retirer le véhicule de la flotte
+                            active
+                        </p>
+                    </div>
                 </div>
-            </div>
+            </template>
+            <template v-else>
+                <p class="text-sm text-muted-foreground">
+                    Le véhicule sera activé automatiquement lors de l'ajout
+                    d'une équipe.
+                </p>
+            </template>
         </div>
 
         <!-- Pied de page -->

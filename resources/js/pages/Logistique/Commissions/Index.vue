@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,16 +9,13 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { HandCoins, MoreHorizontal, Truck, User } from 'lucide-vue-next';
-import Dialog from 'primevue/dialog';
 import PvDropdown from 'primevue/dropdown';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -41,6 +39,11 @@ interface SelectOption {
     label: string;
 }
 
+interface PeriodeOption {
+    code: string;
+    label: string;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 const props = defineProps<{
@@ -48,6 +51,8 @@ const props = defineProps<{
     kpis: Kpis;
     search: string;
     filtre_statut: string;
+    selected_periode: string;
+    periodes_disponibles: PeriodeOption[];
     can_payer: boolean;
 }>();
 
@@ -62,6 +67,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const searchVal = ref(props.search ?? '');
 const statutFiltre = ref<string | null>(props.filtre_statut || null);
+const periodeFiltre = ref<string | null>(props.selected_periode || null);
 
 const STATUT_OPTIONS: SelectOption[] = [
     { value: null, label: 'Tous les statuts' },
@@ -69,12 +75,21 @@ const STATUT_OPTIONS: SelectOption[] = [
     { value: 'paye', label: 'Payé' },
 ];
 
+const PERIODE_OPTIONS = computed<SelectOption[]>(() => [
+    { value: null, label: 'Toutes les périodes' },
+    ...(props.periodes_disponibles ?? []).map((p) => ({
+        value: p.code,
+        label: p.label,
+    })),
+]);
+
 function appliquerFiltres() {
     router.get(
         '/logistique/commissions',
         {
             search: searchVal.value || undefined,
             statut: statutFiltre.value ?? undefined,
+            periode: periodeFiltre.value ?? undefined,
         },
         { preserveState: true, replace: true },
     );
@@ -86,73 +101,46 @@ watch(searchVal, () => {
     searchTimeout = setTimeout(appliquerFiltres, 300);
 });
 watch(statutFiltre, appliquerFiltres);
+watch(periodeFiltre, appliquerFiltres);
 
 // ── KPIs calculés ─────────────────────────────────────────────────────────────
 
 const kpiTotalCumule = computed(
-    () => props.kpis.total_impaye + props.kpis.total_paye,
+    () => (props.kpis?.total_impaye ?? 0) + (props.kpis?.total_paye ?? 0),
 );
 
 // ── Paiement ──────────────────────────────────────────────────────────────────
 
-const MODES_PAIEMENT = [
-    { value: 'especes', label: 'Espèces' },
-    { value: 'virement', label: 'Virement' },
-    { value: 'cheque', label: 'Chèque' },
-    { value: 'mobile_money', label: 'Mobile Money' },
-];
-
 const showPaiementDialog = ref(false);
 const selectedLivreur = ref<LivreurRow | null>(null);
-
-interface PaiementForm {
-    montant: number | null;
-    mode_paiement: string;
-    processing: boolean;
-    errors: Record<string, string>;
-}
-
-const paiementForm = reactive<PaiementForm>({
-    montant: null,
-    mode_paiement: 'especes',
-    processing: false,
-    errors: {},
-});
+const paiementProcessing = ref(false);
+const paiementErrors = ref<Record<string, string>>({});
 
 function openPaiement(livreur: LivreurRow) {
     selectedLivreur.value = livreur;
-    paiementForm.montant = livreur.impaye > 0 ? livreur.impaye : null;
-    paiementForm.mode_paiement = 'especes';
-    paiementForm.processing = false;
-    paiementForm.errors = {};
     showPaiementDialog.value = true;
 }
 
-function submitPaiement() {
-    if (
-        !paiementForm.montant ||
-        paiementForm.montant <= 0 ||
-        !selectedLivreur.value
-    )
-        return;
-    paiementForm.processing = true;
-    paiementForm.errors = {};
+function handlePaiementSubmit(payload: {
+    montant: number;
+    mode_paiement: string;
+}) {
+    if (!selectedLivreur.value) return;
+    paiementProcessing.value = true;
+    paiementErrors.value = {};
     router.post(
         `/logistique/commissions/livreurs/${selectedLivreur.value.livreur_id}/paiements`,
-        {
-            montant: paiementForm.montant,
-            mode_paiement: paiementForm.mode_paiement,
-        },
+        payload,
         {
             preserveScroll: true,
             onSuccess: () => {
                 showPaiementDialog.value = false;
             },
             onError: (e) => {
-                paiementForm.errors = e as Record<string, string>;
+                paiementErrors.value = e as Record<string, string>;
             },
             onFinish: () => {
-                paiementForm.processing = false;
+                paiementProcessing.value = false;
             },
         },
     );
@@ -174,8 +162,9 @@ function livreurStatuts(l: LivreurRow): StatutBadge[] {
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
 
-function formatGNF(val: number): string {
-    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
+function formatGNF(val: number | null | undefined): string {
+    const n = Number(val ?? 0);
+    return new Intl.NumberFormat('fr-FR').format(isNaN(n) ? 0 : n) + ' GNF';
 }
 
 function formatPhone(tel: string | null): string {
@@ -269,7 +258,7 @@ function formatPhone(tel: string | null): string {
             <div class="flex flex-wrap items-center gap-3">
                 <InputText
                     v-model="searchVal"
-                    placeholder="Rechercher nom, téléphone, véhicule, montant…"
+                    placeholder="Nom, téléphone, véhicule, immatriculation, montant, statut…"
                     class="w-72 text-sm"
                 />
                 <PvDropdown
@@ -280,6 +269,15 @@ function formatPhone(tel: string | null): string {
                     placeholder="Tous les statuts"
                     class="w-52 text-sm"
                     @change="(e) => (statutFiltre = e.value)"
+                />
+                <PvDropdown
+                    :options="PERIODE_OPTIONS"
+                    option-label="label"
+                    option-value="value"
+                    :model-value="periodeFiltre"
+                    placeholder="Toutes les périodes"
+                    class="w-72 text-sm"
+                    @change="(e) => (periodeFiltre = e.value)"
                 />
                 <span class="text-xs text-muted-foreground">
                     {{ livreurs.length }} résultat{{
@@ -444,69 +442,12 @@ function formatPhone(tel: string | null): string {
     </AppLayout>
 
     <!-- ── Dialog paiement ───────────────────────────────────────────────────── -->
-    <Dialog
+    <PaymentDialogCompact
         v-model:visible="showPaiementDialog"
-        modal
-        :header="selectedLivreur ? `Payer — ${selectedLivreur.nom}` : 'Payer'"
-        :style="{ width: '420px' }"
-        :draggable="false"
-    >
-        <div v-if="selectedLivreur" class="space-y-4 py-2">
-            <div
-                class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
-            >
-                Solde à payer :
-                <strong>{{ formatGNF(selectedLivreur.impaye) }}</strong>
-            </div>
-            <div>
-                <Label class="mb-1.5 block text-sm">Montant (GNF)</Label>
-                <InputNumber
-                    v-model="paiementForm.montant"
-                    :min="1"
-                    :max="selectedLivreur.impaye"
-                    class="w-full"
-                    input-class="w-full"
-                />
-                <p
-                    v-if="paiementForm.errors.montant"
-                    class="mt-1 text-xs text-destructive"
-                >
-                    {{ paiementForm.errors.montant }}
-                </p>
-            </div>
-            <div>
-                <Label class="mb-1.5 block text-sm">Mode de paiement</Label>
-                <PvDropdown
-                    v-model="paiementForm.mode_paiement"
-                    :options="MODES_PAIEMENT"
-                    option-label="label"
-                    option-value="value"
-                    class="w-full"
-                />
-            </div>
-        </div>
-        <template #footer>
-            <Button
-                variant="outline"
-                :disabled="paiementForm.processing"
-                @click="showPaiementDialog = false"
-            >
-                Annuler
-            </Button>
-            <Button
-                :disabled="paiementForm.processing || !paiementForm.montant"
-                @click="submitPaiement"
-            >
-                <HandCoins
-                    v-if="!paiementForm.processing"
-                    class="mr-1.5 h-4 w-4"
-                />
-                <span
-                    v-else
-                    class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-                />
-                Confirmer le paiement
-            </Button>
-        </template>
-    </Dialog>
+        :title="selectedLivreur ? `Payer — ${selectedLivreur.nom}` : 'Payer'"
+        :solde="selectedLivreur?.impaye ?? 0"
+        :processing="paiementProcessing"
+        :errors="paiementErrors"
+        @submit="handlePaiementSubmit"
+    />
 </template>

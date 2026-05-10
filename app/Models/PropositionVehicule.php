@@ -37,7 +37,7 @@ class PropositionVehicule extends Model
         'traitee_par',
     ];
 
-    protected $appends = ['statut_label'];
+    protected $appends = ['statut_label', 'photo_url'];
 
     protected function casts(): array
     {
@@ -46,6 +46,11 @@ class PropositionVehicule extends Model
             'traitee_at' => 'datetime',
             'statut' => StatutPropositionVehicule::class,
         ];
+    }
+
+    public function getPhotoUrlAttribute(): ?string
+    {
+        return $this->photo_path ? '/storage/'.$this->photo_path : null;
     }
 
     public function getStatutLabelAttribute(): string

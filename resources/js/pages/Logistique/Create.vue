@@ -265,7 +265,7 @@ function submit() {
             </div>
         </div>
 
-        <div class="mx-auto max-w-[85rem] p-4 sm:p-6">
+        <div class="mx-auto max-w-5xl p-4 sm:p-6">
             <!-- En-tête desktop -->
             <div class="mb-6 hidden sm:block">
                 <h1 class="text-2xl font-semibold tracking-tight">

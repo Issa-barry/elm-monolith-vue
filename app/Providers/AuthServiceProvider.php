@@ -10,6 +10,7 @@ use App\Models\Livreur;
 use App\Models\Packing;
 use App\Models\Prestataire;
 use App\Models\Produit;
+use App\Models\PropositionVehicule;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\User;
@@ -23,6 +24,7 @@ use App\Policies\LivreurPolicy;
 use App\Policies\PackingPolicy;
 use App\Policies\PrestatairePolicy;
 use App\Policies\ProduitPolicy;
+use App\Policies\PropositionVehiculePolicy;
 use App\Policies\ProprietairePolicy;
 use App\Policies\SitePolicy;
 use App\Policies\UserInvitationPolicy;
@@ -47,6 +49,7 @@ class AuthServiceProvider extends ServiceProvider
         UserInvitation::class => UserInvitationPolicy::class,
         CommandeVente::class => CommandeVentePolicy::class,
         CommandeAchat::class => CommandeAchatPolicy::class,
+        PropositionVehicule::class => PropositionVehiculePolicy::class,
     ];
 
     public function boot(): void
