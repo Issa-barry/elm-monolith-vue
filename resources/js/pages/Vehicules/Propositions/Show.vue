@@ -191,8 +191,8 @@ function valider() {
                         <span class="font-mono font-bold">{{
                             vehicule_doublon.immatriculation
                         }}</span>
-                        existe déjà ({{ vehicule_doublon.nom_vehicule }}).
-                        La conversion est bloquée.
+                        existe déjà ({{ vehicule_doublon.nom_vehicule }}). La
+                        conversion est bloquée.
                     </p>
                 </div>
             </div>
@@ -229,7 +229,9 @@ function valider() {
                         <dt class="text-xs text-muted-foreground">
                             Propriétaire existant
                         </dt>
-                        <dd class="mt-0.5 font-medium text-emerald-700 dark:text-emerald-400">
+                        <dd
+                            class="mt-0.5 font-medium text-emerald-700 dark:text-emerald-400"
+                        >
                             {{ proposition.proprietaire_nom }}
                         </dd>
                     </div>
@@ -244,10 +246,7 @@ function valider() {
                     Véhicule proposé
                 </h2>
                 <div class="flex gap-6">
-                    <div
-                        v-if="proposition.photo_url"
-                        class="shrink-0"
-                    >
+                    <div v-if="proposition.photo_url" class="shrink-0">
                         <img
                             :src="proposition.photo_url"
                             alt="Photo du véhicule"
@@ -391,7 +390,9 @@ function valider() {
             class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
             @click.self="closeModal"
         >
-            <div class="w-full max-w-md rounded-xl border bg-card p-6 shadow-xl">
+            <div
+                class="w-full max-w-md rounded-xl border bg-card p-6 shadow-xl"
+            >
                 <h3 class="mb-4 text-lg font-semibold">
                     {{
                         showModal === 'complement'

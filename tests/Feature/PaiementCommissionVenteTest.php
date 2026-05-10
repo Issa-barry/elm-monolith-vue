@@ -6,6 +6,7 @@ use App\Enums\StatutCommission;
 use App\Models\CommissionVente;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\PaiementCommissionVente;
 use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -71,11 +72,10 @@ class PaiementCommissionVenteTest extends TestCase
             ]
         )->assertRedirect();
 
-        $this->assertDatabaseHas('paiements_commissions_ventes', [
-            'livreur_id' => $livreur->id,
-            'montant' => 3000,
-            'paid_at' => '2026-01-15',
-        ]);
+        $paiement = PaiementCommissionVente::where('livreur_id', $livreur->id)->first();
+        $this->assertNotNull($paiement);
+        $this->assertEquals(3000, (float) $paiement->montant);
+        $this->assertEquals('2026-01-15', $paiement->paid_at->toDateString());
     }
 
     public function test_paiement_commission_vente_sans_paid_at_utilise_date_du_jour(): void
@@ -91,11 +91,10 @@ class PaiementCommissionVenteTest extends TestCase
             ]
         )->assertRedirect();
 
-        $this->assertDatabaseHas('paiements_commissions_ventes', [
-            'livreur_id' => $livreur->id,
-            'montant' => 2000,
-            'paid_at' => now()->toDateString(),
-        ]);
+        $paiement = PaiementCommissionVente::where('livreur_id', $livreur->id)->first();
+        $this->assertNotNull($paiement);
+        $this->assertEquals(2000, (float) $paiement->montant);
+        $this->assertEquals(now()->toDateString(), $paiement->paid_at->toDateString());
     }
 
     public function test_paiement_commission_vente_refuse_sans_permission(): void

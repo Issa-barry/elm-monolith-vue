@@ -70,7 +70,10 @@ function close() {
 
 function handleSubmit() {
     if (!montant.value || montant.value <= 0) return;
-    emit('submit', { montant: montant.value, mode_paiement: modePaiement.value });
+    emit('submit', {
+        montant: montant.value,
+        mode_paiement: modePaiement.value,
+    });
 }
 </script>
 

@@ -67,7 +67,10 @@ const vehiculesItems = computed((): NavItem[] => {
         sub.push({
             title: 'Propositions',
             href: '/vehicules/propositions',
-            badge: propositionsATraiter.value > 0 ? propositionsATraiter.value : undefined,
+            badge:
+                propositionsATraiter.value > 0
+                    ? propositionsATraiter.value
+                    : undefined,
         });
     return sub;
 });

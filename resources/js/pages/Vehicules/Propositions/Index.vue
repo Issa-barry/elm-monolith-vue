@@ -2,7 +2,7 @@
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { CheckCircle, ChevronRight, Eye, Filter, X } from 'lucide-vue-next';
+import { CheckCircle, Eye, Filter, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Proposition {
@@ -28,7 +28,11 @@ interface StatutOption {
 const props = defineProps<{
     propositions: Proposition[];
     statuts: StatutOption[];
-    filters: { statut: string | null; date_debut: string | null; date_fin: string | null };
+    filters: {
+        statut: string | null;
+        date_debut: string | null;
+        date_fin: string | null;
+    };
 }>();
 
 const page = usePage();
@@ -62,7 +66,11 @@ function resetFilters() {
     filterStatut.value = '';
     filterDateDebut.value = '';
     filterDateFin.value = '';
-    router.get('/vehicules/propositions', {}, { preserveState: true, replace: true });
+    router.get(
+        '/vehicules/propositions',
+        {},
+        { preserveState: true, replace: true },
+    );
 }
 
 const colorClasses: Record<string, string> = {
@@ -104,7 +112,9 @@ const colorClasses: Record<string, string> = {
             <!-- Filtres -->
             <div class="rounded-xl border bg-card p-4 shadow-sm">
                 <div class="flex flex-wrap items-end gap-3">
-                    <Filter class="mb-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <Filter
+                        class="mb-1 h-4 w-4 shrink-0 text-muted-foreground"
+                    />
 
                     <div class="flex flex-col gap-1">
                         <label class="text-xs font-medium text-muted-foreground"
@@ -223,7 +233,10 @@ const colorClasses: Record<string, string> = {
                         <!-- Statut -->
                         <span
                             class="inline-block rounded-full px-2.5 py-1 text-xs font-medium"
-                            :class="colorClasses[p.statut_color] ?? colorClasses['gray']"
+                            :class="
+                                colorClasses[p.statut_color] ??
+                                colorClasses['gray']
+                            "
                         >
                             {{ p.statut_label }}
                         </span>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,7 +9,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
@@ -202,7 +202,10 @@ function openPaiement(b: BeneficiaireRow) {
     showPaiementDialog.value = true;
 }
 
-function handlePaiementSubmit(payload: { montant: number; mode_paiement: string }) {
+function handlePaiementSubmit(payload: {
+    montant: number;
+    mode_paiement: string;
+}) {
     if (!selectedBeneficiaire.value) return;
     paiementProcessing.value = true;
     paiementErrors.value = {};
@@ -221,8 +224,12 @@ function handlePaiementSubmit(payload: { montant: number; mode_paiement: string 
                     life: 3000,
                 });
             },
-            onError: (e) => { paiementErrors.value = e as Record<string, string>; },
-            onFinish: () => { paiementProcessing.value = false; },
+            onError: (e) => {
+                paiementErrors.value = e as Record<string, string>;
+            },
+            onFinish: () => {
+                paiementProcessing.value = false;
+            },
         },
     );
 }
@@ -722,7 +729,11 @@ function detailUrl(b: BeneficiaireRow): string {
     <!-- ── Dialog paiement ───────────────────────────────────────────────────── -->
     <PaymentDialogCompact
         v-model:visible="showPaiementDialog"
-        :title="selectedBeneficiaire ? `Payer — ${selectedBeneficiaire.beneficiaire_nom}` : 'Payer'"
+        :title="
+            selectedBeneficiaire
+                ? `Payer — ${selectedBeneficiaire.beneficiaire_nom}`
+                : 'Payer'
+        "
         :solde="selectedBeneficiaire?.solde_restant ?? 0"
         :processing="paiementProcessing"
         :errors="paiementErrors"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,7 +9,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -223,7 +223,10 @@ function openDialog(facture: FactureItem) {
     dialogVisible.value = true;
 }
 
-function handleEncaissSubmit(payload: { montant: number; mode_paiement: string }) {
+function handleEncaissSubmit(payload: {
+    montant: number;
+    mode_paiement: string;
+}) {
     if (!factureActive.value) return;
     encaissProcessing.value = true;
     encaissErrors.value = {};
@@ -238,8 +241,12 @@ function handleEncaissSubmit(payload: { montant: number; mode_paiement: string }
                 life: 3000,
             });
         },
-        onError: (e) => { encaissErrors.value = e as Record<string, string>; },
-        onFinish: () => { encaissProcessing.value = false; },
+        onError: (e) => {
+            encaissErrors.value = e as Record<string, string>;
+        },
+        onFinish: () => {
+            encaissProcessing.value = false;
+        },
     });
 }
 
@@ -838,7 +845,11 @@ function _progressPercent(f: FactureItem): number {
         <!-- Dialog encaissement ─────────────────────────────────────────────── -->
         <PaymentDialogCompact
             v-model:visible="dialogVisible"
-            :title="factureActive ? `Encaisser — ${factureActive.reference}` : 'Encaisser'"
+            :title="
+                factureActive
+                    ? `Encaisser — ${factureActive.reference}`
+                    : 'Encaisser'
+            "
             :solde="factureActive?.montant_restant ?? 0"
             :processing="encaissProcessing"
             :errors="encaissErrors"

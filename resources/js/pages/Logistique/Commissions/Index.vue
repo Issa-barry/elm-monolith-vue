@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,7 +9,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -121,7 +121,10 @@ function openPaiement(livreur: LivreurRow) {
     showPaiementDialog.value = true;
 }
 
-function handlePaiementSubmit(payload: { montant: number; mode_paiement: string }) {
+function handlePaiementSubmit(payload: {
+    montant: number;
+    mode_paiement: string;
+}) {
     if (!selectedLivreur.value) return;
     paiementProcessing.value = true;
     paiementErrors.value = {};
@@ -130,9 +133,15 @@ function handlePaiementSubmit(payload: { montant: number; mode_paiement: string 
         payload,
         {
             preserveScroll: true,
-            onSuccess: () => { showPaiementDialog.value = false; },
-            onError: (e) => { paiementErrors.value = e as Record<string, string>; },
-            onFinish: () => { paiementProcessing.value = false; },
+            onSuccess: () => {
+                showPaiementDialog.value = false;
+            },
+            onError: (e) => {
+                paiementErrors.value = e as Record<string, string>;
+            },
+            onFinish: () => {
+                paiementProcessing.value = false;
+            },
         },
     );
 }
