@@ -24,7 +24,10 @@ interface Periode {
     created_at: string;
 }
 
-interface Option { value: string; label: string }
+interface Option {
+    value: string;
+    label: string;
+}
 interface PaginatedPeriodes {
     data: Periode[];
     current_page: number;
@@ -47,19 +50,27 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Paie', href: '/paie' },
 ];
 
-const anneeFilter  = ref<string | null>(props.filters.annee ?? null);
+const anneeFilter = ref<string | null>(props.filters.annee ?? null);
 const statutFilter = ref<string | null>(props.filters.statut ?? null);
 
 const globalFilter = ref('');
-const filtersMeta  = ref({ global: { value: '', matchMode: FilterMatchMode.CONTAINS } });
+const filtersMeta = ref({
+    global: { value: '', matchMode: FilterMatchMode.CONTAINS },
+});
 
-watch(globalFilter, (v) => { filtersMeta.value.global.value = v; });
+watch(globalFilter, (v) => {
+    filtersMeta.value.global.value = v;
+});
 
 function applyFilters() {
-    router.get('/paie', {
-        annee:  anneeFilter.value ?? undefined,
-        statut: statutFilter.value ?? undefined,
-    }, { preserveState: true, replace: true });
+    router.get(
+        '/paie',
+        {
+            annee: anneeFilter.value ?? undefined,
+            statut: statutFilter.value ?? undefined,
+        },
+        { preserveState: true, replace: true },
+    );
 }
 
 watch([anneeFilter, statutFilter], applyFilters);
@@ -71,11 +82,11 @@ const anneesOptions = Array.from({ length: 10 }, (_, i) => {
 
 function statutSeverity(statut: string) {
     const map: Record<string, string> = {
-        brouillon:  'secondary',
-        calcule:    'info',
-        valide_rh:  'warning',
-        paye:       'success',
-        cloture:    'contrast',
+        brouillon: 'secondary',
+        calcule: 'info',
+        valide_rh: 'warning',
+        paye: 'success',
+        cloture: 'contrast',
     };
     return map[statut] ?? 'secondary';
 }
@@ -124,7 +135,7 @@ function statutSeverity(statut: string) {
                     v-model="globalFilter"
                     type="text"
                     placeholder="Rechercher…"
-                    class="rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    class="rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
                 />
             </div>
 
@@ -142,22 +153,33 @@ function statutSeverity(statut: string) {
                 <Column field="label" header="Période" sortable />
                 <Column field="statut_label" header="Statut" sortable>
                     <template #body="{ data }">
-                        <Tag :value="data.statut_label" :severity="statutSeverity(data.statut)" />
+                        <Tag
+                            :value="data.statut_label"
+                            :severity="statutSeverity(data.statut)"
+                        />
                     </template>
                 </Column>
                 <Column field="lignes_count" header="Lignes" sortable />
                 <Column header="Actions" style="width: 8rem">
                     <template #body="{ data }">
                         <Link :href="`/paie/${data.id}`" @click.stop>
-                            <Button variant="outline" size="sm">Détail →</Button>
+                            <Button variant="outline" size="sm"
+                                >Détail →</Button
+                            >
                         </Link>
                     </template>
                 </Column>
             </DataTable>
 
             <!-- Pagination simple -->
-            <div v-if="periodes.last_page > 1" class="flex items-center justify-center gap-2 text-sm">
-                <span>Page {{ periodes.current_page }} / {{ periodes.last_page }}</span>
+            <div
+                v-if="periodes.last_page > 1"
+                class="flex items-center justify-center gap-2 text-sm"
+            >
+                <span
+                    >Page {{ periodes.current_page }} /
+                    {{ periodes.last_page }}</span
+                >
             </div>
         </div>
     </AppLayout>

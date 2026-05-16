@@ -402,15 +402,28 @@ function handleSubmit() {
             >
                 Prise en charge par l'usine ?
             </h3>
-            <div class="flex items-center gap-4" :class="{ 'opacity-60': form.categorie === 'interne' }">
-                <label class="flex items-center gap-2" :class="form.categorie === 'interne' ? 'cursor-not-allowed' : 'cursor-pointer'">
+            <div
+                class="flex items-center gap-4"
+                :class="{ 'opacity-60': form.categorie === 'interne' }"
+            >
+                <label
+                    class="flex items-center gap-2"
+                    :class="
+                        form.categorie === 'interne'
+                            ? 'cursor-not-allowed'
+                            : 'cursor-pointer'
+                    "
+                >
                     <Checkbox
                         id="pris_en_charge_par_usine"
                         :model-value="Boolean(form.pris_en_charge_par_usine)"
                         :disabled="form.categorie === 'interne'"
                         @update:model-value="
                             form.categorie !== 'interne' &&
-                            $emit('update:form', { ...form, pris_en_charge_par_usine: $event === true })
+                            $emit('update:form', {
+                                ...form,
+                                pris_en_charge_par_usine: $event === true,
+                            })
                         "
                     />
                     <span class="text-sm font-medium">
@@ -418,8 +431,13 @@ function handleSubmit() {
                     </span>
                 </label>
                 <p class="text-xs text-muted-foreground">
-                    <template v-if="form.categorie === 'interne'">Obligatoire pour un véhicule interne</template>
-                    <template v-else>Les frais du véhicule sont supportés par l'organisation</template>
+                    <template v-if="form.categorie === 'interne'"
+                        >Obligatoire pour un véhicule interne</template
+                    >
+                    <template v-else
+                        >Les frais du véhicule sont supportés par
+                        l'organisation</template
+                    >
                 </p>
             </div>
         </div>

@@ -179,7 +179,9 @@ function handleConfirm() {
                     class="w-full"
                     :class="{ 'p-invalid': errors.role }"
                 />
-                <p v-if="errors.role" class="mt-1 text-xs text-destructive">{{ errors.role }}</p>
+                <p v-if="errors.role" class="mt-1 text-xs text-destructive">
+                    {{ errors.role }}
+                </p>
             </div>
 
             <!-- Prénom + Nom -->

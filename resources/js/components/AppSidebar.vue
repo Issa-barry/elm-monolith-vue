@@ -53,8 +53,10 @@ const canSee = (permission: string, module: string): boolean =>
 const rhItems = computed((): NavItem[] => {
     if (!moduleActive('rh')) return [];
     const sub: NavItem[] = [];
-    if (can('rh-employes.read')) sub.push({ title: 'Employés', href: '/employes' });
-    if (can('rh-contrats.read')) sub.push({ title: 'Contrats', href: '/contrats' });
+    if (can('rh-employes.read'))
+        sub.push({ title: 'Employés', href: '/employes' });
+    if (can('rh-contrats.read'))
+        sub.push({ title: 'Contrats', href: '/contrats' });
     if (can('rh-paie.read')) sub.push({ title: 'Paie', href: '/paie' });
     return sub;
 });

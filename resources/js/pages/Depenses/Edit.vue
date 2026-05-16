@@ -258,21 +258,38 @@ function submit() {
 
                     <!-- Employé (conditionnel) -->
                     <div v-if="selectedType?.applique_aux_employes">
-                        <Label for="dep-employe" class="mb-1.5 block text-xs font-medium">
+                        <Label
+                            for="dep-employe"
+                            class="mb-1.5 block text-xs font-medium"
+                        >
                             Employé <span class="text-destructive">*</span>
                         </Label>
                         <select
                             id="dep-employe"
                             v-model="form.employe_id"
                             class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                            :class="{ 'border-destructive': form.errors.employe_id }"
+                            :class="{
+                                'border-destructive': form.errors.employe_id,
+                            }"
                         >
                             <option value="">Sélectionner un employé…</option>
-                            <option v-for="e in employes" :key="e.id" :value="e.id">
-                                {{ e.prenom }} {{ e.nom }}<template v-if="e.matricule"> — {{ e.matricule }}</template>
+                            <option
+                                v-for="e in employes"
+                                :key="e.id"
+                                :value="e.id"
+                            >
+                                {{ e.prenom }} {{ e.nom
+                                }}<template v-if="e.matricule">
+                                    — {{ e.matricule }}</template
+                                >
                             </option>
                         </select>
-                        <p v-if="form.errors.employe_id" class="mt-1 text-xs text-destructive">{{ form.errors.employe_id }}</p>
+                        <p
+                            v-if="form.errors.employe_id"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ form.errors.employe_id }}
+                        </p>
                     </div>
 
                     <!-- Site -->

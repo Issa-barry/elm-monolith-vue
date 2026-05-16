@@ -11,7 +11,7 @@ import {
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Briefcase,
     MoreVertical,
@@ -83,8 +83,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 // ── Filtres (URL-persistent) ──────────────────────────────────────────────────
-const search      = ref(props.filters.search ?? '');
-const statut      = ref(props.filters.statut ?? '');
+const search = ref(props.filters.search ?? '');
+const statut = ref(props.filters.statut ?? '');
 const typeEmploye = ref(props.filters.type_employe ?? '');
 const typeContrat = ref(props.filters.type_contrat ?? '');
 
@@ -94,8 +94,8 @@ function applyFilters() {
     router.visit('/employes', {
         method: 'get',
         data: {
-            search:       search.value || undefined,
-            statut:       statut.value || undefined,
+            search: search.value || undefined,
+            statut: statut.value || undefined,
             type_employe: typeEmploye.value || undefined,
             type_contrat: typeContrat.value || undefined,
         },
@@ -113,14 +113,15 @@ watch(search, () => {
 watch([statut, typeEmploye, typeContrat], applyFilters);
 
 function resetFilters() {
-    search.value      = '';
-    statut.value      = '';
+    search.value = '';
+    statut.value = '';
     typeEmploye.value = '';
     typeContrat.value = '';
 }
 
 const hasActiveFilters = computed(
-    () => search.value || statut.value || typeEmploye.value || typeContrat.value,
+    () =>
+        search.value || statut.value || typeEmploye.value || typeContrat.value,
 );
 
 // ── Options avec "Tous" ───────────────────────────────────────────────────────
@@ -141,14 +142,15 @@ const typeContratOptions = computed(() => [
 
 // ── Couleurs ──────────────────────────────────────────────────────────────────
 const STATUT_DOT: Record<string, string> = {
-    actif:    'bg-emerald-500',
+    actif: 'bg-emerald-500',
     suspendu: 'bg-amber-400',
-    sorti:    'bg-zinc-400 dark:bg-zinc-500',
+    sorti: 'bg-zinc-400 dark:bg-zinc-500',
 };
 
 const TYPE_EMPLOYE_CLASS: Record<string, string> = {
     interne: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    externe: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+    externe:
+        'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
 };
 
 const TYPE_CONTRAT_CLASS: Record<string, string> = {
@@ -167,7 +169,13 @@ function typeContratClass(type: string) {
 }
 
 function initials(name: string) {
-    return name.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+    return name
+        .trim()
+        .split(/\s+/)
+        .map((w) => w[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase();
 }
 
 // ── Suppression ───────────────────────────────────────────────────────────────
@@ -198,13 +206,16 @@ function confirmDelete(e: Employe) {
     <Head><title>Employés</title></Head>
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <div class="flex flex-col gap-6 p-6">
-
             <!-- Header -->
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">Employés</h1>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Employés
+                    </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ employes.length }} résultat{{ employes.length !== 1 ? 's' : '' }}
+                        {{ employes.length }} résultat{{
+                            employes.length !== 1 ? 's' : ''
+                        }}
                     </p>
                 </div>
                 <Link v-if="can('rh-employes.create')" href="/employes/create">
@@ -216,13 +227,15 @@ function confirmDelete(e: Employe) {
             <div class="rounded-xl border bg-card px-4 py-3">
                 <div class="flex flex-wrap items-center gap-3">
                     <!-- Recherche -->
-                    <div class="relative flex-1 min-w-[200px]">
-                        <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    <div class="relative min-w-[200px] flex-1">
+                        <Search
+                            class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        />
                         <input
                             v-model="search"
                             type="text"
                             placeholder="Matricule, nom, téléphone, email…"
-                            class="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-9 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         />
                     </div>
 
@@ -282,34 +295,63 @@ function confirmDelete(e: Employe) {
                     table-class="w-full"
                 >
                     <!-- Employé -->
-                    <Column field="nom_complet" header="Employé" sortable style="min-width: 220px">
+                    <Column
+                        field="nom_complet"
+                        header="Employé"
+                        sortable
+                        style="min-width: 220px"
+                    >
                         <template #body="{ data }">
                             <div class="flex items-center gap-3">
-                                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                                <div
+                                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
+                                >
                                     {{ initials(data.nom_complet) }}
                                 </div>
                                 <div>
-                                    <div class="font-medium">{{ data.nom_complet }}</div>
-                                    <div class="text-xs text-muted-foreground">{{ data.email }}</div>
+                                    <div class="font-medium">
+                                        {{ data.nom_complet }}
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        {{ data.email }}
+                                    </div>
                                 </div>
                             </div>
                         </template>
                     </Column>
 
                     <!-- Matricule -->
-                    <Column field="matricule" header="Matricule" sortable style="width: 110px">
+                    <Column
+                        field="matricule"
+                        header="Matricule"
+                        sortable
+                        style="width: 110px"
+                    >
                         <template #body="{ data }">
-                            <span v-if="data.matricule" class="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
+                            <span
+                                v-if="data.matricule"
+                                class="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground"
+                            >
                                 {{ data.matricule }}
                             </span>
-                            <span v-else class="text-xs text-muted-foreground">—</span>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
                         </template>
                     </Column>
 
                     <!-- Type employé -->
-                    <Column field="type_employe_label" header="Type" sortable style="width: 120px">
+                    <Column
+                        field="type_employe_label"
+                        header="Type"
+                        sortable
+                        style="width: 120px"
+                    >
                         <template #body="{ data }">
-                            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="typeEmployeClass(data.type_employe)">
+                            <span
+                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                :class="typeEmployeClass(data.type_employe)"
+                            >
                                 {{ data.type_employe_label }}
                             </span>
                         </template>
@@ -321,24 +363,42 @@ function confirmDelete(e: Employe) {
                             <span
                                 v-if="data.contrat_actif"
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="typeContratClass(data.contrat_actif.type_contrat)"
+                                :class="
+                                    typeContratClass(
+                                        data.contrat_actif.type_contrat,
+                                    )
+                                "
                             >
                                 <Briefcase class="mr-1 h-3 w-3" />
                                 {{ data.contrat_actif.type_contrat_label }}
                             </span>
-                            <span v-else class="text-xs text-muted-foreground">—</span>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
                         </template>
                     </Column>
 
                     <!-- Site -->
-                    <Column field="site" header="Site" sortable style="width: 160px">
+                    <Column
+                        field="site"
+                        header="Site"
+                        sortable
+                        style="width: 160px"
+                    >
                         <template #body="{ data }">
-                            <span class="text-sm text-muted-foreground">{{ data.site ?? '—' }}</span>
+                            <span class="text-sm text-muted-foreground">{{
+                                data.site ?? '—'
+                            }}</span>
                         </template>
                     </Column>
 
                     <!-- Statut -->
-                    <Column field="statut_label" header="Statut" sortable style="width: 110px">
+                    <Column
+                        field="statut_label"
+                        header="Statut"
+                        sortable
+                        style="width: 110px"
+                    >
                         <template #body="{ data }">
                             <StatusDot
                                 :label="data.statut_label"
@@ -354,22 +414,47 @@ function confirmDelete(e: Employe) {
                             <div class="flex justify-end">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger as-child>
-                                        <Button variant="ghost" size="icon" class="h-8 w-8">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-8 w-8"
+                                        >
                                             <MoreVertical class="h-4 w-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" class="w-44">
-                                        <DropdownMenuItem v-if="can('rh-employes.update')" as-child>
-                                            <Link :href="`/employes/${data.id}/edit`" class="flex w-full items-center gap-2">
-                                                <Pencil class="h-4 w-4" />Modifier
+                                    <DropdownMenuContent
+                                        align="end"
+                                        class="w-44"
+                                    >
+                                        <DropdownMenuItem
+                                            v-if="can('rh-employes.update')"
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="`/employes/${data.id}/edit`"
+                                                class="flex w-full items-center gap-2"
+                                            >
+                                                <Pencil
+                                                    class="h-4 w-4"
+                                                />Modifier
                                             </Link>
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem v-if="can('rh-contrats.create')" as-child>
-                                            <Link :href="`/contrats/create?employe_id=${data.id}`" class="flex w-full items-center gap-2">
-                                                <Briefcase class="h-4 w-4" />Nouveau contrat
+                                        <DropdownMenuItem
+                                            v-if="can('rh-contrats.create')"
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="`/contrats/create?employe_id=${data.id}`"
+                                                class="flex w-full items-center gap-2"
+                                            >
+                                                <Briefcase
+                                                    class="h-4 w-4"
+                                                />Nouveau contrat
                                             </Link>
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator v-if="can('rh-employes.delete')" />
+                                        <DropdownMenuSeparator
+                                            v-if="can('rh-employes.delete')"
+                                        />
                                         <DropdownMenuItem
                                             v-if="can('rh-employes.delete')"
                                             class="cursor-pointer text-destructive focus:text-destructive"
@@ -384,19 +469,24 @@ function confirmDelete(e: Employe) {
                     </Column>
 
                     <template #empty>
-                        <div class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                        <div
+                            class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+                        >
                             <UserRound class="h-12 w-12 opacity-30" />
                             <p class="text-sm">Aucun employé trouvé.</p>
-                            <Link v-if="can('rh-employes.create')" href="/employes/create">
+                            <Link
+                                v-if="can('rh-employes.create')"
+                                href="/employes/create"
+                            >
                                 <Button variant="outline" size="sm">
-                                    <Plus class="mr-2 h-4 w-4" />Créer le premier employé
+                                    <Plus class="mr-2 h-4 w-4" />Créer le
+                                    premier employé
                                 </Button>
                             </Link>
                         </div>
                     </template>
                 </DataTable>
             </div>
-
         </div>
     </AppLayout>
 </template>

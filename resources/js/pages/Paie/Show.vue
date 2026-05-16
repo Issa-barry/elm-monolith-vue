@@ -15,7 +15,13 @@ import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { ref, watch } from 'vue';
 
-interface Variable { id: string; type: string; libelle: string; montant: number; note: string | null }
+interface Variable {
+    id: string;
+    type: string;
+    libelle: string;
+    montant: number;
+    note: string | null;
+}
 interface Paiement {
     id: string;
     montant: number;
@@ -57,7 +63,13 @@ interface Periode {
     est_verrouille: boolean;
     notes: string | null;
 }
-interface Can { update: boolean; validate: boolean; pay: boolean; close: boolean; delete: boolean }
+interface Can {
+    update: boolean;
+    validate: boolean;
+    pay: boolean;
+    close: boolean;
+    delete: boolean;
+}
 
 const props = defineProps<{
     periode: Periode;
@@ -66,8 +78,8 @@ const props = defineProps<{
     can: Can;
 }>();
 
-const confirm  = useConfirm();
-const toast    = useToast();
+const confirm = useConfirm();
+const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -76,34 +88,75 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const globalFilter = ref('');
-const filtersMeta  = ref({ global: { value: '', matchMode: FilterMatchMode.CONTAINS } });
-watch(globalFilter, (v) => { filtersMeta.value.global.value = v; });
+const filtersMeta = ref({
+    global: { value: '', matchMode: FilterMatchMode.CONTAINS },
+});
+watch(globalFilter, (v) => {
+    filtersMeta.value.global.value = v;
+});
 
 const expandedRows = ref<Record<string, boolean>>({});
 
 // ── Actions workflow ──────────────────────────────────────────────────────────
 function calculer() {
-    router.post(`/paie/${props.periode.id}/calculer`, {}, {
-        onSuccess: () => toast.add({ severity: 'success', summary: 'Calculé', life: 3000 }),
-    });
+    router.post(
+        `/paie/${props.periode.id}/calculer`,
+        {},
+        {
+            onSuccess: () =>
+                toast.add({
+                    severity: 'success',
+                    summary: 'Calculé',
+                    life: 3000,
+                }),
+        },
+    );
 }
 function valider() {
-    router.post(`/paie/${props.periode.id}/valider`, {}, {
-        onSuccess: () => toast.add({ severity: 'success', summary: 'Validé RH', life: 3000 }),
-    });
+    router.post(
+        `/paie/${props.periode.id}/valider`,
+        {},
+        {
+            onSuccess: () =>
+                toast.add({
+                    severity: 'success',
+                    summary: 'Validé RH',
+                    life: 3000,
+                }),
+        },
+    );
 }
 function marquerPaye() {
-    router.post(`/paie/${props.periode.id}/paye`, {}, {
-        onSuccess: () => toast.add({ severity: 'success', summary: 'Marqué payé', life: 3000 }),
-    });
+    router.post(
+        `/paie/${props.periode.id}/paye`,
+        {},
+        {
+            onSuccess: () =>
+                toast.add({
+                    severity: 'success',
+                    summary: 'Marqué payé',
+                    life: 3000,
+                }),
+        },
+    );
 }
 function cloturer() {
     confirm.require({
         message: 'Cette action est irréversible. Confirmer la clôture ?',
         header: 'Clôturer la période',
-        accept: () => router.post(`/paie/${props.periode.id}/cloturer`, {}, {
-            onSuccess: () => toast.add({ severity: 'success', summary: 'Clôturé', life: 3000 }),
-        }),
+        accept: () =>
+            router.post(
+                `/paie/${props.periode.id}/cloturer`,
+                {},
+                {
+                    onSuccess: () =>
+                        toast.add({
+                            severity: 'success',
+                            summary: 'Clôturé',
+                            life: 3000,
+                        }),
+                },
+            ),
     });
 }
 function supprimerPeriode() {
@@ -116,28 +169,28 @@ function supprimerPeriode() {
 
 // ── Modal variable ────────────────────────────────────────────────────────────
 const showVariableModal = ref(false);
-const selectedLigne     = ref<Ligne | null>(null);
-const editingVariable   = ref<Variable | null>(null);
+const selectedLigne = ref<Ligne | null>(null);
+const editingVariable = ref<Variable | null>(null);
 
 const typeOptions = [
-    { value: 'prime',           label: 'Prime' },
-    { value: 'autre_gain',      label: 'Autre gain' },
-    { value: 'avance',          label: 'Avance sur salaire' },
-    { value: 'retenue',         label: 'Retenue' },
-    { value: 'absence',         label: 'Absence' },
+    { value: 'prime', label: 'Prime' },
+    { value: 'autre_gain', label: 'Autre gain' },
+    { value: 'avance', label: 'Avance sur salaire' },
+    { value: 'retenue', label: 'Retenue' },
+    { value: 'absence', label: 'Absence' },
     { value: 'autre_deduction', label: 'Autre déduction' },
 ];
 
 const varForm = useForm({ type: 'prime', libelle: '', montant: 0, note: '' });
 
 function openVariableModal(ligne: Ligne, variable?: Variable) {
-    selectedLigne.value   = ligne;
+    selectedLigne.value = ligne;
     editingVariable.value = variable ?? null;
     if (variable) {
-        varForm.type    = variable.type;
+        varForm.type = variable.type;
         varForm.libelle = variable.libelle;
         varForm.montant = variable.montant;
-        varForm.note    = variable.note ?? '';
+        varForm.note = variable.note ?? '';
     } else {
         varForm.reset();
         varForm.type = 'prime';
@@ -148,11 +201,17 @@ function openVariableModal(ligne: Ligne, variable?: Variable) {
 function submitVariable() {
     if (editingVariable.value) {
         varForm.put(`/paie-variables/${editingVariable.value.id}`, {
-            onSuccess: () => { showVariableModal.value = false; varForm.reset(); },
+            onSuccess: () => {
+                showVariableModal.value = false;
+                varForm.reset();
+            },
         });
     } else {
         varForm.post(`/paie-lignes/${selectedLigne.value!.id}/variables`, {
-            onSuccess: () => { showVariableModal.value = false; varForm.reset(); },
+            onSuccess: () => {
+                showVariableModal.value = false;
+                varForm.reset();
+            },
         });
     }
 }
@@ -161,19 +220,25 @@ function supprimerVariable(variable: Variable) {
     confirm.require({
         message: `Supprimer la variable "${variable.libelle}" ?`,
         header: 'Confirmation',
-        accept: () => router.delete(`/paie-variables/${variable.id}`, {
-            onSuccess: () => toast.add({ severity: 'success', summary: 'Variable supprimée', life: 3000 }),
-        }),
+        accept: () =>
+            router.delete(`/paie-variables/${variable.id}`, {
+                onSuccess: () =>
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Variable supprimée',
+                        life: 3000,
+                    }),
+            }),
     });
 }
 
 // ── Modal paiement (PaymentDialogCompact) ─────────────────────────────────────
-const showPaiementModal  = ref(false);
+const showPaiementModal = ref(false);
 const paiementProcessing = ref(false);
-const paiementErrors     = ref<Record<string, string>>({});
+const paiementErrors = ref<Record<string, string>>({});
 
 function openPaiementModal(ligne: Ligne) {
-    selectedLigne.value  = ligne;
+    selectedLigne.value = ligne;
     paiementErrors.value = {};
     showPaiementModal.value = true;
 }
@@ -181,23 +246,27 @@ function openPaiementModal(ligne: Ligne) {
 function submitPaiement(payload: { montant: number; mode_paiement: string }) {
     if (!selectedLigne.value) return;
     paiementProcessing.value = true;
-    paiementErrors.value     = {};
+    paiementErrors.value = {};
 
     router.post(
         `/paie-lignes/${selectedLigne.value.id}/paiements`,
         {
-            montant:        payload.montant,
-            mode_paiement:  payload.mode_paiement,
-            date_paiement:  new Date().toISOString().slice(0, 10),
+            montant: payload.montant,
+            mode_paiement: payload.mode_paiement,
+            date_paiement: new Date().toISOString().slice(0, 10),
         },
         {
             onSuccess: () => {
-                showPaiementModal.value  = false;
+                showPaiementModal.value = false;
                 paiementProcessing.value = false;
-                toast.add({ severity: 'success', summary: 'Paiement enregistré', life: 3000 });
+                toast.add({
+                    severity: 'success',
+                    summary: 'Paiement enregistré',
+                    life: 3000,
+                });
             },
             onError: (errors) => {
-                paiementErrors.value     = errors as Record<string, string>;
+                paiementErrors.value = errors as Record<string, string>;
                 paiementProcessing.value = false;
             },
         },
@@ -208,35 +277,43 @@ function supprimerPaiement(paiement: Paiement) {
     confirm.require({
         message: 'Supprimer ce paiement ?',
         header: 'Confirmation',
-        accept: () => router.delete(`/paie-paiements/${paiement.id}`, {
-            onSuccess: () => toast.add({ severity: 'success', summary: 'Paiement supprimé', life: 3000 }),
-        }),
+        accept: () =>
+            router.delete(`/paie-paiements/${paiement.id}`, {
+                onSuccess: () =>
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Paiement supprimé',
+                        life: 3000,
+                    }),
+            }),
     });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const modePaiementLabels: Record<string, string> = {
-    especes:      'Espèces',
-    virement:     'Virement',
-    cheque:       'Chèque',
+    especes: 'Espèces',
+    virement: 'Virement',
+    cheque: 'Chèque',
     mobile_money: 'Mobile Money',
 };
 
 function statutSeverity(statut: string) {
     const map: Record<string, string> = {
-        en_attente:         'secondary',
-        calcule:            'info',
+        en_attente: 'secondary',
+        calcule: 'info',
         partiellement_paye: 'warning',
-        paye:               'success',
-        brouillon:          'secondary',
-        valide_rh:          'warning',
-        cloture:            'contrast',
+        paye: 'success',
+        brouillon: 'secondary',
+        valide_rh: 'warning',
+        cloture: 'contrast',
     };
     return map[statut] ?? 'secondary';
 }
 
 function fmt(n: number) {
-    return new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 0 }).format(n);
+    return new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 0 }).format(
+        n,
+    );
 }
 </script>
 
@@ -249,8 +326,17 @@ function fmt(n: number) {
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <h1 class="text-2xl font-bold">{{ periode.label }}</h1>
-                    <Tag :value="periode.statut_label" :severity="statutSeverity(periode.statut)" class="mt-1" />
-                    <p v-if="periode.notes" class="mt-1 text-sm text-muted-foreground">{{ periode.notes }}</p>
+                    <Tag
+                        :value="periode.statut_label"
+                        :severity="statutSeverity(periode.statut)"
+                        class="mt-1"
+                    />
+                    <p
+                        v-if="periode.notes"
+                        class="mt-1 text-sm text-muted-foreground"
+                    >
+                        {{ periode.notes }}
+                    </p>
                 </div>
 
                 <!-- Actions workflow -->
@@ -305,9 +391,11 @@ function fmt(n: number) {
                     v-model="globalFilter"
                     type="text"
                     placeholder="Rechercher un employé (nom, matricule)…"
-                    class="rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring w-80"
+                    class="w-80 rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
                 />
-                <span class="text-sm text-muted-foreground">{{ lignes.length }} employé(s)</span>
+                <span class="text-sm text-muted-foreground"
+                    >{{ lignes.length }} employé(s)</span
+                >
             </div>
 
             <!-- Table lignes -->
@@ -315,13 +403,22 @@ function fmt(n: number) {
                 :value="lignes"
                 dataKey="id"
                 :filters="filtersMeta"
-                :global-filter-fields="['employe_nom', 'employe_matricule', 'statut_label']"
+                :global-filter-fields="[
+                    'employe_nom',
+                    'employe_matricule',
+                    'statut_label',
+                ]"
                 v-model:expanded-rows="expandedRows"
                 striped-rows
                 class="text-sm"
             >
                 <Column expander style="width: 3rem" />
-                <Column field="employe_matricule" header="Matricule" sortable style="width: 8rem" />
+                <Column
+                    field="employe_matricule"
+                    header="Matricule"
+                    sortable
+                    style="width: 8rem"
+                />
                 <Column field="employe_nom" header="Employé" sortable />
                 <Column field="net" header="Net à payer" sortable>
                     <template #body="{ data }">
@@ -329,18 +426,29 @@ function fmt(n: number) {
                     </template>
                 </Column>
                 <Column field="deja_paye" header="Déjà payé" sortable>
-                    <template #body="{ data }">{{ fmt(data.deja_paye) }}</template>
+                    <template #body="{ data }">{{
+                        fmt(data.deja_paye)
+                    }}</template>
                 </Column>
                 <Column field="reste_a_payer" header="Reste" sortable>
                     <template #body="{ data }">
-                        <span :class="data.reste_a_payer > 0 ? 'text-amber-600 font-medium' : 'text-green-600'">
+                        <span
+                            :class="
+                                data.reste_a_payer > 0
+                                    ? 'font-medium text-amber-600'
+                                    : 'text-green-600'
+                            "
+                        >
                             {{ fmt(data.reste_a_payer) }}
                         </span>
                     </template>
                 </Column>
                 <Column field="statut_label" header="Statut">
                     <template #body="{ data }">
-                        <Tag :value="data.statut_label" :severity="statutSeverity(data.statut)" />
+                        <Tag
+                            :value="data.statut_label"
+                            :severity="statutSeverity(data.statut)"
+                        />
                     </template>
                 </Column>
                 <Column header="Payer" style="width: 7rem">
@@ -352,7 +460,11 @@ function fmt(n: number) {
                         >
                             Payer
                         </Button>
-                        <span v-else-if="data.reste_a_payer === 0" class="text-xs text-green-600">✓ Soldé</span>
+                        <span
+                            v-else-if="data.reste_a_payer === 0"
+                            class="text-xs text-green-600"
+                            >✓ Soldé</span
+                        >
                     </template>
                 </Column>
 
@@ -372,38 +484,74 @@ function fmt(n: number) {
                                     <Plus class="mr-1 h-3 w-3" /> Ajouter
                                 </Button>
                             </div>
-                            <div v-if="data.variables.length === 0" class="text-sm text-muted-foreground">Aucune variable</div>
+                            <div
+                                v-if="data.variables.length === 0"
+                                class="text-sm text-muted-foreground"
+                            >
+                                Aucune variable
+                            </div>
                             <table v-else class="w-full text-sm">
                                 <thead>
                                     <tr class="text-muted-foreground">
-                                        <th class="pb-1 text-left font-normal">Type</th>
-                                        <th class="pb-1 text-left font-normal">Libellé</th>
-                                        <th class="pb-1 text-right font-normal">Montant</th>
+                                        <th class="pb-1 text-left font-normal">
+                                            Type
+                                        </th>
+                                        <th class="pb-1 text-left font-normal">
+                                            Libellé
+                                        </th>
+                                        <th class="pb-1 text-right font-normal">
+                                            Montant
+                                        </th>
                                         <th />
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="v in data.variables" :key="v.id" class="border-t">
-                                        <td class="py-1 pr-2 capitalize">{{ v.type }}</td>
-                                        <td class="py-1 pr-2">{{ v.libelle }}</td>
-                                        <td class="py-1 pr-2 text-right">{{ fmt(v.montant) }}</td>
+                                    <tr
+                                        v-for="v in data.variables"
+                                        :key="v.id"
+                                        class="border-t"
+                                    >
+                                        <td class="py-1 pr-2 capitalize">
+                                            {{ v.type }}
+                                        </td>
+                                        <td class="py-1 pr-2">
+                                            {{ v.libelle }}
+                                        </td>
+                                        <td class="py-1 pr-2 text-right">
+                                            {{ fmt(v.montant) }}
+                                        </td>
                                         <td class="py-1">
                                             <div class="flex gap-1">
                                                 <Button
-                                                    v-if="!periode.est_verrouille && can.update"
+                                                    v-if="
+                                                        !periode.est_verrouille &&
+                                                        can.update
+                                                    "
                                                     size="icon"
                                                     variant="ghost"
                                                     class="h-6 w-6"
-                                                    @click="openVariableModal(data, v)"
+                                                    @click="
+                                                        openVariableModal(
+                                                            data,
+                                                            v,
+                                                        )
+                                                    "
                                                 >
-                                                    <span class="text-xs">✎</span>
+                                                    <span class="text-xs"
+                                                        >✎</span
+                                                    >
                                                 </Button>
                                                 <Button
-                                                    v-if="!periode.est_verrouille && can.update"
+                                                    v-if="
+                                                        !periode.est_verrouille &&
+                                                        can.update
+                                                    "
                                                     size="icon"
                                                     variant="ghost"
                                                     class="h-6 w-6 text-destructive"
-                                                    @click="supprimerVariable(v)"
+                                                    @click="
+                                                        supprimerVariable(v)
+                                                    "
                                                 >
                                                     <X class="h-3 w-3" />
                                                 </Button>
@@ -414,18 +562,30 @@ function fmt(n: number) {
                             </table>
 
                             <!-- Récap rapide -->
-                            <div class="mt-3 grid grid-cols-3 gap-2 rounded-md bg-muted/40 p-2 text-xs">
+                            <div
+                                class="mt-3 grid grid-cols-3 gap-2 rounded-md bg-muted/40 p-2 text-xs"
+                            >
                                 <div>
-                                    <div class="text-muted-foreground">Base</div>
-                                    <div class="font-medium">{{ fmt(data.salaire_base) }}</div>
+                                    <div class="text-muted-foreground">
+                                        Base
+                                    </div>
+                                    <div class="font-medium">
+                                        {{ fmt(data.salaire_base) }}
+                                    </div>
                                 </div>
                                 <div>
-                                    <div class="text-muted-foreground">Brut</div>
-                                    <div class="font-medium">{{ fmt(data.brut) }}</div>
+                                    <div class="text-muted-foreground">
+                                        Brut
+                                    </div>
+                                    <div class="font-medium">
+                                        {{ fmt(data.brut) }}
+                                    </div>
                                 </div>
                                 <div>
                                     <div class="text-muted-foreground">Net</div>
-                                    <div class="font-semibold text-primary">{{ fmt(data.net) }}</div>
+                                    <div class="font-semibold text-primary">
+                                        {{ fmt(data.net) }}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -433,7 +593,9 @@ function fmt(n: number) {
                         <!-- Historique paiements -->
                         <div>
                             <div class="mb-2 flex items-center justify-between">
-                                <h3 class="font-semibold">Historique paiements</h3>
+                                <h3 class="font-semibold">
+                                    Historique paiements
+                                </h3>
                                 <Button
                                     v-if="can.pay && data.reste_a_payer > 0"
                                     size="sm"
@@ -443,21 +605,48 @@ function fmt(n: number) {
                                     Payer
                                 </Button>
                             </div>
-                            <div v-if="data.paiements.length === 0" class="text-sm text-muted-foreground">Aucun paiement</div>
+                            <div
+                                v-if="data.paiements.length === 0"
+                                class="text-sm text-muted-foreground"
+                            >
+                                Aucun paiement
+                            </div>
                             <table v-else class="w-full text-sm">
                                 <thead>
                                     <tr class="text-muted-foreground">
-                                        <th class="pb-1 text-left font-normal">Date</th>
-                                        <th class="pb-1 text-left font-normal">Mode</th>
-                                        <th class="pb-1 text-right font-normal">Montant</th>
+                                        <th class="pb-1 text-left font-normal">
+                                            Date
+                                        </th>
+                                        <th class="pb-1 text-left font-normal">
+                                            Mode
+                                        </th>
+                                        <th class="pb-1 text-right font-normal">
+                                            Montant
+                                        </th>
                                         <th />
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="p in data.paiements" :key="p.id" class="border-t">
-                                        <td class="py-1 pr-2">{{ p.date_paiement }}</td>
-                                        <td class="py-1 pr-2">{{ modePaiementLabels[p.mode_paiement] ?? p.mode_paiement }}</td>
-                                        <td class="py-1 pr-2 text-right font-medium">{{ fmt(p.montant) }}</td>
+                                    <tr
+                                        v-for="p in data.paiements"
+                                        :key="p.id"
+                                        class="border-t"
+                                    >
+                                        <td class="py-1 pr-2">
+                                            {{ p.date_paiement }}
+                                        </td>
+                                        <td class="py-1 pr-2">
+                                            {{
+                                                modePaiementLabels[
+                                                    p.mode_paiement
+                                                ] ?? p.mode_paiement
+                                            }}
+                                        </td>
+                                        <td
+                                            class="py-1 pr-2 text-right font-medium"
+                                        >
+                                            {{ fmt(p.montant) }}
+                                        </td>
                                         <td class="py-1">
                                             <Button
                                                 v-if="can.pay"
@@ -482,7 +671,11 @@ function fmt(n: number) {
         <Dialog
             v-model:visible="showVariableModal"
             modal
-            :header="editingVariable ? 'Modifier la variable' : 'Ajouter une variable'"
+            :header="
+                editingVariable
+                    ? 'Modifier la variable'
+                    : 'Ajouter une variable'
+            "
             style="width: 30rem"
         >
             <form class="space-y-4" @submit.prevent="submitVariable">
@@ -495,16 +688,26 @@ function fmt(n: number) {
                         option-value="value"
                         class="w-full"
                     />
-                    <p v-if="varForm.errors.type" class="text-xs text-destructive">{{ varForm.errors.type }}</p>
+                    <p
+                        v-if="varForm.errors.type"
+                        class="text-xs text-destructive"
+                    >
+                        {{ varForm.errors.type }}
+                    </p>
                 </div>
                 <div class="space-y-1">
                     <label class="text-sm font-medium">Libellé</label>
                     <input
                         v-model="varForm.libelle"
                         type="text"
-                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
                     />
-                    <p v-if="varForm.errors.libelle" class="text-xs text-destructive">{{ varForm.errors.libelle }}</p>
+                    <p
+                        v-if="varForm.errors.libelle"
+                        class="text-xs text-destructive"
+                    >
+                        {{ varForm.errors.libelle }}
+                    </p>
                 </div>
                 <div class="space-y-1">
                     <label class="text-sm font-medium">Montant</label>
@@ -513,21 +716,38 @@ function fmt(n: number) {
                         type="number"
                         step="0.01"
                         min="0.01"
-                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
                     />
-                    <p v-if="varForm.errors.montant" class="text-xs text-destructive">{{ varForm.errors.montant }}</p>
+                    <p
+                        v-if="varForm.errors.montant"
+                        class="text-xs text-destructive"
+                    >
+                        {{ varForm.errors.montant }}
+                    </p>
                 </div>
                 <div class="space-y-1">
-                    <label class="text-sm font-medium">Note <span class="text-muted-foreground">(optionnel)</span></label>
+                    <label class="text-sm font-medium"
+                        >Note
+                        <span class="text-muted-foreground"
+                            >(optionnel)</span
+                        ></label
+                    >
                     <textarea
                         v-model="varForm.note"
                         rows="2"
-                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
                     />
                 </div>
                 <div class="flex justify-end gap-2 pt-2">
-                    <Button type="button" variant="outline" @click="showVariableModal = false">Annuler</Button>
-                    <Button type="submit" :disabled="varForm.processing">Enregistrer</Button>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        @click="showVariableModal = false"
+                        >Annuler</Button
+                    >
+                    <Button type="submit" :disabled="varForm.processing"
+                        >Enregistrer</Button
+                    >
                 </div>
             </form>
         </Dialog>

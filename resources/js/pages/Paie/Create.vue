@@ -16,8 +16,19 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const moisLabels = [
-    '', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+    '',
+    'Janvier',
+    'Février',
+    'Mars',
+    'Avril',
+    'Mai',
+    'Juin',
+    'Juillet',
+    'Août',
+    'Septembre',
+    'Octobre',
+    'Novembre',
+    'Décembre',
 ];
 
 const moisOptions = Array.from({ length: 12 }, (_, i) => ({
@@ -31,7 +42,7 @@ const anneesOptions = Array.from({ length: 10 }, (_, i) => {
 });
 
 const form = useForm({
-    mois:  props.mois_courant,
+    mois: props.mois_courant,
     annee: props.annee_courante,
     notes: '',
 });
@@ -54,13 +65,19 @@ function submit() {
                     <label class="text-sm font-medium">Mois</label>
                     <select
                         v-model="form.mois"
-                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
                     >
-                        <option v-for="opt in moisOptions" :key="opt.value" :value="opt.value">
+                        <option
+                            v-for="opt in moisOptions"
+                            :key="opt.value"
+                            :value="opt.value"
+                        >
                             {{ opt.label }}
                         </option>
                     </select>
-                    <p v-if="form.errors.mois" class="text-xs text-destructive">{{ form.errors.mois }}</p>
+                    <p v-if="form.errors.mois" class="text-xs text-destructive">
+                        {{ form.errors.mois }}
+                    </p>
                 </div>
 
                 <!-- Année -->
@@ -68,27 +85,43 @@ function submit() {
                     <label class="text-sm font-medium">Année</label>
                     <select
                         v-model="form.annee"
-                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
                     >
-                        <option v-for="opt in anneesOptions" :key="opt.value" :value="opt.value">
+                        <option
+                            v-for="opt in anneesOptions"
+                            :key="opt.value"
+                            :value="opt.value"
+                        >
                             {{ opt.label }}
                         </option>
                     </select>
-                    <p v-if="form.errors.annee" class="text-xs text-destructive">{{ form.errors.annee }}</p>
+                    <p
+                        v-if="form.errors.annee"
+                        class="text-xs text-destructive"
+                    >
+                        {{ form.errors.annee }}
+                    </p>
                 </div>
 
                 <!-- Notes -->
                 <div class="space-y-1">
-                    <label class="text-sm font-medium">Notes <span class="text-muted-foreground">(optionnel)</span></label>
+                    <label class="text-sm font-medium"
+                        >Notes
+                        <span class="text-muted-foreground"
+                            >(optionnel)</span
+                        ></label
+                    >
                     <textarea
                         v-model="form.notes"
                         rows="3"
-                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
                     />
                 </div>
 
                 <div class="flex gap-3">
-                    <Button type="submit" :disabled="form.processing">Créer la période</Button>
+                    <Button type="submit" :disabled="form.processing"
+                        >Créer la période</Button
+                    >
                     <a href="/paie">
                         <Button variant="outline" type="button">Annuler</Button>
                     </a>

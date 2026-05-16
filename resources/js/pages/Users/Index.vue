@@ -210,7 +210,12 @@ function confirmDelete(u: StaffUser) {
                     :value="filteredUsers"
                     :paginator="props.users.length > 20"
                     :rows="20"
-                    :global-filter-fields="['nom_complet', 'email', 'site', 'matricule']"
+                    :global-filter-fields="[
+                        'nom_complet',
+                        'email',
+                        'site',
+                        'matricule',
+                    ]"
                     v-model:filters="filters"
                     data-key="id"
                     striped-rows
@@ -292,8 +297,11 @@ function confirmDelete(u: StaffUser) {
                             <span
                                 v-if="data.matricule"
                                 class="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground"
-                            >{{ data.matricule }}</span>
-                            <span v-else class="text-xs text-muted-foreground">—</span>
+                                >{{ data.matricule }}</span
+                            >
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
                         </template>
                     </Column>
 
