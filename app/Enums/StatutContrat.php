@@ -4,16 +4,16 @@ namespace App\Enums;
 
 enum StatutContrat: string
 {
-    case ACTIF   = 'actif';
+    case ACTIF = 'actif';
     case TERMINE = 'termine';
-    case ROMPU   = 'rompu';
+    case ROMPU = 'rompu';
 
     public function label(): string
     {
         return match ($this) {
-            self::ACTIF   => 'Actif',
+            self::ACTIF => 'Actif',
             self::TERMINE => 'Terminé',
-            self::ROMPU   => 'Rompu',
+            self::ROMPU => 'Rompu',
         };
     }
 

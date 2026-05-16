@@ -93,10 +93,10 @@ class DepenseController extends Controller
             ->first();
 
         return Inertia::render('Depenses/Create', [
-            'types'           => $types,
-            'vehicules'       => $vehicules,
-            'sites'           => $sites,
-            'employes'        => $employes,
+            'types' => $types,
+            'vehicules' => $vehicules,
+            'sites' => $sites,
+            'employes' => $employes,
             'default_site_id' => $defaultSite?->id,
         ]);
     }
@@ -112,19 +112,19 @@ class DepenseController extends Controller
 
         $validated = $request->validate([
             'depense_type_id' => ['required', 'ulid'],
-            'vehicule_id'     => [$type->requires_vehicle ? 'required' : 'nullable', 'ulid', 'exists:vehicules,id'],
-            'employe_id'      => [$type->applique_aux_employes ? 'required' : 'nullable', 'ulid', 'exists:employes,id'],
-            'site_id'         => ['nullable', 'ulid', 'exists:sites,id'],
-            'montant'         => ['required', 'numeric', 'min:0.01'],
-            'date_depense'    => ['required', 'date'],
-            'commentaire'     => [$type->requires_comment ? 'required' : 'nullable', 'string', 'max:1000'],
-            'statut'          => ['required', 'in:brouillon,soumis'],
+            'vehicule_id' => [$type->requires_vehicle ? 'required' : 'nullable', 'ulid', 'exists:vehicules,id'],
+            'employe_id' => [$type->applique_aux_employes ? 'required' : 'nullable', 'ulid', 'exists:employes,id'],
+            'site_id' => ['nullable', 'ulid', 'exists:sites,id'],
+            'montant' => ['required', 'numeric', 'min:0.01'],
+            'date_depense' => ['required', 'date'],
+            'commentaire' => [$type->requires_comment ? 'required' : 'nullable', 'string', 'max:1000'],
+            'statut' => ['required', 'in:brouillon,soumis'],
         ]);
 
         Depense::create([
             ...$validated,
             'organization_id' => $orgId,
-            'user_id'         => auth()->id(),
+            'user_id' => auth()->id(),
         ]);
 
         return redirect()->route('depenses.index')->with('success', 'Dépense enregistrée.');
@@ -157,19 +157,19 @@ class DepenseController extends Controller
 
         return Inertia::render('Depenses/Edit', [
             'depense' => [
-                'id'              => $depense->id,
+                'id' => $depense->id,
                 'depense_type_id' => $depense->depense_type_id,
-                'vehicule_id'     => $depense->vehicule_id,
-                'employe_id'      => $depense->employe_id,
-                'site_id'         => $depense->site_id,
-                'montant'         => (float) $depense->montant,
-                'date_depense'    => $depense->date_depense->toDateString(),
-                'commentaire'     => $depense->commentaire ?? '',
-                'statut'          => $depense->statut,
+                'vehicule_id' => $depense->vehicule_id,
+                'employe_id' => $depense->employe_id,
+                'site_id' => $depense->site_id,
+                'montant' => (float) $depense->montant,
+                'date_depense' => $depense->date_depense->toDateString(),
+                'commentaire' => $depense->commentaire ?? '',
+                'statut' => $depense->statut,
             ],
-            'types'    => $types,
+            'types' => $types,
             'vehicules' => $vehicules,
-            'sites'    => $sites,
+            'sites' => $sites,
             'employes' => $employes,
         ]);
     }
@@ -185,13 +185,13 @@ class DepenseController extends Controller
 
         $validated = $request->validate([
             'depense_type_id' => ['required', 'ulid'],
-            'vehicule_id'     => [$type->requires_vehicle ? 'required' : 'nullable', 'ulid', 'exists:vehicules,id'],
-            'employe_id'      => [$type->applique_aux_employes ? 'required' : 'nullable', 'ulid', 'exists:employes,id'],
-            'site_id'         => ['nullable', 'ulid', 'exists:sites,id'],
-            'montant'         => ['required', 'numeric', 'min:0.01'],
-            'date_depense'    => ['required', 'date'],
-            'commentaire'     => [$type->requires_comment ? 'required' : 'nullable', 'string', 'max:1000'],
-            'statut'          => ['required', 'in:brouillon,soumis,approuve,rejete'],
+            'vehicule_id' => [$type->requires_vehicle ? 'required' : 'nullable', 'ulid', 'exists:vehicules,id'],
+            'employe_id' => [$type->applique_aux_employes ? 'required' : 'nullable', 'ulid', 'exists:employes,id'],
+            'site_id' => ['nullable', 'ulid', 'exists:sites,id'],
+            'montant' => ['required', 'numeric', 'min:0.01'],
+            'date_depense' => ['required', 'date'],
+            'commentaire' => [$type->requires_comment ? 'required' : 'nullable', 'string', 'max:1000'],
+            'statut' => ['required', 'in:brouillon,soumis,approuve,rejete'],
         ]);
 
         $depense->update($validated);

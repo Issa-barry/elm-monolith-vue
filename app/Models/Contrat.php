@@ -27,11 +27,11 @@ class Contrat extends Model
     protected function casts(): array
     {
         return [
-            'type_contrat'   => TypeContrat::class,
+            'type_contrat' => TypeContrat::class,
             'statut_contrat' => StatutContrat::class,
-            'date_debut'     => 'date',
-            'date_fin'       => 'date',
-            'salaire_base'   => 'decimal:2',
+            'date_debut' => 'date',
+            'date_fin' => 'date',
+            'salaire_base' => 'decimal:2',
         ];
     }
 

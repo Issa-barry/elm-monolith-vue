@@ -4,21 +4,21 @@ namespace App\Enums;
 
 enum TypeVariablePaie: string
 {
-    case PRIME             = 'prime';
-    case AUTRE_GAIN        = 'autre_gain';
-    case AVANCE            = 'avance';
-    case RETENUE           = 'retenue';
-    case ABSENCE           = 'absence';
-    case AUTRE_DEDUCTION   = 'autre_deduction';
+    case PRIME = 'prime';
+    case AUTRE_GAIN = 'autre_gain';
+    case AVANCE = 'avance';
+    case RETENUE = 'retenue';
+    case ABSENCE = 'absence';
+    case AUTRE_DEDUCTION = 'autre_deduction';
 
     public function label(): string
     {
-        return match($this) {
-            self::PRIME           => 'Prime',
-            self::AUTRE_GAIN      => 'Autre gain',
-            self::AVANCE          => 'Avance sur salaire',
-            self::RETENUE         => 'Retenue',
-            self::ABSENCE         => 'Absence',
+        return match ($this) {
+            self::PRIME => 'Prime',
+            self::AUTRE_GAIN => 'Autre gain',
+            self::AVANCE => 'Avance sur salaire',
+            self::RETENUE => 'Retenue',
+            self::ABSENCE => 'Absence',
             self::AUTRE_DEDUCTION => 'Autre déduction',
         };
     }

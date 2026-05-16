@@ -15,10 +15,10 @@ class PaiePaiementController extends Controller
         $this->authorize('pay', $ligne->periode);
 
         $data = $request->validate([
-            'montant'       => ['required', 'numeric', 'min:0.01'],
+            'montant' => ['required', 'numeric', 'min:0.01'],
             'date_paiement' => ['required', 'date'],
             'mode_paiement' => ['required', 'string', 'in:especes,virement,cheque,mobile_money'],
-            'note'          => ['nullable', 'string', 'max:500'],
+            'note' => ['nullable', 'string', 'max:500'],
         ]);
 
         $maxPaiement = (float) $ligne->reste_a_payer;

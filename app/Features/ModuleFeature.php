@@ -80,7 +80,7 @@ class ModuleFeature
             self::CASHBACK => 'Cashback clients',
             self::LOGISTIQUE => 'Logistique inter-sites',
             self::DEPENSES => 'Dépenses opérationnelles',
-            self::RH       => 'Ressources humaines',
+            self::RH => 'Ressources humaines',
         ];
     }
 }

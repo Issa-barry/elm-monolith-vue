@@ -9,7 +9,6 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\UserInvitation;
-use App\Services\MatriculeService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;

@@ -19,14 +19,16 @@ class ContratTest extends TestCase
     use RefreshDatabase;
 
     private Organization $org;
+
     private User $user;
+
     private Site $site;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->org  = Organization::factory()->create();
+        $this->org = Organization::factory()->create();
         $this->site = Site::create(['organization_id' => $this->org->id, 'nom' => 'Dépôt', 'type' => 'depot']);
         $this->user = $this->makeUser([
             'rh-contrats.read', 'rh-contrats.create', 'rh-contrats.update', 'rh-contrats.delete',
@@ -56,11 +58,11 @@ class ContratTest extends TestCase
 
         return Employe::create(array_merge([
             'organization_id' => $this->org->id,
-            'matricule'       => str_pad((string) $seq, 6, '0', STR_PAD_LEFT),
-            'nom'             => 'DIALLO',
-            'prenom'          => 'Mamadou',
-            'type_employe'    => 'interne',
-            'statut'          => 'actif',
+            'matricule' => str_pad((string) $seq, 6, '0', STR_PAD_LEFT),
+            'nom' => 'DIALLO',
+            'prenom' => 'Mamadou',
+            'type_employe' => 'interne',
+            'statut' => 'actif',
         ], $overrides));
     }
 
@@ -68,10 +70,10 @@ class ContratTest extends TestCase
     {
         return Contrat::create(array_merge([
             'organization_id' => $this->org->id,
-            'employe_id'      => $employe->id,
-            'type_contrat'    => TypeContrat::CDI->value,
-            'date_debut'      => now()->toDateString(),
-            'statut_contrat'  => StatutContrat::ACTIF->value,
+            'employe_id' => $employe->id,
+            'type_contrat' => TypeContrat::CDI->value,
+            'date_debut' => now()->toDateString(),
+            'statut_contrat' => StatutContrat::ACTIF->value,
         ], $overrides));
     }
 
@@ -108,9 +110,9 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
-                'employe_id'   => $employe->id,
+                'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
-                'date_debut'   => '2025-01-01',
+                'date_debut' => '2025-01-01',
             ])
             ->assertRedirect(route('employes.edit', $employe));
 
@@ -126,10 +128,10 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
-                'employe_id'   => $employe->id,
+                'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
-                'date_debut'   => '2025-01-01',
-                'date_fin'     => '2026-12-31',
+                'date_debut' => '2025-01-01',
+                'date_fin' => '2026-12-31',
             ])
             ->assertRedirect(route('employes.edit', $employe));
 
@@ -144,9 +146,9 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
-                'employe_id'   => $employe->id,
+                'employe_id' => $employe->id,
                 'type_contrat' => 'cdd',
-                'date_debut'   => '2025-01-01',
+                'date_debut' => '2025-01-01',
             ])
             ->assertSessionHasErrors('date_fin');
     }
@@ -157,10 +159,10 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
-                'employe_id'   => $employe->id,
+                'employe_id' => $employe->id,
                 'type_contrat' => 'cdd',
-                'date_debut'   => '2025-06-01',
-                'date_fin'     => '2025-01-01',
+                'date_debut' => '2025-06-01',
+                'date_fin' => '2025-01-01',
             ])
             ->assertSessionHasErrors('date_fin');
     }
@@ -171,10 +173,10 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
-                'employe_id'   => $employe->id,
+                'employe_id' => $employe->id,
                 'type_contrat' => 'cdd',
-                'date_debut'   => '2025-01-01',
-                'date_fin'     => '2025-12-31',
+                'date_debut' => '2025-01-01',
+                'date_fin' => '2025-12-31',
             ])
             ->assertRedirect(route('employes.edit', $employe));
 
@@ -191,9 +193,9 @@ class ContratTest extends TestCase
 
         $response = $this->actingAs($this->user)
             ->post(route('contrats.store'), [
-                'employe_id'   => $employe->id,
+                'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
-                'date_debut'   => '2025-06-01',
+                'date_debut' => '2025-06-01',
             ]);
 
         $response->assertSessionHasErrors('employe_id');
@@ -207,9 +209,9 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
-                'employe_id'   => $employe->id,
+                'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
-                'date_debut'   => '2025-06-01',
+                'date_debut' => '2025-06-01',
             ])
             ->assertRedirect(route('employes.edit', $employe));
 
@@ -231,9 +233,9 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
-                'employe_id'   => $employe->id,
+                'employe_id' => $employe->id,
                 'type_contrat' => 'ctt',
-                'date_debut'   => '2025-01-01',
+                'date_debut' => '2025-01-01',
             ])
             ->assertSessionHasErrors('type_contrat');
     }
@@ -242,43 +244,43 @@ class ContratTest extends TestCase
 
     public function test_store_rejects_employe_from_other_organization(): void
     {
-        $otherOrg    = Organization::factory()->create();
+        $otherOrg = Organization::factory()->create();
         $otherEmploye = Employe::create([
             'organization_id' => $otherOrg->id,
-            'matricule'       => '999999',
-            'nom'             => 'Autre',
-            'prenom'          => 'Org',
-            'type_employe'    => 'interne',
-            'statut'          => 'actif',
+            'matricule' => '999999',
+            'nom' => 'Autre',
+            'prenom' => 'Org',
+            'type_employe' => 'interne',
+            'statut' => 'actif',
         ]);
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
-                'employe_id'   => $otherEmploye->id,
+                'employe_id' => $otherEmploye->id,
                 'type_contrat' => 'cdi',
-                'date_debut'   => '2025-01-01',
+                'date_debut' => '2025-01-01',
             ])
             ->assertStatus(404);
     }
 
     public function test_update_returns_403_for_other_organization(): void
     {
-        $otherOrg    = Organization::factory()->create();
+        $otherOrg = Organization::factory()->create();
         $otherEmploye = Employe::create([
             'organization_id' => $otherOrg->id,
-            'matricule'       => '999998',
-            'nom'             => 'Autre',
-            'prenom'          => 'Org',
-            'type_employe'    => 'interne',
-            'statut'          => 'actif',
+            'matricule' => '999998',
+            'nom' => 'Autre',
+            'prenom' => 'Org',
+            'type_employe' => 'interne',
+            'statut' => 'actif',
         ]);
         $contrat = $this->makeContrat($otherEmploye, ['organization_id' => $otherOrg->id]);
 
         $this->actingAs($this->user)
             ->put(route('contrats.update', $contrat), [
-                'employe_id'   => $otherEmploye->id,
+                'employe_id' => $otherEmploye->id,
                 'type_contrat' => 'cdi',
-                'date_debut'   => '2025-01-01',
+                'date_debut' => '2025-01-01',
             ])
             ->assertStatus(403);
     }
@@ -290,16 +292,16 @@ class ContratTest extends TestCase
         $employe = $this->makeEmploye();
         $contrat = $this->makeContrat($employe, [
             'type_contrat' => 'cdd',
-            'date_debut'   => '2025-01-01',
-            'date_fin'     => '2025-06-30',
+            'date_debut' => '2025-01-01',
+            'date_fin' => '2025-06-30',
         ]);
 
         $this->actingAs($this->user)
             ->put(route('contrats.update', $contrat), [
-                'employe_id'    => $employe->id,
-                'type_contrat'  => 'cdd',
-                'date_debut'    => '2025-01-01',
-                'date_fin'      => '2025-12-31',
+                'employe_id' => $employe->id,
+                'type_contrat' => 'cdd',
+                'date_debut' => '2025-01-01',
+                'date_fin' => '2025-12-31',
                 'statut_contrat' => 'termine',
             ])
             ->assertRedirect(route('employes.edit', $employe));

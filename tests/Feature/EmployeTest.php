@@ -21,14 +21,16 @@ class EmployeTest extends TestCase
     use RefreshDatabase;
 
     private Organization $org;
+
     private User $user;
+
     private Site $site;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->org  = Organization::factory()->create();
+        $this->org = Organization::factory()->create();
         $this->site = Site::create(['organization_id' => $this->org->id, 'nom' => 'Dépôt', 'type' => 'depot']);
         $this->user = $this->makeUser(['rh-employes.read', 'rh-employes.create', 'rh-employes.update', 'rh-employes.delete']);
     }
@@ -52,11 +54,11 @@ class EmployeTest extends TestCase
     {
         return Employe::create(array_merge([
             'organization_id' => $this->org->id,
-            'matricule'       => '000001',
-            'nom'             => 'DIALLO',
-            'prenom'          => 'Mamadou',
-            'type_employe'    => TypeEmploye::INTERNE->value,
-            'statut'          => StatutEmploye::ACTIF->value,
+            'matricule' => '000001',
+            'nom' => 'DIALLO',
+            'prenom' => 'Mamadou',
+            'type_employe' => TypeEmploye::INTERNE->value,
+            'statut' => StatutEmploye::ACTIF->value,
         ], $overrides));
     }
 
@@ -121,19 +123,19 @@ class EmployeTest extends TestCase
 
         Contrat::create([
             'organization_id' => $this->org->id,
-            'employe_id'      => $e1->id,
-            'type_contrat'    => TypeContrat::CDI->value,
-            'date_debut'      => now(),
-            'statut_contrat'  => StatutContrat::ACTIF->value,
+            'employe_id' => $e1->id,
+            'type_contrat' => TypeContrat::CDI->value,
+            'date_debut' => now(),
+            'statut_contrat' => StatutContrat::ACTIF->value,
         ]);
 
         Contrat::create([
             'organization_id' => $this->org->id,
-            'employe_id'      => $e2->id,
-            'type_contrat'    => TypeContrat::CDD->value,
-            'date_debut'      => now(),
-            'date_fin'        => now()->addYear(),
-            'statut_contrat'  => StatutContrat::ACTIF->value,
+            'employe_id' => $e2->id,
+            'type_contrat' => TypeContrat::CDD->value,
+            'date_debut' => now(),
+            'date_fin' => now()->addYear(),
+            'statut_contrat' => StatutContrat::ACTIF->value,
         ]);
 
         $response = $this->actingAs($this->user)
@@ -159,7 +161,7 @@ class EmployeTest extends TestCase
         Contrat::create(['organization_id' => $this->org->id, 'employe_id' => $e3->id, 'type_contrat' => 'cdi', 'date_debut' => now(), 'statut_contrat' => 'actif']);
 
         $response = $this->actingAs($this->user)->get(route('employes.index', [
-            'statut'       => 'actif',
+            'statut' => 'actif',
             'type_employe' => 'interne',
             'type_contrat' => 'cdi',
         ]));
@@ -175,10 +177,10 @@ class EmployeTest extends TestCase
     {
         $response = $this->actingAs($this->user)
             ->post(route('employes.store'), [
-                'nom'          => 'BARRY',
-                'prenom'       => 'Alpha',
+                'nom' => 'BARRY',
+                'prenom' => 'Alpha',
                 'type_employe' => 'interne',
-                'statut'       => 'actif',
+                'statut' => 'actif',
             ]);
 
         $employe = Employe::where('organization_id', $this->org->id)->firstOrFail();
@@ -227,16 +229,16 @@ class EmployeTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('employes.update', $employe), [
-                'nom'          => 'CAMARA',
-                'prenom'       => 'Fatoumata',
+                'nom' => 'CAMARA',
+                'prenom' => 'Fatoumata',
                 'type_employe' => 'externe',
-                'statut'       => 'suspendu',
+                'statut' => 'suspendu',
             ])
             ->assertRedirect(route('employes.edit', $employe));
 
         $this->assertDatabaseHas('employes', [
-            'id'     => $employe->id,
-            'nom'    => 'CAMARA',
+            'id' => $employe->id,
+            'nom' => 'CAMARA',
             'statut' => 'suspendu',
         ]);
     }
@@ -247,11 +249,11 @@ class EmployeTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('employes.update', $employe), [
-                'nom'          => $employe->nom,
-                'prenom'       => $employe->prenom,
+                'nom' => $employe->nom,
+                'prenom' => $employe->prenom,
                 'type_employe' => $employe->type_employe->value,
-                'statut'       => $employe->statut->value,
-                'matricule'    => '999999',
+                'statut' => $employe->statut->value,
+                'matricule' => '999999',
             ]);
 
         $this->assertSame('000099', $employe->fresh()->matricule);
@@ -259,8 +261,8 @@ class EmployeTest extends TestCase
 
     public function test_update_returns_403_for_other_organization(): void
     {
-        $otherOrg  = Organization::factory()->create();
-        $employe   = $this->makeEmploye(['organization_id' => $otherOrg->id]);
+        $otherOrg = Organization::factory()->create();
+        $employe = $this->makeEmploye(['organization_id' => $otherOrg->id]);
 
         $this->actingAs($this->user)
             ->put(route('employes.update', $employe), [

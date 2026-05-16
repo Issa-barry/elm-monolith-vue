@@ -4,16 +4,16 @@ namespace App\Enums;
 
 enum StatutEmploye: string
 {
-    case ACTIF     = 'actif';
-    case SUSPENDU  = 'suspendu';
-    case SORTI     = 'sorti';
+    case ACTIF = 'actif';
+    case SUSPENDU = 'suspendu';
+    case SORTI = 'sorti';
 
     public function label(): string
     {
         return match ($this) {
-            self::ACTIF    => 'Actif',
+            self::ACTIF => 'Actif',
             self::SUSPENDU => 'Suspendu',
-            self::SORTI    => 'Sorti',
+            self::SORTI => 'Sorti',
         };
     }
 

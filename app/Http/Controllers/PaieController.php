@@ -127,11 +127,11 @@ class PaieController extends Controller
                 'note' => $v->note,
             ]),
             'paiements' => $l->paiements->map(fn ($p) => [
-                'id'             => $p->id,
-                'montant'        => (float) $p->montant,
-                'date_paiement'  => $p->date_paiement->format('Y-m-d'),
-                'mode_paiement'  => $p->mode_paiement,
-                'note'           => $p->note,
+                'id' => $p->id,
+                'montant' => (float) $p->montant,
+                'date_paiement' => $p->date_paiement->format('Y-m-d'),
+                'mode_paiement' => $p->mode_paiement,
+                'note' => $p->note,
             ]),
         ]);
 

@@ -145,7 +145,7 @@ class PaieCalculService
     private function importerDepenses(PaieLigne $ligne, PaiePeriode $periode): void
     {
         $debut = Carbon::create($periode->annee, $periode->mois, 1)->startOfMonth();
-        $fin   = $debut->copy()->endOfMonth();
+        $fin = $debut->copy()->endOfMonth();
 
         // Supprimer les variables auto-importées précédemment
         $ligne->variables()->whereNotNull('depense_id')->delete();
@@ -161,15 +161,15 @@ class PaieCalculService
         foreach ($depenses as $depense) {
             $libelle = $depense->depenseType->libelle;
             if ($depense->commentaire) {
-                $libelle .= ' — ' . $depense->commentaire;
+                $libelle .= ' — '.$depense->commentaire;
             }
 
             $ligne->variables()->create([
                 'depense_id' => $depense->id,
-                'type'       => TypeVariablePaie::from($depense->depenseType->type_paie),
-                'libelle'    => $libelle,
-                'montant'    => (float) $depense->montant,
-                'note'       => null,
+                'type' => TypeVariablePaie::from($depense->depenseType->type_paie),
+                'libelle' => $libelle,
+                'montant' => (float) $depense->montant,
+                'note' => null,
             ]);
         }
     }
@@ -196,10 +196,10 @@ class PaieCalculService
     private function joursActifs(Contrat $contrat, Carbon $debut, Carbon $fin, int $joursMois): float
     {
         $dateDebut = Carbon::parse($contrat->date_debut)->startOfDay();
-        $dateFin   = $contrat->date_fin ? Carbon::parse($contrat->date_fin)->startOfDay() : null;
+        $dateFin = $contrat->date_fin ? Carbon::parse($contrat->date_fin)->startOfDay() : null;
 
         $effectifDebut = $dateDebut->gt($debut) ? $dateDebut : $debut->copy()->startOfDay();
-        $effectifFin   = ($dateFin && $dateFin->lt($fin)) ? $dateFin : $fin->copy()->startOfDay();
+        $effectifFin = ($dateFin && $dateFin->lt($fin)) ? $dateFin : $fin->copy()->startOfDay();
 
         if ($effectifDebut->gt($effectifFin)) {
             return 0;

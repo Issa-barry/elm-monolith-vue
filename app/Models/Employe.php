@@ -33,7 +33,7 @@ class Employe extends Model
     {
         return [
             'type_employe' => TypeEmploye::class,
-            'statut'       => StatutEmploye::class,
+            'statut' => StatutEmploye::class,
         ];
     }
 

@@ -18,7 +18,7 @@ class ContratController extends Controller
     {
         $this->authorize('viewAny', Contrat::class);
 
-        $orgId   = auth()->user()->organization_id;
+        $orgId = auth()->user()->organization_id;
         $filters = $request->only(['statut_contrat', 'type_contrat']);
 
         $query = Contrat::with('employe:id,nom,prenom,matricule')
@@ -36,9 +36,9 @@ class ContratController extends Controller
             ->map(fn (Contrat $c) => $this->toRow($c));
 
         return Inertia::render('Contrats/Index', [
-            'contrats'              => $contrats,
-            'filters'               => $filters,
-            'type_contrat_options'  => TypeContrat::options(),
+            'contrats' => $contrats,
+            'filters' => $filters,
+            'type_contrat_options' => TypeContrat::options(),
             'statut_contrat_options' => StatutContrat::options(),
         ]);
     }
@@ -59,10 +59,10 @@ class ContratController extends Controller
             ])->values();
 
         return Inertia::render('Contrats/Create', [
-            'employes'              => $employes,
-            'type_contrat_options'  => TypeContrat::options(),
+            'employes' => $employes,
+            'type_contrat_options' => TypeContrat::options(),
             'statut_contrat_options' => StatutContrat::options(),
-            'employe_id_prefill'    => $request->query('employe_id'),
+            'employe_id_prefill' => $request->query('employe_id'),
         ]);
     }
 
@@ -96,7 +96,7 @@ class ContratController extends Controller
 
         Contrat::create(array_merge($data, [
             'organization_id' => $orgId,
-            'statut_contrat'  => StatutContrat::ACTIF->value,
+            'statut_contrat' => StatutContrat::ACTIF->value,
         ]));
 
         return redirect()->route('employes.edit', $employe)
@@ -118,9 +118,9 @@ class ContratController extends Controller
             ])->values();
 
         return Inertia::render('Contrats/Edit', [
-            'contrat'               => $this->toRow($contrat),
-            'employes'              => $employes,
-            'type_contrat_options'  => TypeContrat::options(),
+            'contrat' => $this->toRow($contrat),
+            'employes' => $employes,
+            'type_contrat_options' => TypeContrat::options(),
             'statut_contrat_options' => StatutContrat::options(),
         ]);
     }
@@ -158,13 +158,13 @@ class ContratController extends Controller
         $isCdd = $request->input('type_contrat') === TypeContrat::CDD->value;
 
         return [
-            'employe_id'    => ['required', 'exists:employes,id'],
-            'type_contrat'  => ['required', Rule::in(TypeContrat::values())],
-            'date_debut'    => 'required|date',
-            'date_fin'      => $isCdd
+            'employe_id' => ['required', 'exists:employes,id'],
+            'type_contrat' => ['required', Rule::in(TypeContrat::values())],
+            'date_debut' => 'required|date',
+            'date_fin' => $isCdd
                 ? ['required', 'date', 'after_or_equal:date_debut']
                 : ['nullable', 'date', 'after_or_equal:date_debut'],
-            'salaire_base'  => 'nullable|numeric|min:0',
+            'salaire_base' => 'nullable|numeric|min:0',
             'statut_contrat' => ['nullable', Rule::in(StatutContrat::values())],
         ];
     }
@@ -172,15 +172,15 @@ class ContratController extends Controller
     private function messages(): array
     {
         return [
-            'employe_id.required'   => "L'employé est obligatoire.",
-            'employe_id.exists'     => 'Employé introuvable.',
+            'employe_id.required' => "L'employé est obligatoire.",
+            'employe_id.exists' => 'Employé introuvable.',
             'type_contrat.required' => 'Le type de contrat est obligatoire.',
-            'type_contrat.in'       => 'Type de contrat invalide.',
-            'date_debut.required'   => 'La date de début est obligatoire.',
-            'date_fin.required'     => 'La date de fin est obligatoire pour un CDD.',
+            'type_contrat.in' => 'Type de contrat invalide.',
+            'date_debut.required' => 'La date de début est obligatoire.',
+            'date_fin.required' => 'La date de fin est obligatoire pour un CDD.',
             'date_fin.after_or_equal' => 'La date de fin doit être égale ou postérieure à la date de début.',
-            'salaire_base.numeric'  => 'Le salaire doit être un nombre.',
-            'salaire_base.min'      => 'Le salaire ne peut pas être négatif.',
+            'salaire_base.numeric' => 'Le salaire doit être un nombre.',
+            'salaire_base.min' => 'Le salaire ne peut pas être négatif.',
         ];
     }
 
@@ -189,17 +189,17 @@ class ContratController extends Controller
         $c->loadMissing('employe:id,nom,prenom,matricule');
 
         return [
-            'id'                    => $c->id,
-            'employe_id'            => $c->employe_id,
-            'employe_nom_complet'   => $c->employe ? trim("{$c->employe->prenom} {$c->employe->nom}") : null,
-            'employe_matricule'     => $c->employe?->matricule,
-            'type_contrat'          => $c->type_contrat->value,
-            'type_contrat_label'    => $c->type_contrat->label(),
-            'statut_contrat'        => $c->statut_contrat->value,
-            'statut_contrat_label'  => $c->statut_contrat->label(),
-            'date_debut'            => $c->date_debut?->format('Y-m-d'),
-            'date_fin'              => $c->date_fin?->format('Y-m-d'),
-            'salaire_base'          => $c->salaire_base,
+            'id' => $c->id,
+            'employe_id' => $c->employe_id,
+            'employe_nom_complet' => $c->employe ? trim("{$c->employe->prenom} {$c->employe->nom}") : null,
+            'employe_matricule' => $c->employe?->matricule,
+            'type_contrat' => $c->type_contrat->value,
+            'type_contrat_label' => $c->type_contrat->label(),
+            'statut_contrat' => $c->statut_contrat->value,
+            'statut_contrat_label' => $c->statut_contrat->label(),
+            'date_debut' => $c->date_debut?->format('Y-m-d'),
+            'date_fin' => $c->date_fin?->format('Y-m-d'),
+            'salaire_base' => $c->salaire_base,
         ];
     }
 }
