@@ -9,13 +9,11 @@ use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\Organization;
 use App\Models\PaieLigne;
-use App\Models\PaiePaiement;
 use App\Models\PaiePeriode;
 use App\Models\PaieVariable;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\PaieCalculService;
-use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -26,14 +24,16 @@ class PaieTest extends TestCase
     use RefreshDatabase;
 
     private Organization $org;
+
     private User $user;
+
     private Site $site;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->org  = Organization::factory()->create();
+        $this->org = Organization::factory()->create();
         $this->site = Site::create(['organization_id' => $this->org->id, 'nom' => 'Dépôt', 'type' => 'depot']);
         $this->user = $this->makeUser([
             'rh-paie.read', 'rh-paie.create', 'rh-paie.update', 'rh-paie.delete',
@@ -63,21 +63,21 @@ class PaieTest extends TestCase
 
         $employe = Employe::create([
             'organization_id' => $this->org->id,
-            'matricule'       => str_pad((string) $seq, 6, '0', STR_PAD_LEFT),
-            'nom'             => 'BARRY',
-            'prenom'          => 'Test',
-            'type_employe'    => 'interne',
-            'statut'          => 'actif',
+            'matricule' => str_pad((string) $seq, 6, '0', STR_PAD_LEFT),
+            'nom' => 'BARRY',
+            'prenom' => 'Test',
+            'type_employe' => 'interne',
+            'statut' => 'actif',
         ]);
 
         $contrat = Contrat::create([
             'organization_id' => $this->org->id,
-            'employe_id'      => $employe->id,
-            'type_contrat'    => 'cdi',
-            'date_debut'      => $dateDebut,
-            'date_fin'        => $dateFin,
-            'salaire_base'    => $salaire,
-            'statut_contrat'  => 'actif',
+            'employe_id' => $employe->id,
+            'type_contrat' => 'cdi',
+            'date_debut' => $dateDebut,
+            'date_fin' => $dateFin,
+            'salaire_base' => $salaire,
+            'statut_contrat' => 'actif',
         ]);
 
         return [$employe, $contrat];
@@ -87,9 +87,9 @@ class PaieTest extends TestCase
     {
         return PaiePeriode::create(array_merge([
             'organization_id' => $this->org->id,
-            'mois'            => 1,
-            'annee'           => 2025,
-            'statut'          => StatutPeriodePaie::BROUILLON,
+            'mois' => 1,
+            'annee' => 2025,
+            'statut' => StatutPeriodePaie::BROUILLON,
         ], $overrides));
     }
 
@@ -126,9 +126,9 @@ class PaieTest extends TestCase
 
         $this->assertDatabaseHas('paie_periodes', [
             'organization_id' => $this->org->id,
-            'mois'            => 3,
-            'annee'           => 2025,
-            'statut'          => 'brouillon',
+            'mois' => 3,
+            'annee' => 2025,
+            'statut' => 'brouillon',
         ]);
     }
 
@@ -162,11 +162,11 @@ class PaieTest extends TestCase
     public function test_show_retourne_403_autre_org(): void
     {
         $autreOrg = Organization::factory()->create();
-        $periode  = PaiePeriode::create([
+        $periode = PaiePeriode::create([
             'organization_id' => $autreOrg->id,
-            'mois'            => 1,
-            'annee'           => 2025,
-            'statut'          => StatutPeriodePaie::BROUILLON,
+            'mois' => 1,
+            'annee' => 2025,
+            'statut' => StatutPeriodePaie::BROUILLON,
         ]);
 
         $this->actingAs($this->user)
@@ -178,7 +178,7 @@ class PaieTest extends TestCase
 
     public function test_calcul_brut_net_sans_variable(): void
     {
-        $periode          = $this->makePeriode(['mois' => 1, 'annee' => 2025]);
+        $periode = $this->makePeriode(['mois' => 1, 'annee' => 2025]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
         $service = app(PaieCalculService::class);
@@ -191,14 +191,14 @@ class PaieTest extends TestCase
 
         $this->assertEquals(1_000_000, (float) $ligne->salaire_base);
         $this->assertEquals(1_000_000, (float) $ligne->brut);
-        $this->assertEquals(0,         (float) $ligne->deductions);
+        $this->assertEquals(0, (float) $ligne->deductions);
         $this->assertEquals(1_000_000, (float) $ligne->net);
         $this->assertEquals(StatutLignePaie::CALCULE, $ligne->statut);
     }
 
     public function test_calcul_avec_prime_et_retenue(): void
     {
-        $periode          = $this->makePeriode(['mois' => 2, 'annee' => 2025]);
+        $periode = $this->makePeriode(['mois' => 2, 'annee' => 2025]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 500_000);
 
         $service = app(PaieCalculService::class);
@@ -210,23 +210,23 @@ class PaieTest extends TestCase
 
         PaieVariable::create([
             'paie_ligne_id' => $ligne->id,
-            'type'          => TypeVariablePaie::PRIME->value,
-            'libelle'       => 'Prime transport',
-            'montant'       => 50_000,
+            'type' => TypeVariablePaie::PRIME->value,
+            'libelle' => 'Prime transport',
+            'montant' => 50_000,
         ]);
 
         PaieVariable::create([
             'paie_ligne_id' => $ligne->id,
-            'type'          => TypeVariablePaie::RETENUE->value,
-            'libelle'       => 'Mutuelle',
-            'montant'       => 20_000,
+            'type' => TypeVariablePaie::RETENUE->value,
+            'libelle' => 'Mutuelle',
+            'montant' => 20_000,
         ]);
 
         $service->calculerLigne($ligne);
         $ligne->refresh();
 
         $this->assertEquals(550_000, (float) $ligne->brut);
-        $this->assertEquals(20_000,  (float) $ligne->deductions);
+        $this->assertEquals(20_000, (float) $ligne->deductions);
         $this->assertEquals(530_000, (float) $ligne->net);
     }
 
@@ -235,7 +235,7 @@ class PaieTest extends TestCase
     public function test_prorata_contrat_mi_mois(): void
     {
         // Janvier 2025 = 31 jours, contrat commence le 16 → 16 jours actifs
-        $periode          = $this->makePeriode(['mois' => 1, 'annee' => 2025]);
+        $periode = $this->makePeriode(['mois' => 1, 'annee' => 2025]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-16', null, 310_000);
 
         $service = app(PaieCalculService::class);
@@ -255,7 +255,7 @@ class PaieTest extends TestCase
 
     public function test_prorata_contrat_plein_mois_pas_de_prorata(): void
     {
-        $periode          = $this->makePeriode(['mois' => 1, 'annee' => 2025]);
+        $periode = $this->makePeriode(['mois' => 1, 'annee' => 2025]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
         $service = app(PaieCalculService::class);
@@ -328,7 +328,7 @@ class PaieTest extends TestCase
 
     public function test_paiement_partiel_met_a_jour_reste(): void
     {
-        $periode          = $this->makePeriode(['statut' => StatutPeriodePaie::CALCULE]);
+        $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
         $service = app(PaieCalculService::class);
@@ -339,21 +339,21 @@ class PaieTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('paie-paiements.store', $ligne), [
-                'montant'       => 400_000,
+                'montant' => 400_000,
                 'date_paiement' => '2025-01-31',
                 'mode_paiement' => 'especes',
             ])
             ->assertRedirect();
 
         $ligne->refresh();
-        $this->assertEquals(400_000,   (float) $ligne->deja_paye);
-        $this->assertEquals(600_000,   (float) $ligne->reste_a_payer);
+        $this->assertEquals(400_000, (float) $ligne->deja_paye);
+        $this->assertEquals(600_000, (float) $ligne->reste_a_payer);
         $this->assertEquals(StatutLignePaie::PARTIELLEMENT_PAYE, $ligne->statut);
     }
 
     public function test_paiement_complet_marque_paye(): void
     {
-        $periode          = $this->makePeriode(['statut' => StatutPeriodePaie::CALCULE]);
+        $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
         $service = app(PaieCalculService::class);
@@ -364,7 +364,7 @@ class PaieTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('paie-paiements.store', $ligne), [
-                'montant'       => 1_000_000,
+                'montant' => 1_000_000,
                 'date_paiement' => '2025-01-31',
                 'mode_paiement' => 'especes',
             ])
@@ -377,7 +377,7 @@ class PaieTest extends TestCase
 
     public function test_paiement_depasse_reste_est_rejete(): void
     {
-        $periode          = $this->makePeriode(['statut' => StatutPeriodePaie::CALCULE]);
+        $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 500_000);
 
         $service = app(PaieCalculService::class);
@@ -388,7 +388,7 @@ class PaieTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('paie-paiements.store', $ligne), [
-                'montant'       => 999_999,
+                'montant' => 999_999,
                 'date_paiement' => '2025-01-31',
                 'mode_paiement' => 'especes',
             ])
@@ -400,11 +400,11 @@ class PaieTest extends TestCase
     public function test_periode_autre_org_non_visible(): void
     {
         $autreOrg = Organization::factory()->create();
-        $periode  = PaiePeriode::create([
+        $periode = PaiePeriode::create([
             'organization_id' => $autreOrg->id,
-            'mois'            => 2,
-            'annee'           => 2025,
-            'statut'          => StatutPeriodePaie::BROUILLON,
+            'mois' => 2,
+            'annee' => 2025,
+            'statut' => StatutPeriodePaie::BROUILLON,
         ]);
 
         $this->actingAs($this->user)
@@ -416,7 +416,7 @@ class PaieTest extends TestCase
 
     public function test_variable_bloquee_si_periode_verrouillee(): void
     {
-        $periode          = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
+        $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
         $service = app(PaieCalculService::class);
@@ -429,7 +429,7 @@ class PaieTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('paie-variables.store', $ligne), [
-                'type'    => 'prime',
+                'type' => 'prime',
                 'libelle' => 'Bonus',
                 'montant' => 10_000,
             ])
