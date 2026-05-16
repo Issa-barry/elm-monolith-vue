@@ -239,7 +239,11 @@ export async function login(page: Page): Promise<void> {
 }
 
 export function getVisibleSearchInput(page: Page): Locator {
-    return page.locator('input[placeholder*="rechercher" i]:visible').first();
+    return page
+        .locator(
+            'input[placeholder*="rechercher" i]:visible, input[placeholder*="recherche" i]:visible',
+        )
+        .first();
 }
 
 export async function openRowActions(row: Locator): Promise<void> {
@@ -515,7 +519,9 @@ export async function cleanupRowsByPrefix(
     const guard = new RegExp(escapeRegExp(prefix), 'i');
 
     for (let i = 0; i < 6; i++) {
-        const row = page.locator('tbody tr', { hasText: guard }).first();
+        const row = page
+            .locator('tbody tr:has(button)', { hasText: guard })
+            .first();
 
         if (!(await row.isVisible().catch(() => false))) {
             break;

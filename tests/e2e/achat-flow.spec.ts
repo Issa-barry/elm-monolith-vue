@@ -24,7 +24,7 @@ test('create achat -> annuler -> supprimer depuis la liste', async ({
     await expect(page).toHaveURL(/\/achats\/create$/, { timeout: 20_000 });
 
     await page
-        .locator('input[placeholder*="Référence fournisseur" i]')
+        .locator('input[placeholder*="fournisseur" i]')
         .first()
         .fill(note);
 
@@ -37,7 +37,7 @@ test('create achat -> annuler -> supprimer depuis la liste', async ({
     await expect(page).toHaveURL(/\/achats\/[a-z0-9]+$/, { timeout: 30_000 });
 
     const annulerBtn = page
-        .getByRole('button', { name: /^annuler la commande$/i })
+        .getByRole('button', { name: /annuler(?: la commande)?/i })
         .first();
     await expect(annulerBtn).toBeVisible({ timeout: 15_000 });
     await annulerBtn.click();
@@ -53,7 +53,7 @@ test('create achat -> annuler -> supprimer depuis la liste', async ({
         .getByRole('button', { name: /confirmer l'annulation/i })
         .click();
 
-    await expect(page.locator('body')).toContainText(/annulée/i, {
+    await expect(page.getByText(/motif d['’]annulation/i)).toBeVisible({
         timeout: 20_000,
     });
 
@@ -64,7 +64,9 @@ test('create achat -> annuler -> supprimer depuis la liste', async ({
     await search.fill(note);
 
     const row = page
-        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(note), 'i') })
+        .locator('.p-datatable-table tbody tr', {
+            hasText: new RegExp(escapeRegExp(note), 'i'),
+        })
         .first();
     await expect(row).toBeVisible({ timeout: 15_000 });
 
@@ -81,7 +83,7 @@ test('create achat -> annuler -> supprimer depuis la liste', async ({
     await page.waitForLoadState('networkidle');
     await search.fill(note);
     await expect(
-        page.locator('tbody tr', {
+        page.locator('.p-datatable-table tbody tr', {
             hasText: new RegExp(escapeRegExp(note), 'i'),
         }),
     ).toHaveCount(0);

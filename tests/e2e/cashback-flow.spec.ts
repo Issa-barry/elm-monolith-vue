@@ -14,19 +14,17 @@ test('cashback index renders and supports search/filter controls', async ({
 }) => {
     await page.goto('/cashback');
     await expect(page).toHaveURL(/\/cashback/, { timeout: 20_000 });
-    await expect(page.locator('body')).toContainText(/cashback/i, {
+    await expect(
+        page.getByRole('heading', { name: /cashback/i }).first(),
+    ).toBeVisible({
         timeout: 20_000,
     });
 
-    const search = page
-        .locator(
-            'input[placeholder*="client" i][placeholder*="téléphone" i], input[placeholder*="client" i][placeholder*="telephone" i]',
-        )
-        .first();
+    const search = page.locator('input[placeholder*="client" i]').first();
     await expect(search).toBeVisible({ timeout: 10_000 });
     await search.fill('zzzz-no-result-e2e');
 
-    await expect(page.locator('body')).toContainText(/aucun cashback/i, {
+    await expect(page.getByText(/aucun cashback/i).first()).toBeVisible({
         timeout: 20_000,
     });
 });
@@ -37,14 +35,17 @@ test('cashback row actions menu is available when transactions exist', async ({
     await page.goto('/cashback');
     await expect(page).toHaveURL(/\/cashback/, { timeout: 20_000 });
 
-    const firstRow = page.locator('tbody tr').first();
-    const rowCount = await page.locator('tbody tr').count();
+    const rows = page.locator(
+        '.p-datatable-table tbody tr:not(.p-datatable-emptymessage)',
+    );
+    const rowCount = await rows.count();
 
     if (rowCount === 0) {
-        await expect(page.locator('body')).toContainText(/aucun cashback/i);
+        await expect(page.getByText(/aucun cashback/i).first()).toBeVisible();
         return;
     }
 
+    const firstRow = rows.first();
     await expect(firstRow).toBeVisible({ timeout: 15_000 });
     await firstRow.locator('button').last().click();
 

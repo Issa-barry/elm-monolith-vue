@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
 
 function depenseRowByComment(page: Page, comment: string): Locator {
     return page
-        .locator('tbody tr', {
+        .locator('div.rounded-lg.border > table > tbody > tr', {
             hasText: new RegExp(escapeRegExp(comment), 'i'),
         })
         .first();

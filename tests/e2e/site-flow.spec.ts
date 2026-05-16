@@ -23,7 +23,9 @@ test.beforeEach(async ({ page }) => {
 
 function rowByName(page: Page, name: string): Locator {
     return page
-        .locator('tbody tr', { hasText: new RegExp(escapeRegExp(name), 'i') })
+        .locator('.p-datatable-table tbody tr', {
+            hasText: new RegExp(escapeRegExp(name), 'i'),
+        })
         .first();
 }
 
@@ -68,7 +70,11 @@ test('create site -> open details page', async ({ page }) => {
         .click();
 
     await expect(page).toHaveURL(/\/sites\/[a-z0-9]+$/, { timeout: 20_000 });
-    await expect(page.locator('body')).toContainText(nom);
+    await expect(
+        page.getByRole('heading', {
+            name: new RegExp(escapeRegExp(nom), 'i'),
+        }),
+    ).toBeVisible({ timeout: 20_000 });
 });
 
 test('create site -> edit -> delete', async ({ page }) => {

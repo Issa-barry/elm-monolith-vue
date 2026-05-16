@@ -73,9 +73,15 @@ test('client submits vehicule proposition -> backoffice can open and handle it',
         .getByRole('button', { name: /envoyer la proposition/i })
         .click();
 
-    await expect(page.locator('body')).toContainText(/proposition/i, {
+    await expect(page).toHaveURL(/\/client\/proposer-vehicule$/, {
         timeout: 30_000,
     });
+    await expect(page.getByText(/proposition.*envoy/i)).toBeVisible({
+        timeout: 30_000,
+    });
+    await expect(
+        page.getByText(new RegExp(escapeRegExp(immatriculation), 'i')),
+    ).toBeVisible({ timeout: 30_000 });
 
     await page.context().clearCookies();
     await login(page);
@@ -87,7 +93,7 @@ test('client submits vehicule proposition -> backoffice can open and handle it',
     });
 
     const row = page
-        .locator('div', {
+        .locator('div.grid', {
             hasText: new RegExp(escapeRegExp(immatriculation), 'i'),
         })
         .filter({
@@ -111,8 +117,9 @@ test('client submits vehicule proposition -> backoffice can open and handle it',
 
     if (await priseEnCharge.isVisible().catch(() => false)) {
         await priseEnCharge.click();
-        await expect(page.locator('body')).toContainText(/r√©vision|revision/i, {
+        await expect(page.getByText(/r[Èe]vision/i).first()).toBeVisible({
             timeout: 20_000,
         });
     }
 });
+
