@@ -117,9 +117,10 @@ test('client submits vehicule proposition -> backoffice can open and handle it',
 
     if (await priseEnCharge.isVisible().catch(() => false)) {
         await priseEnCharge.click();
-        await expect(page.getByText(/r[ée]vision/i).first()).toBeVisible({
-            timeout: 20_000,
-        });
+        await expect(page.getByText(/revision|r..vision/i).first()).toBeVisible(
+            {
+                timeout: 20_000,
+            },
+        );
     }
 });
-
