@@ -110,7 +110,7 @@ class VehiculeTest extends TestCase
 
         $vehicule = Vehicule::query()
             ->where('organization_id', $this->org->id)
-            ->where('immatriculation', 'MO-001-GN')
+            ->where('immatriculation', 'TC-TEST-GN')
             ->firstOrFail();
 
         $response->assertRedirect(route('vehicules.edit', $vehicule));
