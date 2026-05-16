@@ -30,6 +30,8 @@ class ModuleFeature
 
     public const DEPENSES = 'module.depenses';
 
+    public const RH = 'module.rh';
+
     public const ALL = [
         self::VENTES,
         self::ACHATS,
@@ -43,6 +45,7 @@ class ModuleFeature
         self::CASHBACK,
         self::LOGISTIQUE,
         self::DEPENSES,
+        self::RH,
     ];
 
     /**
@@ -77,6 +80,7 @@ class ModuleFeature
             self::CASHBACK => 'Cashback clients',
             self::LOGISTIQUE => 'Logistique inter-sites',
             self::DEPENSES => 'Dépenses opérationnelles',
+            self::RH       => 'Ressources humaines',
         ];
     }
 }

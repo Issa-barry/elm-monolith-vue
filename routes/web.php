@@ -12,7 +12,12 @@ use App\Http\Controllers\CommissionPaymentController;
 use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\CommissionVenteController;
 use App\Http\Controllers\ContactController;
+use App\Http\Controllers\ContratController;
 use App\Http\Controllers\DepenseController;
+use App\Http\Controllers\EmployeController;
+use App\Http\Controllers\PaieController;
+use App\Http\Controllers\PaiePaiementController;
+use App\Http\Controllers\PaieVariableController;
 use App\Http\Controllers\EncaissementVenteController;
 use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
@@ -206,6 +211,32 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::resource('depenses', DepenseController::class)->except(['show']);
         Route::patch('depenses/{depense}/approuver', [DepenseController::class, 'approuver'])->name('depenses.approuver');
         Route::patch('depenses/{depense}/rejeter', [DepenseController::class, 'rejeter'])->name('depenses.rejeter');
+    });
+
+    // ── Module : RH (Ressources humaines) ────────────────────────────────────
+    Route::middleware('module:'.ModuleFeature::RH)->group(function () {
+        Route::resource('employes', EmployeController::class);
+        Route::resource('contrats', ContratController::class)->except(['show']);
+
+        // Paie
+        Route::get('paie', [PaieController::class, 'index'])->name('paie.index');
+        Route::get('paie/create', [PaieController::class, 'create'])->name('paie.create');
+        Route::post('paie', [PaieController::class, 'store'])->name('paie.store');
+        Route::get('paie/{paie}', [PaieController::class, 'show'])->name('paie.show');
+        Route::delete('paie/{paie}', [PaieController::class, 'destroy'])->name('paie.destroy');
+        Route::post('paie/{paie}/calculer', [PaieController::class, 'calculer'])->name('paie.calculer');
+        Route::post('paie/{paie}/valider', [PaieController::class, 'valider'])->name('paie.valider');
+        Route::post('paie/{paie}/paye', [PaieController::class, 'marquerPaye'])->name('paie.marquer-paye');
+        Route::post('paie/{paie}/cloturer', [PaieController::class, 'cloturer'])->name('paie.cloturer');
+
+        // Variables de paie
+        Route::post('paie-lignes/{ligne}/variables', [PaieVariableController::class, 'store'])->name('paie-variables.store');
+        Route::put('paie-variables/{variable}', [PaieVariableController::class, 'update'])->name('paie-variables.update');
+        Route::delete('paie-variables/{variable}', [PaieVariableController::class, 'destroy'])->name('paie-variables.destroy');
+
+        // Paiements de paie
+        Route::post('paie-lignes/{ligne}/paiements', [PaiePaiementController::class, 'store'])->name('paie-paiements.store');
+        Route::delete('paie-paiements/{paiement}', [PaiePaiementController::class, 'destroy'])->name('paie-paiements.destroy');
     });
 
     // ── Module : Logistique inter-sites ───────────────────────────────────────

@@ -17,6 +17,7 @@ class Depense extends Model
         'user_id',
         'depense_type_id',
         'vehicule_id',
+        'employe_id',
         'montant',
         'date_depense',
         'commentaire',
@@ -56,6 +57,11 @@ class Depense extends Model
     public function vehicule(): BelongsTo
     {
         return $this->belongsTo(Vehicule::class);
+    }
+
+    public function employe(): BelongsTo
+    {
+        return $this->belongsTo(Employe::class);
     }
 
     // ── Scopes ────────────────────────────────────────────────────────────────

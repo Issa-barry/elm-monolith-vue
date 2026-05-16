@@ -17,6 +17,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'clients', 'prestataires', 'livreurs', 'proprietaires',
         'vehicules', 'equipes-livraison', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres',
         'logistique', 'depenses',
+        'rh-employes', 'rh-contrats', 'rh-paie',
     ];
 
     private const ACTIONS = ['create', 'read', 'update', 'delete'];
@@ -38,6 +39,9 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'logistique.commission.verser']);
         Permission::firstOrCreate(['name' => 'ventes.qte.update']);
         Permission::firstOrCreate(['name' => 'ventes.prix.update']);
+        Permission::firstOrCreate(['name' => 'rh-paie.validate']);
+        Permission::firstOrCreate(['name' => 'rh-paie.pay']);
+        Permission::firstOrCreate(['name' => 'rh-paie.close']);
 
         // ── 2. Rôles + matrices de permissions ────────────────────────────────
         $superAdmin = Role::firstOrCreate(['name' => 'super_admin']);
@@ -70,6 +74,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'logistique.create',        'logistique.read',        'logistique.update',      'logistique.delete',
             'logistique.commission.verser',
             'depenses.create',          'depenses.read',          'depenses.update',        'depenses.delete',
+            'rh-employes.create',       'rh-employes.read',       'rh-employes.update',     'rh-employes.delete',
+            'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',     'rh-contrats.delete',
+            'rh-paie.create',           'rh-paie.read',           'rh-paie.update',         'rh-paie.delete',
+            'rh-paie.validate',         'rh-paie.pay',            'rh-paie.close',
         ]);
 
         $manager->syncPermissions([
@@ -91,6 +99,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'logistique.create',        'logistique.read',        'logistique.update',
             'logistique.commission.verser',
             'depenses.create',          'depenses.read',          'depenses.update',
+            'rh-employes.create',       'rh-employes.read',       'rh-employes.update',
+            'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',
+            'rh-paie.create',           'rh-paie.read',           'rh-paie.update',
+            'rh-paie.validate',         'rh-paie.pay',
         ]);
 
         $commerciale->syncPermissions([

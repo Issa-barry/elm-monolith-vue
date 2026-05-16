@@ -58,6 +58,7 @@ watch(
             modePaiement.value = 'especes';
         }
     },
+    { immediate: true },
 );
 
 function formatGNF(val: number): string {

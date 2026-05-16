@@ -395,48 +395,32 @@ function handleSubmit() {
             </div>
         </div>
 
-        <!-- Commission & Charges -->
+        <!-- Prise en charge par l'usine -->
         <div class="order-3 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
-                Commission & Charges
+                Prise en charge par l'usine ?
             </h3>
-            <div
-                class="flex items-start gap-3"
-                :class="{ 'opacity-60': form.categorie === 'interne' }"
-            >
-                <Checkbox
-                    id="pris_en_charge_par_usine"
-                    :model-value="Boolean(form.pris_en_charge_par_usine)"
-                    :disabled="form.categorie === 'interne'"
-                    @update:model-value="
-                        form.categorie !== 'interne' &&
-                        $emit('update:form', {
-                            ...form,
-                            pris_en_charge_par_usine: $event === true,
-                        })
-                    "
-                />
-                <div>
-                    <Label
-                        for="pris_en_charge_par_usine"
-                        class="font-medium"
-                        :class="
-                            form.categorie === 'interne'
-                                ? 'cursor-not-allowed'
-                                : 'cursor-pointer'
+            <div class="flex items-center gap-4" :class="{ 'opacity-60': form.categorie === 'interne' }">
+                <label class="flex items-center gap-2" :class="form.categorie === 'interne' ? 'cursor-not-allowed' : 'cursor-pointer'">
+                    <Checkbox
+                        id="pris_en_charge_par_usine"
+                        :model-value="Boolean(form.pris_en_charge_par_usine)"
+                        :disabled="form.categorie === 'interne'"
+                        @update:model-value="
+                            form.categorie !== 'interne' &&
+                            $emit('update:form', { ...form, pris_en_charge_par_usine: $event === true })
                         "
-                    >
-                        Pris en charge par l'usine
-                    </Label>
-                    <p class="text-xs text-muted-foreground">
-                        Les frais du véhicule sont supportés par l'organisation
-                        <template v-if="form.categorie === 'interne'">
-                            — obligatoire pour un véhicule interne
-                        </template>
-                    </p>
-                </div>
+                    />
+                    <span class="text-sm font-medium">
+                        {{ form.pris_en_charge_par_usine ? 'Oui' : 'Non' }}
+                    </span>
+                </label>
+                <p class="text-xs text-muted-foreground">
+                    <template v-if="form.categorie === 'interne'">Obligatoire pour un véhicule interne</template>
+                    <template v-else>Les frais du véhicule sont supportés par l'organisation</template>
+                </p>
             </div>
         </div>
 

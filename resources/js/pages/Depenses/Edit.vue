@@ -14,6 +14,7 @@ interface DepenseType {
     libelle: string;
     requires_vehicle: boolean;
     requires_comment: boolean;
+    applique_aux_employes: boolean;
 }
 interface Vehicule {
     id: string;
@@ -25,10 +26,17 @@ interface Site {
     nom: string;
     type: string;
 }
+interface Employe {
+    id: string;
+    nom: string;
+    prenom: string;
+    matricule: string | null;
+}
 interface DepenseData {
     id: string;
     depense_type_id: string;
     vehicule_id: string | null;
+    employe_id: string | null;
     site_id: string | null;
     montant: number;
     date_depense: string;
@@ -41,6 +49,7 @@ const props = defineProps<{
     types: DepenseType[];
     vehicules: Vehicule[];
     sites: Site[];
+    employes: Employe[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -51,6 +60,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     depense_type_id: props.depense.depense_type_id,
     vehicule_id: props.depense.vehicule_id ?? '',
+    employe_id: props.depense.employe_id ?? '',
     site_id: props.depense.site_id ?? '',
     montant: props.depense.montant,
     date_depense: props.depense.date_depense,
@@ -244,6 +254,25 @@ function submit() {
                         >
                             {{ form.errors.vehicule_id }}
                         </p>
+                    </div>
+
+                    <!-- Employé (conditionnel) -->
+                    <div v-if="selectedType?.applique_aux_employes">
+                        <Label for="dep-employe" class="mb-1.5 block text-xs font-medium">
+                            Employé <span class="text-destructive">*</span>
+                        </Label>
+                        <select
+                            id="dep-employe"
+                            v-model="form.employe_id"
+                            class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                            :class="{ 'border-destructive': form.errors.employe_id }"
+                        >
+                            <option value="">Sélectionner un employé…</option>
+                            <option v-for="e in employes" :key="e.id" :value="e.id">
+                                {{ e.prenom }} {{ e.nom }}<template v-if="e.matricule"> — {{ e.matricule }}</template>
+                            </option>
+                        </select>
+                        <p v-if="form.errors.employe_id" class="mt-1 text-xs text-destructive">{{ form.errors.employe_id }}</p>
                     </div>
 
                     <!-- Site -->

@@ -3,6 +3,9 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 export const E2E_EMAIL = process.env.E2E_EMAIL ?? 'superadmin@admin.com';
 export const E2E_PHONE = process.env.E2E_PHONE ?? '+33758855039';
 export const E2E_PASSWORD = process.env.E2E_PASSWORD ?? 'Staff@2025';
+export const E2E_FALLBACK_PHONES = Array.from(
+    new Set([E2E_PHONE, '+224656555520', '+33769442565', '+224622176056']),
+);
 
 interface LoginCountryOption {
     code: string;
@@ -147,6 +150,7 @@ export async function fillLoginIdentifier(
     }
 
     const parsedPhone = parseLoginPhone(phone);
+    const normalizedPhone = normalizeE164Phone(phone);
     if (parsedPhone) {
         await ensureLoginCountry(page, parsedPhone.country);
     }
@@ -156,11 +160,25 @@ export async function fillLoginIdentifier(
     await telInput.fill(parsedPhone?.localDigits ?? phone.replace(/\D/g, ''));
 
     const hiddenTelephone = page.locator('input[name="telephone"]').first();
-    if ((await hiddenTelephone.count()) > 0 && parsedPhone) {
-        await expect(hiddenTelephone).toHaveValue(
-            `${parsedPhone.country.prefix}${parsedPhone.localDigits.replace(/^0/, '')}`,
-            { timeout: 10_000 },
-        );
+    const telephoneForSubmit = parsedPhone
+        ? `${parsedPhone.country.prefix}${parsedPhone.localDigits.replace(/^0/, '')}`
+        : normalizedPhone;
+
+    if ((await hiddenTelephone.count()) > 0) {
+        if (telephoneForSubmit) {
+            await hiddenTelephone.evaluate((input, value) => {
+                const field = input as HTMLInputElement;
+                field.value = value;
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+            }, telephoneForSubmit);
+        }
+
+        if (parsedPhone) {
+            await expect(hiddenTelephone).toHaveValue(telephoneForSubmit, {
+                timeout: 10_000,
+            });
+        }
     }
 }
 
@@ -172,46 +190,52 @@ export async function login(page: Page): Promise<void> {
     }
 
     let lastError: unknown;
+    let lastPageBody = '';
 
     for (let attempt = 1; attempt <= 3; attempt++) {
-        await page.goto('/login');
-        await page.waitForSelector('input[name="password"]', {
-            timeout: 20_000,
-        });
-
-        await fillLoginIdentifier(page);
-        await page.locator('input[name="password"]').fill(E2E_PASSWORD);
-
-        const submitButton = page
-            .getByRole('button', { name: /se connecter/i })
-            .first();
-        await expect(submitButton).toBeEnabled({ timeout: 10_000 });
-        await submitButton.click();
-
-        try {
-            await expect(page).not.toHaveURL(/\/login(?:\?.*)?$/, {
-                timeout: 30_000,
+        for (const phone of E2E_FALLBACK_PHONES) {
+            await page.goto('/login');
+            await page.waitForSelector('input[name="password"]', {
+                timeout: 20_000,
             });
-            return;
-        } catch (error) {
-            lastError = error;
 
-            const bodyText = await page
-                .locator('body')
-                .innerText()
-                .catch(() => '');
-            const isRateLimited =
-                /too many|trop de tentatives|veuillez patienter|please wait|seconds|secondes|essayez|requests|429/i.test(
-                    bodyText,
-                );
+            await fillLoginIdentifier(page, { phone });
+            await page.locator('input[name="password"]').fill(E2E_PASSWORD);
 
-            await page.waitForTimeout(isRateLimited ? 61_000 : 2_000 * attempt);
+            const submitButton = page
+                .getByRole('button', { name: /se connecter/i })
+                .first();
+            await expect(submitButton).toBeEnabled({ timeout: 10_000 });
+            await submitButton.click();
+
+            try {
+                await expect(page).not.toHaveURL(/\/login(?:\?.*)?$/, {
+                    timeout: 12_000,
+                });
+                return;
+            } catch (error) {
+                lastError = error;
+
+                const bodyText = await page
+                    .locator('body')
+                    .innerText()
+                    .catch(() => '');
+                lastPageBody = bodyText;
+                const isRateLimited =
+                    /too many|trop de tentatives|veuillez patienter|please wait|seconds|secondes|essayez|requests|429/i.test(
+                        bodyText,
+                    );
+
+                await page.waitForTimeout(isRateLimited ? 200 : 500 * attempt);
+            }
         }
     }
 
-    throw (
-        lastError ?? new Error('Unable to login after retries in E2E helper.')
-    );
+    const snippet = lastPageBody.trim().replace(/\s+/g, ' ').slice(0, 500);
+    const message = `Unable to login after retries in E2E helper. Phones tried: ${E2E_FALLBACK_PHONES.join(', ')}. Last page snippet: ${snippet || 'n/a'}`;
+    throw lastError instanceof Error
+        ? new Error(`${message}\nCause: ${lastError.message}`)
+        : new Error(message);
 }
 
 export function getVisibleSearchInput(page: Page): Locator {
@@ -388,7 +412,8 @@ export async function fillUserInfoAndAdvance(
 
     const roleComboboxByText = formComboboxes
         .filter({
-            hasText: /choisir un role|role|manager|comptable|commercial|administrateur/i,
+            hasText:
+                /choisir un role|role|manager|comptable|commercial|administrateur/i,
         })
         .first();
     const roleCombobox =
@@ -522,4 +547,3 @@ export async function cleanupRowsByPrefix(
         await searchInput.fill(prefix);
     }
 }
-

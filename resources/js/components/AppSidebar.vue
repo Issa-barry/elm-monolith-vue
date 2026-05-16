@@ -16,6 +16,7 @@ import { dashboard, home } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
+    Briefcase,
     Building2,
     Car,
     Layers,
@@ -48,6 +49,15 @@ const transfertsAReceptionner = computed(
 /** Guard combiné permission + module actif */
 const canSee = (permission: string, module: string): boolean =>
     can(permission) && moduleActive(module);
+
+const rhItems = computed((): NavItem[] => {
+    if (!moduleActive('rh')) return [];
+    const sub: NavItem[] = [];
+    if (can('rh-employes.read')) sub.push({ title: 'Employés', href: '/employes' });
+    if (can('rh-contrats.read')) sub.push({ title: 'Contrats', href: '/contrats' });
+    if (can('rh-paie.read')) sub.push({ title: 'Paie', href: '/paie' });
+    return sub;
+});
 
 /** Sous-items Véhicules (calculés séparément pour limiter la complexité) */
 const propositionsATraiter = computed(
@@ -158,6 +168,15 @@ const mainNavItems = computed((): NavItem[] => {
 
     if (canSee('depenses.read', 'depenses'))
         items.push({ title: 'Dépenses', href: '/depenses', icon: Receipt });
+
+    if (rhItems.value.length > 0) {
+        items.push({
+            title: 'RH',
+            href: rhItems.value[0].href,
+            icon: Briefcase,
+            items: rhItems.value,
+        });
+    }
 
     if (canSee('sites.read', 'sites'))
         items.push({ title: 'Sites', href: '/sites', icon: Building2 });

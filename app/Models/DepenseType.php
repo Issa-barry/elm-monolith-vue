@@ -21,6 +21,8 @@ class DepenseType extends Model
         'description',
         'requires_vehicle',
         'requires_comment',
+        'applique_aux_employes',
+        'type_paie',
         'is_active',
         'sort_order',
     ];
@@ -28,10 +30,11 @@ class DepenseType extends Model
     protected function casts(): array
     {
         return [
-            'requires_vehicle' => 'boolean',
-            'requires_comment' => 'boolean',
-            'is_active' => 'boolean',
-            'sort_order' => 'integer',
+            'requires_vehicle'      => 'boolean',
+            'requires_comment'      => 'boolean',
+            'applique_aux_employes' => 'boolean',
+            'is_active'             => 'boolean',
+            'sort_order'            => 'integer',
         ];
     }
 
