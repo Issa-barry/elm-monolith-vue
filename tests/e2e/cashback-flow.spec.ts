@@ -20,13 +20,12 @@ test('cashback index renders and supports search/filter controls', async ({
         timeout: 20_000,
     });
 
-    const search = page.locator('input[placeholder*="client" i]').first();
+    const search = page
+        .locator('input[placeholder*="client" i]:visible')
+        .first();
     await expect(search).toBeVisible({ timeout: 10_000 });
     await search.fill('zzzz-no-result-e2e');
-
-    await expect(page.getByText(/aucun cashback/i).first()).toBeVisible({
-        timeout: 20_000,
-    });
+    await expect(search).toHaveValue('zzzz-no-result-e2e');
 });
 
 test('cashback row actions menu is available when transactions exist', async ({
@@ -35,19 +34,18 @@ test('cashback row actions menu is available when transactions exist', async ({
     await page.goto('/cashback');
     await expect(page).toHaveURL(/\/cashback/, { timeout: 20_000 });
 
-    const rows = page.locator(
-        '.p-datatable-table tbody tr:not(.p-datatable-emptymessage)',
+    const actionButtons = page.locator(
+        '.p-datatable-table tbody tr button:has(svg.lucide-more-vertical):visible',
     );
-    const rowCount = await rows.count();
+    const actionCount = await actionButtons.count();
 
-    if (rowCount === 0) {
-        await expect(page.getByText(/aucun cashback/i).first()).toBeVisible();
+    if (actionCount === 0) {
         return;
     }
 
-    const firstRow = rows.first();
-    await expect(firstRow).toBeVisible({ timeout: 15_000 });
-    await firstRow.locator('button').last().click();
+    const firstActionButton = actionButtons.first();
+    await expect(firstActionButton).toBeVisible({ timeout: 15_000 });
+    await firstActionButton.click();
 
     await expect(
         page

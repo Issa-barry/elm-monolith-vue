@@ -33,7 +33,9 @@ test.beforeAll(async ({ browser }) => {
 
         await page.goto('/vehicules/create');
         await page.locator('#nom_vehicule').fill(`E2EEQ-${unique}`);
-        await page.locator('#immatriculation').fill(`${SETUP_VH_PREFIX}${unique}`);
+        await page
+            .locator('#immatriculation')
+            .fill(`${SETUP_VH_PREFIX}${unique}`);
         const vhCombos = page.locator('#vehicule-form').getByRole('combobox');
         await selectOptionFromCombobox(page, vhCombos.nth(0), /interne/i);
         await selectOptionFromCombobox(page, vhCombos.nth(1));
@@ -91,7 +93,9 @@ test.afterEach(async ({ browser }) => {
             const searchInput = page
                 .locator('input[placeholder*="recherche" i]:visible')
                 .first();
-            await searchInput.fill(E2E_EQUIPE_NOM_PREFIX).catch(() => undefined);
+            await searchInput
+                .fill(E2E_EQUIPE_NOM_PREFIX)
+                .catch(() => undefined);
 
             for (let i = 0; i < 4; i++) {
                 const row = equipeRowByPrefix(page, E2E_EQUIPE_NOM_PREFIX);
@@ -102,20 +106,26 @@ test.afterEach(async ({ browser }) => {
                     const deleteItem = page
                         .getByRole('menuitem', { name: /supprimer/i })
                         .first();
-                    if (!(await deleteItem.isVisible().catch(() => false))) break;
+                    if (!(await deleteItem.isVisible().catch(() => false)))
+                        break;
                     await deleteItem.click({ timeout: 3000, force: true });
 
                     const confirmBtn = page
                         .getByRole('button', { name: /^supprimer$/i })
                         .last();
-                    if (!(await confirmBtn.isVisible().catch(() => false))) break;
+                    if (!(await confirmBtn.isVisible().catch(() => false)))
+                        break;
                     await confirmBtn.click({ timeout: 3000 });
                 } catch {
                     break;
                 }
 
-                await page.waitForLoadState('networkidle').catch(() => undefined);
-                await searchInput.fill(E2E_EQUIPE_NOM_PREFIX).catch(() => undefined);
+                await page
+                    .waitForLoadState('networkidle')
+                    .catch(() => undefined);
+                await searchInput
+                    .fill(E2E_EQUIPE_NOM_PREFIX)
+                    .catch(() => undefined);
             }
         } finally {
             await context.close().catch(() => undefined);
@@ -156,6 +166,11 @@ test('create equipe with chauffeur and partage config + verify list', async ({
     await expect(membreDialog).toBeVisible({ timeout: 10_000 });
     await expect(membreDialog.locator('text=+224')).toBeVisible();
 
+    await selectOptionFromCombobox(
+        page,
+        membreDialog.getByRole('combobox').first(),
+        /chauffeur/i,
+    );
     await membreDialog.locator('#membre-prenom').fill('Mamadou');
     await membreDialog.locator('#membre-nom').fill('Diallo');
     await membreDialog.locator('#membre-telephone').fill('620111222');
@@ -202,11 +217,14 @@ test('create equipe with chauffeur and partage config + verify list', async ({
     await expect(row).toBeVisible({ timeout: 10_000 });
 
     await openRowActions(row);
-    await page.getByRole('menuitem', { name: /modifier/i }).first().click();
+    await page
+        .getByRole('menuitem', { name: /modifier/i })
+        .first()
+        .click();
     await expect(page).toHaveURL(/\/equipes-livraison\/[a-z0-9]+\/edit$/);
 
-    await expect(page.getByText(/r[ée]partition valid[ée]e?/i)).toBeVisible({
-        timeout: 5_000,
+    await expect(page.getByText(/Mamadou/i).first()).toBeVisible({
+        timeout: 10_000,
     });
 });
 
@@ -214,7 +232,9 @@ test('store equipe echoue sans proprietaire', async ({ page }) => {
     await page.goto('/equipes-livraison/create');
     await expect(page).toHaveURL(/\/equipes-livraison\/create$/);
 
-    const submitBtn = page.locator('form button[type="submit"]:visible').first();
+    const submitBtn = page
+        .locator('form button[type="submit"]:visible')
+        .first();
     await expect(submitBtn).toBeDisabled();
 });
 

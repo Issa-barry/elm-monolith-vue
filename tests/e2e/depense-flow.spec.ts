@@ -41,7 +41,10 @@ async function createDraftDepense(
         .locator('input[type="radio"][value="brouillon"]')
         .check({ force: true });
 
-    await page.locator('form button[type="submit"]').click();
+    await page
+        .getByRole('button', { name: /enregistrer/i })
+        .first()
+        .click();
     await expect(page).toHaveURL(/\/depenses$/, { timeout: 30_000 });
 }
 
@@ -61,17 +64,18 @@ test('create depense brouillon -> edit -> delete', async ({ page }) => {
         timeout: 20_000,
     });
 
-    const updatedMontant = montant + 1000;
+    const updatedMontant = 12345;
     await page.locator('#dep-montant').fill(String(updatedMontant));
-    await page.locator('form button[type="submit"]').click();
+    await page
+        .getByRole('button', { name: /enregistrer/i })
+        .first()
+        .click();
 
     await expect(page).toHaveURL(/\/depenses$/, { timeout: 20_000 });
 
     const updatedRow = depenseRowByComment(page, comment);
     await expect(updatedRow).toBeVisible({ timeout: 15_000 });
-    await expect(updatedRow).toContainText(
-        new RegExp(`${updatedMontant}`.slice(0, 2)),
-    );
+    await expect(updatedRow).toContainText(/12[\s\u00A0\u202F]?345/);
 
     page.once('dialog', async (dialog) => {
         await dialog.accept();
