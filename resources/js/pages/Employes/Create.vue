@@ -11,7 +11,7 @@ interface Option {
     label: string;
 }
 
-const props = defineProps<{
+defineProps<{
     type_employe_options: Option[];
     statut_options: Option[];
     sites: Option[];
