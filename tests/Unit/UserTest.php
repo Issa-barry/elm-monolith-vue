@@ -76,8 +76,8 @@ class UserTest extends TestCase
 
         $map = $user->permissionsMap();
 
-        // 15 resources × 4 actions + 2 standalone (logistique.commission.verser, ventes.qte.update) + 1 extra
-        $this->assertCount(63, $map);
+        // 18 resources × 4 actions + 6 standalone = 78
+        $this->assertCount(78, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

@@ -7,7 +7,7 @@ import type {
     StatementLine,
     VehiculeOption,
 } from '@/types/client-space';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
@@ -19,7 +19,11 @@ const props = defineProps<{
     filters: { date_debut: string | null; date_fin: string | null };
 }>();
 
-const selectedVehiculeId = ref<string | 'all'>('all');
+const page = usePage();
+
+const selectedVehiculeId = ref<string | 'all'>(
+    resolveInitialVehiculeId(page.url, props.vehicules),
+);
 const dateDebut = ref<string>(props.filters.date_debut ?? '');
 const dateFin = ref<string>(props.filters.date_fin ?? '');
 
@@ -28,7 +32,7 @@ const filteredStatement = computed(() => {
         return props.statement;
     }
     return props.statement.filter(
-        (line) => line.vehicule_id === selectedVehiculeId.value,
+        (line) => String(line.vehicule_id) === selectedVehiculeId.value,
     );
 });
 
@@ -36,6 +40,10 @@ function applyFilters() {
     router.get(
         '/client/gains',
         {
+            vehicule_id:
+                selectedVehiculeId.value === 'all'
+                    ? undefined
+                    : selectedVehiculeId.value,
             date_debut: dateDebut.value || undefined,
             date_fin: dateFin.value || undefined,
         },
@@ -44,6 +52,7 @@ function applyFilters() {
 }
 
 function resetFilters() {
+    selectedVehiculeId.value = 'all';
     dateDebut.value = '';
     dateFin.value = '';
     router.get('/client/gains', {}, { preserveScroll: true });
@@ -54,8 +63,26 @@ function formatMoney(value: number): string {
 }
 
 const hasActiveFilter = computed(
-    () => !!props.filters.date_debut || !!props.filters.date_fin,
+    () =>
+        selectedVehiculeId.value !== 'all' ||
+        !!dateDebut.value ||
+        !!dateFin.value,
 );
+
+function resolveInitialVehiculeId(
+    url: string,
+    vehicules: VehiculeOption[],
+): string | 'all' {
+    const queryString = url.includes('?') ? url.split('?')[1] : '';
+    const value = new URLSearchParams(queryString).get('vehicule_id');
+    if (!value) {
+        return 'all';
+    }
+
+    const exists = vehicules.some((vehicule) => String(vehicule.id) === value);
+
+    return exists ? value : 'all';
+}
 </script>
 
 <template>
@@ -82,7 +109,7 @@ const hasActiveFilter = computed(
                             <option
                                 v-for="vehicule in vehicules"
                                 :key="vehicule.id"
-                                :value="vehicule.id"
+                                :value="String(vehicule.id)"
                             >
                                 {{ vehicule.nom_vehicule }} ({{
                                     vehicule.immatriculation ?? '-'
@@ -157,6 +184,74 @@ const hasActiveFilter = computed(
             </div>
 
             <div class="rounded-xl border border-border bg-card p-5">
+                <h2 class="text-lg font-semibold">Solde par vehicule</h2>
+
+                <div class="mt-4 overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr
+                                class="border-b border-border text-left text-muted-foreground"
+                            >
+                                <th class="py-2 pr-4 font-medium">Vehicule</th>
+                                <th class="py-2 pr-4 font-medium">
+                                    Immatriculation
+                                </th>
+                                <th class="py-2 pr-4 font-medium">Gains</th>
+                                <th
+                                    class="py-2 pr-4 font-medium text-destructive"
+                                >
+                                    Frais
+                                </th>
+                                <th class="py-2 pr-4 font-medium">Verses</th>
+                                <th class="py-2 pr-0 font-medium">
+                                    Reste à payer
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in earnings_by_vehicule"
+                                :key="row.vehicule_id"
+                                class="border-b border-border/70"
+                            >
+                                <td class="py-2 pr-4">
+                                    {{ row.nom_vehicule }}
+                                </td>
+                                <td class="py-2 pr-4">
+                                    {{ row.immatriculation ?? '-' }}
+                                </td>
+                                <td class="py-2 pr-4">
+                                    {{ formatMoney(row.total_earned) }}
+                                </td>
+                                <td class="py-2 pr-4 text-destructive">
+                                    {{
+                                        row.frais_depenses > 0
+                                            ? `- ${formatMoney(row.frais_depenses)}`
+                                            : '-'
+                                    }}
+                                </td>
+                                <td class="py-2 pr-4">
+                                    {{ formatMoney(row.total_paid) }}
+                                </td>
+                                <td class="py-2 pr-0">
+                                    {{ formatMoney(row.balance) }}
+                                </td>
+                            </tr>
+                            <tr v-if="earnings_by_vehicule.length === 0">
+                                <td
+                                    colspan="6"
+                                    class="py-4 text-center text-muted-foreground"
+                                >
+                                    Aucun vehicule partenaire detecte pour ce
+                                    compte.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-border bg-card p-5">
                 <h2 class="text-lg font-semibold">Releve des operations</h2>
                 <p class="mt-1 text-sm text-muted-foreground">
                     Historique des commissions generees via vos vehicules.
@@ -226,74 +321,6 @@ const hasActiveFilter = computed(
                                     class="py-4 text-center text-muted-foreground"
                                 >
                                     Aucune operation trouvee.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="rounded-xl border border-border bg-card p-5">
-                <h2 class="text-lg font-semibold">Solde par vehicule</h2>
-
-                <div class="mt-4 overflow-x-auto">
-                    <table class="min-w-full text-sm">
-                        <thead>
-                            <tr
-                                class="border-b border-border text-left text-muted-foreground"
-                            >
-                                <th class="py-2 pr-4 font-medium">Vehicule</th>
-                                <th class="py-2 pr-4 font-medium">
-                                    Immatriculation
-                                </th>
-                                <th class="py-2 pr-4 font-medium">Gains</th>
-                                <th
-                                    class="py-2 pr-4 font-medium text-destructive"
-                                >
-                                    Frais
-                                </th>
-                                <th class="py-2 pr-4 font-medium">Verses</th>
-                                <th class="py-2 pr-0 font-medium">
-                                    Reste à payer
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="row in earnings_by_vehicule"
-                                :key="row.vehicule_id"
-                                class="border-b border-border/70"
-                            >
-                                <td class="py-2 pr-4">
-                                    {{ row.nom_vehicule }}
-                                </td>
-                                <td class="py-2 pr-4">
-                                    {{ row.immatriculation ?? '-' }}
-                                </td>
-                                <td class="py-2 pr-4">
-                                    {{ formatMoney(row.total_earned) }}
-                                </td>
-                                <td class="py-2 pr-4 text-destructive">
-                                    {{
-                                        row.frais_depenses > 0
-                                            ? `- ${formatMoney(row.frais_depenses)}`
-                                            : '-'
-                                    }}
-                                </td>
-                                <td class="py-2 pr-4">
-                                    {{ formatMoney(row.total_paid) }}
-                                </td>
-                                <td class="py-2 pr-0">
-                                    {{ formatMoney(row.balance) }}
-                                </td>
-                            </tr>
-                            <tr v-if="earnings_by_vehicule.length === 0">
-                                <td
-                                    colspan="6"
-                                    class="py-4 text-center text-muted-foreground"
-                                >
-                                    Aucun vehicule partenaire detecte pour ce
-                                    compte.
                                 </td>
                             </tr>
                         </tbody>

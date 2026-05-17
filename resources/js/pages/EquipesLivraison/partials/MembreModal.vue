@@ -41,6 +41,7 @@ const title = computed(() =>
 );
 const canSubmit = computed(
     () =>
+        form.role.trim().length > 0 &&
         form.prenom.trim().length > 0 &&
         form.nom.trim().length > 0 &&
         /^\d{9}$/.test(phoneLocal.value),
@@ -51,7 +52,7 @@ const form = reactive<MembreFormData>({
     nom: '',
     prenom: '',
     telephone: '',
-    role: 'chauffeur',
+    role: '',
     ordre: 0,
     montant_par_pack: 0,
 });
@@ -84,7 +85,7 @@ watch(
                 nom: '',
                 prenom: '',
                 telephone: '',
-                role: 'chauffeur',
+                role: '',
                 ordre: 0,
                 montant_par_pack: 0,
             });
@@ -127,6 +128,7 @@ function validate(): boolean {
         (k) => delete errors[k],
     );
 
+    if (!form.role.trim()) errors.role = 'Le rôle est obligatoire.';
     if (!form.prenom.trim()) errors.prenom = 'Le prénom est obligatoire.';
     if (!form.nom.trim()) errors.nom = 'Le nom est obligatoire.';
 
@@ -162,6 +164,26 @@ function handleConfirm() {
         @update:visible="emit('update:visible', $event)"
     >
         <div class="space-y-4 pt-2 pb-1">
+            <!-- Rôle -->
+            <div>
+                <Label for="membre-role" class="mb-1 block text-xs font-medium">
+                    Rôle <span class="text-destructive">*</span>
+                </Label>
+                <Dropdown
+                    v-model="form.role"
+                    input-id="membre-role"
+                    :options="roles"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Sélectionner un rôle…"
+                    class="w-full"
+                    :class="{ 'p-invalid': errors.role }"
+                />
+                <p v-if="errors.role" class="mt-1 text-xs text-destructive">
+                    {{ errors.role }}
+                </p>
+            </div>
+
             <!-- Prénom + Nom -->
             <div class="grid grid-cols-2 gap-3">
                 <div>
@@ -250,21 +272,6 @@ function handleConfirm() {
                 >
                     {{ errors.telephone || telephoneError }}
                 </p>
-            </div>
-
-            <!-- Rôle -->
-            <div>
-                <Label for="membre-role" class="mb-1 block text-xs font-medium"
-                    >Rôle</Label
-                >
-                <Dropdown
-                    v-model="form.role"
-                    input-id="membre-role"
-                    :options="roles"
-                    option-label="label"
-                    option-value="value"
-                    class="w-full"
-                />
             </div>
         </div>
 

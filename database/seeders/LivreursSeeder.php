@@ -19,8 +19,8 @@ class LivreursSeeder extends Seeder
             ['nom' => 'BAH',      'prenom' => 'Mariama',   'telephone' => '+224622000003'], // Auto Dogomet principal
             ['nom' => 'SOUMAH',   'prenom' => 'Mamadou',   'telephone' => '+224622000004'], // Kaloum Express principal
             ['nom' => 'KOUROUMA', 'prenom' => 'Fatoumata', 'telephone' => '+224622000005'], // Kaloum Express assistant
-            ['nom' => 'DIALLO',   'prenom' => 'Boubacar',  'telephone' => '+224622000006'], // (réserve)
-            ['nom' => 'BARRY',    'prenom' => 'Alpha',     'telephone' => '+224622000007'], // (réserve)
+            ['nom' => 'DIALLO',   'prenom' => 'Boubacar',  'telephone' => '+224622000006'], // Conakry 2 principal
+            ['nom' => 'BARRY',    'prenom' => 'Alpha',     'telephone' => '+224622000007'], // ELM Logistique 4 principal
             ['nom' => 'CAMARA',   'prenom' => 'Oumar',     'telephone' => '+224622000008'], // Baba Ousou principal
             ['nom' => 'SYLLA',    'prenom' => 'Abdoulaye', 'telephone' => '+224622000009'], // Baba Ousou assistant
             ['nom' => 'TOURÉ',   'prenom' => 'Kadiatou',  'telephone' => '+224622000010'], // Baba Ousou assistant

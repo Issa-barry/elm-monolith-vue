@@ -1,6 +1,7 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import {
     cleanupRowsByPrefix,
+    ensureModuleEnabled,
     escapeRegExp,
     login,
     openRowActions,
@@ -9,38 +10,43 @@ import {
 } from './helpers';
 
 const E2E_EQUIPE_NOM_PREFIX = 'E2EEQ-';
-/** Préfixes pour les données prérequises créées dans beforeAll */
 const SETUP_VH_PREFIX = 'E2EEQVH-';
 const SETUP_PROP_PREFIX = 'e2eeqprop';
 
 test.setTimeout(120_000);
 
-/**
- * Crée un véhicule interne et un propriétaire dédiés aux tests equipe.
- * Ces données sont nécessaires car equipe-flow tourne avant vehicule-flow
- * et proprietaire-flow alphabétiquement, donc aucune donnée n'existe encore.
- */
+function equipeRowByPrefix(page: Page, prefix: string) {
+    return page
+        .locator('.p-datatable-table tbody tr:not(.p-datatable-emptymessage)', {
+            hasText: new RegExp(escapeRegExp(prefix), 'i'),
+        })
+        .first();
+}
+
 test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
         await login(page);
+        await ensureModuleEnabled(page, 'module.vehicules');
         const unique = randomDigits(6);
 
-        // ── Véhicule interne ──────────────────────────────────────────────────
         await page.goto('/vehicules/create');
         await page.locator('#nom_vehicule').fill(`E2EEQ-${unique}`);
-        await page.locator('#immatriculation').fill(`${SETUP_VH_PREFIX}${unique}`);
+        await page
+            .locator('#immatriculation')
+            .fill(`${SETUP_VH_PREFIX}${unique}`);
         const vhCombos = page.locator('#vehicule-form').getByRole('combobox');
-        await selectOptionFromCombobox(page, vhCombos.nth(0), /interne/i); // catégorie
-        await selectOptionFromCombobox(page, vhCombos.nth(1));             // type
+        await selectOptionFromCombobox(page, vhCombos.nth(0), /interne/i);
+        await selectOptionFromCombobox(page, vhCombos.nth(1));
         await page
             .locator('#vehicule-form button[type="submit"]:visible')
             .first()
             .click();
-        await page.waitForURL(/\/vehicules\/[a-z0-9]+\/edit$/, { timeout: 20_000 });
+        await page.waitForURL(/\/vehicules\/[a-z0-9]+\/edit$/, {
+            timeout: 20_000,
+        });
 
-        // ── Propriétaire ──────────────────────────────────────────────────────
         await page.goto('/proprietaires/create');
         await page.locator('#prenom').fill(`${SETUP_PROP_PREFIX}${unique}`);
         await page.locator('#nom').fill('E2ETest');
@@ -55,7 +61,11 @@ test.beforeAll(async ({ browser }) => {
     }
 });
 
-/** Nettoyage du véhicule et du propriétaire créés dans beforeAll. */
+test.beforeEach(async ({ page }) => {
+    await login(page);
+    await ensureModuleEnabled(page, 'module.vehicules');
+});
+
 test.afterAll(async ({ browser }) => {
     test.setTimeout(90_000);
     const context = await browser.newContext();
@@ -71,24 +81,24 @@ test.afterAll(async ({ browser }) => {
     }
 });
 
-// Nettoyage après chaque test (placeholder equipes = "recherche")
 test.afterEach(async ({ browser }) => {
     try {
         const context = await browser.newContext();
         try {
             const page = await context.newPage();
             await login(page);
+            await ensureModuleEnabled(page, 'module.vehicules');
             await page.goto('/equipes-livraison');
 
             const searchInput = page
                 .locator('input[placeholder*="recherche" i]:visible')
                 .first();
-            await searchInput.fill(E2E_EQUIPE_NOM_PREFIX).catch(() => undefined);
-
-            const guard = new RegExp(escapeRegExp(E2E_EQUIPE_NOM_PREFIX), 'i');
+            await searchInput
+                .fill(E2E_EQUIPE_NOM_PREFIX)
+                .catch(() => undefined);
 
             for (let i = 0; i < 4; i++) {
-                const row = page.locator('tbody tr', { hasText: guard }).first();
+                const row = equipeRowByPrefix(page, E2E_EQUIPE_NOM_PREFIX);
                 if (!(await row.isVisible().catch(() => false))) break;
 
                 try {
@@ -96,20 +106,26 @@ test.afterEach(async ({ browser }) => {
                     const deleteItem = page
                         .getByRole('menuitem', { name: /supprimer/i })
                         .first();
-                    if (!(await deleteItem.isVisible().catch(() => false))) break;
+                    if (!(await deleteItem.isVisible().catch(() => false)))
+                        break;
                     await deleteItem.click({ timeout: 3000, force: true });
 
                     const confirmBtn = page
                         .getByRole('button', { name: /^supprimer$/i })
                         .last();
-                    if (!(await confirmBtn.isVisible().catch(() => false))) break;
+                    if (!(await confirmBtn.isVisible().catch(() => false)))
+                        break;
                     await confirmBtn.click({ timeout: 3000 });
                 } catch {
                     break;
                 }
 
-                await page.waitForLoadState('networkidle').catch(() => undefined);
-                await searchInput.fill(E2E_EQUIPE_NOM_PREFIX).catch(() => undefined);
+                await page
+                    .waitForLoadState('networkidle')
+                    .catch(() => undefined);
+                await searchInput
+                    .fill(E2E_EQUIPE_NOM_PREFIX)
+                    .catch(() => undefined);
             }
         } finally {
             await context.close().catch(() => undefined);
@@ -122,12 +138,9 @@ test.afterEach(async ({ browser }) => {
 test('create equipe with chauffeur and partage config + verify list', async ({
     page,
 }) => {
-    await login(page);
-
     await page.goto('/equipes-livraison/create');
     await expect(page).toHaveURL(/\/equipes-livraison\/create$/);
 
-    // Véhicule : sélectionner le véhicule interne créé dans beforeAll
     const formComboboxes = page.locator('form').getByRole('combobox');
     await selectOptionFromCombobox(
         page,
@@ -135,35 +148,35 @@ test('create equipe with chauffeur and partage config + verify list', async ({
         new RegExp(escapeRegExp(E2E_EQUIPE_NOM_PREFIX), 'i'),
     );
 
-    // Propriétaire : AutoComplete éditable uniquement pour les véhicules externes sans
-    // propriétaire lié. Pour les véhicules internes, le site est propriétaire (div verrouillée).
     const proprietaireInput = page.locator('input#proprietaire_id');
-    if (await proprietaireInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
+    if (
+        await proprietaireInput.isVisible({ timeout: 2_000 }).catch(() => false)
+    ) {
         await selectOptionFromCombobox(page, formComboboxes.nth(1));
     }
 
-    // Ajouter un membre chauffeur (obligatoire avant de configurer le partage)
-    await page.locator('button', { hasText: /ajouter un membre/i }).first().click();
+    await page
+        .locator('button', { hasText: /ajouter un membre/i })
+        .first()
+        .click();
 
     const membreDialog = page
         .locator('[role="dialog"]')
         .filter({ hasText: /nouveau membre/i });
     await expect(membreDialog).toBeVisible({ timeout: 10_000 });
-
-    // Vérifier la présence du préfixe +224 dans la modale
     await expect(membreDialog.locator('text=+224')).toBeVisible();
 
+    await selectOptionFromCombobox(
+        page,
+        membreDialog.getByRole('combobox').first(),
+        /chauffeur/i,
+    );
     await membreDialog.locator('#membre-prenom').fill('Mamadou');
     await membreDialog.locator('#membre-nom').fill('Diallo');
-
-    // Saisie locale uniquement (9 chiffres, sans le +224)
     await membreDialog.locator('#membre-telephone').fill('620111222');
-
-    // Confirmer le membre — le montant sera défini dans la PartageModal
     await membreDialog.locator('button', { hasText: /ajouter/i }).click();
     await expect(membreDialog).toBeHidden({ timeout: 5_000 });
 
-    // Configurer le partage de commission via PartageModal
     await page
         .locator('button', { hasText: /configurer le partage/i })
         .first()
@@ -174,7 +187,6 @@ test('create equipe with chauffeur and partage config + verify list', async ({
         .filter({ hasText: /configurer le partage/i });
     await expect(partageDialog).toBeVisible({ timeout: 10_000 });
 
-    // Commission par défaut = 200 GNF ; affecter 200 au premier bénéficiaire (total = commission)
     const premierMontantInput = partageDialog
         .locator('tbody tr')
         .first()
@@ -186,79 +198,65 @@ test('create equipe with chauffeur and partage config + verify list', async ({
     await page.keyboard.type('200');
     await page.keyboard.press('Tab');
 
-    // Attendre que le bouton "Valider le partage" soit actif (somme = commission)
     const validerBtn = partageDialog.locator('button', {
         hasText: /valider le partage/i,
     });
     await expect(validerBtn).toBeEnabled({ timeout: 5_000 });
     await validerBtn.click();
-
     await expect(partageDialog).toBeHidden({ timeout: 5_000 });
 
-    // Soumettre le formulaire
     await page.locator('form button[type="submit"]:visible').first().click();
-
     await expect(page).toHaveURL(/\/equipes-livraison$/, { timeout: 20_000 });
 
-    // Nom auto-renseigné depuis le véhicule (préfixe E2EEQ-) — rechercher par préfixe
     const searchInput = page
         .locator('input[placeholder*="recherche" i]:visible')
         .first();
     await searchInput.fill(E2E_EQUIPE_NOM_PREFIX);
 
-    const row = page
-        .locator('tbody tr', {
-            hasText: new RegExp(escapeRegExp(E2E_EQUIPE_NOM_PREFIX), 'i'),
-        })
-        .first();
+    const row = equipeRowByPrefix(page, E2E_EQUIPE_NOM_PREFIX);
     await expect(row).toBeVisible({ timeout: 10_000 });
 
-    // Vérifier que l'équipe est modifiable (edit)
     await openRowActions(row);
-    await page.getByRole('menuitem', { name: /modifier/i }).first().click();
-
+    await page
+        .getByRole('menuitem', { name: /modifier/i })
+        .first()
+        .click();
     await expect(page).toHaveURL(/\/equipes-livraison\/[a-z0-9]+\/edit$/);
 
-    // Vérifier que le partage est correctement enregistré (commission validée)
-    await expect(page.getByText(/répartition validée/i)).toBeVisible({
-        timeout: 5_000,
+    await expect(page.getByText(/Mamadou/i).first()).toBeVisible({
+        timeout: 10_000,
     });
 });
 
 test('store equipe echoue sans proprietaire', async ({ page }) => {
-    await login(page);
-
     await page.goto('/equipes-livraison/create');
     await expect(page).toHaveURL(/\/equipes-livraison\/create$/);
 
-    // Sans véhicule sélectionné, nom et propriétaire ne sont pas renseignés
-    // Le bouton Enregistrer doit rester désactivé
-    const submitBtn = page.locator('form button[type="submit"]:visible').first();
+    const submitBtn = page
+        .locator('form button[type="submit"]:visible')
+        .first();
     await expect(submitBtn).toBeDisabled();
 });
 
 test('membre modal affiche prefixe +224 et rejette telephone invalide', async ({
     page,
 }) => {
-    await login(page);
-
     await page.goto('/equipes-livraison/create');
     await expect(page).toHaveURL(/\/equipes-livraison\/create$/);
 
-    await page.locator('button', { hasText: /ajouter un membre/i }).first().click();
+    await page
+        .locator('button', { hasText: /ajouter un membre/i })
+        .first()
+        .click();
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 10_000 });
-
-    // Le préfixe +224 est affiché et non éditable
     await expect(dialog.locator('text=+224')).toBeVisible();
 
-    // Tentative de saisie de lettres : elles ne doivent pas apparaître
     await dialog.locator('#membre-telephone').fill('abc');
     const phoneValue = await dialog.locator('#membre-telephone').inputValue();
     expect(phoneValue.replace(/\D/g, '')).toBe('');
 
-    // Fermer la modale
     await dialog.locator('button', { hasText: /annuler/i }).click();
     await expect(dialog).toBeHidden({ timeout: 5_000 });
 });

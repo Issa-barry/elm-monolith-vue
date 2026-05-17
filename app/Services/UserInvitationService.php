@@ -112,6 +112,10 @@ class UserInvitationService
             'is_default' => true,
         ]);
 
+        if (MatriculeService::isStaffRole($invitation->role)) {
+            app(MatriculeService::class)->assignForUser($user);
+        }
+
         $invitation->update(['accepted_at' => now()]);
 
         return $user;

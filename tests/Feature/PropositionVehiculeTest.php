@@ -70,7 +70,7 @@ class PropositionVehiculeTest extends TestCase
             'organization_id' => $otherOrg->id,
             'nom_contact' => 'Autre Contact',
             'immatriculation' => 'OT-999-GN',
-            'type_vehicule' => 'moto',
+            'type_vehicule' => 'tricycle',
             'statut' => StatutPropositionVehicule::SOUMISE->value,
         ]);
 

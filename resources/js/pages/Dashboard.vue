@@ -74,7 +74,7 @@ const breadcrumbs: BreadcrumbItem[] = [
         <div class="flex h-full flex-1 flex-col gap-4 p-4 sm:p-6">
             <HeaderWidget :periode="periode" />
 
-            <div class="mt-4 grid grid-cols-12 gap-8">
+            <div class="mt-4">
                 <StatsBankingWidget :stats="stats_factures" />
             </div>
 

@@ -188,6 +188,70 @@ class ClientDashboardTest extends TestCase
             );
     }
 
+    public function test_qr_code_returns_svg_for_authenticated_user(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->clientUser($org);
+
+        Client::create([
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'nom' => $user->nom,
+            'prenom' => $user->prenom,
+            'telephone' => $user->telephone,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('client.qr-code'))
+            ->assertStatus(200)
+            ->assertHeader('Content-Type', 'image/svg+xml; charset=UTF-8');
+    }
+
+    public function test_qr_payload_is_proprietaire_fiche_url_for_owner(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->clientUser($org);
+
+        $proprietaire = Proprietaire::create([
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'nom' => $user->nom,
+            'prenom' => $user->prenom,
+            'telephone' => $user->telephone,
+            'is_active' => true,
+        ]);
+
+        $controller = app(\App\Http\Controllers\Client\ClientDashboardController::class);
+        $method = new \ReflectionMethod($controller, 'resolveQrPayload');
+        $method->setAccessible(true);
+
+        $payload = $method->invoke($controller, $user);
+
+        $this->assertSame(route('proprietaires.show', $proprietaire->id), $payload);
+    }
+
+    public function test_qr_payload_is_dashboard_url_for_non_owner(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->clientUser($org);
+
+        Client::create([
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'nom' => $user->nom,
+            'prenom' => $user->prenom,
+            'telephone' => $user->telephone,
+        ]);
+
+        $controller = app(\App\Http\Controllers\Client\ClientDashboardController::class);
+        $method = new \ReflectionMethod($controller, 'resolveQrPayload');
+        $method->setAccessible(true);
+
+        $payload = $method->invoke($controller, $user);
+
+        $this->assertSame(route('dashboard'), $payload);
+    }
+
     public function test_client_menu_pages_are_accessible(): void
     {
         $org = Organization::factory()->create();

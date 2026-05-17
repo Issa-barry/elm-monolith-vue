@@ -5,19 +5,15 @@ namespace App\Enums;
 enum TypeVehicule: string
 {
     case CAMION = 'camion';
-    case CAMIONNETTE = 'camionnette';
-    case MOTO = 'moto';
+    case MINIBUS = 'minibus';
     case TRICYCLE = 'tricycle';
-    case VOITURE = 'voiture';
 
     public function label(): string
     {
         return match ($this) {
             self::CAMION => 'Camion',
-            self::CAMIONNETTE => 'Camionnette',
-            self::MOTO => 'Moto',
+            self::MINIBUS => 'Minibus',
             self::TRICYCLE => 'Tricycle',
-            self::VOITURE => 'Voiture',
         };
     }
 
@@ -25,10 +21,8 @@ enum TypeVehicule: string
     {
         return match ($this) {
             self::CAMION => 200,
-            self::CAMIONNETTE => 80,
-            self::VOITURE => 40,
+            self::MINIBUS => 80,
             self::TRICYCLE => 30,
-            self::MOTO => 10,
         };
     }
 

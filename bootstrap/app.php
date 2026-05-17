@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Support\AuthRedirects;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -22,17 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->redirectUsersTo(function (Request $request): string {
-            $user = $request->user();
-
-            if ($user?->hasRole('client')) {
-                return route('client.dashboard');
-            }
-
-            if ($user?->hasAnyRole(['super_admin', 'admin_entreprise', 'manager', 'commerciale', 'comptable'])) {
-                return route('dashboard');
-            }
-
-            return route('home');
+            return AuthRedirects::defaultPathForUser($request->user());
         });
 
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
