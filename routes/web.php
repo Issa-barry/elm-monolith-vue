@@ -93,9 +93,6 @@ Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'inde
 // ── Espace staff ──────────────────────────────────────────────────────────────
 Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->group(function () {
 
-    // Scan station QR
-    Route::get('scan', fn () => Inertia::render('Scan'))->name('scan');
-
     // Messages de contact
     Route::get('contact-messages/unread-count', [ContactController::class, 'unreadCount'])->name('contact-messages.unread-count');
     Route::patch('contact-messages/{contactMessage}/read', [ContactController::class, 'markRead'])->name('contact-messages.read');

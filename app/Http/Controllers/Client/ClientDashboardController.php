@@ -32,14 +32,19 @@ use Inertia\Response;
 
 class ClientDashboardController extends Controller
 {
+    protected function resolveQrPayload(User $user): string
+    {
+        [, , $proprietaire] = $this->resolveActorContext($user);
+
+        return $proprietaire
+            ? route('proprietaires.show', $proprietaire->id)
+            : route('dashboard');
+    }
+
     public function qrCode(Request $request): HttpResponse
     {
         $user = $request->user();
-        [, , $proprietaire] = $this->resolveActorContext($user);
-
-        $payload = $proprietaire
-            ? route('proprietaires.show', $proprietaire->id)
-            : route('dashboard');
+        $payload = $this->resolveQrPayload($user);
 
         $renderer = new ImageRenderer(
             new RendererStyle(256),
