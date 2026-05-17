@@ -35,19 +35,18 @@ class ClientDashboardController extends Controller
     public function qrCode(Request $request): HttpResponse
     {
         $user = $request->user();
-        $payload = json_encode([
-            'app' => 'elm',
-            'type' => 'client_portal_user',
-            'uid' => (string) $user->id,
-            'org' => $user->organization_id ? (string) $user->organization_id : null,
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        [, , $proprietaire] = $this->resolveActorContext($user);
+
+        $payload = $proprietaire
+            ? route('proprietaires.show', $proprietaire->id)
+            : route('dashboard');
 
         $renderer = new ImageRenderer(
             new RendererStyle(256),
             new SvgImageBackEnd
         );
         $writer = new QrWriter($renderer);
-        $svg = $writer->writeString($payload ?: 'elm-client');
+        $svg = $writer->writeString($payload);
 
         return response($svg, 200, [
             'Content-Type' => 'image/svg+xml; charset=UTF-8',

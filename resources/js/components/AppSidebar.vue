@@ -24,6 +24,7 @@ import {
     Package,
     PackageCheck,
     Receipt,
+    ScanLine,
     ShoppingCart,
     Truck,
     UserCog,
@@ -90,6 +91,7 @@ const vehiculesItems = computed((): NavItem[] => {
 const mainNavItems = computed((): NavItem[] => {
     const items: NavItem[] = [
         { title: 'Tableau de bord', href: dashboard(), icon: LayoutGrid },
+        { title: 'Scan QR', href: '/scan', icon: ScanLine },
     ];
 
     if (canSee('ventes.read', 'ventes')) {
