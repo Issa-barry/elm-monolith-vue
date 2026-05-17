@@ -115,14 +115,9 @@ function fmt(n: number) {
 }
 
 function formatPaginationLabel(label: string) {
-    return label
-        .replaceAll('&laquo;', '«')
-        .replaceAll('&raquo;', '»')
-        .replaceAll('&lsaquo;', '‹')
-        .replaceAll('&rsaquo;', '›')
-        .replaceAll('&amp;', '&')
-        .replace(/<[^>]*>/g, '')
-        .trim();
+    const el = document.createElement('div');
+    el.innerHTML = label;
+    return el.textContent?.trim() ?? label.trim();
 }
 </script>
 
