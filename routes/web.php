@@ -298,6 +298,8 @@ Route::middleware(['auth', 'role:client|proprietaire|livreur'])->prefix('client'
     Route::get('/dashboard', [ClientDashboardController::class, 'index'])->name('dashboard');
     Route::get('/vehicules', [ClientDashboardController::class, 'vehicles'])->name('vehicles');
     Route::get('/gains', [ClientDashboardController::class, 'earnings'])->name('earnings');
+    Route::get('/vehicules/{vehiculeId}/solde', [ClientDashboardController::class, 'vehicleBalance'])->name('vehicules.solde');
+    Route::get('/qr-code', [ClientDashboardController::class, 'qrCode'])->name('qr-code');
     Route::get('/proposer-vehicule', [ClientDashboardController::class, 'proposals'])->name('propositions.index');
     Route::get('/profile', [ClientDashboardController::class, 'profile'])->name('profile');
     Route::post('/propositions-vehicules', [ClientDashboardController::class, 'storeVehicleProposal'])->name('propositions.store');

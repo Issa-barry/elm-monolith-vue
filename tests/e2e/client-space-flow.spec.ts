@@ -26,7 +26,13 @@ test('client space pages are accessible for proprietaire account', async ({
 
     await page.goto('/client/dashboard');
     await expect(page).toHaveURL(/\/client\/dashboard/, { timeout: 20_000 });
-    await expect(page.locator('body')).toContainText(/bonjour/i, {
+    await expect(page.locator('body')).toContainText(
+        /bienvenue dans votre espace partenaire/i,
+        {
+            timeout: 15_000,
+        },
+    );
+    await expect(page.locator('body')).toContainText(/amadou diallo/i, {
         timeout: 15_000,
     });
 

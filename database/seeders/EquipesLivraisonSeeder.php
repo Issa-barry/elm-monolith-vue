@@ -87,6 +87,7 @@ class EquipesLivraisonSeeder extends Seeder
             ],
             [
                 'nom' => 'Conakry 2',
+                'aliases' => ['Conakry2'],
                 'proprietaire_tel' => '+33754158797',
                 'membres' => [
                     ['telephone' => '+224622000006', 'role' => 'chauffeur', 'montant' => 80, 'ordre' => 0],
@@ -100,21 +101,48 @@ class EquipesLivraisonSeeder extends Seeder
             $montantProp = self::COMMISSION - $sommeMembres;
             $tauxProp = round($montantProp / self::COMMISSION * 100, 2);
 
-            $equipe = EquipeLivraison::updateOrCreate(
-                ['nom' => $equipeData['nom'], 'organization_id' => $org->id],
-                [
+            $nomOfficiel = $equipeData['nom'];
+            $nomsRecherche = collect([$nomOfficiel])
+                ->merge($equipeData['aliases'] ?? [])
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            $equipe = EquipeLivraison::query()
+                ->where('organization_id', $org->id)
+                ->whereIn('nom', $nomsRecherche)
+                ->first();
+
+            if ($equipe) {
+                $equipe->update([
+                    'nom' => $nomOfficiel,
                     'is_active' => true,
                     'proprietaire_id' => $proprietaire->id,
                     'commission_unitaire_par_pack' => self::COMMISSION,
                     'montant_par_pack_proprietaire' => $montantProp,
                     'taux_commission_proprietaire' => $tauxProp,
-                ]
-            );
+                ]);
+            } else {
+                $equipe = EquipeLivraison::create([
+                    'organization_id' => $org->id,
+                    'nom' => $nomOfficiel,
+                    'is_active' => true,
+                    'proprietaire_id' => $proprietaire->id,
+                    'commission_unitaire_par_pack' => self::COMMISSION,
+                    'montant_par_pack_proprietaire' => $montantProp,
+                    'taux_commission_proprietaire' => $tauxProp,
+                ]);
+            }
+
+            $membresIds = [];
 
             foreach ($equipeData['membres'] as $m) {
+                $livreur = $lv($m['telephone']);
+                $membresIds[] = $livreur->id;
                 $taux = round($m['montant'] / self::COMMISSION * 100, 2);
                 EquipeLivreur::updateOrCreate(
-                    ['equipe_id' => $equipe->id, 'livreur_id' => $lv($m['telephone'])->id],
+                    ['equipe_id' => $equipe->id, 'livreur_id' => $livreur->id],
                     [
                         'role' => $m['role'],
                         'montant_par_pack' => $m['montant'],
@@ -123,6 +151,12 @@ class EquipesLivraisonSeeder extends Seeder
                     ]
                 );
             }
+
+            // Nettoie les anciens membres qui ne font plus partie de l'équipe seedée.
+            EquipeLivreur::query()
+                ->where('equipe_id', $equipe->id)
+                ->whereNotIn('livreur_id', $membresIds)
+                ->delete();
         }
 
         // ── Équipes INTERNES ──────────────────────────────────────────────────

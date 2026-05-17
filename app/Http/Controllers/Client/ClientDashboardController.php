@@ -17,9 +17,14 @@ use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\ImageService;
+use BaconQrCode\Renderer\Image\SvgImageBackEnd;
+use BaconQrCode\Renderer\ImageRenderer;
+use BaconQrCode\Renderer\RendererStyle\RendererStyle;
+use BaconQrCode\Writer as QrWriter;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -27,6 +32,33 @@ use Inertia\Response;
 
 class ClientDashboardController extends Controller
 {
+    protected function resolveQrPayload(User $user): string
+    {
+        [, , $proprietaire] = $this->resolveActorContext($user);
+
+        return $proprietaire
+            ? route('proprietaires.show', $proprietaire->id)
+            : route('dashboard');
+    }
+
+    public function qrCode(Request $request): HttpResponse
+    {
+        $user = $request->user();
+        $payload = $this->resolveQrPayload($user);
+
+        $renderer = new ImageRenderer(
+            new RendererStyle(256),
+            new SvgImageBackEnd
+        );
+        $writer = new QrWriter($renderer);
+        $svg = $writer->writeString($payload);
+
+        return response($svg, 200, [
+            'Content-Type' => 'image/svg+xml; charset=UTF-8',
+            'Cache-Control' => 'private, max-age=300',
+        ]);
+    }
+
     public function index(Request $request): Response
     {
         $filters = $this->resolveDashboardFilters($request);
@@ -41,6 +73,7 @@ class ClientDashboardController extends Controller
         return Inertia::render('client/Dashboard', [
             'actor' => $payload['actor'],
             'earnings' => $payload['earnings'],
+            'earnings_by_vehicule' => $payload['earnings_by_vehicule'],
             'vehicules' => $payload['vehicules'],
             'status_options' => StatutCommission::options(),
             'filters' => $filters,
@@ -58,6 +91,47 @@ class ClientDashboardController extends Controller
             'vehicules' => $payload['vehicules'],
             'earnings' => $payload['earnings'],
             'earnings_by_vehicule' => $payload['earnings_by_vehicule'],
+            'statement' => $payload['statement'],
+            'filters' => ['date_debut' => $dateDebut, 'date_fin' => $dateFin],
+        ]);
+    }
+
+    public function vehicleBalance(Request $request, string $vehiculeId): Response
+    {
+        $dateDebut = $request->input('date_debut') ?: null;
+        $dateFin = $request->input('date_fin') ?: null;
+        $payload = $this->dashboardPayload(
+            $request->user(),
+            $dateDebut,
+            $dateFin,
+            $vehiculeId
+        );
+
+        $vehicule = collect($payload['vehicules'])
+            ->first(fn (array $item) => (string) $item['id'] === $vehiculeId);
+
+        if ($vehicule === null) {
+            abort(404);
+        }
+
+        $summary = collect($payload['earnings_by_vehicule'])
+            ->first(fn (array $item) => (string) $item['vehicule_id'] === $vehiculeId);
+
+        if ($summary === null) {
+            $summary = [
+                'vehicule_id' => $vehicule['id'],
+                'nom_vehicule' => $vehicule['nom_vehicule'],
+                'immatriculation' => $vehicule['immatriculation'],
+                'frais_depenses' => 0.0,
+                'total_earned' => 0.0,
+                'total_paid' => 0.0,
+                'balance' => 0.0,
+            ];
+        }
+
+        return Inertia::render('client/VehicleBalanceDetail', [
+            'vehicule' => $vehicule,
+            'summary' => $summary,
             'statement' => $payload['statement'],
             'filters' => ['date_debut' => $dateDebut, 'date_fin' => $dateFin],
         ]);

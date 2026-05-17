@@ -3,6 +3,7 @@ import AppContent from '@/components/AppContent.vue';
 import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
+import { useScanInterceptor } from '@/composables/useScanInterceptor';
 import type { BreadcrumbItemType } from '@/types';
 import ConfirmDialog from 'primevue/confirmdialog';
 import Toast from 'primevue/toast';
@@ -18,6 +19,8 @@ withDefaults(defineProps<Props>(), {
     showHeader: true,
     hideMobileHeader: false,
 });
+
+useScanInterceptor();
 </script>
 
 <template>

@@ -39,11 +39,19 @@ class VehiculesSeeder extends Seeder
             ->where('organization_id', $org->id)
             ->firstOrFail();
 
+        $equipeParNoms = fn (array $noms) => EquipeLivraison::query()
+            ->where('organization_id', $org->id)
+            ->whereIn('nom', $noms)
+            ->firstOrFail();
+
         $eqNenDow = $equipe('Nen Dow');
         $eqAutoDogomet = $equipe('Auto Dogomet');
         $eqBabaOusou = $equipe('Baba Ousou');
         $eqKaloumExpress = $equipe('Kaloum Express');
-        $eqConakry2 = $equipe('Conakry 2');
+        $eqConakry2 = $equipeParNoms(['Conakry 2', 'Conakry2']);
+        if ($eqConakry2->nom !== 'Conakry 2') {
+            $eqConakry2->update(['nom' => 'Conakry 2']);
+        }
 
         $eqElm1 = $equipe('ELM Logistique 1');
         $eqElm2 = $equipe('ELM Logistique 2');
