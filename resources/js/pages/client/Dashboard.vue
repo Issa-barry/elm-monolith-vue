@@ -406,18 +406,23 @@ onBeforeUnmount(() => {
 
             <KpiCardsResponsive :items="kpiItems" breakpoint="md" />
 
-            <div class="rounded-xl border border-border bg-card p-5">
-                <h2 class="text-lg font-semibold">Solde par vehicule</h2>
-
-                <div class="mt-4 md:hidden">
+            <div class="-mx-4 md:hidden">
+                <h2 class="px-4 text-lg font-semibold">Solde par vehicule</h2>
+                <div class="mt-2">
                     <MobileVehiculeBalancesList
                         :rows="earnings_by_vehicule"
                         :date-debut="dateDebut"
                         :date-fin="dateFin"
                     />
                 </div>
+            </div>
 
-                <div class="mt-4 hidden overflow-x-auto md:block">
+            <div
+                class="hidden rounded-xl border border-border bg-card p-5 md:block"
+            >
+                <h2 class="text-lg font-semibold">Solde par vehicule</h2>
+
+                <div class="mt-4 overflow-x-auto">
                     <table class="min-w-full text-sm">
                         <thead>
                             <tr

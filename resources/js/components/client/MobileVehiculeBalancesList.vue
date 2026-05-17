@@ -15,7 +15,6 @@ function formatMoney(value: number): string {
 
 function detailHref(vehiculeId: string | number): string {
     const params = new URLSearchParams();
-    params.set('vehicule_id', String(vehiculeId));
     if (props.dateDebut) {
         params.set('date_debut', props.dateDebut);
     }
@@ -23,17 +22,19 @@ function detailHref(vehiculeId: string | number): string {
         params.set('date_fin', props.dateFin);
     }
 
-    return `/client/gains?${params.toString()}`;
+    const query = params.toString();
+
+    return `/client/vehicules/${encodeURIComponent(String(vehiculeId))}/solde${query ? `?${query}` : ''}`;
 }
 </script>
 
 <template>
-    <div class="space-y-3">
+    <div>
         <Link
             v-for="row in rows"
             :key="row.vehicule_id"
             :href="detailHref(row.vehicule_id)"
-            class="block rounded-lg border border-border bg-background p-3 transition-colors hover:bg-muted/40"
+            class="block border-b border-border px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/40"
         >
             <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
@@ -50,16 +51,16 @@ function detailHref(vehiculeId: string | number): string {
             </div>
 
             <div class="mt-2 flex items-baseline justify-between gap-3">
-                <span class="text-xs text-muted-foreground">Reste a payer</span>
+                <span class="text-xs text-muted-foreground">Gains</span>
                 <span class="text-sm font-semibold text-foreground">
-                    {{ formatMoney(row.balance) }}
+                    {{ formatMoney(row.total_earned) }}
                 </span>
             </div>
         </Link>
 
         <div
             v-if="rows.length === 0"
-            class="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground"
+            class="px-4 py-3 text-sm text-muted-foreground"
         >
             Aucun vehicule partenaire detecte pour ce compte.
         </div>

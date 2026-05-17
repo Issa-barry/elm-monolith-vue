@@ -92,6 +92,47 @@ class ClientDashboardController extends Controller
         ]);
     }
 
+    public function vehicleBalance(Request $request, string $vehiculeId): Response
+    {
+        $dateDebut = $request->input('date_debut') ?: null;
+        $dateFin = $request->input('date_fin') ?: null;
+        $payload = $this->dashboardPayload(
+            $request->user(),
+            $dateDebut,
+            $dateFin,
+            $vehiculeId
+        );
+
+        $vehicule = collect($payload['vehicules'])
+            ->first(fn (array $item) => (string) $item['id'] === $vehiculeId);
+
+        if ($vehicule === null) {
+            abort(404);
+        }
+
+        $summary = collect($payload['earnings_by_vehicule'])
+            ->first(fn (array $item) => (string) $item['vehicule_id'] === $vehiculeId);
+
+        if ($summary === null) {
+            $summary = [
+                'vehicule_id' => $vehicule['id'],
+                'nom_vehicule' => $vehicule['nom_vehicule'],
+                'immatriculation' => $vehicule['immatriculation'],
+                'frais_depenses' => 0.0,
+                'total_earned' => 0.0,
+                'total_paid' => 0.0,
+                'balance' => 0.0,
+            ];
+        }
+
+        return Inertia::render('client/VehicleBalanceDetail', [
+            'vehicule' => $vehicule,
+            'summary' => $summary,
+            'statement' => $payload['statement'],
+            'filters' => ['date_debut' => $dateDebut, 'date_fin' => $dateFin],
+        ]);
+    }
+
     public function proposals(Request $request): Response
     {
         $payload = $this->dashboardPayload($request->user());
