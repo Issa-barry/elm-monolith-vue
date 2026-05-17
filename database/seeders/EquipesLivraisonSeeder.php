@@ -16,19 +16,21 @@ use Illuminate\Database\Seeder;
  *        taux = montant / commission * 100 (calculé et stocké à la sauvegarde)
  *
  * Équipes EXTERNES (commission 200 GNF/pack) :
- * | Equipe        | Proprietaire      | Prop GNF | Chauffeur         | GNF | Convoyeur(s)          | GNF   |
- * |---------------|-------------------|----------|-------------------|-----|-----------------------|-------|
- * | Nen Dow       | Amadou DIALLO     | 120      | Ibrahima CAMARA   | 50  | Sekou KOUYATE         | 30    |
- * | Auto Dogomet  | Fatoumata DIALLO  | 120      | Mariama BAH       | 80  | -                     | -     |
- * | Baba Ousou    | Amadou DIALLO     | 120      | Oumar CAMARA      | 40  | A. SYLLA, K. TOURE    | 30+10 |
- * | Kaloum Express| Issa TOUNKARA     | 130      | Mamadou SOUMAH    | 50  | Fatoumata KOUROUMA    | 20    |
+ * | Equipe         | Proprietaire      | Prop GNF | Chauffeur         | GNF | Convoyeur(s)          | GNF   |
+ * |----------------|-------------------|----------|-------------------|-----|-----------------------|-------|
+ * | Nen Dow        | Amadou DIALLO     | 120      | Ibrahima CAMARA   | 50  | Sekou KOUYATE         | 30    |
+ * | Auto Dogomet   | Fatoumata DIALLO  | 120      | Mariama BAH       | 80  | -                     | -     |
+ * | Baba Ousou     | Amadou DIALLO     | 120      | Oumar CAMARA      | 40  | A. SYLLA, K. TOURE    | 30+10 |
+ * | Kaloum Express | Issa TOUNKARA     | 130      | Mamadou SOUMAH    | 50  | Fatoumata KOUROUMA    | 20    |
+ * | Conakry 2      | Amadou DIALLO     | 120      | Boubacar DIALLO   | 80  | -                     | -     |
  *
  * Équipes INTERNES (commission 200 GNF/pack — 100 % aux membres) :
- * | Equipe           | Prop GNF | Chauffeur          | GNF | Convoyeur(s)                  | GNF    |
- * |------------------|---------|--------------------|-----|-------------------------------|--------|
- * | ELM Logistique 1 | 0       | Boubacar KONATÉ    | 200 | -                             | -      |
- * | ELM Logistique 2 | 0       | Aissatou BALDÉ     | 140 | Thierno SALL                  | 60     |
- * | ELM Logistique 3 | 0       | Mamadou KEÏTA      | 100 | Djénabou TRAORÉ, Lamine FOFANA| 60+40  |
+ * | Equipe           | Prop GNF | Chauffeur          | GNF | Convoyeur(s)                   | GNF    |
+ * |------------------|----------|--------------------|-----|--------------------------------|--------|
+ * | ELM Logistique 1 | 0        | Boubacar KONATÉ    | 200 | -                              | -      |
+ * | ELM Logistique 2 | 0        | Aissatou BALDÉ     | 140 | Thierno SALL                   | 60     |
+ * | ELM Logistique 3 | 0        | Mamadou KEÏTA      | 100 | Djénabou TRAORÉ, Lamine FOFANA | 60+40  |
+ * | ELM Logistique 4 | 0        | Alpha BARRY        | 200 | -                              | -      |
  */
 class EquipesLivraisonSeeder extends Seeder
 {
@@ -81,6 +83,13 @@ class EquipesLivraisonSeeder extends Seeder
                 'membres' => [
                     ['telephone' => '+224622000004', 'role' => 'chauffeur', 'montant' => 50, 'ordre' => 0],
                     ['telephone' => '+224622000005', 'role' => 'convoyeur', 'montant' => 20, 'ordre' => 1],
+                ],
+            ],
+            [
+                'nom' => 'Conakry 2',
+                'proprietaire_tel' => '+33754158797',
+                'membres' => [
+                    ['telephone' => '+224622000006', 'role' => 'chauffeur', 'montant' => 80, 'ordre' => 0],
                 ],
             ],
         ];
@@ -138,6 +147,12 @@ class EquipesLivraisonSeeder extends Seeder
                     ['telephone' => '+224622000014', 'role' => 'chauffeur', 'montant' => 100, 'ordre' => 0],
                     ['telephone' => '+224622000015', 'role' => 'convoyeur', 'montant' => 60, 'ordre' => 1],
                     ['telephone' => '+224622000016', 'role' => 'convoyeur', 'montant' => 40, 'ordre' => 2],
+                ],
+            ],
+            [
+                'nom' => 'ELM Logistique 4',
+                'membres' => [
+                    ['telephone' => '+224622000007', 'role' => 'chauffeur', 'montant' => 200, 'ordre' => 0],
                 ],
             ],
         ];

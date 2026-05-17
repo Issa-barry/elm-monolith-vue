@@ -29,6 +29,7 @@ interface UserData {
     role: string;
     site_id: number | null;
     is_active: boolean;
+    matricule: string | null;
 }
 
 const props = defineProps<{
@@ -162,11 +163,18 @@ function submitPassword() {
                     <h1 class="text-2xl font-semibold tracking-tight">
                         Modifier le compte
                     </h1>
-                    <p class="mt-1 text-sm font-medium text-muted-foreground">
+                    <p
+                        class="mt-1 flex items-center gap-2 text-sm font-medium text-muted-foreground"
+                    >
                         {{ user.prenom }} {{ user.nom }}
                         <span
+                            v-if="user.matricule"
+                            class="rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
+                            >{{ user.matricule }}</span
+                        >
+                        <span
                             v-if="is_me"
-                            class="ml-1 rounded bg-muted px-1.5 py-0.5 text-[10px]"
+                            class="rounded bg-muted px-1.5 py-0.5 text-[10px]"
                             >Moi</span
                         >
                     </p>

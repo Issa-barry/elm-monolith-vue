@@ -19,7 +19,7 @@ const { getPrimary, getSurface, isDarkTheme } = useChartTheme();
 const pieData = ref({});
 const pieOptions = ref({});
 
-// Palette fixe — jusqu'à 5 types de véhicule (TypeVehicule enum)
+// Palette fixe — 3 types de véhicule (TypeVehicule enum)
 const BG_VARS = [
     '--p-indigo-500',
     '--p-purple-500',

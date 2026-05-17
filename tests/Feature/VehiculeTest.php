@@ -99,9 +99,9 @@ class VehiculeTest extends TestCase
     {
         $response = $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
-                'nom_vehicule' => 'Moto 01',
-                'immatriculation' => 'MO-001-GN',
-                'type_vehicule' => 'moto',
+                'nom_vehicule' => 'Tricycle 01',
+                'immatriculation' => 'TC-TEST-GN',
+                'type_vehicule' => 'tricycle',
                 'categorie' => 'interne',
                 'capacite_packs' => 50,
                 'is_active' => true,
@@ -110,7 +110,7 @@ class VehiculeTest extends TestCase
 
         $vehicule = Vehicule::query()
             ->where('organization_id', $this->org->id)
-            ->where('immatriculation', 'MO-001-GN')
+            ->where('immatriculation', 'TC-TEST-GN')
             ->firstOrFail();
 
         $response->assertRedirect(route('vehicules.edit', $vehicule));

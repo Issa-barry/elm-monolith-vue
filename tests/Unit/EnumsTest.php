@@ -195,35 +195,32 @@ class EnumsTest extends TestCase
     public function test_type_vehicule_labels(): void
     {
         $this->assertSame('Camion', TypeVehicule::CAMION->label());
-        $this->assertSame('Camionnette', TypeVehicule::CAMIONNETTE->label());
-        $this->assertSame('Moto', TypeVehicule::MOTO->label());
+        $this->assertSame('Minibus', TypeVehicule::MINIBUS->label());
         $this->assertSame('Tricycle', TypeVehicule::TRICYCLE->label());
-        $this->assertSame('Voiture', TypeVehicule::VOITURE->label());
     }
 
     public function test_type_vehicule_default_capacite_packs(): void
     {
         $this->assertSame(200, TypeVehicule::CAMION->defaultCapacitePacks());
-        $this->assertSame(80, TypeVehicule::CAMIONNETTE->defaultCapacitePacks());
-        $this->assertSame(40, TypeVehicule::VOITURE->defaultCapacitePacks());
+        $this->assertSame(80, TypeVehicule::MINIBUS->defaultCapacitePacks());
         $this->assertSame(30, TypeVehicule::TRICYCLE->defaultCapacitePacks());
-        $this->assertSame(10, TypeVehicule::MOTO->defaultCapacitePacks());
     }
 
     public function test_type_vehicule_allowed_values(): void
     {
         $values = TypeVehicule::allowedValues();
         $this->assertContains('camion', $values);
-        $this->assertContains('camionnette', $values);
-        $this->assertContains('moto', $values);
+        $this->assertContains('minibus', $values);
         $this->assertContains('tricycle', $values);
-        $this->assertContains('voiture', $values);
+        $this->assertNotContains('camionnette', $values);
+        $this->assertNotContains('moto', $values);
+        $this->assertNotContains('voiture', $values);
     }
 
     public function test_type_vehicule_options(): void
     {
         $options = TypeVehicule::options();
-        $this->assertCount(5, $options);
+        $this->assertCount(3, $options);
         foreach ($options as $option) {
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);
@@ -235,7 +232,8 @@ class EnumsTest extends TestCase
     {
         $this->assertSame('camion', TypeVehicule::normalize('camion'));
         $this->assertSame('camion', TypeVehicule::normalize(' CAMION '));
-        $this->assertSame('moto', TypeVehicule::normalize('moto'));
+        $this->assertSame('minibus', TypeVehicule::normalize('minibus'));
+        $this->assertSame('tricycle', TypeVehicule::normalize('tricycle'));
     }
 
     public function test_type_vehicule_normalize_returns_null_for_invalid(): void

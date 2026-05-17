@@ -184,8 +184,8 @@ class CommissionPaymentServiceTest extends TestCase
 
         // impaye = restant sur parts IMPAYE + PARTIEL : 1000 + (2000-500) = 2500
         $this->assertEquals(2500.0, (float) $livreurRow['impaye']);
-        // paye = montant_net des parts PAYE : 600
-        $this->assertEquals(600.0, (float) $livreurRow['paye']);
+        // paye = SUM(montant_verse) toutes parts : 0 + 500 + 600 = 1100
+        $this->assertEquals(1100.0, (float) $livreurRow['paye']);
     }
 
     public function test_soldes_par_vehicule_sans_parts_retourne_vide(): void

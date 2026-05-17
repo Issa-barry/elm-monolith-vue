@@ -8,6 +8,7 @@ use App\Models\CommandeVente;
 use App\Models\EquipeLivraison;
 use App\Models\Livreur;
 use App\Models\Packing;
+use App\Models\PaiePeriode;
 use App\Models\Prestataire;
 use App\Models\Produit;
 use App\Models\PropositionVehicule;
@@ -22,6 +23,7 @@ use App\Policies\CommandeVentePolicy;
 use App\Policies\EquipeLivraisonPolicy;
 use App\Policies\LivreurPolicy;
 use App\Policies\PackingPolicy;
+use App\Policies\PaiePolicy;
 use App\Policies\PrestatairePolicy;
 use App\Policies\ProduitPolicy;
 use App\Policies\PropositionVehiculePolicy;
@@ -50,6 +52,7 @@ class AuthServiceProvider extends ServiceProvider
         CommandeVente::class => CommandeVentePolicy::class,
         CommandeAchat::class => CommandeAchatPolicy::class,
         PropositionVehicule::class => PropositionVehiculePolicy::class,
+        PaiePeriode::class => PaiePolicy::class,
     ];
 
     public function boot(): void
