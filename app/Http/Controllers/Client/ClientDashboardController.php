@@ -17,9 +17,14 @@ use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\ImageService;
+use BaconQrCode\Renderer\Image\SvgImageBackEnd;
+use BaconQrCode\Renderer\ImageRenderer;
+use BaconQrCode\Renderer\RendererStyle\RendererStyle;
+use BaconQrCode\Writer as QrWriter;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -27,6 +32,29 @@ use Inertia\Response;
 
 class ClientDashboardController extends Controller
 {
+    public function qrCode(Request $request): HttpResponse
+    {
+        $user = $request->user();
+        $payload = json_encode([
+            'app' => 'elm',
+            'type' => 'client_portal_user',
+            'uid' => (string) $user->id,
+            'org' => $user->organization_id ? (string) $user->organization_id : null,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        $renderer = new ImageRenderer(
+            new RendererStyle(256),
+            new SvgImageBackEnd
+        );
+        $writer = new QrWriter($renderer);
+        $svg = $writer->writeString($payload ?: 'elm-client');
+
+        return response($svg, 200, [
+            'Content-Type' => 'image/svg+xml; charset=UTF-8',
+            'Cache-Control' => 'private, max-age=300',
+        ]);
+    }
+
     public function index(Request $request): Response
     {
         $filters = $this->resolveDashboardFilters($request);

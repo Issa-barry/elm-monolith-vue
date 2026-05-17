@@ -7,7 +7,8 @@ import type {
     VehiculeOption,
 } from '@/types/client-space';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { SlidersHorizontal, X } from 'lucide-vue-next';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 interface StatusOption {
     value: string;
@@ -31,19 +32,6 @@ const userFullName = computed(() => {
 
     return fullName || user.value?.name || 'Mon compte';
 });
-const userInitials = computed(() => {
-    const parts = userFullName.value.split(/\s+/).filter(Boolean);
-
-    if (parts.length === 0) {
-        return '--';
-    }
-
-    if (parts.length === 1) {
-        return parts[0].slice(0, 2).toUpperCase();
-    }
-
-    return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
-});
 
 const periodOptions: Array<{
     value: DashboardFiltersPayload['period'];
@@ -63,6 +51,8 @@ const selectedVehiculeId = ref(props.filters.vehicule_id ?? 'all');
 const selectedStatus = ref(props.filters.statut ?? 'all');
 const dateDebut = ref(props.filters.date_debut ?? '');
 const dateFin = ref(props.filters.date_fin ?? '');
+const isQrZoomOpen = ref(false);
+const isMobileFiltersOpen = ref(false);
 
 const hasActiveFilters = computed(
     () =>
@@ -150,6 +140,20 @@ function onCustomDateChange() {
     applyFilters();
 }
 
+function onPeriodDraftChange(period: DashboardFiltersPayload['period']) {
+    selectedPeriod.value = period;
+    if (period !== 'custom') {
+        dateDebut.value = '';
+        dateFin.value = '';
+    }
+}
+
+function onCustomDateDraftChange() {
+    if (selectedPeriod.value !== 'custom') {
+        selectedPeriod.value = 'custom';
+    }
+}
+
 function resetFilters() {
     selectedPeriod.value = 'ce_mois';
     selectedVehiculeId.value = 'all';
@@ -162,6 +166,55 @@ function resetFilters() {
         { preserveScroll: true, replace: true },
     );
 }
+
+function openQrZoom() {
+    isQrZoomOpen.value = true;
+}
+
+function closeQrZoom() {
+    isQrZoomOpen.value = false;
+}
+
+function openMobileFilters() {
+    isMobileFiltersOpen.value = true;
+}
+
+function closeMobileFilters() {
+    isMobileFiltersOpen.value = false;
+}
+
+function applyFiltersFromMobile() {
+    applyFilters();
+    closeMobileFilters();
+}
+
+function resetFiltersFromMobile() {
+    resetFilters();
+    closeMobileFilters();
+}
+
+function onKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape') {
+        return;
+    }
+
+    if (isMobileFiltersOpen.value) {
+        closeMobileFilters();
+        return;
+    }
+
+    if (isQrZoomOpen.value) {
+        closeQrZoom();
+    }
+}
+
+onMounted(() => {
+    window.addEventListener('keydown', onKeydown);
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', onKeydown);
+});
 </script>
 
 <template>
@@ -170,11 +223,22 @@ function resetFilters() {
 
         <div class="space-y-8">
             <div class="flex items-center gap-4">
-                <div
-                    class="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-2xl font-semibold text-primary-foreground"
+                <button
+                    type="button"
+                    class="group relative shrink-0 rounded-md focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
+                    @click="openQrZoom"
                 >
-                    {{ userInitials }}
-                </div>
+                    <img
+                        src="/client/qr-code"
+                        alt="QR code utilisateur"
+                        class="h-16 w-16 object-contain transition-transform duration-200 group-hover:scale-105"
+                    />
+                    <span
+                        class="pointer-events-none absolute -right-1 -bottom-1 rounded-full border border-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                    >
+                        Zoom
+                    </span>
+                </button>
                 <div>
                     <h1 class="text-2xl font-semibold">
                         {{ userFullName }}
@@ -185,7 +249,26 @@ function resetFilters() {
                 </div>
             </div>
 
-            <div class="rounded-xl border border-border bg-card p-4">
+            <div class="md:hidden">
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                    @click="openMobileFilters"
+                >
+                    <SlidersHorizontal class="h-4 w-4" />
+                    Filtres
+                    <span
+                        v-if="hasActiveFilters"
+                        class="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground"
+                    >
+                        actifs
+                    </span>
+                </button>
+            </div>
+
+            <div
+                class="hidden rounded-xl border border-border bg-card p-4 md:block"
+            >
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <p class="text-sm font-medium text-foreground">Filtres</p>
                     <button
@@ -412,6 +495,174 @@ function resetFilters() {
                     Voir tous les gains
                 </Link>
             </div>
+        </div>
+
+        <div
+            v-if="isQrZoomOpen"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            @click.self="closeQrZoom"
+        >
+            <div
+                class="w-full max-w-md rounded-xl border border-border bg-background p-4 shadow-2xl"
+            >
+                <div class="mb-3 flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-foreground">
+                        QR code partenaire
+                    </h3>
+                    <button
+                        type="button"
+                        class="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted"
+                        @click="closeQrZoom"
+                    >
+                        Fermer
+                    </button>
+                </div>
+                <div class="flex justify-center">
+                    <img
+                        src="/client/qr-code"
+                        alt="QR code utilisateur agrandi"
+                        class="h-[min(70vh,22rem)] w-[min(70vh,22rem)] object-contain"
+                    />
+                </div>
+                <p class="mt-3 text-center text-xs text-muted-foreground">
+                    Cliquez en dehors du cadre ou appuyez sur Echap pour fermer.
+                </p>
+            </div>
+        </div>
+
+        <div
+            v-if="isMobileFiltersOpen"
+            class="fixed inset-0 z-50 bg-black/40 md:hidden"
+            @click.self="closeMobileFilters"
+        >
+            <aside
+                class="absolute top-0 right-0 flex h-full w-[88vw] max-w-sm flex-col border-l border-border bg-background shadow-2xl"
+                @click.stop
+            >
+                <div
+                    class="flex items-center justify-between border-b border-border px-4 py-3"
+                >
+                    <h3 class="text-sm font-semibold text-foreground">
+                        Filtres
+                    </h3>
+                    <button
+                        type="button"
+                        class="rounded-md border border-border p-1 text-muted-foreground transition-colors hover:bg-muted"
+                        @click="closeMobileFilters"
+                    >
+                        <X class="h-4 w-4" />
+                        <span class="sr-only">Fermer</span>
+                    </button>
+                </div>
+
+                <div class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+                    <div class="space-y-1">
+                        <label class="text-xs font-medium text-muted-foreground"
+                            >Periode</label
+                        >
+                        <select
+                            v-model="selectedPeriod"
+                            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                            @change="
+                                onPeriodDraftChange(
+                                    selectedPeriod as DashboardFiltersPayload['period'],
+                                )
+                            "
+                        >
+                            <option
+                                v-for="option in periodOptions"
+                                :key="`mobile-${option.value}`"
+                                :value="option.value"
+                            >
+                                {{ option.label }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-xs font-medium text-muted-foreground"
+                            >Vehicule</label
+                        >
+                        <select
+                            v-model="selectedVehiculeId"
+                            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                        >
+                            <option value="all">Tous les vehicules</option>
+                            <option
+                                v-for="vehicule in vehicules"
+                                :key="`mobile-${vehicule.id}`"
+                                :value="String(vehicule.id)"
+                            >
+                                {{ vehicule.nom_vehicule }} ({{
+                                    vehicule.immatriculation ?? '-'
+                                }})
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-xs font-medium text-muted-foreground"
+                            >Statut paiement</label
+                        >
+                        <select
+                            v-model="selectedStatus"
+                            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                        >
+                            <option value="all">Tous les statuts</option>
+                            <option
+                                v-for="status in status_options"
+                                :key="`mobile-${status.value}`"
+                                :value="status.value"
+                            >
+                                {{ status.label }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-xs font-medium text-muted-foreground"
+                            >Du</label
+                        >
+                        <input
+                            v-model="dateDebut"
+                            type="date"
+                            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                            @change="onCustomDateDraftChange"
+                        />
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-xs font-medium text-muted-foreground"
+                            >Au</label
+                        >
+                        <input
+                            v-model="dateFin"
+                            type="date"
+                            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                            @change="onCustomDateDraftChange"
+                        />
+                    </div>
+                </div>
+
+                <div class="border-t border-border px-4 py-3">
+                    <div class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            class="w-full rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                            @click="resetFiltersFromMobile"
+                        >
+                            Reinitialiser
+                        </button>
+                        <button
+                            type="button"
+                            class="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                            @click="applyFiltersFromMobile"
+                        >
+                            Appliquer
+                        </button>
+                    </div>
+                </div>
+            </aside>
         </div>
     </ClientLayout>
 </template>
