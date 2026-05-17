@@ -1,20 +1,37 @@
 import { onMounted, onUnmounted } from 'vue';
 
 const AZERTY_TO_QWERTY: Record<string, string> = {
-    'q': 'a', 'a': 'q',
-    'z': 'w', 'w': 'z',
-    '&': '1', 'é': '2', '"': '3', "'": '4', '(': '5',
-    '-': '6', 'è': '7', '_': '8', 'ç': '9', 'à': '0',
-    'M': ':', '!': '/', ':': '.', ')': '-',
+    q: 'a',
+    a: 'q',
+    z: 'w',
+    w: 'z',
+    '&': '1',
+    é: '2',
+    '"': '3',
+    "'": '4',
+    '(': '5',
+    '-': '6',
+    è: '7',
+    _: '8',
+    ç: '9',
+    à: '0',
+    M: ':',
+    '!': '/',
+    ':': '.',
+    ')': '-',
 };
 
 function decode(s: string): string {
-    return s.split('').map(c => AZERTY_TO_QWERTY[c] ?? c).join('');
+    return s
+        .split('')
+        .map((c) => AZERTY_TO_QWERTY[c] ?? c)
+        .join('');
 }
 
 function resolveInternalUrl(raw: string): string | null {
     const origin = window.location.origin;
-    const isInternal = (u: string) => u.startsWith(origin + '/') || u === origin;
+    const isInternal = (u: string) =>
+        u.startsWith(origin + '/') || u === origin;
     if (isInternal(raw)) return raw;
     const decoded = decode(raw);
     if (isInternal(decoded)) return decoded;
@@ -49,7 +66,8 @@ export function useScanInterceptor() {
             target.tagName === 'TEXTAREA' ||
             target.tagName === 'SELECT' ||
             target.isContentEditable
-        ) return;
+        )
+            return;
 
         if (e.key === 'Enter') {
             // Valider seulement si au moins 10 frappes rapides consécutives
