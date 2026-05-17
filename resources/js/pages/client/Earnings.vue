@@ -7,7 +7,7 @@ import type {
     StatementLine,
     VehiculeOption,
 } from '@/types/client-space';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
@@ -19,7 +19,11 @@ const props = defineProps<{
     filters: { date_debut: string | null; date_fin: string | null };
 }>();
 
-const selectedVehiculeId = ref<string | 'all'>('all');
+const page = usePage();
+
+const selectedVehiculeId = ref<string | 'all'>(
+    resolveInitialVehiculeId(page.url, props.vehicules),
+);
 const dateDebut = ref<string>(props.filters.date_debut ?? '');
 const dateFin = ref<string>(props.filters.date_fin ?? '');
 
@@ -28,7 +32,7 @@ const filteredStatement = computed(() => {
         return props.statement;
     }
     return props.statement.filter(
-        (line) => line.vehicule_id === selectedVehiculeId.value,
+        (line) => String(line.vehicule_id) === selectedVehiculeId.value,
     );
 });
 
@@ -36,6 +40,10 @@ function applyFilters() {
     router.get(
         '/client/gains',
         {
+            vehicule_id:
+                selectedVehiculeId.value === 'all'
+                    ? undefined
+                    : selectedVehiculeId.value,
             date_debut: dateDebut.value || undefined,
             date_fin: dateFin.value || undefined,
         },
@@ -44,6 +52,7 @@ function applyFilters() {
 }
 
 function resetFilters() {
+    selectedVehiculeId.value = 'all';
     dateDebut.value = '';
     dateFin.value = '';
     router.get('/client/gains', {}, { preserveScroll: true });
@@ -54,8 +63,26 @@ function formatMoney(value: number): string {
 }
 
 const hasActiveFilter = computed(
-    () => !!props.filters.date_debut || !!props.filters.date_fin,
+    () =>
+        selectedVehiculeId.value !== 'all' ||
+        !!dateDebut.value ||
+        !!dateFin.value,
 );
+
+function resolveInitialVehiculeId(
+    url: string,
+    vehicules: VehiculeOption[],
+): string | 'all' {
+    const queryString = url.includes('?') ? url.split('?')[1] : '';
+    const value = new URLSearchParams(queryString).get('vehicule_id');
+    if (!value) {
+        return 'all';
+    }
+
+    const exists = vehicules.some((vehicule) => String(vehicule.id) === value);
+
+    return exists ? value : 'all';
+}
 </script>
 
 <template>
@@ -82,7 +109,7 @@ const hasActiveFilter = computed(
                             <option
                                 v-for="vehicule in vehicules"
                                 :key="vehicule.id"
-                                :value="vehicule.id"
+                                :value="String(vehicule.id)"
                             >
                                 {{ vehicule.nom_vehicule }} ({{
                                     vehicule.immatriculation ?? '-'
@@ -300,8 +327,6 @@ const hasActiveFilter = computed(
                     </table>
                 </div>
             </div>
-
-            
         </div>
     </ClientLayout>
 </template>

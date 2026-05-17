@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import MobileVehiculeBalancesList from '@/components/client/MobileVehiculeBalancesList.vue';
+import KpiCardsResponsive from '@/components/dashboard/shared/KpiCardsResponsive.vue';
 import ClientLayout from '@/layouts/ClientLayout.vue';
 import type {
     DashboardFiltersPayload,
@@ -6,6 +8,7 @@ import type {
     EarningsVehiculePayload,
     VehiculeOption,
 } from '@/types/client-space';
+import type { KpiWidgetItem } from '@/types/kpi-widgets';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { SlidersHorizontal, X } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
@@ -53,9 +56,6 @@ const dateDebut = ref(props.filters.date_debut ?? '');
 const dateFin = ref(props.filters.date_fin ?? '');
 const isQrZoomOpen = ref(false);
 const isMobileFiltersOpen = ref(false);
-const widgetScrollerRef = ref<HTMLElement | null>(null);
-const currentWidgetSlide = ref(0);
-const totalWidgetSlides = 3;
 
 const hasActiveFilters = computed(
     () =>
@@ -88,6 +88,35 @@ const periodLabel = computed(() => {
             return '30 derniers jours';
     }
 });
+
+const kpiItems = computed<KpiWidgetItem[]>(() => [
+    {
+        id: 'gains-cumules',
+        title: 'Gains cumules',
+        value: formatMoney(props.earnings.total_earned),
+        subtitle: periodLabel.value,
+    },
+    {
+        id: 'deja-verses',
+        title: 'Deja verses',
+        value: formatMoney(props.earnings.total_paid),
+        subtitle: periodLabel.value,
+    },
+    {
+        id: 'reste-a-payer',
+        title: 'Reste a payer',
+        value: formatMoney(props.earnings.balance),
+        subtitle: `${props.earnings.operations_count} operation(s) - ${periodLabel.value}`,
+        note:
+            props.earnings.frais_depenses_total > 0
+                ? `dont ${formatMoney(props.earnings.frais_depenses_total)} de frais deduits`
+                : undefined,
+        noteClass:
+            props.earnings.frais_depenses_total > 0
+                ? 'text-destructive'
+                : undefined,
+    },
+]);
 
 function formatDateFr(value: string): string {
     return new Intl.DateTimeFormat('fr-FR', {
@@ -211,65 +240,12 @@ function onKeydown(event: KeyboardEvent) {
     }
 }
 
-function updateCurrentWidgetSlide() {
-    const scroller = widgetScrollerRef.value;
-    if (!scroller) return;
-
-    const cards = Array.from(
-        scroller.querySelectorAll<HTMLElement>('[data-widget-slide]'),
-    );
-
-    if (!cards.length) return;
-
-    const viewportCenter = scroller.scrollLeft + scroller.clientWidth / 2;
-    let closestIndex = 0;
-    let minDistance = Number.POSITIVE_INFINITY;
-
-    cards.forEach((card, index) => {
-        const cardCenter = card.offsetLeft + card.offsetWidth / 2;
-        const distance = Math.abs(cardCenter - viewportCenter);
-        if (distance < minDistance) {
-            minDistance = distance;
-            closestIndex = index;
-        }
-    });
-
-    currentWidgetSlide.value = closestIndex;
-}
-
-function goToWidgetSlide(index: number) {
-    const scroller = widgetScrollerRef.value;
-    if (!scroller) return;
-
-    const cards = Array.from(
-        scroller.querySelectorAll<HTMLElement>('[data-widget-slide]'),
-    );
-
-    cards[index]?.scrollIntoView({
-        behavior: 'smooth',
-        inline: 'start',
-        block: 'nearest',
-    });
-}
-
 onMounted(() => {
     window.addEventListener('keydown', onKeydown);
-    widgetScrollerRef.value?.addEventListener(
-        'scroll',
-        updateCurrentWidgetSlide,
-        {
-            passive: true,
-        },
-    );
-    updateCurrentWidgetSlide();
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', onKeydown);
-    widgetScrollerRef.value?.removeEventListener(
-        'scroll',
-        updateCurrentWidgetSlide,
-    );
 });
 </script>
 
@@ -428,161 +404,20 @@ onBeforeUnmount(() => {
                 </div>
             </div>
 
-            <div class="md:hidden">
-                <div
-                    ref="widgetScrollerRef"
-                    class="flex snap-x snap-mandatory items-stretch gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                >
-                    <div
-                        data-widget-slide
-                        class="max-w-[88%] min-w-[88%] shrink-0 snap-start"
-                    >
-                        <div
-                            class="flex min-h-[176px] flex-col rounded-xl border border-border bg-card p-5"
-                        >
-                            <p class="text-sm text-muted-foreground">
-                                Gains cumules
-                            </p>
-                            <p
-                                class="mt-2 text-2xl font-semibold text-foreground"
-                            >
-                                {{ formatMoney(earnings.total_earned) }}
-                            </p>
-                            <div class="mt-auto pt-1">
-                                <p class="text-xs text-muted-foreground">
-                                    {{ periodLabel }}
-                                </p>
-                                <p class="mt-1 text-xs text-transparent">
-                                    espace reserve
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div
-                        data-widget-slide
-                        class="max-w-[88%] min-w-[88%] shrink-0 snap-start"
-                    >
-                        <div
-                            class="flex min-h-[176px] flex-col rounded-xl border border-border bg-card p-5"
-                        >
-                            <p class="text-sm text-muted-foreground">
-                                Deja verses
-                            </p>
-                            <p
-                                class="mt-2 text-2xl font-semibold text-foreground"
-                            >
-                                {{ formatMoney(earnings.total_paid) }}
-                            </p>
-                            <div class="mt-auto pt-1">
-                                <p class="text-xs text-muted-foreground">
-                                    {{ periodLabel }}
-                                </p>
-                                <p class="mt-1 text-xs text-transparent">
-                                    espace reserve
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div
-                        data-widget-slide
-                        class="max-w-[88%] min-w-[88%] shrink-0 snap-start"
-                    >
-                        <div
-                            class="flex min-h-[176px] flex-col rounded-xl border border-border bg-card p-5"
-                        >
-                            <p class="text-sm text-muted-foreground">
-                                Reste a payer
-                            </p>
-                            <p
-                                class="mt-2 text-2xl font-semibold text-foreground"
-                            >
-                                {{ formatMoney(earnings.balance) }}
-                            </p>
-                            <div class="mt-auto pt-1">
-                                <p class="text-xs text-muted-foreground">
-                                    {{ earnings.operations_count }} operation(s)
-                                    -
-                                    {{ periodLabel }}
-                                </p>
-                                <p
-                                    class="mt-1 text-xs"
-                                    :class="
-                                        earnings.frais_depenses_total > 0
-                                            ? 'text-destructive'
-                                            : 'text-transparent'
-                                    "
-                                >
-                                    {{
-                                        earnings.frais_depenses_total > 0
-                                            ? `dont ${formatMoney(earnings.frais_depenses_total)} de frais deduits`
-                                            : 'espace reserve'
-                                    }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-1.5 flex items-center justify-center gap-1.5">
-                    <button
-                        v-for="dotIndex in totalWidgetSlides"
-                        :key="dotIndex"
-                        type="button"
-                        class="h-1.5 w-1.5 rounded-full transition-colors"
-                        :class="
-                            dotIndex - 1 === currentWidgetSlide
-                                ? 'bg-primary'
-                                : 'bg-primary/30'
-                        "
-                        @click="goToWidgetSlide(dotIndex - 1)"
-                    />
-                </div>
-            </div>
-
-            <div class="hidden gap-4 md:grid md:grid-cols-3">
-                <div class="rounded-xl border border-border bg-card p-5">
-                    <p class="text-sm text-muted-foreground">Gains cumules</p>
-                    <p class="mt-2 text-2xl font-semibold text-foreground">
-                        {{ formatMoney(earnings.total_earned) }}
-                    </p>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        {{ periodLabel }}
-                    </p>
-                </div>
-                <div class="rounded-xl border border-border bg-card p-5">
-                    <p class="text-sm text-muted-foreground">Deja verses</p>
-                    <p class="mt-2 text-2xl font-semibold text-foreground">
-                        {{ formatMoney(earnings.total_paid) }}
-                    </p>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        {{ periodLabel }}
-                    </p>
-                </div>
-                <div class="rounded-xl border border-border bg-card p-5">
-                    <p class="text-sm text-muted-foreground">Reste a payer</p>
-                    <p class="mt-2 text-2xl font-semibold text-foreground">
-                        {{ formatMoney(earnings.balance) }}
-                    </p>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        {{ earnings.operations_count }} operation(s) -
-                        {{ periodLabel }}
-                    </p>
-                    <p
-                        v-if="earnings.frais_depenses_total > 0"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        dont {{ formatMoney(earnings.frais_depenses_total) }} de
-                        frais deduits
-                    </p>
-                </div>
-            </div>
+            <KpiCardsResponsive :items="kpiItems" breakpoint="md" />
 
             <div class="rounded-xl border border-border bg-card p-5">
                 <h2 class="text-lg font-semibold">Solde par vehicule</h2>
 
-                <div class="mt-4 overflow-x-auto">
+                <div class="mt-4 md:hidden">
+                    <MobileVehiculeBalancesList
+                        :rows="earnings_by_vehicule"
+                        :date-debut="dateDebut"
+                        :date-fin="dateFin"
+                    />
+                </div>
+
+                <div class="mt-4 hidden overflow-x-auto md:block">
                     <table class="min-w-full text-sm">
                         <thead>
                             <tr
