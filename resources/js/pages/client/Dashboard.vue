@@ -53,6 +53,9 @@ const dateDebut = ref(props.filters.date_debut ?? '');
 const dateFin = ref(props.filters.date_fin ?? '');
 const isQrZoomOpen = ref(false);
 const isMobileFiltersOpen = ref(false);
+const widgetScrollerRef = ref<HTMLElement | null>(null);
+const currentWidgetSlide = ref(0);
+const totalWidgetSlides = 3;
 
 const hasActiveFilters = computed(
     () =>
@@ -208,12 +211,65 @@ function onKeydown(event: KeyboardEvent) {
     }
 }
 
+function updateCurrentWidgetSlide() {
+    const scroller = widgetScrollerRef.value;
+    if (!scroller) return;
+
+    const cards = Array.from(
+        scroller.querySelectorAll<HTMLElement>('[data-widget-slide]'),
+    );
+
+    if (!cards.length) return;
+
+    const viewportCenter = scroller.scrollLeft + scroller.clientWidth / 2;
+    let closestIndex = 0;
+    let minDistance = Number.POSITIVE_INFINITY;
+
+    cards.forEach((card, index) => {
+        const cardCenter = card.offsetLeft + card.offsetWidth / 2;
+        const distance = Math.abs(cardCenter - viewportCenter);
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestIndex = index;
+        }
+    });
+
+    currentWidgetSlide.value = closestIndex;
+}
+
+function goToWidgetSlide(index: number) {
+    const scroller = widgetScrollerRef.value;
+    if (!scroller) return;
+
+    const cards = Array.from(
+        scroller.querySelectorAll<HTMLElement>('[data-widget-slide]'),
+    );
+
+    cards[index]?.scrollIntoView({
+        behavior: 'smooth',
+        inline: 'start',
+        block: 'nearest',
+    });
+}
+
 onMounted(() => {
     window.addEventListener('keydown', onKeydown);
+    widgetScrollerRef.value?.addEventListener(
+        'scroll',
+        updateCurrentWidgetSlide,
+        {
+            passive: true,
+        },
+    );
+    updateCurrentWidgetSlide();
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', onKeydown);
+    widgetScrollerRef.value?.removeEventListener(
+        'scroll',
+        updateCurrentWidgetSlide,
+    );
 });
 </script>
 
@@ -372,7 +428,120 @@ onBeforeUnmount(() => {
                 </div>
             </div>
 
-            <div class="grid gap-4 md:grid-cols-3">
+            <div class="md:hidden">
+                <div
+                    ref="widgetScrollerRef"
+                    class="flex snap-x snap-mandatory items-stretch gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                >
+                    <div
+                        data-widget-slide
+                        class="max-w-[88%] min-w-[88%] shrink-0 snap-start"
+                    >
+                        <div
+                            class="flex min-h-[176px] flex-col rounded-xl border border-border bg-card p-5"
+                        >
+                            <p class="text-sm text-muted-foreground">
+                                Gains cumules
+                            </p>
+                            <p
+                                class="mt-2 text-2xl font-semibold text-foreground"
+                            >
+                                {{ formatMoney(earnings.total_earned) }}
+                            </p>
+                            <div class="mt-auto pt-1">
+                                <p class="text-xs text-muted-foreground">
+                                    {{ periodLabel }}
+                                </p>
+                                <p class="mt-1 text-xs text-transparent">
+                                    espace reserve
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        data-widget-slide
+                        class="max-w-[88%] min-w-[88%] shrink-0 snap-start"
+                    >
+                        <div
+                            class="flex min-h-[176px] flex-col rounded-xl border border-border bg-card p-5"
+                        >
+                            <p class="text-sm text-muted-foreground">
+                                Deja verses
+                            </p>
+                            <p
+                                class="mt-2 text-2xl font-semibold text-foreground"
+                            >
+                                {{ formatMoney(earnings.total_paid) }}
+                            </p>
+                            <div class="mt-auto pt-1">
+                                <p class="text-xs text-muted-foreground">
+                                    {{ periodLabel }}
+                                </p>
+                                <p class="mt-1 text-xs text-transparent">
+                                    espace reserve
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        data-widget-slide
+                        class="max-w-[88%] min-w-[88%] shrink-0 snap-start"
+                    >
+                        <div
+                            class="flex min-h-[176px] flex-col rounded-xl border border-border bg-card p-5"
+                        >
+                            <p class="text-sm text-muted-foreground">
+                                Reste a payer
+                            </p>
+                            <p
+                                class="mt-2 text-2xl font-semibold text-foreground"
+                            >
+                                {{ formatMoney(earnings.balance) }}
+                            </p>
+                            <div class="mt-auto pt-1">
+                                <p class="text-xs text-muted-foreground">
+                                    {{ earnings.operations_count }} operation(s)
+                                    -
+                                    {{ periodLabel }}
+                                </p>
+                                <p
+                                    class="mt-1 text-xs"
+                                    :class="
+                                        earnings.frais_depenses_total > 0
+                                            ? 'text-destructive'
+                                            : 'text-transparent'
+                                    "
+                                >
+                                    {{
+                                        earnings.frais_depenses_total > 0
+                                            ? `dont ${formatMoney(earnings.frais_depenses_total)} de frais deduits`
+                                            : 'espace reserve'
+                                    }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-1.5 flex items-center justify-center gap-1.5">
+                    <button
+                        v-for="dotIndex in totalWidgetSlides"
+                        :key="dotIndex"
+                        type="button"
+                        class="h-1.5 w-1.5 rounded-full transition-colors"
+                        :class="
+                            dotIndex - 1 === currentWidgetSlide
+                                ? 'bg-primary'
+                                : 'bg-primary/30'
+                        "
+                        @click="goToWidgetSlide(dotIndex - 1)"
+                    />
+                </div>
+            </div>
+
+            <div class="hidden gap-4 md:grid md:grid-cols-3">
                 <div class="rounded-xl border border-border bg-card p-5">
                     <p class="text-sm text-muted-foreground">Gains cumules</p>
                     <p class="mt-2 text-2xl font-semibold text-foreground">
