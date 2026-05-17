@@ -36,8 +36,8 @@ const userDisplayName = computed(() => {
 
 const navItems = [
     { label: 'Accueil', href: '/client/dashboard' },
-    { label: 'Vehicules', href: '/client/vehicules' },
     { label: 'Gains', href: '/client/gains' },
+    { label: 'Vehicules', href: '/client/vehicules' },
 ];
 
 function isActive(href: string): boolean {

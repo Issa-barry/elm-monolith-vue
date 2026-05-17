@@ -13,12 +13,15 @@ class LoginResponseTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function makeRequest(User $user, bool $wantsJson = false): Request
+    private function makeRequest(User $user, bool $wantsJson = false, ?string $intendedUrl = null): Request
     {
         $server = $wantsJson ? ['HTTP_ACCEPT' => 'application/json'] : [];
         $request = Request::create('/', 'GET', [], [], [], $server);
         $request->setLaravelSession(app('session.store'));
         $request->setUserResolver(fn () => $user);
+        if ($intendedUrl !== null) {
+            $request->session()->put('url.intended', $intendedUrl);
+        }
 
         return $request;
     }
@@ -78,5 +81,47 @@ class LoginResponseTest extends TestCase
 
         $data = json_decode($response->getContent(), true);
         $this->assertFalse($data['two_factor']);
+    }
+
+    public function test_client_user_ignores_staff_intended_url_and_goes_to_client_dashboard(): void
+    {
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('client');
+
+        $request = $this->makeRequest($user, false, route('dashboard'));
+        $loginResponse = new LoginResponse;
+        $response = $loginResponse->toResponse($request);
+
+        $this->assertSame(route('client.dashboard'), $response->getTargetUrl());
+    }
+
+    public function test_staff_user_ignores_client_intended_url_and_goes_to_dashboard(): void
+    {
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('admin_entreprise');
+
+        $request = $this->makeRequest($user, false, route('client.dashboard'));
+        $loginResponse = new LoginResponse;
+        $response = $loginResponse->toResponse($request);
+
+        $this->assertSame(route('dashboard'), $response->getTargetUrl());
+    }
+
+    public function test_client_user_keeps_client_intended_url(): void
+    {
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('client');
+
+        $request = $this->makeRequest($user, false, route('client.propositions.index'));
+        $loginResponse = new LoginResponse;
+        $response = $loginResponse->toResponse($request);
+
+        $this->assertSame(route('client.propositions.index'), $response->getTargetUrl());
     }
 }

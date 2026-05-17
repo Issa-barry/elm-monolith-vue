@@ -2,24 +2,17 @@
 
 namespace App\Http\Responses;
 
+use App\Support\AuthRedirects;
 use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
 
 class LoginResponse implements LoginResponseContract
 {
     public function toResponse($request)
     {
-        $user = $request->user();
-
-        if ($user?->hasAnyRole(['client', 'proprietaire', 'livreur'])) {
-            $redirectTo = route('client.dashboard');
-        } elseif ($user?->hasAnyRole(['super_admin', 'admin_entreprise', 'manager', 'commerciale', 'comptable'])) {
-            $redirectTo = route('dashboard');
-        } else {
-            $redirectTo = route('home');
-        }
+        $redirectTo = AuthRedirects::resolvePostAuthRedirect($request, $request->user());
 
         return $request->wantsJson()
             ? response()->json(['two_factor' => false])
-            : redirect()->intended($redirectTo);
+            : redirect()->to($redirectTo);
     }
 }

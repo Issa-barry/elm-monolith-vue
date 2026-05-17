@@ -157,6 +157,74 @@ const hasActiveFilter = computed(
             </div>
 
             <div class="rounded-xl border border-border bg-card p-5">
+                <h2 class="text-lg font-semibold">Solde par vehicule</h2>
+
+                <div class="mt-4 overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr
+                                class="border-b border-border text-left text-muted-foreground"
+                            >
+                                <th class="py-2 pr-4 font-medium">Vehicule</th>
+                                <th class="py-2 pr-4 font-medium">
+                                    Immatriculation
+                                </th>
+                                <th class="py-2 pr-4 font-medium">Gains</th>
+                                <th
+                                    class="py-2 pr-4 font-medium text-destructive"
+                                >
+                                    Frais
+                                </th>
+                                <th class="py-2 pr-4 font-medium">Verses</th>
+                                <th class="py-2 pr-0 font-medium">
+                                    Reste à payer
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in earnings_by_vehicule"
+                                :key="row.vehicule_id"
+                                class="border-b border-border/70"
+                            >
+                                <td class="py-2 pr-4">
+                                    {{ row.nom_vehicule }}
+                                </td>
+                                <td class="py-2 pr-4">
+                                    {{ row.immatriculation ?? '-' }}
+                                </td>
+                                <td class="py-2 pr-4">
+                                    {{ formatMoney(row.total_earned) }}
+                                </td>
+                                <td class="py-2 pr-4 text-destructive">
+                                    {{
+                                        row.frais_depenses > 0
+                                            ? `- ${formatMoney(row.frais_depenses)}`
+                                            : '-'
+                                    }}
+                                </td>
+                                <td class="py-2 pr-4">
+                                    {{ formatMoney(row.total_paid) }}
+                                </td>
+                                <td class="py-2 pr-0">
+                                    {{ formatMoney(row.balance) }}
+                                </td>
+                            </tr>
+                            <tr v-if="earnings_by_vehicule.length === 0">
+                                <td
+                                    colspan="6"
+                                    class="py-4 text-center text-muted-foreground"
+                                >
+                                    Aucun vehicule partenaire detecte pour ce
+                                    compte.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-border bg-card p-5">
                 <h2 class="text-lg font-semibold">Releve des operations</h2>
                 <p class="mt-1 text-sm text-muted-foreground">
                     Historique des commissions generees via vos vehicules.
@@ -233,73 +301,7 @@ const hasActiveFilter = computed(
                 </div>
             </div>
 
-            <div class="rounded-xl border border-border bg-card p-5">
-                <h2 class="text-lg font-semibold">Solde par vehicule</h2>
-
-                <div class="mt-4 overflow-x-auto">
-                    <table class="min-w-full text-sm">
-                        <thead>
-                            <tr
-                                class="border-b border-border text-left text-muted-foreground"
-                            >
-                                <th class="py-2 pr-4 font-medium">Vehicule</th>
-                                <th class="py-2 pr-4 font-medium">
-                                    Immatriculation
-                                </th>
-                                <th class="py-2 pr-4 font-medium">Gains</th>
-                                <th
-                                    class="py-2 pr-4 font-medium text-destructive"
-                                >
-                                    Frais
-                                </th>
-                                <th class="py-2 pr-4 font-medium">Verses</th>
-                                <th class="py-2 pr-0 font-medium">
-                                    Reste à payer
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="row in earnings_by_vehicule"
-                                :key="row.vehicule_id"
-                                class="border-b border-border/70"
-                            >
-                                <td class="py-2 pr-4">
-                                    {{ row.nom_vehicule }}
-                                </td>
-                                <td class="py-2 pr-4">
-                                    {{ row.immatriculation ?? '-' }}
-                                </td>
-                                <td class="py-2 pr-4">
-                                    {{ formatMoney(row.total_earned) }}
-                                </td>
-                                <td class="py-2 pr-4 text-destructive">
-                                    {{
-                                        row.frais_depenses > 0
-                                            ? `- ${formatMoney(row.frais_depenses)}`
-                                            : '-'
-                                    }}
-                                </td>
-                                <td class="py-2 pr-4">
-                                    {{ formatMoney(row.total_paid) }}
-                                </td>
-                                <td class="py-2 pr-0">
-                                    {{ formatMoney(row.balance) }}
-                                </td>
-                            </tr>
-                            <tr v-if="earnings_by_vehicule.length === 0">
-                                <td
-                                    colspan="6"
-                                    class="py-4 text-center text-muted-foreground"
-                                >
-                                    Aucun vehicule partenaire detecte pour ce
-                                    compte.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            
         </div>
     </ClientLayout>
 </template>
