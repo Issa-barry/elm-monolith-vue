@@ -24,6 +24,26 @@ const props = defineProps<{
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
+const userFullName = computed(() => {
+    const prenom = (user.value?.prenom ?? '').trim();
+    const nom = (user.value?.nom ?? '').trim();
+    const fullName = [prenom, nom].filter(Boolean).join(' ');
+
+    return fullName || user.value?.name || 'Mon compte';
+});
+const userInitials = computed(() => {
+    const parts = userFullName.value.split(/\s+/).filter(Boolean);
+
+    if (parts.length === 0) {
+        return '--';
+    }
+
+    if (parts.length === 1) {
+        return parts[0].slice(0, 2).toUpperCase();
+    }
+
+    return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
+});
 
 const periodOptions: Array<{
     value: DashboardFiltersPayload['period'];
@@ -149,13 +169,20 @@ function resetFilters() {
         <Head title="Mon espace - Accueil" />
 
         <div class="space-y-8">
-            <div>
-                <h1 class="text-2xl font-semibold">
-                    Bonjour, {{ user.prenom }}
-                </h1>
-                <p class="mt-1 text-muted-foreground">
-                    Bienvenue dans votre espace partenaire.
-                </p>
+            <div class="flex items-center gap-4">
+                <div
+                    class="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-2xl font-semibold text-primary-foreground"
+                >
+                    {{ userInitials }}
+                </div>
+                <div>
+                    <h1 class="text-2xl font-semibold">
+                        {{ userFullName }}
+                    </h1>
+                    <p class="mt-1 text-muted-foreground">
+                        Bienvenue dans votre espace partenaire.
+                    </p>
+                </div>
             </div>
 
             <div class="rounded-xl border border-border bg-card p-4">
@@ -289,6 +316,13 @@ function resetFilters() {
                     <p class="mt-1 text-xs text-muted-foreground">
                         {{ earnings.operations_count }} operation(s) -
                         {{ periodLabel }}
+                    </p>
+                    <p
+                        v-if="earnings.frais_depenses_total > 0"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        dont {{ formatMoney(earnings.frais_depenses_total) }} de
+                        frais deduits
                     </p>
                 </div>
             </div>
