@@ -19,6 +19,7 @@ const AZERTY_TO_QWERTY: Record<string, string> = {
     '!': '/',
     ':': '.',
     ')': '-',
+    ',': 'm',
 };
 
 function decode(s: string): string {
