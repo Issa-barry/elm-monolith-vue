@@ -44,11 +44,26 @@ const userDisplayName = computed(() => {
     return user.value?.name ?? 'Mon compte';
 });
 
-const navItems = [
-    { label: 'Accueil', href: '/client/dashboard' },
-    { label: 'Gains', href: '/client/gains' },
-    { label: 'Vehicules', href: '/client/vehicules' },
-];
+const roles = computed<string[]>(() => (page.props as any).auth.roles ?? []);
+const isProprietaire = computed(() => roles.value.includes('proprietaire'));
+const isLivreur = computed(() => roles.value.includes('livreur'));
+
+const navItems = computed(() => {
+    const items: { label: string; href: string }[] = [
+        { label: 'Accueil', href: '/client/dashboard' },
+    ];
+
+    if (isProprietaire.value) {
+        items.push({ label: 'Commissions', href: '/client/gains' });
+    }
+    if (isLivreur.value) {
+        items.push({ label: 'Gains livraison', href: '/client/gains' });
+    }
+
+    items.push({ label: 'Vehicules', href: '/client/vehicules' });
+
+    return items;
+});
 
 function isActive(href: string): boolean {
     return currentUrl.value === href || currentUrl.value.startsWith(`${href}?`);

@@ -9,7 +9,7 @@ import { usePhoneOtpForm } from '@/composables/usePhoneOtpForm';
 import AuthBase from '@/layouts/AuthLayout.vue';
 import { login } from '@/routes';
 import { Head, useForm } from '@inertiajs/vue3';
-import { Lock } from 'lucide-vue-next';
+import { Lock, Truck } from 'lucide-vue-next';
 import Select from 'primevue/select';
 
 const {
@@ -51,7 +51,7 @@ function submitRegistration() {
     form.prenom = formPrenom.value;
     form.nom = formNom.value;
 
-    form.post('/register', {
+    form.post('/register/livreur', {
         preserveState: true,
         onSuccess: () => form.reset('password'),
     });
@@ -60,12 +60,18 @@ function submitRegistration() {
 
 <template>
     <AuthBase
-        title="Créer un compte"
-        description="Renseignez vos informations pour créer votre compte"
+        title="Inscription livreur"
+        description="Créez votre espace chauffeur / livreur"
     >
-        <Head title="Inscription" />
+        <Head title="Inscription livreur" />
 
         <div class="flex flex-col gap-6">
+            <!-- Bandeau informatif -->
+            <div class="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200">
+                <Truck class="mt-0.5 h-4 w-4 shrink-0" />
+                <span>Votre compte sera actif après validation par l'équipe.</span>
+            </div>
+
             <!-- ── Étape 1 : Téléphone ────────────────────────────────────── -->
             <div v-if="step === 'phone'" class="grid gap-6">
                 <div class="grid gap-2">
@@ -121,7 +127,6 @@ function submitRegistration() {
                     :tabindex="3"
                     :disabled="loading || !isPhoneValid"
                     @click="submitPhoneLookup"
-                    data-test="register-phone-button"
                 >
                     <Spinner v-if="loading" />
                     Continuer
@@ -165,7 +170,6 @@ function submitRegistration() {
                     :tabindex="2"
                     :disabled="loading || otpCode.length !== 5"
                     @click="submitOtp"
-                    data-test="register-otp-button"
                 >
                     <Spinner v-if="loading" />
                     Vérifier
@@ -188,7 +192,7 @@ function submitRegistration() {
                     class="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
                 >
                     <Lock class="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>Informations trouvées dans notre système.</span>
+                    <span>Vos informations ont été trouvées dans notre système.</span>
                 </div>
 
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -236,7 +240,6 @@ function submitRegistration() {
                     :tabindex="3"
                     :disabled="formPrenom.trim().length < 2 || formNom.trim().length < 2"
                     @click="step = 'password'"
-                    data-test="register-identity-button"
                 >
                     Continuer
                 </Button>
@@ -245,7 +248,7 @@ function submitRegistration() {
             <!-- ── Étape 4 : Mot de passe + création ─────────────────────── -->
             <div v-else-if="step === 'password'" class="grid gap-6">
                 <div class="rounded-md border border-border bg-muted/50 px-4 py-3 text-sm">
-                    <p class="text-muted-foreground">Compte pour</p>
+                    <p class="text-muted-foreground">Compte livreur pour</p>
                     <p class="mt-0.5 font-medium text-foreground">
                         {{ formPrenom }} {{ formNom.toUpperCase() }}
                         &middot;
@@ -275,10 +278,9 @@ function submitRegistration() {
                     :tabindex="2"
                     :disabled="form.processing"
                     @click="submitRegistration"
-                    data-test="register-user-button"
                 >
                     <Spinner v-if="form.processing" />
-                    Créer mon compte
+                    Créer mon compte livreur
                 </Button>
 
                 <div class="text-center text-sm text-muted-foreground">

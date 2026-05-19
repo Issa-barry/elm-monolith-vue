@@ -2,6 +2,7 @@
 
 use App\Features\ModuleFeature;
 use App\Http\Controllers\Auth\AcceptInvitationController;
+use App\Http\Controllers\Auth\LivreurRegistrationController;
 use App\Http\Controllers\CashbackController;
 use App\Http\Controllers\Client\ClientDashboardController;
 use App\Http\Controllers\ClientController;
@@ -50,6 +51,10 @@ Route::middleware('guest')->group(function () {
         ->name('register.lookup');
     Route::post('/register/otp/verify', \App\Http\Controllers\Auth\RegisterOtpController::class)
         ->name('register.otp.verify');
+    Route::get('/register/livreur', [LivreurRegistrationController::class, 'create'])
+        ->name('livreur.register');
+    Route::post('/register/livreur', [LivreurRegistrationController::class, 'store'])
+        ->name('livreur.register.store');
 });
 
 // ── Onboarding via lien d'invitation ─────────────────────────────────────────
@@ -170,6 +175,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::get('livreurs', [LivreurController::class, 'index'])->name('livreurs.index');
         Route::post('livreurs', [LivreurController::class, 'store'])->name('livreurs.store');
         Route::patch('livreurs/{livreur}/toggle', [LivreurController::class, 'toggle'])->name('livreurs.toggle');
+        Route::patch('livreurs/{livreur}/approuver', [LivreurController::class, 'approuver'])->name('livreurs.approuver');
         Route::delete('livreurs/{livreur}', [LivreurController::class, 'destroy'])->name('livreurs.destroy');
 
         Route::resource('equipes-livraison', EquipeLivraisonController::class);
@@ -294,7 +300,8 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 });
 
 // ── Espace client ─────────────────────────────────────────────────────────────
-Route::middleware(['auth', 'role:client|proprietaire|livreur'])->prefix('client')->name('client.')->group(function () {
+Route::middleware(['auth', 'role:client|proprietaire|livreur', 'active.livreur'])->prefix('client')->name('client.')->group(function () {
+    Route::get('/pending', fn () => Inertia::render('client/Pending'))->name('pending');
     Route::get('/dashboard', [ClientDashboardController::class, 'index'])->name('dashboard');
     Route::get('/vehicules', [ClientDashboardController::class, 'vehicles'])->name('vehicles');
     Route::get('/gains', [ClientDashboardController::class, 'earnings'])->name('earnings');

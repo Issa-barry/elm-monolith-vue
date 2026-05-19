@@ -34,11 +34,16 @@ class ClientDashboardController extends Controller
 {
     protected function resolveQrPayload(User $user): string
     {
-        [, , $proprietaire] = $this->resolveActorContext($user);
+        [, , $proprietaire, $livreur] = $this->resolveActorContext($user);
 
-        return $proprietaire
-            ? route('proprietaires.show', $proprietaire->id)
-            : route('dashboard');
+        if ($proprietaire) {
+            return route('proprietaires.show', $proprietaire->id);
+        }
+        if ($livreur) {
+            return route('logistique.commissions.livreur', $livreur->id);
+        }
+
+        return route('dashboard');
     }
 
     public function qrCode(Request $request): HttpResponse
@@ -431,11 +436,13 @@ class ClientDashboardController extends Controller
 
         $livreur = Livreur::query()
             ->when($organizationId !== null, fn ($query) => $query->where('organization_id', $organizationId))
-            ->when(
-                $telephone !== null,
-                fn ($query) => $query->where('telephone', $telephone),
-                fn ($query) => $query->whereRaw('1 = 0')
-            )
+            ->where(function ($query) use ($user, $telephone) {
+                $query->where('user_id', $user->id);
+                if ($telephone) {
+                    $query->orWhere('telephone', $telephone);
+                }
+            })
+            ->orderByRaw('CASE WHEN user_id = ? THEN 0 ELSE 1 END', [$user->id])
             ->first();
 
         if ($organizationId === null && $livreur !== null) {
