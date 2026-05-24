@@ -426,7 +426,13 @@ onBeforeUnmount(() => {
                 </div>
             </div>
 
-            <KpiCardsResponsive :items="kpiItems" breakpoint="md" />
+            <KpiCardsResponsive
+                :items="kpiItems"
+                breakpoint="md"
+                desktop-wrapper-class="grid grid-cols-3 gap-8"
+                desktop-card-min-height-class="min-h-[220px]"
+                mobile-card-min-height-class="min-h-[196px]"
+            />
 
             <div class="-mx-4 md:hidden">
                 <h2 class="px-4 text-lg font-semibold">Solde par vehicule</h2>
@@ -556,7 +562,8 @@ onBeforeUnmount(() => {
                     />
                 </div>
                 <p class="mt-3 text-center text-xs text-muted-foreground">
-                    Présentez ce code au scanner. Cliquez en dehors ou appuyez sur Echap pour fermer.
+                    Présentez ce code au scanner. Cliquez en dehors ou appuyez
+                    sur Echap pour fermer.
                 </p>
             </div>
         </div>

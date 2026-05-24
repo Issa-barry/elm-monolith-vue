@@ -146,7 +146,7 @@ const showInfo = ref(false);
                             :class="showInfo ? 'border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30' : ''"
                         >
                             <div
-                                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400"
+                                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground"
                             >
                                 <UserRound class="h-5 w-5" />
                             </div>
@@ -169,7 +169,7 @@ const showInfo = ref(false);
                             class="flex items-center gap-4 rounded-xl border bg-card px-4 py-4 shadow-sm transition-colors hover:bg-muted/50"
                         >
                             <div
-                                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400"
+                                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground"
                             >
                                 <ReceiptText class="h-5 w-5" />
                             </div>
@@ -189,7 +189,7 @@ const showInfo = ref(false);
                             class="flex items-center gap-4 rounded-xl border bg-card px-4 py-4 shadow-sm transition-colors hover:bg-muted/50"
                         >
                             <div
-                                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400"
+                                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground"
                             >
                                 <FileText class="h-5 w-5" />
                             </div>
