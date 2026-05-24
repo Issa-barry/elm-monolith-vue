@@ -20,13 +20,22 @@ import {
     ShieldCheck,
     ShieldX,
     Truck,
+    X,
     XCircle,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import { useToast } from 'primevue/usetoast';
-import { computed, nextTick, ref, watch } from 'vue';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    watch,
+    type Component,
+} from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -77,6 +86,8 @@ interface Ligne {
     id: number;
     produit_id: number;
     produit_nom: string;
+    produit_code: string | null;
+    produit_image_url: string | null;
     quantite_demandee: number;
     quantite_chargee: number | null;
     quantite_recue: number | null;
@@ -565,13 +576,79 @@ const historiquePart = ref<CommissionPart | null>(null);
 
 const showActivitesDialog = ref(false);
 const activitesTriees = computed(() => [...props.activites].reverse());
+const lightboxUrl = ref<string | null>(null);
+const lightboxAlt = ref('');
+
+function openProductLightbox(url: string, alt: string) {
+    lightboxUrl.value = url;
+    lightboxAlt.value = alt;
+}
+
+function closeProductLightbox() {
+    lightboxUrl.value = null;
+}
+
+function onKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+        closeProductLightbox();
+    }
+}
+
+onMounted(() => document.addEventListener('keydown', onKeydown));
+onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
 
 type DetailTabKey = 'informations' | 'lignes' | 'commission';
 const activeDetailTab = ref<DetailTabKey>('informations');
 
+interface DetailMenuItem {
+    key: DetailTabKey;
+    label: string;
+    icon: Component;
+    disabled?: boolean;
+    command: () => void;
+}
+
 function setActiveDetailTab(tab: DetailTabKey) {
     if (tab === 'commission' && !showCommissionSection.value) return;
     activeDetailTab.value = tab;
+}
+
+function isDetailTabActive(key: DetailTabKey): boolean {
+    return activeDetailTab.value === key;
+}
+
+const detailMenuItems = computed<DetailMenuItem[]>(() => [
+    {
+        key: 'informations',
+        label: 'Informations',
+        icon: FileEdit,
+        command: () => setActiveDetailTab('informations'),
+    },
+    {
+        key: 'lignes',
+        label: 'Lignes produits',
+        icon: Package,
+        command: () => setActiveDetailTab('lignes'),
+    },
+    {
+        key: 'commission',
+        label: 'Commission logistique',
+        icon: ShieldCheck,
+        disabled: !showCommissionSection.value,
+        command: () => setActiveDetailTab('commission'),
+    },
+]);
+
+function detailMenuItemClass(item: DetailMenuItem): string {
+    if (item.disabled) {
+        return 'cursor-not-allowed border border-transparent bg-transparent text-muted-foreground/55 opacity-80';
+    }
+
+    if (isDetailTabActive(item.key)) {
+        return 'border border-primary/20 bg-primary text-primary-foreground shadow-sm';
+    }
+
+    return 'border border-transparent bg-transparent text-foreground/75 hover:border-primary/20 hover:bg-primary/10 hover:text-primary';
 }
 
 watch(showCommissionSection, (visible) => {
@@ -756,43 +833,18 @@ function activiteDotClass(action: string): string {
 
             <!-- ══ Contenu principal (2 colonnes) ═════════════════════════════ -->
             <div class="rounded-xl border bg-card p-1.5 shadow-sm">
-                <div class="grid grid-cols-1 gap-1 sm:grid-cols-3">
+                <div class="flex flex-wrap items-center gap-1">
                     <button
+                        v-for="item in detailMenuItems"
+                        :key="item.key"
                         type="button"
-                        class="rounded-lg px-4 py-2.5 text-left text-sm font-medium transition-colors"
-                        :class="
-                            activeDetailTab === 'informations'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                        "
-                        @click="setActiveDetailTab('informations')"
+                        class="inline-flex w-auto items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors"
+                        :class="detailMenuItemClass(item)"
+                        :disabled="item.disabled"
+                        @click="item.command()"
                     >
-                        Informations
-                    </button>
-                    <button
-                        type="button"
-                        class="rounded-lg px-4 py-2.5 text-left text-sm font-medium transition-colors"
-                        :class="
-                            activeDetailTab === 'lignes'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                        "
-                        @click="setActiveDetailTab('lignes')"
-                    >
-                        Lignes produits
-                    </button>
-                    <button
-                        type="button"
-                        class="rounded-lg px-4 py-2.5 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                        :class="
-                            activeDetailTab === 'commission'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                        "
-                        :disabled="!showCommissionSection"
-                        @click="setActiveDetailTab('commission')"
-                    >
-                        Commission logistique
+                        <component :is="item.icon" class="h-4 w-4 shrink-0" />
+                        <span>{{ item.label }}</span>
                     </button>
                 </div>
             </div>
@@ -963,8 +1015,56 @@ function activiteDotClass(action: string): string {
                                     :key="ligne.id"
                                     class="hover:bg-muted/10"
                                 >
-                                    <td class="px-4 py-3 font-medium">
-                                        {{ ligne.produit_nom }}
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center gap-3">
+                                            <div
+                                                class="h-10 w-10 overflow-hidden rounded-lg border bg-muted"
+                                                :class="
+                                                    ligne.produit_image_url
+                                                        ? 'cursor-zoom-in'
+                                                        : ''
+                                                "
+                                                @click="
+                                                    ligne.produit_image_url &&
+                                                    openProductLightbox(
+                                                        ligne.produit_image_url,
+                                                        ligne.produit_nom,
+                                                    )
+                                                "
+                                            >
+                                                <img
+                                                    v-if="
+                                                        ligne.produit_image_url
+                                                    "
+                                                    :src="
+                                                        ligne.produit_image_url
+                                                    "
+                                                    :alt="ligne.produit_nom"
+                                                    class="h-full w-full object-cover"
+                                                />
+                                                <div
+                                                    v-else
+                                                    class="flex h-full w-full items-center justify-center"
+                                                >
+                                                    <Package
+                                                        class="h-5 w-5 text-muted-foreground/40"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <p class="font-medium">
+                                                    {{ ligne.produit_nom }}
+                                                </p>
+                                                <p
+                                                    class="font-mono text-xs text-muted-foreground"
+                                                >
+                                                    {{
+                                                        ligne.produit_code ??
+                                                        '—'
+                                                    }}
+                                                </p>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td
                                         class="px-4 py-3 text-center tabular-nums"
@@ -1794,5 +1894,31 @@ function activiteDotClass(action: string): string {
                 </ol>
             </div>
         </Dialog>
+
+        <Teleport to="body">
+            <div
+                v-if="lightboxUrl"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+                @click.self="closeProductLightbox"
+            >
+                <div class="relative max-h-full max-w-3xl">
+                    <button
+                        type="button"
+                        class="absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+                        @click="closeProductLightbox"
+                    >
+                        <X class="h-5 w-5" />
+                    </button>
+                    <img
+                        :src="lightboxUrl"
+                        :alt="lightboxAlt"
+                        class="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl"
+                    />
+                    <p class="mt-2 text-center text-sm text-white/70">
+                        {{ lightboxAlt }}
+                    </p>
+                </div>
+            </div>
+        </Teleport>
     </AppLayout>
 </template>
