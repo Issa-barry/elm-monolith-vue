@@ -48,19 +48,38 @@ const roles = computed<string[]>(() => (page.props as any).auth.roles ?? []);
 const isProprietaire = computed(() => roles.value.includes('proprietaire'));
 const isLivreur = computed(() => roles.value.includes('livreur'));
 
+type NavItem = {
+    id: string;
+    label: string;
+    href: string;
+};
+
 const navItems = computed(() => {
-    const items: { label: string; href: string }[] = [
-        { label: 'Accueil', href: '/client/dashboard' },
+    const items: NavItem[] = [
+        { id: 'dashboard', label: 'Accueil', href: '/client/dashboard' },
     ];
 
-    if (isProprietaire.value) {
-        items.push({ label: 'Commissions', href: '/client/gains' });
-    }
-    if (isLivreur.value) {
-        items.push({ label: 'Gains livraison', href: '/client/gains' });
+    if (isProprietaire.value && isLivreur.value) {
+        items.push({
+            id: 'gains',
+            label: 'Commissions / Gains livraison',
+            href: '/client/gains',
+        });
+    } else if (isProprietaire.value) {
+        items.push({
+            id: 'commissions',
+            label: 'Commissions',
+            href: '/client/gains',
+        });
+    } else if (isLivreur.value) {
+        items.push({
+            id: 'gains-livraison',
+            label: 'Gains livraison',
+            href: '/client/gains',
+        });
     }
 
-    items.push({ label: 'Vehicules', href: '/client/vehicules' });
+    items.push({ id: 'vehicules', label: 'Vehicules', href: '/client/vehicules' });
 
     return items;
 });
@@ -125,9 +144,7 @@ watch(currentUrl, () => {
             class="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur"
         >
             <div class="mx-auto max-w-5xl px-4">
-                <div
-                    class="flex h-14 items-center justify-between lg:grid lg:grid-cols-3 lg:items-center"
-                >
+                <div class="relative flex h-14 items-center justify-between">
                     <Link
                         :href="home()"
                         class="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-80"
@@ -138,13 +155,15 @@ watch(currentUrl, () => {
                         <span class="font-semibold">Eau la maman</span>
                     </Link>
 
-                    <nav class="hidden justify-center lg:flex">
+                    <nav
+                        class="absolute left-1/2 hidden -translate-x-1/2 justify-center lg:flex"
+                    >
                         <div
                             class="flex items-center gap-1 overflow-x-auto whitespace-nowrap"
                         >
                             <Link
                                 v-for="item in navItems"
-                                :key="item.href"
+                                :key="item.id"
                                 :href="item.href"
                                 class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
                                 :class="
@@ -158,7 +177,9 @@ watch(currentUrl, () => {
                         </div>
                     </nav>
 
-                    <div class="flex shrink-0 items-center justify-end gap-1">
+                    <div
+                        class="ml-auto flex shrink-0 items-center justify-end gap-1"
+                    >
                         <Button
                             variant="ghost"
                             size="icon"
@@ -262,7 +283,7 @@ watch(currentUrl, () => {
                     <nav class="flex flex-col gap-1">
                         <Link
                             v-for="item in navItems"
-                            :key="`mobile-${item.href}`"
+                            :key="`mobile-${item.id}`"
                             :href="item.href"
                             class="rounded-md px-3 py-2 text-sm font-medium transition-colors"
                             :class="

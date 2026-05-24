@@ -117,6 +117,36 @@ class LivreurTest extends TestCase
             ->assertStatus(403);
     }
 
+    // ── approuver ─────────────────────────────────────────────────────────────
+
+    public function test_approuver_activates_pending_livreur(): void
+    {
+        $livreur = Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'is_active' => false,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('livreurs.approuver', $livreur))
+            ->assertStatus(200)
+            ->assertJson(['is_active' => true]);
+
+        $this->assertTrue($livreur->fresh()->is_active);
+    }
+
+    public function test_approuver_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $livreur = Livreur::factory()->create([
+            'organization_id' => $otherOrg->id,
+            'is_active' => false,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('livreurs.approuver', $livreur))
+            ->assertStatus(403);
+    }
+
     // ── destroy ───────────────────────────────────────────────────────────────
 
     public function test_destroy_supprime_livreur_sans_historique(): void
