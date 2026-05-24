@@ -21,7 +21,7 @@ class LivreurController extends Controller
 
         $livreurs = Livreur::with('equipes')
             ->where('organization_id', auth()->user()->organization_id)
-            ->orderBy('nom')
+            ->orderByRaw('is_active DESC, nom')
             ->get()
             ->map(fn (Livreur $l) => [
                 'id' => $l->id,
@@ -30,6 +30,7 @@ class LivreurController extends Controller
                 'nom_complet' => $l->nom_complet,
                 'telephone' => $l->telephone,
                 'is_active' => $l->is_active,
+                'has_account' => $l->user_id !== null,
                 'equipes' => $l->equipes->map(fn ($e) => [
                     'id' => $e->id,
                     'nom' => $e->nom,
@@ -87,6 +88,18 @@ class LivreurController extends Controller
         $livreur->update(['is_active' => ! $livreur->is_active]);
 
         return response()->json(['is_active' => $livreur->is_active]);
+    }
+
+    /**
+     * Approuve un livreur auto-inscrit (is_active false → true).
+     */
+    public function approuver(Livreur $livreur): JsonResponse
+    {
+        $this->authorize('update', $livreur);
+
+        $livreur->update(['is_active' => true]);
+
+        return response()->json(['is_active' => true]);
     }
 
     /**

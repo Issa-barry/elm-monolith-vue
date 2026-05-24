@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
 
             // ── Module Véhicules ──────────────────────────────────────────────
             LivreursSeeder::class,              // 16 livreurs (10 externes + 6 internes)
+            LivreurComptesSeeder::class,        // Comptes livreurs : 2 actifs + 1 pending
             ProprietairesSeeder::class,         // 4 propriétaires
             EquipesLivraisonSeeder::class,      // 9 equipes : 5 externes + 4 internes (elm)
             VehiculesSeeder::class,             // 9 vehicules : 5 externes + 4 internes

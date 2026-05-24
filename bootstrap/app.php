@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'module' => \App\Http\Middleware\RequireModuleEnabled::class,
             'require.site' => \App\Http\Middleware\RequireSiteAssigned::class,
+            'active.livreur' => \App\Http\Middleware\RequireActiveLivreur::class,
         ]);
 
         $middleware->redirectUsersTo(function (Request $request): string {

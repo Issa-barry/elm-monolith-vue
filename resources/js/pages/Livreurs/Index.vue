@@ -5,8 +5,8 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/vue3';
-import { Users } from 'lucide-vue-next';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { CheckCircle, Users } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import IconField from 'primevue/iconfield';
@@ -22,12 +22,13 @@ interface EquipeRef {
 }
 
 interface Livreur {
-    id: number;
+    id: string;
     nom: string;
     prenom: string;
     nom_complet: string;
     telephone: string | null;
     is_active: boolean;
+    has_account: boolean;
     equipes: EquipeRef[];
 }
 
@@ -42,21 +43,33 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const search = ref('');
-const statutFilter = ref<'tous' | 'actif' | 'inactif'>('tous');
+const statutFilter = ref<'tous' | 'actif' | 'inactif' | 'pending'>('tous');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => {
     filters.value.global.value = val;
 });
 
+const pendingCount = computed(
+    () => props.livreurs.filter((l) => l.has_account && !l.is_active).length,
+);
+
 const livreursFiltres = computed(() => {
-    const byStatut =
-        statutFilter.value === 'tous'
-            ? props.livreurs
-            : props.livreurs.filter((l) =>
-                  statutFilter.value === 'actif' ? l.is_active : !l.is_active,
-              );
-    return byStatut;
+    if (statutFilter.value === 'actif')
+        return props.livreurs.filter((l) => l.is_active);
+    if (statutFilter.value === 'inactif')
+        return props.livreurs.filter((l) => !l.is_active);
+    if (statutFilter.value === 'pending')
+        return props.livreurs.filter((l) => l.has_account && !l.is_active);
+    return props.livreurs;
 });
+
+function approuver(livreur: Livreur) {
+    router.patch(
+        `/livreurs/${livreur.id}/approuver`,
+        {},
+        { preserveScroll: true },
+    );
+}
 </script>
 
 <template>
@@ -81,7 +94,7 @@ const livreursFiltres = computed(() => {
                             href="/equipes-livraison"
                             class="underline underline-offset-2 hover:text-foreground"
                         >
-                            Équipes de livraison</Link
+                            Équipes de livraison </Link
                         >.
                     </p>
                 </div>
@@ -94,6 +107,26 @@ const livreursFiltres = computed(() => {
                         Gérer les équipes
                     </Button>
                 </Link>
+            </div>
+
+            <!-- Alerte inscriptions en attente -->
+            <div
+                v-if="pendingCount > 0"
+                class="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+            >
+                <CheckCircle class="h-4 w-4 shrink-0" />
+                <span>
+                    <strong>{{ pendingCount }}</strong> livreur{{
+                        pendingCount > 1 ? 's' : ''
+                    }}
+                    en attente de validation.
+                    <button
+                        class="underline underline-offset-2"
+                        @click="statutFilter = 'pending'"
+                    >
+                        Voir
+                    </button>
+                </span>
             </div>
 
             <!-- Filtres -->
@@ -112,10 +145,11 @@ const livreursFiltres = computed(() => {
                         { value: 'tous', label: 'Tous' },
                         { value: 'actif', label: 'Actif' },
                         { value: 'inactif', label: 'Inactif' },
+                        { value: 'pending', label: 'En attente' },
                     ]"
                     option-label="label"
                     option-value="value"
-                    class="w-32"
+                    class="w-36"
                 />
             </div>
 
@@ -139,12 +173,24 @@ const livreursFiltres = computed(() => {
 
                 <Column field="nom_complet" header="Livreur" sortable>
                     <template #body="{ data }">
-                        <div class="font-medium">{{ data.nom_complet }}</div>
-                        <div
-                            v-if="data.telephone"
-                            class="text-xs text-muted-foreground"
-                        >
-                            {{ formatPhoneDisplay(data.telephone) }}
+                        <div class="flex items-center gap-2">
+                            <div>
+                                <div class="font-medium">
+                                    {{ data.nom_complet }}
+                                </div>
+                                <div
+                                    v-if="data.telephone"
+                                    class="text-xs text-muted-foreground"
+                                >
+                                    {{ formatPhoneDisplay(data.telephone) }}
+                                </div>
+                            </div>
+                            <span
+                                v-if="data.has_account && !data.is_active"
+                                class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900 dark:text-amber-300"
+                            >
+                                En attente
+                            </span>
                         </div>
                     </template>
                 </Column>
@@ -196,6 +242,25 @@ const livreursFiltres = computed(() => {
                             "
                             class="text-muted-foreground"
                         />
+                    </template>
+                </Column>
+
+                <Column header="Actions" style="width: 120px">
+                    <template #body="{ data }">
+                        <Button
+                            v-if="
+                                data.has_account &&
+                                !data.is_active &&
+                                can('livreurs.update')
+                            "
+                            size="sm"
+                            variant="outline"
+                            class="gap-1.5 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50 dark:text-emerald-400"
+                            @click="approuver(data)"
+                        >
+                            <CheckCircle class="h-3.5 w-3.5" />
+                            Approuver
+                        </Button>
                     </template>
                 </Column>
             </DataTable>
