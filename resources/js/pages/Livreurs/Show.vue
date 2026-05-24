@@ -42,7 +42,10 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: props.is_staff ? '/dashboard' : '/client/dashboard' },
+    {
+        title: 'Tableau de bord',
+        href: props.is_staff ? '/dashboard' : '/client/dashboard',
+    },
     ...(props.is_staff ? [{ title: 'Livreurs', href: '/livreurs' }] : []),
     { title: props.livreur.nom_complet, href: '#' },
 ];
@@ -54,10 +57,15 @@ const showInfo = ref(false);
 <template>
     <Head :title="`${livreur.nom_complet} — Livreur`" />
 
-    <component :is="Layout" :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-        <div class="flex min-h-[70vh] w-full items-center justify-center p-4 sm:p-6">
+    <component
+        :is="Layout"
+        :breadcrumbs="breadcrumbs"
+        :hide-mobile-header="true"
+    >
+        <div
+            class="flex min-h-[70vh] w-full items-center justify-center p-4 sm:p-6"
+        >
             <div class="w-full max-w-md space-y-4">
-
                 <!-- ── En-tête identité ────────────────────────────────── -->
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <div class="flex items-start gap-4">
@@ -68,11 +76,15 @@ const showInfo = ref(false);
                         </div>
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2">
-                                <h1 class="text-xl font-semibold tracking-tight">
+                                <h1
+                                    class="text-xl font-semibold tracking-tight"
+                                >
                                     {{ livreur.nom_complet }}
                                 </h1>
                                 <StatusDot
-                                    :label="livreur.is_active ? 'Actif' : 'Inactif'"
+                                    :label="
+                                        livreur.is_active ? 'Actif' : 'Inactif'
+                                    "
                                     :dot-class="
                                         livreur.is_active
                                             ? 'bg-emerald-500'
@@ -81,8 +93,17 @@ const showInfo = ref(false);
                                     class="text-sm text-muted-foreground"
                                 />
                             </div>
-                            <p class="mt-0.5 font-mono text-sm text-muted-foreground">
-                                {{ formatPhoneDisplay(livreur.telephone, null) ?? livreur.telephone ?? '—' }}
+                            <p
+                                class="mt-0.5 font-mono text-sm text-muted-foreground"
+                            >
+                                {{
+                                    formatPhoneDisplay(
+                                        livreur.telephone,
+                                        null,
+                                    ) ??
+                                    livreur.telephone ??
+                                    '—'
+                                }}
                             </p>
                         </div>
                     </div>
@@ -91,29 +112,44 @@ const showInfo = ref(false);
                     <div v-if="showInfo" class="mt-4 space-y-3 border-t pt-4">
                         <div class="grid grid-cols-2 gap-3">
                             <div class="rounded-lg border bg-background p-3">
-                                <p class="text-xs text-muted-foreground">Prénom</p>
-                                <p class="mt-0.5 text-sm font-medium">{{ livreur.prenom }}</p>
+                                <p class="text-xs text-muted-foreground">
+                                    Prénom
+                                </p>
+                                <p class="mt-0.5 text-sm font-medium">
+                                    {{ livreur.prenom }}
+                                </p>
                             </div>
                             <div class="rounded-lg border bg-background p-3">
                                 <p class="text-xs text-muted-foreground">Nom</p>
-                                <p class="mt-0.5 text-sm font-medium">{{ livreur.nom }}</p>
+                                <p class="mt-0.5 text-sm font-medium">
+                                    {{ livreur.nom }}
+                                </p>
                             </div>
                             <div class="rounded-lg border bg-background p-3">
-                                <p class="text-xs text-muted-foreground">Compte</p>
+                                <p class="text-xs text-muted-foreground">
+                                    Compte
+                                </p>
                                 <p class="mt-0.5 text-sm font-medium">
                                     {{ livreur.has_account ? 'Oui' : 'Non' }}
                                 </p>
                             </div>
                             <div class="rounded-lg border bg-background p-3">
-                                <p class="text-xs text-muted-foreground">Équipes</p>
+                                <p class="text-xs text-muted-foreground">
+                                    Équipes
+                                </p>
                                 <p class="mt-0.5 text-sm font-medium">
                                     {{ livreur.equipes.length || '—' }}
                                 </p>
                             </div>
                         </div>
 
-                        <div v-if="livreur.equipes.length" class="rounded-lg border bg-background p-3">
-                            <p class="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <div
+                            v-if="livreur.equipes.length"
+                            class="rounded-lg border bg-background p-3"
+                        >
+                            <p
+                                class="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground"
+                            >
                                 <Users class="h-3.5 w-3.5" />
                                 Équipes de livraison
                             </p>
@@ -123,8 +159,12 @@ const showInfo = ref(false);
                                     :key="equipe.id"
                                     class="flex items-center justify-between text-sm"
                                 >
-                                    <span class="font-medium">{{ equipe.nom }}</span>
-                                    <span class="text-xs capitalize text-muted-foreground">
+                                    <span class="font-medium">{{
+                                        equipe.nom
+                                    }}</span>
+                                    <span
+                                        class="text-xs text-muted-foreground capitalize"
+                                    >
                                         {{ equipe.role }}
                                     </span>
                                 </div>
@@ -134,16 +174,26 @@ const showInfo = ref(false);
                 </div>
 
                 <!-- ── Actions ────────────────────────────────────────── -->
-                <p class="px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <p
+                    class="px-1 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                >
                     Accès rapide
                 </p>
 
                 <div class="space-y-2">
                     <!-- Fiche livreur (toggle inline) -->
-                    <button type="button" class="block w-full text-left" @click="showInfo = !showInfo">
+                    <button
+                        type="button"
+                        class="block w-full text-left"
+                        @click="showInfo = !showInfo"
+                    >
                         <div
                             class="flex items-center gap-4 rounded-xl border bg-card px-4 py-4 shadow-sm transition-colors hover:bg-muted/50"
-                            :class="showInfo ? 'border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30' : ''"
+                            :class="
+                                showInfo
+                                    ? 'border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30'
+                                    : ''
+                            "
                         >
                             <div
                                 class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground"
@@ -153,7 +203,11 @@ const showInfo = ref(false);
                             <div class="min-w-0 flex-1">
                                 <p class="font-medium">Fiche livreur</p>
                                 <p class="text-sm text-muted-foreground">
-                                    {{ showInfo ? 'Masquer les informations' : 'Voir informations, équipes et statut' }}
+                                    {{
+                                        showInfo
+                                            ? 'Masquer les informations'
+                                            : 'Voir informations, équipes et statut'
+                                    }}
                                 </p>
                             </div>
                             <ChevronRight
@@ -174,12 +228,20 @@ const showInfo = ref(false);
                                 <ReceiptText class="h-5 w-5" />
                             </div>
                             <div class="min-w-0 flex-1">
-                                <p class="font-medium">Commissions logistiques</p>
+                                <p class="font-medium">
+                                    Commissions logistiques
+                                </p>
                                 <p class="text-sm text-muted-foreground">
-                                    {{ is_staff ? 'Gains et versements sur les transferts' : 'Voir mes gains et commissions' }}
+                                    {{
+                                        is_staff
+                                            ? 'Gains et versements sur les transferts'
+                                            : 'Voir mes gains et commissions'
+                                    }}
                                 </p>
                             </div>
-                            <ChevronRight class="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <ChevronRight
+                                class="h-4 w-4 shrink-0 text-muted-foreground"
+                            />
                         </div>
                     </a>
 
@@ -199,7 +261,9 @@ const showInfo = ref(false);
                                     Factures filtrées sur ce livreur
                                 </p>
                             </div>
-                            <ChevronRight class="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <ChevronRight
+                                class="h-4 w-4 shrink-0 text-muted-foreground"
+                            />
                         </div>
                     </a>
                 </div>
@@ -207,9 +271,17 @@ const showInfo = ref(false);
                 <!-- ── Retour ──────────────────────────────────────────── -->
                 <div class="pt-2 text-center">
                     <Link :href="is_staff ? '/livreurs' : '/client/dashboard'">
-                        <Button variant="ghost" size="sm" class="text-muted-foreground">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            class="text-muted-foreground"
+                        >
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
-                            {{ is_staff ? 'Retour à la liste' : 'Retour à mon espace' }}
+                            {{
+                                is_staff
+                                    ? 'Retour à la liste'
+                                    : 'Retour à mon espace'
+                            }}
                         </Button>
                     </Link>
                 </div>

@@ -305,7 +305,10 @@ function _progressPercent(f: FactureItem): number {
                 <span class="flex-1 truncate">
                     Livreur : <strong>{{ livreur.nom_complet }}</strong>
                 </span>
-                <a href="/factures" class="flex items-center gap-0.5 opacity-70">
+                <a
+                    href="/factures"
+                    class="flex items-center gap-0.5 opacity-70"
+                >
                     <X class="h-3.5 w-3.5" />
                 </a>
             </div>
@@ -467,11 +470,17 @@ function _progressPercent(f: FactureItem): number {
                 <span class="flex-1">
                     Factures filtrées pour le livreur
                     <strong>{{ livreur.nom_complet }}</strong>
-                    <span v-if="livreur.telephone" class="ml-1 font-mono text-xs opacity-70">
+                    <span
+                        v-if="livreur.telephone"
+                        class="ml-1 font-mono text-xs opacity-70"
+                    >
                         {{ livreur.telephone }}
                     </span>
                 </span>
-                <a href="/factures" class="ml-auto flex items-center gap-1 text-xs opacity-70 hover:opacity-100">
+                <a
+                    href="/factures"
+                    class="ml-auto flex items-center gap-1 text-xs opacity-70 hover:opacity-100"
+                >
                     <X class="h-3.5 w-3.5" />
                     Effacer le filtre
                 </a>
