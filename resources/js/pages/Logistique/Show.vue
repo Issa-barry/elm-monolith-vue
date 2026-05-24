@@ -189,16 +189,16 @@ const breadcrumbs: BreadcrumbItem[] = [
 // Étape virtuelle "Commission" insérée entre Réceptionné (3) et Clôturé (5).
 // Son libellé reflète le statut réel de la commission.
 const STEPS = computed(() => [
-    { key: 'brouillon',  shortLabel: 'Brouillon',   icon: FileEdit },
-    { key: 'chargement', shortLabel: 'Chargement',   icon: Package },
-    { key: 'transit',    shortLabel: 'Livraison',    icon: Truck },
-    { key: 'reception',  shortLabel: 'Réceptionné',  icon: PackageCheck },
+    { key: 'brouillon', shortLabel: 'Brouillon', icon: FileEdit },
+    { key: 'chargement', shortLabel: 'Chargement', icon: Package },
+    { key: 'transit', shortLabel: 'Livraison', icon: Truck },
+    { key: 'reception', shortLabel: 'Réceptionné', icon: PackageCheck },
     {
         key: 'commission',
         shortLabel: props.transfert.commission?.statut_label ?? 'Commission',
         icon: ShieldCheck,
     },
-    { key: 'cloture',    shortLabel: 'Clôturé',      icon: CheckCircle2 },
+    { key: 'cloture', shortLabel: 'Clôturé', icon: CheckCircle2 },
 ]);
 
 // Cloturé est à l'index 5 (commission virtuelle insérée en 4).
@@ -208,7 +208,11 @@ const currentStepIdx = computed(() => {
     const statut = props.transfert.statut;
     if (statut === 'reception' && props.transfert.commission) return 4;
     const map: Record<string, number> = {
-        brouillon: 0, chargement: 1, transit: 2, reception: 3, cloture: 5,
+        brouillon: 0,
+        chargement: 1,
+        transit: 2,
+        reception: 3,
+        cloture: 5,
     };
     return map[statut] ?? -1;
 });
