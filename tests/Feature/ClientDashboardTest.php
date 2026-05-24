@@ -6,9 +6,9 @@ use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Models\Client;
 use App\Models\CommandeVente;
-use App\Models\Livreur;
 use App\Models\CommissionPart;
 use App\Models\CommissionVente;
+use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\User;
@@ -243,11 +243,11 @@ class ClientDashboardTest extends TestCase
 
         $livreur = Livreur::create([
             'organization_id' => $org->id,
-            'user_id'         => $user->id,
-            'nom'             => $user->nom,
-            'prenom'          => $user->prenom,
-            'telephone'       => $user->telephone,
-            'is_active'       => true,
+            'user_id' => $user->id,
+            'nom' => $user->nom,
+            'prenom' => $user->prenom,
+            'telephone' => $user->telephone,
+            'is_active' => true,
         ]);
 
         $controller = app(\App\Http\Controllers\Client\ClientDashboardController::class);

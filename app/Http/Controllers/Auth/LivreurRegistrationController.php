@@ -28,12 +28,12 @@ class LivreurRegistrationController extends Controller
     public function store(Request $request, OtpService $otp): RedirectResponse
     {
         $validated = $request->validate([
-            'prenom'    => ['required', 'string', 'min:2', 'max:100'],
-            'nom'       => ['required', 'string', 'min:2', 'max:100'],
+            'prenom' => ['required', 'string', 'min:2', 'max:100'],
+            'nom' => ['required', 'string', 'min:2', 'max:100'],
             'telephone' => ['required', 'string'],
             'telephone_country' => ['required', 'string'],
-            'telephone_local'   => ['required', 'string', 'regex:/^\d+$/'],
-            'password'  => ['required', 'string', Password::default()],
+            'telephone_local' => ['required', 'string', 'regex:/^\d+$/'],
+            'password' => ['required', 'string', Password::default()],
         ]);
 
         $phone = PhoneNormalizer::normalize($validated['telephone']);
@@ -54,10 +54,10 @@ class LivreurRegistrationController extends Controller
             $org = Organization::first();
 
             $user = User::create([
-                'prenom'          => self::formatPrenom($validated['prenom']),
-                'nom'             => mb_strtoupper($validated['nom']),
-                'telephone'       => $phone,
-                'password'        => $validated['password'],
+                'prenom' => self::formatPrenom($validated['prenom']),
+                'nom' => mb_strtoupper($validated['nom']),
+                'telephone' => $phone,
+                'password' => $validated['password'],
                 'organization_id' => $org?->id,
             ]);
 
@@ -74,11 +74,11 @@ class LivreurRegistrationController extends Controller
             } else {
                 Livreur::create([
                     'organization_id' => $org?->id,
-                    'user_id'         => $user->id,
-                    'nom'             => mb_strtoupper($validated['nom']),
-                    'prenom'          => self::formatPrenom($validated['prenom']),
-                    'telephone'       => $phone,
-                    'is_active'       => false,
+                    'user_id' => $user->id,
+                    'nom' => mb_strtoupper($validated['nom']),
+                    'prenom' => self::formatPrenom($validated['prenom']),
+                    'telephone' => $phone,
+                    'is_active' => false,
                 ]);
             }
 

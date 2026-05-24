@@ -23,9 +23,9 @@ class RequireActiveLivreurTest extends TestCase
 
         Livreur::factory()->create([
             'organization_id' => $org->id,
-            'user_id'         => $user->id,
-            'telephone'       => $user->telephone,
-            'is_active'       => $isActive,
+            'user_id' => $user->id,
+            'telephone' => $user->telephone,
+            'is_active' => $isActive,
         ]);
 
         return $user;
@@ -87,11 +87,11 @@ class RequireActiveLivreurTest extends TestCase
 
         Proprietaire::create([
             'organization_id' => $org->id,
-            'user_id'         => $user->id,
-            'nom'             => $user->nom,
-            'prenom'          => $user->prenom,
-            'telephone'       => $user->telephone,
-            'is_active'       => true,
+            'user_id' => $user->id,
+            'nom' => $user->nom,
+            'prenom' => $user->prenom,
+            'telephone' => $user->telephone,
+            'is_active' => true,
         ]);
 
         $this->actingAs($user)

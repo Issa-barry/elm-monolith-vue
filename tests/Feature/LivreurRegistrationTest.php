@@ -23,12 +23,12 @@ class LivreurRegistrationTest extends TestCase
     private function validPayload(array $overrides = []): array
     {
         return array_merge([
-            'prenom'            => 'Alpha',
-            'nom'               => 'Diallo',
-            'telephone'         => '+224622111001',
+            'prenom' => 'Alpha',
+            'nom' => 'Diallo',
+            'telephone' => '+224622111001',
             'telephone_country' => 'GN',
-            'telephone_local'   => '622111001',
-            'password'          => 'Password123!',
+            'telephone_local' => '622111001',
+            'password' => 'Password123!',
         ], $overrides);
     }
 
@@ -74,8 +74,8 @@ class LivreurRegistrationTest extends TestCase
         $org = Organization::factory()->create();
         $livreur = Livreur::factory()->create([
             'organization_id' => $org->id,
-            'telephone'       => '+224622111001',
-            'user_id'         => null,
+            'telephone' => '+224622111001',
+            'user_id' => null,
         ]);
 
         $this->verifyOtp('+224622111001');
