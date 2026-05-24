@@ -201,12 +201,16 @@ const STEPS = computed(() => [
     { key: 'cloture',    shortLabel: 'Clôturé',      icon: CheckCircle2 },
 ]);
 
-// Cloturé est à l'index 5 (commission virtuelle insérée en 4)
+// Cloturé est à l'index 5 (commission virtuelle insérée en 4).
+// Quand la commission est générée, on avance le marqueur sur l'étape commission (4)
+// afin que "Réceptionné" passe au vert.
 const currentStepIdx = computed(() => {
+    const statut = props.transfert.statut;
+    if (statut === 'reception' && props.transfert.commission) return 4;
     const map: Record<string, number> = {
         brouillon: 0, chargement: 1, transit: 2, reception: 3, cloture: 5,
     };
-    return map[props.transfert.statut] ?? -1;
+    return map[statut] ?? -1;
 });
 
 // État indépendant de l'étape commission (index 4)
@@ -851,80 +855,6 @@ function activiteDotClass(action: string): string {
                     >
                         <component :is="item.icon" class="h-4 w-4 shrink-0" />
                         <span>{{ item.label }}</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- ══ Statut commission (toujours visible après réceptionné) ════════ -->
-            <div v-if="showCommissionSection">
-                <!-- Commission générée -->
-                <div
-                    v-if="transfert.commission"
-                    class="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm"
-                >
-                    <div class="flex items-center gap-2 text-sm font-medium">
-                        <ShieldCheck class="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span class="text-muted-foreground">Commission logistique :</span>
-                        <StatusDot
-                            :label="transfert.commission.statut_label"
-                            :dot-class="transfert.commission.statut_dot_class"
-                            class="font-semibold"
-                        />
-                    </div>
-                    <div class="flex items-center gap-4 text-sm">
-                        <span class="text-muted-foreground">
-                            Total :
-                            <span class="font-semibold text-foreground">{{ formatGNF(transfert.commission.montant_total) }}</span>
-                        </span>
-                        <span class="text-muted-foreground">
-                            Versé :
-                            <span class="font-semibold text-foreground">{{ formatGNF(transfert.commission.montant_verse) }}</span>
-                        </span>
-                        <button
-                            type="button"
-                            class="text-xs font-medium text-primary underline underline-offset-2 hover:opacity-80"
-                            @click="setActiveDetailTab('commission')"
-                        >
-                            Voir détail
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Réception refusée (pas encore de commission) -->
-                <div
-                    v-else-if="transfert.validation_reception === 'refus'"
-                    class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 shadow-sm dark:border-red-800 dark:bg-red-950/30"
-                >
-                    <div class="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-400">
-                        <ShieldX class="h-4 w-4 shrink-0" />
-                        Réception refusée — {{ transfert.validation_motif ?? 'Aucun motif renseigné' }}
-                    </div>
-                    <button
-                        v-if="can_valider_reception_admin"
-                        type="button"
-                        class="text-xs font-medium text-red-600 underline underline-offset-2 dark:text-red-400"
-                        @click="setActiveDetailTab('commission')"
-                    >
-                        Voir détail
-                    </button>
-                </div>
-
-                <!-- En attente de validation admin -->
-                <div
-                    v-else
-                    class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 shadow-sm dark:border-amber-800 dark:bg-amber-950/30"
-                >
-                    <div class="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300">
-                        <ShieldCheck class="h-4 w-4 shrink-0" />
-                        Commission en attente de validation admin
-                    </div>
-                    <button
-                        v-if="can_valider_reception_admin"
-                        type="button"
-                        class="text-xs font-medium text-amber-700 underline underline-offset-2 dark:text-amber-400"
-                        @click="showValidationCommissionDialog = true"
-                    >
-                        Générer
                     </button>
                 </div>
             </div>
