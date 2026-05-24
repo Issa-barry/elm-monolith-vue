@@ -18,9 +18,14 @@ test.beforeEach(async ({ page }) => {
  * Navigue vers la page détail d'un transfert à partir de son référence.
  * Le lien est présent dans la colonne "Référence" du tableau.
  */
-async function goToTransfertDetail(page: Page, reference: string): Promise<void> {
+async function goToTransfertDetail(
+    page: Page,
+    reference: string,
+): Promise<void> {
     await page.goto('/logistique/transferts');
-    await expect(page.locator('body')).toContainText(reference, { timeout: 20_000 });
+    await expect(page.locator('body')).toContainText(reference, {
+        timeout: 20_000,
+    });
     await page
         .getByRole('link', { name: new RegExp(reference, 'i') })
         .first()
@@ -144,15 +149,17 @@ test('stepper — 6 étapes dont "Commission" grise dès la création', async ({
     ).toBeDisabled({ timeout: 5_000 });
 });
 
-test('stepper — étape commission affiche "Impayé" sur TL-SEED-001 (clôturé)', async ({
+test('stepper — étape commission affiche "Impayé" ou "Partiel" sur TL-SEED-001 (clôturé)', async ({
     page,
 }) => {
     await goToTransfertDetail(page, 'TL-SEED-001');
 
-    // Le stepper affiche "Impayé" comme libellé de l'étape commission
+    // Le stepper affiche le statut de commission.
+    // TL-SEED-001 est "Impayé" sur seed fresh, mais peut devenir "Partiel"
+    // si le test logistique-commission-flow a déjà effectué des versements.
     const stepper = stepperCard(page);
     await expect(stepper).toBeVisible({ timeout: 10_000 });
-    await expect(stepper).toContainText(/impay/i);
+    await expect(stepper).toContainText(/impay|partiel/i);
 
     // L'onglet commission est accessible
     await expect(

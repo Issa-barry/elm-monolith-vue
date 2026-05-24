@@ -40,7 +40,7 @@ class ClientDashboardController extends Controller
             return route('proprietaires.show', $proprietaire->id);
         }
         if ($livreur) {
-            return route('logistique.commissions.livreur', $livreur->id);
+            return route('livreurs.show', $livreur->id);
         }
 
         return route('dashboard');

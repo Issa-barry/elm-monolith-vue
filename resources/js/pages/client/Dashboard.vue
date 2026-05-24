@@ -35,6 +35,25 @@ const userFullName = computed(() => {
 
     return fullName || user.value?.name || 'Mon compte';
 });
+const userPhone = computed(() => user.value?.telephone?.trim() || '-');
+
+const ROLE_LABELS: Record<string, string> = {
+    super_admin: 'Super administrateur',
+    admin_entreprise: 'Administrateur entreprise',
+    manager: 'Manager',
+    commerciale: 'Commercial',
+    comptable: 'Comptable',
+    client: 'Client',
+};
+
+const userRoleLabel = computed(() => {
+    const firstRole = (page.props.auth.roles as string[])?.[0];
+    if (!firstRole) {
+        return 'Partenaire';
+    }
+
+    return ROLE_LABELS[firstRole] ?? firstRole.replaceAll('_', ' ');
+});
 
 const periodOptions: Array<{
     value: DashboardFiltersPayload['period'];
@@ -263,12 +282,12 @@ onBeforeUnmount(() => {
                     <img
                         src="/client/qr-code"
                         alt="QR code utilisateur"
-                        class="h-16 w-16 object-contain transition-transform duration-200 group-hover:scale-105"
+                        class="h-24 w-24 object-contain transition-transform duration-200 group-hover:scale-105"
                     />
                     <span
                         class="pointer-events-none absolute -right-1 -bottom-1 rounded-full border border-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground"
                     >
-                        Zoom
+                        Scanner
                     </span>
                 </button>
                 <div>
@@ -276,7 +295,10 @@ onBeforeUnmount(() => {
                         {{ userFullName }}
                     </h1>
                     <p class="mt-1 text-muted-foreground">
-                        Bienvenue dans votre espace partenaire.
+                        {{ userPhone }}
+                    </p>
+                    <p class="text-sm text-muted-foreground">
+                        {{ userRoleLabel }}
                     </p>
                 </div>
             </div>
@@ -530,11 +552,11 @@ onBeforeUnmount(() => {
                     <img
                         src="/client/qr-code"
                         alt="QR code utilisateur agrandi"
-                        class="h-[min(70vh,22rem)] w-[min(70vh,22rem)] object-contain"
+                        class="h-[min(80vh,36rem)] w-[min(80vh,36rem)] object-contain"
                     />
                 </div>
                 <p class="mt-3 text-center text-xs text-muted-foreground">
-                    Cliquez en dehors du cadre ou appuyez sur Echap pour fermer.
+                    Présentez ce code au scanner. Cliquez en dehors ou appuyez sur Echap pour fermer.
                 </p>
             </div>
         </div>

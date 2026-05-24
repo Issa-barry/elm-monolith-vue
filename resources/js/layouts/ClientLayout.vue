@@ -10,6 +10,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAppearance } from '@/composables/useAppearance';
+import { useScanInterceptor } from '@/composables/useScanInterceptor';
 import { home, logout } from '@/routes';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import {
@@ -28,6 +29,7 @@ const page = usePage();
 const user = computed(() => (page.props as any).auth.user);
 const currentUrl = computed(() => page.url);
 const { updateAppearance } = useAppearance();
+useScanInterceptor();
 const isDark = ref(false);
 const isMobileMenuOpen = ref(false);
 const notificationsCount = computed(

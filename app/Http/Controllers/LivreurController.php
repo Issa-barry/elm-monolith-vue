@@ -103,6 +103,43 @@ class LivreurController extends Controller
     }
 
     /**
+     * Affiche la fiche d'un livreur — page d'accueil après scan QR.
+     */
+    public function show(Livreur $livreur): Response
+    {
+        $this->authorize('view', $livreur);
+
+        $livreur->load('equipes');
+
+        $user = auth()->user();
+        $isStaff = $user->hasAnyRole(['super_admin', 'admin_entreprise', 'manager', 'commerciale', 'comptable']);
+
+        return Inertia::render('Livreurs/Show', [
+            'livreur' => [
+                'id' => $livreur->id,
+                'nom' => $livreur->nom,
+                'prenom' => $livreur->prenom,
+                'nom_complet' => $livreur->nom_complet,
+                'telephone' => $livreur->telephone,
+                'is_active' => $livreur->is_active,
+                'has_account' => $livreur->user_id !== null,
+                'equipes' => $livreur->equipes->map(fn ($e) => [
+                    'id' => $e->id,
+                    'nom' => $e->nom,
+                    'role' => $e->pivot->role,
+                ])->values(),
+            ],
+            'commissions_url' => $isStaff
+                ? route('logistique.commissions.livreur', $livreur->id)
+                : route('client.gains'),
+            'factures_url' => $isStaff
+                ? route('factures.index', ['livreur_id' => $livreur->id])
+                : null,
+            'is_staff' => $isStaff,
+        ]);
+    }
+
+    /**
      * Supprime un livreur :
      *  - Suppression physique (soft) s'il n'a pas d'historique de commissions.
      *  - Désactivation logique s'il est référencé dans des commission_parts.
