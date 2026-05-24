@@ -17,9 +17,14 @@ import { Truck } from 'lucide-vue-next';
             account-label="Compte livreur pour"
         >
             <template #banner>
-                <div class="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200">
+                <div
+                    class="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"
+                >
                     <Truck class="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>Votre compte sera actif après validation par l'équipe.</span>
+                    <span
+                        >Votre compte sera actif après validation par
+                        l'équipe.</span
+                    >
                 </div>
             </template>
         </PhoneOtpRegistrationSteps>

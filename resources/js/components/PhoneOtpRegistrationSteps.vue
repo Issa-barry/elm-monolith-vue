@@ -86,19 +86,34 @@ function submitRegistration() {
                         option-value="code"
                         :tabindex="1"
                         class="shrink-0"
-                        :pt="{ root: { class: 'h-10' }, label: { class: 'flex items-center py-0 h-10' } }"
+                        :pt="{
+                            root: { class: 'h-10' },
+                            label: { class: 'flex items-center py-0 h-10' },
+                        }"
                     >
                         <template #value="{ value }">
                             <div v-if="value" class="flex items-center gap-2">
-                                <img :src="flagUrl(value)" class="h-4 w-auto rounded-sm shadow-sm" />
-                                <span class="font-mono text-sm">{{ selectedPays.prefix }}</span>
+                                <img
+                                    :src="flagUrl(value)"
+                                    class="h-4 w-auto rounded-sm shadow-sm"
+                                />
+                                <span class="font-mono text-sm">{{
+                                    selectedPays.prefix
+                                }}</span>
                             </div>
                         </template>
                         <template #option="{ option }">
                             <div class="flex items-center gap-2">
-                                <img :src="flagUrl(option.code)" :alt="option.label" class="h-4 w-auto rounded-sm shadow-sm" />
+                                <img
+                                    :src="flagUrl(option.code)"
+                                    :alt="option.label"
+                                    class="h-4 w-auto rounded-sm shadow-sm"
+                                />
                                 <span>{{ option.label }}</span>
-                                <span class="ml-auto text-xs text-muted-foreground">{{ option.prefix }}</span>
+                                <span
+                                    class="ml-auto text-xs text-muted-foreground"
+                                    >{{ option.prefix }}</span
+                                >
                             </div>
                         </template>
                     </Select>
@@ -110,7 +125,11 @@ function submitRegistration() {
                         autocomplete="tel-national"
                         inputmode="numeric"
                         pattern="[0-9]*"
-                        :maxlength="phoneDigits.startsWith('0') ? selectedPays.localLength + 1 : selectedPays.localLength"
+                        :maxlength="
+                            phoneDigits.startsWith('0')
+                                ? selectedPays.localLength + 1
+                                : selectedPays.localLength
+                        "
                         :placeholder="`${selectedPays.localLength} chiffres`"
                         class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm"
                         @keydown="handlePhoneKeydown"
@@ -118,7 +137,9 @@ function submitRegistration() {
                     />
                 </div>
 
-                <p class="text-xs text-muted-foreground">Saisissez uniquement les chiffres, sans indicatif.</p>
+                <p class="text-xs text-muted-foreground">
+                    Saisissez uniquement les chiffres, sans indicatif.
+                </p>
                 <InputError :message="lookupError" />
             </div>
 
@@ -135,7 +156,11 @@ function submitRegistration() {
 
             <div class="text-center text-sm text-muted-foreground">
                 Déjà un compte ?
-                <TextLink :href="login()" class="underline underline-offset-4" :tabindex="4">
+                <TextLink
+                    :href="login()"
+                    class="underline underline-offset-4"
+                    :tabindex="4"
+                >
                     Se connecter
                 </TextLink>
             </div>
@@ -145,8 +170,8 @@ function submitRegistration() {
         <div v-else-if="step === 'otp'" class="grid gap-6">
             <p class="text-sm text-muted-foreground">
                 Un code de vérification a été envoyé au
-                <span class="font-medium text-foreground">{{ fullPhone }}</span>.
-                Saisissez-le ci-dessous.
+                <span class="font-medium text-foreground">{{ fullPhone }}</span
+                >. Saisissez-le ci-dessous.
             </p>
 
             <div class="grid gap-2">
@@ -198,7 +223,9 @@ function submitRegistration() {
 
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div class="grid gap-2">
-                    <Label for="identity-prenom">Prénom <span class="text-destructive">*</span></Label>
+                    <Label for="identity-prenom"
+                        >Prénom <span class="text-destructive">*</span></Label
+                    >
                     <div class="relative">
                         <Input
                             id="identity-prenom"
@@ -210,14 +237,23 @@ function submitRegistration() {
                             autocomplete="given-name"
                             minlength="2"
                             placeholder="Prénom"
-                            :class="isPrefilled ? 'cursor-not-allowed bg-muted pr-9 text-muted-foreground' : ''"
+                            :class="
+                                isPrefilled
+                                    ? 'cursor-not-allowed bg-muted pr-9 text-muted-foreground'
+                                    : ''
+                            "
                         />
-                        <Lock v-if="isPrefilled" class="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Lock
+                            v-if="isPrefilled"
+                            class="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        />
                     </div>
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="identity-nom">Nom <span class="text-destructive">*</span></Label>
+                    <Label for="identity-nom"
+                        >Nom <span class="text-destructive">*</span></Label
+                    >
                     <div class="relative">
                         <Input
                             id="identity-nom"
@@ -228,9 +264,16 @@ function submitRegistration() {
                             autocomplete="family-name"
                             minlength="2"
                             placeholder="Nom"
-                            :class="isPrefilled ? 'cursor-not-allowed bg-muted pr-9 text-muted-foreground' : ''"
+                            :class="
+                                isPrefilled
+                                    ? 'cursor-not-allowed bg-muted pr-9 text-muted-foreground'
+                                    : ''
+                            "
                         />
-                        <Lock v-if="isPrefilled" class="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Lock
+                            v-if="isPrefilled"
+                            class="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        />
                     </div>
                 </div>
             </div>
@@ -239,7 +282,9 @@ function submitRegistration() {
                 type="button"
                 class="mt-2 w-full"
                 :tabindex="3"
-                :disabled="formPrenom.trim().length < 2 || formNom.trim().length < 2"
+                :disabled="
+                    formPrenom.trim().length < 2 || formNom.trim().length < 2
+                "
                 @click="step = 'password'"
             >
                 Continuer
@@ -248,7 +293,9 @@ function submitRegistration() {
 
         <!-- ── Étape 4 : Mot de passe + création ─────────────────────── -->
         <div v-else-if="step === 'password'" class="grid gap-6">
-            <div class="rounded-md border border-border bg-muted/50 px-4 py-3 text-sm">
+            <div
+                class="rounded-md border border-border bg-muted/50 px-4 py-3 text-sm"
+            >
                 <p class="text-muted-foreground">{{ accountLabel }}</p>
                 <p class="mt-0.5 font-medium text-foreground">
                     {{ formPrenom }} {{ formNom.toUpperCase() }}
@@ -258,7 +305,9 @@ function submitRegistration() {
             </div>
 
             <div class="grid gap-2">
-                <Label for="password">Mot de passe <span class="text-destructive">*</span></Label>
+                <Label for="password"
+                    >Mot de passe <span class="text-destructive">*</span></Label
+                >
                 <Input
                     id="password"
                     v-model="form.password"
@@ -269,8 +318,12 @@ function submitRegistration() {
                     autocomplete="new-password"
                     placeholder="Mot de passe"
                 />
-                <p class="text-xs text-muted-foreground">8 caractères minimum, majuscule, minuscule et symbole.</p>
-                <InputError :message="form.errors.password ?? form.errors.telephone" />
+                <p class="text-xs text-muted-foreground">
+                    8 caractères minimum, majuscule, minuscule et symbole.
+                </p>
+                <InputError
+                    :message="form.errors.password ?? form.errors.telephone"
+                />
             </div>
 
             <Button
@@ -286,7 +339,11 @@ function submitRegistration() {
 
             <div class="text-center text-sm text-muted-foreground">
                 Déjà un compte ?
-                <TextLink :href="login()" class="underline underline-offset-4" :tabindex="3">
+                <TextLink
+                    :href="login()"
+                    class="underline underline-offset-4"
+                    :tabindex="3"
+                >
                     Se connecter
                 </TextLink>
             </div>

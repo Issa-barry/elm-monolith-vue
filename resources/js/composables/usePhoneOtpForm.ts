@@ -17,7 +17,12 @@ export const PAYS: CountryOption[] = [
     { label: 'Sierra Leone', code: 'SL', prefix: '+232', localLength: 8 },
     { label: 'France', code: 'FR', prefix: '+33', localLength: 9 },
     { label: 'Chine', code: 'CN', prefix: '+86', localLength: 11 },
-    { label: 'Émirats arabes unis', code: 'AE', prefix: '+971', localLength: 9 },
+    {
+        label: 'Émirats arabes unis',
+        code: 'AE',
+        prefix: '+971',
+        localLength: 9,
+    },
     { label: 'Inde', code: 'IN', prefix: '+91', localLength: 10 },
 ];
 
@@ -29,7 +34,10 @@ function getCsrfToken(): string {
     );
 }
 
-async function apiFetch<T>(url: string, body: Record<string, string>): Promise<T> {
+async function apiFetch<T>(
+    url: string,
+    body: Record<string, string>,
+): Promise<T> {
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -78,16 +86,34 @@ export function usePhoneOtpForm() {
     }
 
     function handlePhoneKeydown(e: KeyboardEvent) {
-        const pass = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+        const pass = [
+            'Backspace',
+            'Delete',
+            'Tab',
+            'Escape',
+            'Enter',
+            'ArrowLeft',
+            'ArrowRight',
+            'ArrowUp',
+            'ArrowDown',
+            'Home',
+            'End',
+        ];
         if (pass.includes(e.key)) return;
-        if ((e.ctrlKey || e.metaKey) && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())) return;
+        if (
+            (e.ctrlKey || e.metaKey) &&
+            ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())
+        )
+            return;
         if (!/^\d$/.test(e.key)) e.preventDefault();
     }
 
     function handlePhoneInput(e: Event) {
         const input = e.target as HTMLInputElement;
         const raw = input.value.replace(/\D/g, '');
-        const max = raw.startsWith('0') ? selectedPays.value.localLength + 1 : selectedPays.value.localLength;
+        const max = raw.startsWith('0')
+            ? selectedPays.value.localLength + 1
+            : selectedPays.value.localLength;
         const digits = raw.slice(0, max);
         phoneDigits.value = digits;
         input.value = digits;
@@ -114,7 +140,8 @@ export function usePhoneOtpForm() {
             }>('/register/lookup', { telephone: fullPhone.value });
 
             if (data.status === 'user_exists') {
-                lookupError.value = 'Ce numéro est déjà associé à un compte. Veuillez vous connecter ou réinitialiser votre mot de passe.';
+                lookupError.value =
+                    'Ce numéro est déjà associé à un compte. Veuillez vous connecter ou réinitialiser votre mot de passe.';
                 return;
             }
 
@@ -130,7 +157,8 @@ export function usePhoneOtpForm() {
 
             step.value = 'otp';
         } catch (e: unknown) {
-            lookupError.value = e instanceof Error ? e.message : 'Une erreur est survenue.';
+            lookupError.value =
+                e instanceof Error ? e.message : 'Une erreur est survenue.';
         } finally {
             loading.value = false;
         }

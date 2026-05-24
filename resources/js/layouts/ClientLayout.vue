@@ -79,7 +79,11 @@ const navItems = computed(() => {
         });
     }
 
-    items.push({ id: 'vehicules', label: 'Vehicules', href: '/client/vehicules' });
+    items.push({
+        id: 'vehicules',
+        label: 'Vehicules',
+        href: '/client/vehicules',
+    });
 
     return items;
 });

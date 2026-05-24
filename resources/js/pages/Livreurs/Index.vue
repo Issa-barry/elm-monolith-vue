@@ -54,14 +54,21 @@ const pendingCount = computed(
 );
 
 const livreursFiltres = computed(() => {
-    if (statutFilter.value === 'actif') return props.livreurs.filter((l) => l.is_active);
-    if (statutFilter.value === 'inactif') return props.livreurs.filter((l) => !l.is_active);
-    if (statutFilter.value === 'pending') return props.livreurs.filter((l) => l.has_account && !l.is_active);
+    if (statutFilter.value === 'actif')
+        return props.livreurs.filter((l) => l.is_active);
+    if (statutFilter.value === 'inactif')
+        return props.livreurs.filter((l) => !l.is_active);
+    if (statutFilter.value === 'pending')
+        return props.livreurs.filter((l) => l.has_account && !l.is_active);
     return props.livreurs;
 });
 
 function approuver(livreur: Livreur) {
-    router.patch(`/livreurs/${livreur.id}/approuver`, {}, { preserveScroll: true });
+    router.patch(
+        `/livreurs/${livreur.id}/approuver`,
+        {},
+        { preserveScroll: true },
+    );
 }
 </script>
 
@@ -75,16 +82,26 @@ function approuver(livreur: Livreur) {
             <!-- En-tête -->
             <div class="flex items-center justify-between gap-4">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">Livreurs</h1>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Livreurs
+                    </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ livreursFiltres.length }} livreur{{ livreursFiltres.length !== 1 ? 's' : '' }}
+                        {{ livreursFiltres.length }} livreur{{
+                            livreursFiltres.length !== 1 ? 's' : ''
+                        }}
                         — Gérez les livreurs depuis les
-                        <Link href="/equipes-livraison" class="underline underline-offset-2 hover:text-foreground">
-                            Équipes de livraison
-                        </Link>.
+                        <Link
+                            href="/equipes-livraison"
+                            class="underline underline-offset-2 hover:text-foreground"
+                        >
+                            Équipes de livraison </Link
+                        >.
                     </p>
                 </div>
-                <Link v-if="can('equipes-livraison.read')" href="/equipes-livraison">
+                <Link
+                    v-if="can('equipes-livraison.read')"
+                    href="/equipes-livraison"
+                >
                     <Button variant="outline">
                         <Users class="mr-2 h-4 w-4" />
                         Gérer les équipes
@@ -99,8 +116,16 @@ function approuver(livreur: Livreur) {
             >
                 <CheckCircle class="h-4 w-4 shrink-0" />
                 <span>
-                    <strong>{{ pendingCount }}</strong> livreur{{ pendingCount > 1 ? 's' : '' }} en attente de validation.
-                    <button class="underline underline-offset-2" @click="statutFilter = 'pending'">Voir</button>
+                    <strong>{{ pendingCount }}</strong> livreur{{
+                        pendingCount > 1 ? 's' : ''
+                    }}
+                    en attente de validation.
+                    <button
+                        class="underline underline-offset-2"
+                        @click="statutFilter = 'pending'"
+                    >
+                        Voir
+                    </button>
                 </span>
             </div>
 
@@ -108,7 +133,11 @@ function approuver(livreur: Livreur) {
             <div class="flex flex-wrap items-center gap-3">
                 <IconField class="max-w-xs flex-1">
                     <InputIcon class="pi pi-search" />
-                    <InputText v-model="search" placeholder="Rechercher un livreur…" class="w-full" />
+                    <InputText
+                        v-model="search"
+                        placeholder="Rechercher un livreur…"
+                        class="w-full"
+                    />
                 </IconField>
                 <Select
                     v-model="statutFilter"
@@ -135,7 +164,9 @@ function approuver(livreur: Livreur) {
                 class="rounded-xl border bg-card shadow-sm"
             >
                 <template #empty>
-                    <div class="py-16 text-center text-sm text-muted-foreground">
+                    <div
+                        class="py-16 text-center text-sm text-muted-foreground"
+                    >
                         Aucun livreur trouvé.
                     </div>
                 </template>
@@ -144,8 +175,13 @@ function approuver(livreur: Livreur) {
                     <template #body="{ data }">
                         <div class="flex items-center gap-2">
                             <div>
-                                <div class="font-medium">{{ data.nom_complet }}</div>
-                                <div v-if="data.telephone" class="text-xs text-muted-foreground">
+                                <div class="font-medium">
+                                    {{ data.nom_complet }}
+                                </div>
+                                <div
+                                    v-if="data.telephone"
+                                    class="text-xs text-muted-foreground"
+                                >
                                     {{ formatPhoneDisplay(data.telephone) }}
                                 </div>
                             </div>
@@ -161,7 +197,10 @@ function approuver(livreur: Livreur) {
 
                 <Column header="Équipes">
                     <template #body="{ data }">
-                        <div v-if="data.equipes.length" class="flex flex-wrap gap-1.5">
+                        <div
+                            v-if="data.equipes.length"
+                            class="flex flex-wrap gap-1.5"
+                        >
                             <Link
                                 v-for="eq in data.equipes"
                                 :key="eq.id"
@@ -171,21 +210,36 @@ function approuver(livreur: Livreur) {
                                 {{ eq.nom }}
                                 <span
                                     class="rounded-sm px-1 text-[10px] font-semibold"
-                                    :class="eq.role === 'principal' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'"
+                                    :class="
+                                        eq.role === 'principal'
+                                            ? 'bg-primary/10 text-primary'
+                                            : 'bg-muted text-muted-foreground'
+                                    "
                                 >
                                     {{ eq.role }}
                                 </span>
                             </Link>
                         </div>
-                        <span v-else class="text-xs text-muted-foreground">— aucune équipe</span>
+                        <span v-else class="text-xs text-muted-foreground"
+                            >— aucune équipe</span
+                        >
                     </template>
                 </Column>
 
-                <Column field="is_active" header="Statut" sortable style="width: 110px">
+                <Column
+                    field="is_active"
+                    header="Statut"
+                    sortable
+                    style="width: 110px"
+                >
                     <template #body="{ data }">
                         <StatusDot
                             :label="data.is_active ? 'Actif' : 'Inactif'"
-                            :dot-class="data.is_active ? 'bg-emerald-500' : 'bg-zinc-400'"
+                            :dot-class="
+                                data.is_active
+                                    ? 'bg-emerald-500'
+                                    : 'bg-zinc-400'
+                            "
                             class="text-muted-foreground"
                         />
                     </template>
@@ -194,7 +248,11 @@ function approuver(livreur: Livreur) {
                 <Column header="Actions" style="width: 120px">
                     <template #body="{ data }">
                         <Button
-                            v-if="data.has_account && !data.is_active && can('livreurs.update')"
+                            v-if="
+                                data.has_account &&
+                                !data.is_active &&
+                                can('livreurs.update')
+                            "
                             size="sm"
                             variant="outline"
                             class="gap-1.5 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50 dark:text-emerald-400"
