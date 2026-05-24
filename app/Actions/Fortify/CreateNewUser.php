@@ -115,11 +115,13 @@ class CreateNewUser implements CreatesNewUsers
             return;
         }
 
-        // 2. Livreur → créer un client dans son organisation
-        $livreur = Livreur::where('telephone', $telephone)->first();
+        // 2. Livreur (pré-créé par admin) → lier et créer un client
+        $livreur = Livreur::where('telephone', $telephone)->whereNull('user_id')->first();
         if ($livreur) {
             Role::firstOrCreate(['name' => 'livreur', 'guard_name' => 'web']);
             $user->assignRole('livreur');
+            $livreur->update(['user_id' => $user->id]);
+            $user->update(['organization_id' => $livreur->organization_id]);
             $this->findOrCreateClientInOrg($user, $livreur->organization_id, $telephone);
 
             return;
