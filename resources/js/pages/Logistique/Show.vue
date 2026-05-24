@@ -186,49 +186,55 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Progression ───────────────────────────────────────────────────────────────
 
-const STEPS = [
+// Étape virtuelle "Commission" insérée entre Réceptionné (3) et Clôturé (5).
+// Son libellé reflète le statut réel de la commission.
+const STEPS = computed(() => [
+    { key: 'brouillon',  shortLabel: 'Brouillon',   icon: FileEdit },
+    { key: 'chargement', shortLabel: 'Chargement',   icon: Package },
+    { key: 'transit',    shortLabel: 'Livraison',    icon: Truck },
+    { key: 'reception',  shortLabel: 'Réceptionné',  icon: PackageCheck },
     {
-        key: 'brouillon',
-        label: 'Brouillon',
-        shortLabel: 'Brouillon',
-        icon: FileEdit,
+        key: 'commission',
+        shortLabel: props.transfert.commission?.statut_label ?? 'Commission',
+        icon: ShieldCheck,
     },
-    {
-        key: 'chargement',
-        label: 'En chargement',
-        shortLabel: 'Chargement',
-        icon: Package,
-    },
-    {
-        key: 'transit',
-        label: 'Livraison',
-        shortLabel: 'Livraison',
-        icon: Truck,
-    },
-    {
-        key: 'reception',
-        label: 'Réceptionné',
-        shortLabel: 'Réceptionné',
-        icon: PackageCheck,
-    },
-    {
-        key: 'cloture',
-        label: 'Clôturé',
-        shortLabel: 'Clôturé',
-        icon: CheckCircle2,
-    },
-];
+    { key: 'cloture',    shortLabel: 'Clôturé',      icon: CheckCircle2 },
+]);
 
-const currentStepIdx = computed(() =>
-    STEPS.findIndex((s) => s.key === props.transfert.statut),
-);
+// Cloturé est à l'index 5 (commission virtuelle insérée en 4)
+const currentStepIdx = computed(() => {
+    const map: Record<string, number> = {
+        brouillon: 0, chargement: 1, transit: 2, reception: 3, cloture: 5,
+    };
+    return map[props.transfert.statut] ?? -1;
+});
+
+// État indépendant de l'étape commission (index 4)
+const commissionStepState = computed((): 'done' | 'current' | 'future' => {
+    const s = props.transfert.statut;
+    if (s !== 'reception' && s !== 'cloture') return 'future';
+    const c = props.transfert.commission;
+    if (!c) return 'future';
+    if (s === 'cloture' || c.is_versee) return 'done';
+    return 'current';
+});
 
 function stepState(idx: number): 'done' | 'current' | 'future' {
+    if (idx === 4) return commissionStepState.value;
     const cur = currentStepIdx.value;
     if (cur === -1) return 'future'; // annulé
     if (idx < cur) return 'done';
     if (idx === cur) return 'current';
     return 'future';
+}
+
+// Connecteur vert si l'étape est passée, ou si la commission est atteinte
+function connectorIsActive(idx: number): boolean {
+    if (currentStepIdx.value === -1) return false;
+    if (idx < currentStepIdx.value) return true;
+    // Connecteur entre Réceptionné (3) et Commission (4) : vert dès que la commission existe
+    if (idx === 3 && commissionStepState.value !== 'future') return true;
+    return false;
 }
 
 // ── Action principale par état ────────────────────────────────────────────────
@@ -822,7 +828,7 @@ function activiteDotClass(action: string): string {
                             v-if="idx < STEPS.length - 1"
                             :class="[
                                 'mb-5 h-0.5 flex-1 transition-all',
-                                idx < currentStepIdx
+                                connectorIsActive(idx)
                                     ? 'bg-emerald-400'
                                     : 'bg-border',
                             ]"
@@ -845,6 +851,80 @@ function activiteDotClass(action: string): string {
                     >
                         <component :is="item.icon" class="h-4 w-4 shrink-0" />
                         <span>{{ item.label }}</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ══ Statut commission (toujours visible après réceptionné) ════════ -->
+            <div v-if="showCommissionSection">
+                <!-- Commission générée -->
+                <div
+                    v-if="transfert.commission"
+                    class="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm"
+                >
+                    <div class="flex items-center gap-2 text-sm font-medium">
+                        <ShieldCheck class="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span class="text-muted-foreground">Commission logistique :</span>
+                        <StatusDot
+                            :label="transfert.commission.statut_label"
+                            :dot-class="transfert.commission.statut_dot_class"
+                            class="font-semibold"
+                        />
+                    </div>
+                    <div class="flex items-center gap-4 text-sm">
+                        <span class="text-muted-foreground">
+                            Total :
+                            <span class="font-semibold text-foreground">{{ formatGNF(transfert.commission.montant_total) }}</span>
+                        </span>
+                        <span class="text-muted-foreground">
+                            Versé :
+                            <span class="font-semibold text-foreground">{{ formatGNF(transfert.commission.montant_verse) }}</span>
+                        </span>
+                        <button
+                            type="button"
+                            class="text-xs font-medium text-primary underline underline-offset-2 hover:opacity-80"
+                            @click="setActiveDetailTab('commission')"
+                        >
+                            Voir détail
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Réception refusée (pas encore de commission) -->
+                <div
+                    v-else-if="transfert.validation_reception === 'refus'"
+                    class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 shadow-sm dark:border-red-800 dark:bg-red-950/30"
+                >
+                    <div class="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-400">
+                        <ShieldX class="h-4 w-4 shrink-0" />
+                        Réception refusée — {{ transfert.validation_motif ?? 'Aucun motif renseigné' }}
+                    </div>
+                    <button
+                        v-if="can_valider_reception_admin"
+                        type="button"
+                        class="text-xs font-medium text-red-600 underline underline-offset-2 dark:text-red-400"
+                        @click="setActiveDetailTab('commission')"
+                    >
+                        Voir détail
+                    </button>
+                </div>
+
+                <!-- En attente de validation admin -->
+                <div
+                    v-else
+                    class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 shadow-sm dark:border-amber-800 dark:bg-amber-950/30"
+                >
+                    <div class="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300">
+                        <ShieldCheck class="h-4 w-4 shrink-0" />
+                        Commission en attente de validation admin
+                    </div>
+                    <button
+                        v-if="can_valider_reception_admin"
+                        type="button"
+                        class="text-xs font-medium text-amber-700 underline underline-offset-2 dark:text-amber-400"
+                        @click="showValidationCommissionDialog = true"
+                    >
+                        Générer
                     </button>
                 </div>
             </div>
