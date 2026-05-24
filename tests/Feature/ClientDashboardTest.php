@@ -256,7 +256,7 @@ class ClientDashboardTest extends TestCase
 
         $payload = $method->invoke($controller, $user);
 
-        $this->assertSame(route('logistique.commissions.livreur', $livreur->id), $payload);
+        $this->assertSame(route('livreurs.show', $livreur->id), $payload);
     }
 
     public function test_qr_payload_is_dashboard_url_for_non_owner(): void
