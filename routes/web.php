@@ -41,6 +41,8 @@ use App\Http\Controllers\VehiculeController;
 use App\Http\Controllers\VersementCommissionController;
 use App\Http\Controllers\VersementCommissionLogistiqueController;
 use App\Http\Controllers\VersementController;
+use App\Models\Client;
+use App\Models\Vehicule;
 use App\Services\ModuleService;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -108,6 +110,42 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     // ── Module : Ventes ───────────────────────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
         Route::resource('ventes', CommandeVenteController::class)->except([]);
+        Route::get('pdv', function () {
+            $orgId = auth()->user()->organization_id;
+
+            $vehicules = Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur')])
+                ->where('organization_id', $orgId)
+                ->where('is_active', true)
+                ->where('categorie', 'externe')
+                ->orderBy('nom_vehicule')
+                ->get()
+                ->map(fn (Vehicule $v) => [
+                    'id' => $v->id,
+                    'nom_vehicule' => $v->nom_vehicule,
+                    'immatriculation' => $v->immatriculation,
+                    'capacite_packs' => $v->capacite_packs !== null ? (int) $v->capacite_packs : null,
+                    'livreur_nom' => ($l = $v->equipe?->livreurs->first())
+                        ? trim($l->prenom.' '.$l->nom)
+                        : null,
+                ])->values();
+
+            $clients = Client::query()
+                ->where('organization_id', $orgId)
+                ->where('is_active', true)
+                ->orderBy('nom')
+                ->get(['id', 'nom', 'prenom', 'telephone'])
+                ->map(fn (Client $c) => [
+                    'id' => $c->id,
+                    'nom' => $c->nom,
+                    'prenom' => $c->prenom,
+                    'telephone' => $c->telephone,
+                ])->values();
+
+            return Inertia::render('PDV/Index', [
+                'vehicules' => $vehicules,
+                'clients' => $clients,
+            ]);
+        })->name('pdv.index');
         Route::patch('ventes/{commande_vente}/valider', [CommandeVenteController::class, 'valider'])->name('ventes.valider');
         Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
         Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');

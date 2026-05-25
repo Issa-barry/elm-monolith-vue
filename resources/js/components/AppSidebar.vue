@@ -95,6 +95,7 @@ const mainNavItems = computed((): NavItem[] => {
     if (canSee('ventes.read', 'ventes')) {
         const ventesSubItems = [
             { title: 'Commandes', href: '/ventes' },
+            { title: 'PDV', href: '/pdv' },
             { title: 'Factures', href: '/factures' },
             { title: 'Commissions', href: '/commissions' },
         ];
