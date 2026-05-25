@@ -545,6 +545,43 @@ function formatGNF(value: number): string {
                                     </template>
                                 </AutoComplete>
 
+                                <div
+                                    v-if="
+                                        selectedMode === 'Client' &&
+                                        selectedClientId &&
+                                        clientSelected
+                                    "
+                                    class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
+                                >
+                                    <span
+                                        class="text-surface-500 dark:text-surface-400"
+                                    >
+                                        Client
+                                    </span>
+                                    <span
+                                        class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
+                                    >
+                                        {{
+                                            [
+                                                clientSelected.prenom,
+                                                clientSelected.nom,
+                                            ]
+                                                .filter(Boolean)
+                                                .join(' ')
+                                        }}
+                                    </span>
+                                    <span
+                                        v-if="clientSelected.telephone"
+                                        class="text-surface-500 dark:text-surface-400 ml-1"
+                                    >
+                                        {{
+                                            formatPhone(
+                                                clientSelected.telephone,
+                                            )
+                                        }}
+                                    </span>
+                                </div>
+
                                 <AutoComplete
                                     v-else
                                     v-model="vehiculeSelected"
@@ -634,34 +671,6 @@ function formatGNF(value: number): string {
                                         }}
                                     </span>
                                 </div>
-                            </div>
-                        </div>
-
-                        <div
-                            v-if="selectedMode === 'Client'"
-                            class="flex flex-wrap items-center gap-2"
-                        >
-                            <div
-                                v-if="selectedClientId && clientSelected"
-                                class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
-                            >
-                                <span
-                                    class="text-surface-500 dark:text-surface-400"
-                                >
-                                    Client
-                                </span>
-                                <span
-                                    class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
-                                >
-                                    {{
-                                        [
-                                            clientSelected.prenom,
-                                            clientSelected.nom,
-                                        ]
-                                            .filter(Boolean)
-                                            .join(' ')
-                                    }}
-                                </span>
                             </div>
                         </div>
 
