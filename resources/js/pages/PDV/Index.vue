@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 import AutoComplete from 'primevue/autocomplete';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
@@ -10,10 +10,10 @@ interface Product {
     code: string;
     name: string;
     subtitle: string;
-    category: 'Packs' | 'Accessoires' | 'Boissons';
+    category: 'Packs' | 'Accessoires' | 'Boissons' | null;
     stock: number;
     unitPrice: number;
-    image: string;
+    image: string | undefined;
 }
 
 interface CartRow {
@@ -47,18 +47,10 @@ type SaleMode = 'Vente rapide' | 'Client' | 'Livreur';
 type ProductCategory = 'Tous' | 'Packs' | 'Accessoires' | 'Boissons';
 
 const props = defineProps<{
+    produits?: Product[];
     vehicules?: VehiculeOption[];
     clients?: ClientOption[];
 }>();
-
-const primeImage1 =
-    'https://fqjltiegiezfetthbags.supabase.co/storage/v1/object/public/block.images/blocks/ecommerce/shoppingcart/extended-slide-over-1.jpg';
-const primeImage2 =
-    'https://fqjltiegiezfetthbags.supabase.co/storage/v1/object/public/block.images/blocks/ecommerce/shoppingcart/extended-slide-over-2.jpg';
-const primeImage3 =
-    'https://fqjltiegiezfetthbags.supabase.co/storage/v1/object/public/block.images/blocks/ecommerce/shoppingcart/extended-slide-over-3.jpg';
-const primeImage4 =
-    'https://fqjltiegiezfetthbags.supabase.co/storage/v1/object/public/block.images/blocks/ecommerce/shoppingcart/extended-slide-over-4.jpg';
 
 const searchQuery = ref('');
 const selectedCategory = ref<ProductCategory>('Tous');
@@ -70,133 +62,9 @@ const clientSelected = ref<ClientOption | null>(null);
 const selectedClientId = ref<string | number | null>(null);
 const clientSuggests = ref<ClientOption[]>(props.clients ?? []);
 
-const products = ref<Product[]>([
-    {
-        id: 1,
-        code: 'PDV-001',
-        name: 'Pack de 30',
-        subtitle: 'Eau de source',
-        category: 'Packs',
-        stock: 120,
-        unitPrice: 5000,
-        image: primeImage1,
-    },
-    {
-        id: 2,
-        code: 'PDV-002',
-        name: 'Pack de 20',
-        subtitle: 'Eau minerale',
-        category: 'Packs',
-        stock: 85,
-        unitPrice: 3500,
-        image: primeImage2,
-    },
-    {
-        id: 3,
-        code: 'PDV-003',
-        name: 'Bouteille 1.5L',
-        subtitle: 'Carton x6',
-        category: 'Boissons',
-        stock: 240,
-        unitPrice: 1200,
-        image: primeImage3,
-    },
-    {
-        id: 4,
-        code: 'PDV-004',
-        name: 'Bouteille 0.5L',
-        subtitle: 'Carton x12',
-        category: 'Boissons',
-        stock: 300,
-        unitPrice: 900,
-        image: primeImage4,
-    },
-    {
-        id: 5,
-        code: 'PDV-005',
-        name: 'Bidon 10L',
-        subtitle: 'Consigne incluse',
-        category: 'Packs',
-        stock: 50,
-        unitPrice: 8000,
-        image: primeImage1,
-    },
-    {
-        id: 6,
-        code: 'PDV-006',
-        name: 'Distributeur',
-        subtitle: 'Tabletop',
-        category: 'Accessoires',
-        stock: 15,
-        unitPrice: 45000,
-        image: primeImage2,
-    },
-    {
-        id: 7,
-        code: 'PDV-007',
-        name: 'Gobelets',
-        subtitle: 'Pack x50',
-        category: 'Accessoires',
-        stock: 400,
-        unitPrice: 1500,
-        image: primeImage3,
-    },
-    {
-        id: 8,
-        code: 'PDV-008',
-        name: 'Bouchons',
-        subtitle: 'Sachet x100',
-        category: 'Accessoires',
-        stock: 600,
-        unitPrice: 700,
-        image: primeImage4,
-    },
-    {
-        id: 9,
-        code: 'PDV-009',
-        name: 'Pack de 10',
-        subtitle: 'Eau minerale',
-        category: 'Packs',
-        stock: 180,
-        unitPrice: 2000,
-        image: primeImage1,
-    },
-    {
-        id: 10,
-        code: 'PDV-010',
-        name: 'Gallon 5L',
-        subtitle: 'Carton x4',
-        category: 'Boissons',
-        stock: 95,
-        unitPrice: 3000,
-        image: primeImage2,
-    },
-    {
-        id: 11,
-        code: 'PDV-011',
-        name: 'Pompe manuelle',
-        subtitle: 'Compatible bidons',
-        category: 'Accessoires',
-        stock: 60,
-        unitPrice: 2500,
-        image: primeImage3,
-    },
-    {
-        id: 12,
-        code: 'PDV-012',
-        name: 'Verres carton',
-        subtitle: 'Pack x100',
-        category: 'Accessoires',
-        stock: 220,
-        unitPrice: 1800,
-        image: primeImage4,
-    },
-]);
+const products = ref<Product[]>(props.produits ?? []);
 
-const cartRows = ref<CartRow[]>([
-    { productId: 1, quantity: 1 },
-    { productId: 3, quantity: 2 },
-]);
+const cartRows = ref<CartRow[]>([]);
 
 const categories: ProductCategory[] = [
     'Tous',
@@ -458,6 +326,27 @@ function removeLine(productId: number): void {
 function formatGNF(value: number): string {
     return `${new Intl.NumberFormat('fr-FR').format(value)} GNF`;
 }
+
+const checkoutForm = useForm({
+    mode: '' as SaleMode,
+    client_id: null as string | number | null,
+    vehicule_id: null as string | null,
+    lignes: [] as Array<{ produit_id: number; quantite: number }>,
+});
+
+function submit(): void {
+    if (cartRows.value.length === 0) return;
+
+    checkoutForm.mode = selectedMode.value;
+    checkoutForm.client_id = selectedClientId.value;
+    checkoutForm.vehicule_id = selectedVehiculeId.value;
+    checkoutForm.lignes = cartRows.value.map((r) => ({
+        produit_id: r.productId,
+        quantite: r.quantity,
+    }));
+
+    checkoutForm.post('/pdv/checkout');
+}
 </script>
 
 <template>
@@ -718,10 +607,17 @@ function formatGNF(value: number): string {
                                     class="bg-surface-100 dark:bg-surface-800 w-28 min-w-[112px] self-stretch"
                                 >
                                     <img
+                                        v-if="product.image"
                                         :src="product.image"
                                         :alt="product.name"
                                         class="h-full w-full object-cover"
                                     />
+                                    <div
+                                        v-else
+                                        class="flex h-full w-full items-center justify-center"
+                                    >
+                                        <i class="pi pi-box text-surface-400 dark:text-surface-500 text-3xl" />
+                                    </div>
                                 </div>
 
                                 <div class="flex min-w-0 flex-1 flex-col p-3">
@@ -801,11 +697,22 @@ function formatGNF(value: number): string {
                         class="border-surface-200 dark:border-surface-700 border-b py-4"
                     >
                         <div class="flex items-start gap-3">
-                            <img
-                                :src="item.image"
-                                :alt="item.name"
-                                class="h-16 w-14 shrink-0 rounded-lg object-cover"
-                            />
+                            <div
+                                class="bg-surface-100 dark:bg-surface-800 h-16 w-14 shrink-0 rounded-lg overflow-hidden"
+                            >
+                                <img
+                                    v-if="item.image"
+                                    :src="item.image"
+                                    :alt="item.name"
+                                    class="h-full w-full object-cover"
+                                />
+                                <div
+                                    v-else
+                                    class="flex h-full w-full items-center justify-center"
+                                >
+                                    <i class="pi pi-box text-surface-400 dark:text-surface-500 text-2xl" />
+                                </div>
+                            </div>
 
                             <div class="min-w-0 flex-1">
                                 <div
@@ -909,6 +816,9 @@ function formatGNF(value: number): string {
                         label="Encaisser"
                         severity="contrast"
                         class="mt-2 w-full text-base font-semibold"
+                        :disabled="cartRows.length === 0 || checkoutForm.processing"
+                        :loading="checkoutForm.processing"
+                        @click="submit"
                     />
                 </div>
             </aside>
