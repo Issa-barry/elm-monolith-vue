@@ -27,6 +27,7 @@ interface VehiculeOption {
     immatriculation: string;
     capacite_packs: number | null;
     livreur_nom: string | null;
+    livreur_telephone: string | null;
     display?: string;
 }
 
@@ -222,12 +223,16 @@ function normalizeVehicule(v: VehiculeOption): VehiculeOption {
     const nomVehicule = sanitizeText(v.nom_vehicule);
     const immatriculation = sanitizeText(v.immatriculation);
     const livreurNom = v.livreur_nom ? sanitizeText(v.livreur_nom) : null;
+    const livreurTelephone = v.livreur_telephone
+        ? sanitizeText(v.livreur_telephone)
+        : null;
 
     return {
         ...v,
         nom_vehicule: nomVehicule,
         immatriculation,
         livreur_nom: livreurNom,
+        livreur_telephone: livreurTelephone,
         display: `${nomVehicule} - ${immatriculation}`,
     };
 }
@@ -247,7 +252,9 @@ function searchVehicule(event: { query: string }) {
               (v) =>
                   v.nom_vehicule.toLowerCase().includes(q) ||
                   v.immatriculation.toLowerCase().includes(q) ||
-                  (v.livreur_nom && v.livreur_nom.toLowerCase().includes(q)),
+                  (v.livreur_nom && v.livreur_nom.toLowerCase().includes(q)) ||
+                  (v.livreur_telephone &&
+                      v.livreur_telephone.toLowerCase().includes(q)),
           )
         : [...vehicules];
 }
@@ -525,6 +532,15 @@ function formatGNF(value: number): string {
                                                 <span v-if="option.livreur_nom">
                                                     - {{ option.livreur_nom }}
                                                 </span>
+                                                <span
+                                                    v-if="
+                                                        option.livreur_telephone
+                                                    "
+                                                >
+                                                    ({{
+                                                        option.livreur_telephone
+                                                    }})
+                                                </span>
                                             </div>
                                         </div>
                                     </template>
@@ -547,6 +563,14 @@ function formatGNF(value: number): string {
                                         class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
                                     >
                                         {{ vehiculeSelected.livreur_nom }}
+                                    </span>
+                                    <span
+                                        v-if="
+                                            vehiculeSelected.livreur_telephone
+                                        "
+                                        class="text-surface-500 dark:text-surface-400 ml-1"
+                                    >
+                                        {{ vehiculeSelected.livreur_telephone }}
                                     </span>
                                 </div>
                             </div>

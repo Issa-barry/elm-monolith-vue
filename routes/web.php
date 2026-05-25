@@ -127,6 +127,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
                     'livreur_nom' => ($l = $v->equipe?->livreurs->first())
                         ? trim($l->prenom.' '.$l->nom)
                         : null,
+                    'livreur_telephone' => $l?->telephone,
                 ])->values();
 
             $clients = Client::query()
