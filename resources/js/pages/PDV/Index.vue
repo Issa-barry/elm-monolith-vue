@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import AutoComplete from 'primevue/autocomplete';
 import Button from 'primevue/button';
@@ -27,6 +27,8 @@ interface VehiculeOption {
     immatriculation: string;
     capacite_packs: number | null;
     livreur_nom: string | null;
+    livreur_telephone: string | null;
+    display?: string;
 }
 
 interface ClientOption {
@@ -63,7 +65,7 @@ const selectedCategory = ref<ProductCategory>('Tous');
 const selectedMode = ref<SaleMode>('Livreur');
 const vehiculeSelected = ref<VehiculeOption | null>(null);
 const selectedVehiculeId = ref<string | null>(null);
-const vehiculeSuggests = ref<VehiculeOption[]>(props.vehicules ?? []);
+const vehiculeSuggests = ref<VehiculeOption[]>([]);
 const clientSelected = ref<ClientOption | null>(null);
 const selectedClientId = ref<string | number | null>(null);
 const clientSuggests = ref<ClientOption[]>(props.clients ?? []);
@@ -204,31 +206,96 @@ const categories: ProductCategory[] = [
 ];
 const saleModes: SaleMode[] = ['Vente rapide', 'Client', 'Livreur'];
 
+function sanitizeText(value: string | null | undefined): string {
+    if (!value) {
+        return '';
+    }
+
+    return value
+        .replace(/â€”/g, '-')
+        .replace(/â€“/g, '-')
+        .replace(/Â·/g, '-')
+        .replace(/Â/g, '')
+        .trim();
+}
+
+function formatPhone(value: string | null | undefined): string {
+    const raw = sanitizeText(value);
+    if (!raw) {
+        return '';
+    }
+
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) {
+        return raw;
+    }
+
+    if (digits.startsWith('224') && digits.length >= 12) {
+        const local = digits.slice(3, 12);
+        const head = local.slice(0, 3);
+        const g1 = local.slice(3, 5);
+        const g2 = local.slice(5, 7);
+        const g3 = local.slice(7, 9);
+
+        return `+224 ${head} ${g1} ${g2} ${g3}`.trim();
+    }
+
+    if (raw.startsWith('+')) {
+        return `+${digits}`;
+    }
+
+    return digits;
+}
+
+function normalizeVehicule(v: VehiculeOption): VehiculeOption {
+    const nomVehicule = sanitizeText(v.nom_vehicule);
+    const immatriculation = sanitizeText(v.immatriculation);
+    const livreurNom = v.livreur_nom ? sanitizeText(v.livreur_nom) : null;
+    const livreurTelephone = v.livreur_telephone
+        ? sanitizeText(v.livreur_telephone)
+        : null;
+
+    return {
+        ...v,
+        nom_vehicule: nomVehicule,
+        immatriculation,
+        livreur_nom: livreurNom,
+        livreur_telephone: livreurTelephone,
+        display: `${nomVehicule} - ${immatriculation}`,
+    };
+}
+
+const vehiculesNormalized = computed<VehiculeOption[]>(() =>
+    (props.vehicules ?? []).map(normalizeVehicule),
+);
+
+vehiculeSuggests.value = [...vehiculesNormalized.value];
+
 function searchVehicule(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
-    const vehicules = props.vehicules ?? [];
+    const vehicules = vehiculesNormalized.value;
 
     vehiculeSuggests.value = q
         ? vehicules.filter(
               (v) =>
                   v.nom_vehicule.toLowerCase().includes(q) ||
                   v.immatriculation.toLowerCase().includes(q) ||
-                  (v.livreur_nom && v.livreur_nom.toLowerCase().includes(q)),
+                  (v.livreur_nom && v.livreur_nom.toLowerCase().includes(q)) ||
+                  (v.livreur_telephone &&
+                      v.livreur_telephone.toLowerCase().includes(q)),
           )
         : [...vehicules];
 }
 
 function onVehiculeSelect(v: VehiculeOption | null) {
-    selectedVehiculeId.value = v?.id ?? null;
+    const normalized = v ? normalizeVehicule(v) : null;
+    vehiculeSelected.value = normalized;
+    selectedVehiculeId.value = normalized?.id ?? null;
 }
 
 function onVehiculeClear() {
     selectedVehiculeId.value = null;
     vehiculeSelected.value = null;
-}
-
-function vehiculeLabel(v: VehiculeOption): string {
-    return `${v.nom_vehicule} — ${v.immatriculation}`;
 }
 
 function searchClient(event: { query: string }) {
@@ -326,12 +393,10 @@ function addToCart(product: Product): void {
 
 function increase(productId: number): void {
     const line = cartRows.value.find((row) => row.productId === productId);
-
     if (!line) {
         return;
     }
-
-    line.quantity += 1;
+    setQuantity(productId, line.quantity + 1);
 }
 
 function decrease(productId: number): void {
@@ -348,7 +413,40 @@ function decrease(productId: number): void {
         return;
     }
 
-    line.quantity -= 1;
+    setQuantity(productId, line.quantity - 1);
+}
+
+function setQuantity(productId: number, rawValue: number): void {
+    const line = cartRows.value.find((row) => row.productId === productId);
+    if (!line) {
+        return;
+    }
+
+    const qty = Math.floor(rawValue);
+    if (!Number.isFinite(qty)) {
+        return;
+    }
+
+    if (qty <= 0) {
+        removeLine(productId);
+        return;
+    }
+
+    line.quantity = qty;
+}
+
+function onQuantityInput(productId: number, event: Event): void {
+    const target = event.target as HTMLInputElement | null;
+    if (!target) {
+        return;
+    }
+
+    const raw = Number(target.value);
+    if (!Number.isFinite(raw)) {
+        return;
+    }
+
+    setQuantity(productId, raw);
 }
 
 function removeLine(productId: number): void {
@@ -375,19 +473,14 @@ function formatGNF(value: number): string {
                 >
                     <div class="flex flex-col gap-4">
                         <div
-                            class="flex flex-wrap items-end justify-between gap-4"
+                            class="flex flex-wrap items-start justify-between gap-4"
                         >
                             <div class="flex flex-wrap items-end gap-4">
                                 <div class="flex flex-col">
-                                    <p
-                                        class="text-surface-500 dark:text-surface-400 text-xs tracking-wide uppercase"
-                                    >
-                                        POS
-                                    </p>
                                     <h1
                                         class="text-surface-900 dark:text-surface-0 text-xl leading-tight font-semibold"
                                     >
-                                        Nouvelle vente
+                                        Point de vente
                                     </h1>
                                 </div>
 
@@ -411,27 +504,12 @@ function formatGNF(value: number): string {
                                 </div>
                             </div>
 
-                            <label class="w-full sm:w-64 md:w-72">
-                                <InputText
-                                    v-model="searchQuery"
-                                    placeholder="Rechercher un produit"
-                                    class="h-8 w-full rounded-lg text-sm"
-                                    aria-label="Rechercher un produit"
-                                />
-                            </label>
-                        </div>
-
-                        <div
-                            v-if="selectedMode === 'Client'"
-                            class="flex flex-wrap items-end gap-3"
-                        >
-                            <div class="w-full sm:w-[22rem] md:w-[26rem]">
-                                <label
-                                    class="text-surface-500 dark:text-surface-400 block text-xs"
-                                >
-                                    Client
-                                </label>
+                            <div
+                                v-if="selectedMode !== 'Vente rapide'"
+                                class="flex w-full flex-col items-end gap-2 sm:w-72 md:w-[26rem]"
+                            >
                                 <AutoComplete
+                                    v-if="selectedMode === 'Client'"
                                     v-model="clientSelected"
                                     :suggestions="clientSuggests"
                                     :option-label="clientLabel"
@@ -440,9 +518,9 @@ function formatGNF(value: number): string {
                                         onClientSelect(clientSelected)
                                     "
                                     @clear="onClientClear"
-                                    placeholder="Nom, prenom, telephone..."
-                                    class="mt-1 w-full"
-                                    input-class="w-full h-10 text-sm"
+                                    placeholder="Choisir un client..."
+                                    class="w-full"
+                                    input-class="w-full h-8 text-sm"
                                     dropdown
                                     force-selection
                                 >
@@ -466,8 +544,103 @@ function formatGNF(value: number): string {
                                         </div>
                                     </template>
                                 </AutoComplete>
-                            </div>
 
+                                <AutoComplete
+                                    v-else
+                                    v-model="vehiculeSelected"
+                                    :suggestions="vehiculeSuggests"
+                                    option-label="display"
+                                    @complete="searchVehicule"
+                                    @item-select="
+                                        onVehiculeSelect(vehiculeSelected)
+                                    "
+                                    @clear="onVehiculeClear"
+                                    placeholder="Choisir un vehicule..."
+                                    class="w-full"
+                                    input-class="w-full h-8 text-sm"
+                                    dropdown
+                                    force-selection
+                                >
+                                    <template #option="{ option }">
+                                        <div class="py-0.5">
+                                            <div
+                                                class="leading-tight font-medium"
+                                            >
+                                                {{ option.nom_vehicule }}
+                                            </div>
+                                            <div
+                                                class="text-surface-500 dark:text-surface-400 mt-0.5 flex items-center gap-2 text-xs"
+                                            >
+                                                <span class="font-mono">{{
+                                                    option.immatriculation
+                                                }}</span>
+                                                <span
+                                                    v-if="
+                                                        option.capacite_packs !==
+                                                        null
+                                                    "
+                                                >
+                                                    -
+                                                    {{ option.capacite_packs }}
+                                                    packs
+                                                </span>
+                                                <span v-if="option.livreur_nom">
+                                                    - {{ option.livreur_nom }}
+                                                </span>
+                                                <span
+                                                    v-if="
+                                                        option.livreur_telephone
+                                                    "
+                                                >
+                                                    ({{
+                                                        formatPhone(
+                                                            option.livreur_telephone,
+                                                        )
+                                                    }})
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </AutoComplete>
+
+                                <div
+                                    v-if="
+                                        selectedMode === 'Livreur' &&
+                                        selectedVehiculeId &&
+                                        vehiculeSelected?.livreur_nom
+                                    "
+                                    class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
+                                >
+                                    <span
+                                        class="text-surface-500 dark:text-surface-400"
+                                    >
+                                        Livreur
+                                    </span>
+                                    <span
+                                        class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
+                                    >
+                                        {{ vehiculeSelected.livreur_nom }}
+                                    </span>
+                                    <span
+                                        v-if="
+                                            vehiculeSelected.livreur_telephone
+                                        "
+                                        class="text-surface-500 dark:text-surface-400 ml-1"
+                                    >
+                                        {{
+                                            formatPhone(
+                                                vehiculeSelected.livreur_telephone,
+                                            )
+                                        }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="selectedMode === 'Client'"
+                            class="flex flex-wrap items-center gap-2"
+                        >
                             <div
                                 v-if="selectedClientId && clientSelected"
                                 class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
@@ -493,113 +666,33 @@ function formatGNF(value: number): string {
                         </div>
 
                         <div
-                            v-if="selectedMode === 'Livreur'"
-                            class="flex flex-wrap items-end gap-3"
+                            class="mt-1 flex flex-wrap items-center justify-between gap-2"
                         >
-                            <div class="w-full sm:w-[22rem] md:w-[26rem]">
-                                <label
-                                    class="text-surface-500 dark:text-surface-400 block text-xs"
-                                >
-                                    Véhicule livraison
-                                </label>
-                                <AutoComplete
-                                    v-model="vehiculeSelected"
-                                    :suggestions="vehiculeSuggests"
-                                    :option-label="vehiculeLabel"
-                                    @complete="searchVehicule"
-                                    @item-select="
-                                        onVehiculeSelect(vehiculeSelected)
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <Button
+                                    v-for="category in categories"
+                                    :key="category"
+                                    :label="category"
+                                    :severity="
+                                        selectedCategory === category
+                                            ? 'primary'
+                                            : 'secondary'
                                     "
-                                    @clear="onVehiculeClear"
-                                    placeholder="Nom, immatriculation, livreur..."
-                                    class="mt-1 w-full"
-                                    input-class="w-full h-10 text-sm"
-                                    dropdown
-                                    force-selection
-                                >
-                                    <template #option="{ option }">
-                                        <div class="py-0.5">
-                                            <div
-                                                class="leading-tight font-medium"
-                                            >
-                                                {{ option.nom_vehicule }}
-                                            </div>
-                                            <div
-                                                class="text-surface-500 dark:text-surface-400 mt-0.5 flex items-center gap-2 text-xs"
-                                            >
-                                                <span class="font-mono">{{
-                                                    option.immatriculation
-                                                }}</span>
-                                                <span
-                                                    v-if="
-                                                        option.capacite_packs !==
-                                                        null
-                                                    "
-                                                >
-                                                    ·
-                                                    {{ option.capacite_packs }}
-                                                    packs
-                                                </span>
-                                                <span v-if="option.livreur_nom">
-                                                    · {{ option.livreur_nom }}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </template>
-                                </AutoComplete>
+                                    :outlined="selectedCategory !== category"
+                                    size="small"
+                                    class="!border-surface-300 dark:!border-surface-600 !h-8 !rounded-full !px-2.5 !text-[12px] !font-medium"
+                                    @click="selectedCategory = category"
+                                />
                             </div>
 
-                            <div
-                                v-if="selectedVehiculeId && vehiculeSelected"
-                                class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
-                            >
-                                <span
-                                    class="text-surface-500 dark:text-surface-400"
-                                >
-                                    Véhicule
-                                </span>
-                                <span
-                                    class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
-                                >
-                                    {{ vehiculeSelected.nom_vehicule }}
-                                </span>
-                            </div>
-
-                            <div
-                                v-if="
-                                    selectedVehiculeId &&
-                                    vehiculeSelected?.livreur_nom
-                                "
-                                class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
-                            >
-                                <span
-                                    class="text-surface-500 dark:text-surface-400"
-                                >
-                                    Livreur
-                                </span>
-                                <span
-                                    class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
-                                >
-                                    {{ vehiculeSelected.livreur_nom }}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div class="mt-1 flex flex-wrap items-center gap-1.5">
-                            <Button
-                                v-for="category in categories"
-                                :key="category"
-                                :label="category"
-                                :severity="
-                                    selectedCategory === category
-                                        ? 'primary'
-                                        : 'secondary'
-                                "
-                                :outlined="selectedCategory !== category"
-                                size="small"
-                                class="!border-surface-300 dark:!border-surface-600 !h-8 !rounded-full !px-2.5 !text-[12px] !font-medium"
-                                @click="selectedCategory = category"
-                            />
+                            <label class="w-full sm:w-64 md:w-72">
+                                <InputText
+                                    v-model="searchQuery"
+                                    placeholder="Rechercher un produit"
+                                    class="h-8 w-full rounded-lg text-sm"
+                                    aria-label="Rechercher un produit"
+                                />
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -745,10 +838,16 @@ function formatGNF(value: number): string {
                                         class="h-7 w-7 !text-primary"
                                         @click="decrease(item.id)"
                                     />
-                                    <span
-                                        class="text-surface-900 dark:text-surface-0 min-w-6 text-center text-sm font-medium"
-                                        >{{ item.quantity }}</span
-                                    >
+                                    <InputText
+                                        :model-value="String(item.quantity)"
+                                        type="number"
+                                        min="1"
+                                        inputmode="numeric"
+                                        class="h-7 w-14 text-center text-sm"
+                                        @input="
+                                            onQuantityInput(item.id, $event)
+                                        "
+                                    />
                                     <Button
                                         icon="pi pi-plus"
                                         text
