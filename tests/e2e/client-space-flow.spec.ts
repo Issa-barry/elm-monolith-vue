@@ -26,13 +26,17 @@ test('client space pages are accessible for proprietaire account', async ({
 
     await page.goto('/client/dashboard');
     await expect(page).toHaveURL(/\/client\/dashboard/, { timeout: 20_000 });
-    await expect(page.locator('body')).toContainText(
-        /bienvenue dans votre espace partenaire/i,
+    const profileHeader = page
+        .locator('h1', { hasText: /amadou diallo/i })
+        .first()
+        .locator('..');
+    await expect(profileHeader).toContainText(
+        new RegExp(PROPRIETAIRE_PHONE.replace('+', '\\+')),
         {
             timeout: 15_000,
         },
     );
-    await expect(page.locator('body')).toContainText(/amadou diallo/i, {
+    await expect(profileHeader).toContainText(/proprietaire/i, {
         timeout: 15_000,
     });
 

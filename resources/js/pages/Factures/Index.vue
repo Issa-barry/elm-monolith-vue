@@ -19,6 +19,8 @@ import {
     History,
     MoreVertical,
     Search,
+    Truck,
+    X,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
@@ -81,6 +83,12 @@ interface SiteOption {
     label: string;
 }
 
+interface LivreurInfo {
+    id: string;
+    nom_complet: string;
+    telephone: string | null;
+}
+
 const props = defineProps<{
     factures: FactureItem[];
     totaux: Totaux;
@@ -89,6 +97,8 @@ const props = defineProps<{
     statut: string;
     site_id: string;
     sites: SiteOption[];
+    livreur_id?: string | null;
+    livreur?: LivreurInfo | null;
 }>();
 
 const { can } = usePermissions();
@@ -107,8 +117,14 @@ const periodes = [
     { value: 'all', label: 'Tout' },
 ];
 
+function baseParams(): Record<string, string> {
+    const p: Record<string, string> = {};
+    if (props.livreur_id) p.livreur_id = props.livreur_id;
+    return p;
+}
+
 function setPeriode(p: string) {
-    const params: Record<string, string> = { periode: p };
+    const params = { ...baseParams(), periode: p };
     if (props.statut !== 'tous') params.statut = props.statut;
     if (props.site_id !== 'tous') params.site_id = props.site_id;
     router.get('/factures', params, { preserveScroll: true, replace: true });
@@ -124,14 +140,14 @@ const filtres = [
 ];
 
 function setStatut(s: string) {
-    const params: Record<string, string> = { periode: props.periode };
+    const params = { ...baseParams(), periode: props.periode };
     if (s !== 'tous') params.statut = s;
     if (props.site_id !== 'tous') params.site_id = props.site_id;
     router.get('/factures', params, { preserveScroll: true, replace: true });
 }
 
 function setSite(s: string) {
-    const params: Record<string, string> = { periode: props.periode };
+    const params = { ...baseParams(), periode: props.periode };
     if (props.statut !== 'tous') params.statut = props.statut;
     if (s !== 'tous') params.site_id = s;
     router.get('/factures', params, { preserveScroll: true, replace: true });
@@ -280,6 +296,23 @@ function _progressPercent(f: FactureItem): number {
                 <div class="w-8" />
             </div>
 
+            <!-- Bandeau filtre livreur (mobile) -->
+            <div
+                v-if="livreur"
+                class="flex items-center gap-2 border-b border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"
+            >
+                <Truck class="h-3.5 w-3.5 shrink-0" />
+                <span class="flex-1 truncate">
+                    Livreur : <strong>{{ livreur.nom_complet }}</strong>
+                </span>
+                <a
+                    href="/factures"
+                    class="flex items-center gap-0.5 opacity-70"
+                >
+                    <X class="h-3.5 w-3.5" />
+                </a>
+            </div>
+
             <!-- KPI cards -->
             <div class="grid grid-cols-2 gap-3 p-4">
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
@@ -426,6 +459,31 @@ function _progressPercent(f: FactureItem): number {
                         Suivi et encaissement des factures.
                     </p>
                 </div>
+            </div>
+
+            <!-- Bandeau filtre livreur -->
+            <div
+                v-if="livreur"
+                class="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"
+            >
+                <Truck class="h-4 w-4 shrink-0" />
+                <span class="flex-1">
+                    Factures filtrées pour le livreur
+                    <strong>{{ livreur.nom_complet }}</strong>
+                    <span
+                        v-if="livreur.telephone"
+                        class="ml-1 font-mono text-xs opacity-70"
+                    >
+                        {{ livreur.telephone }}
+                    </span>
+                </span>
+                <a
+                    href="/factures"
+                    class="ml-auto flex items-center gap-1 text-xs opacity-70 hover:opacity-100"
+                >
+                    <X class="h-3.5 w-3.5" />
+                    Effacer le filtre
+                </a>
             </div>
 
             <!-- Cartes de synthèse -->

@@ -10,6 +10,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAppearance } from '@/composables/useAppearance';
+import { useScanInterceptor } from '@/composables/useScanInterceptor';
 import { home, logout } from '@/routes';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import {
@@ -28,6 +29,7 @@ const page = usePage();
 const user = computed(() => (page.props as any).auth.user);
 const currentUrl = computed(() => page.url);
 const { updateAppearance } = useAppearance();
+useScanInterceptor();
 const isDark = ref(false);
 const isMobileMenuOpen = ref(false);
 const notificationsCount = computed(
@@ -147,7 +149,7 @@ watch(currentUrl, () => {
         <header
             class="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur"
         >
-            <div class="mx-auto max-w-5xl px-4">
+            <div class="mx-auto max-w-7xl px-4">
                 <div class="relative flex h-14 items-center justify-between">
                     <Link
                         :href="home()"
@@ -330,7 +332,7 @@ watch(currentUrl, () => {
             </div>
         </header>
 
-        <main class="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
+        <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
             <slot />
         </main>
     </div>

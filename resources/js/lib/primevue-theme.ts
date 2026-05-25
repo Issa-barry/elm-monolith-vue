@@ -353,7 +353,7 @@ export function normalizePrimeVueTheme(
     if (normalized === 'material') return 'material';
     if (normalized === 'nora') return 'nora';
 
-    return 'aura';
+    return 'starter';
 }
 
 export function normalizePrimeVuePrimary(
@@ -389,18 +389,18 @@ export function getPrimeVueThemePreset(value?: string | null): {
 export function getDefaultPrimeVuePrimary(
     theme: PrimeVueThemeName,
 ): PrimeVuePrimaryName {
-    return theme === 'starter' ? 'zinc' : 'emerald';
+    return theme === 'starter' ? 'blue' : 'emerald';
 }
 
 export function getDefaultPrimeVueSurface(
-    _theme: PrimeVueThemeName,
+    theme: PrimeVueThemeName,
 ): PrimeVueSurfaceName {
-    return 'zinc';
+    return theme === 'starter' ? 'slate' : 'zinc';
 }
 
 export function resolvePrimeVueThemeFromEnv(): PrimeVueThemeName {
     return normalizePrimeVueTheme(
-        import.meta.env.VITE_PRIMEVUE_THEME || 'aura',
+        import.meta.env.VITE_PRIMEVUE_THEME || 'starter',
     );
 }
 
