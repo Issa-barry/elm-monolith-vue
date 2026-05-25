@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
+import AutoComplete from 'primevue/autocomplete';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import { computed, ref } from 'vue';
@@ -20,6 +21,21 @@ interface CartRow {
     quantity: number;
 }
 
+interface VehiculeOption {
+    id: string;
+    nom_vehicule: string;
+    immatriculation: string;
+    capacite_packs: number | null;
+    livreur_nom: string | null;
+}
+
+interface ClientOption {
+    id: string | number;
+    nom: string;
+    prenom: string | null;
+    telephone: string | null;
+}
+
 type CartItem = Product & {
     quantity: number;
     lineTotal: number;
@@ -27,6 +43,11 @@ type CartItem = Product & {
 
 type SaleMode = 'Vente rapide' | 'Client' | 'Livreur';
 type ProductCategory = 'Tous' | 'Packs' | 'Accessoires' | 'Boissons';
+
+const props = defineProps<{
+    vehicules?: VehiculeOption[];
+    clients?: ClientOption[];
+}>();
 
 const primeImage1 =
     'https://fqjltiegiezfetthbags.supabase.co/storage/v1/object/public/block.images/blocks/ecommerce/shoppingcart/extended-slide-over-1.jpg';
@@ -39,7 +60,13 @@ const primeImage4 =
 
 const searchQuery = ref('');
 const selectedCategory = ref<ProductCategory>('Tous');
-const selectedMode = ref<SaleMode>('Vente rapide');
+const selectedMode = ref<SaleMode>('Livreur');
+const vehiculeSelected = ref<VehiculeOption | null>(null);
+const selectedVehiculeId = ref<string | null>(null);
+const vehiculeSuggests = ref<VehiculeOption[]>(props.vehicules ?? []);
+const clientSelected = ref<ClientOption | null>(null);
+const selectedClientId = ref<string | number | null>(null);
+const clientSuggests = ref<ClientOption[]>(props.clients ?? []);
 
 const products = ref<Product[]>([
     {
@@ -177,6 +204,60 @@ const categories: ProductCategory[] = [
 ];
 const saleModes: SaleMode[] = ['Vente rapide', 'Client', 'Livreur'];
 
+function searchVehicule(event: { query: string }) {
+    const q = event.query.toLowerCase().trim();
+    const vehicules = props.vehicules ?? [];
+
+    vehiculeSuggests.value = q
+        ? vehicules.filter(
+              (v) =>
+                  v.nom_vehicule.toLowerCase().includes(q) ||
+                  v.immatriculation.toLowerCase().includes(q) ||
+                  (v.livreur_nom && v.livreur_nom.toLowerCase().includes(q)),
+          )
+        : [...vehicules];
+}
+
+function onVehiculeSelect(v: VehiculeOption | null) {
+    selectedVehiculeId.value = v?.id ?? null;
+}
+
+function onVehiculeClear() {
+    selectedVehiculeId.value = null;
+    vehiculeSelected.value = null;
+}
+
+function vehiculeLabel(v: VehiculeOption): string {
+    return `${v.nom_vehicule} — ${v.immatriculation}`;
+}
+
+function searchClient(event: { query: string }) {
+    const q = event.query.toLowerCase().trim();
+    const clients = props.clients ?? [];
+
+    clientSuggests.value = q
+        ? clients.filter(
+              (c) =>
+                  c.nom.toLowerCase().includes(q) ||
+                  (c.prenom && c.prenom.toLowerCase().includes(q)) ||
+                  (c.telephone && c.telephone.includes(q)),
+          )
+        : [...clients];
+}
+
+function onClientSelect(c: ClientOption | null) {
+    selectedClientId.value = c?.id ?? null;
+}
+
+function onClientClear() {
+    selectedClientId.value = null;
+    clientSelected.value = null;
+}
+
+function clientLabel(c: ClientOption): string {
+    return [c.prenom, c.nom].filter(Boolean).join(' ');
+}
+
 const filteredProducts = computed(() => {
     const query = searchQuery.value.trim().toLowerCase();
 
@@ -294,9 +375,9 @@ function formatGNF(value: number): string {
                 >
                     <div class="flex flex-col gap-4">
                         <div
-                            class="flex flex-wrap items-center justify-between gap-4"
+                            class="flex flex-wrap items-end justify-between gap-4"
                         >
-                            <div class="flex flex-wrap items-center gap-4">
+                            <div class="flex flex-wrap items-end gap-4">
                                 <div class="flex flex-col">
                                     <p
                                         class="text-surface-500 dark:text-surface-400 text-xs tracking-wide uppercase"
@@ -310,35 +391,201 @@ function formatGNF(value: number): string {
                                     </h1>
                                 </div>
 
-                                <label class="w-full sm:w-64 md:w-72">
-                                    
-                                    <InputText
-                                        v-model="searchQuery"
-                                        placeholder="Rechercher un produit"
-                                        class="mt-1 h-10 w-full rounded-lg text-sm"
+                                <div
+                                    class="mb-0.5 flex flex-wrap items-center gap-1.5"
+                                >
+                                    <Button
+                                        v-for="mode in saleModes"
+                                        :key="mode"
+                                        :label="mode"
+                                        :severity="
+                                            selectedMode === mode
+                                                ? 'primary'
+                                                : 'secondary'
+                                        "
+                                        :outlined="selectedMode !== mode"
+                                        size="small"
+                                        class="!border-surface-300 dark:!border-surface-600 !h-8 !rounded-full !px-2.5 !text-[12px] !font-medium"
+                                        @click="selectedMode = mode"
                                     />
-                                </label>
+                                </div>
                             </div>
 
-                            <div class="flex flex-wrap items-center gap-2">
-                                <Button
-                                    v-for="mode in saleModes"
-                                    :key="mode"
-                                    :label="mode"
-                                    :severity="
-                                        selectedMode === mode
-                                            ? 'primary'
-                                            : 'secondary'
-                                    "
-                                    :outlined="selectedMode !== mode"
-                                    size="small"
-                                    class="h-9 rounded-full px-3 text-xs font-medium"
-                                    @click="selectedMode = mode"
+                            <label class="w-full sm:w-64 md:w-72">
+                                <InputText
+                                    v-model="searchQuery"
+                                    placeholder="Rechercher un produit"
+                                    class="h-8 w-full rounded-lg text-sm"
+                                    aria-label="Rechercher un produit"
                                 />
+                            </label>
+                        </div>
+
+                        <div
+                            v-if="selectedMode === 'Client'"
+                            class="flex flex-wrap items-end gap-3"
+                        >
+                            <div class="w-full sm:w-[22rem] md:w-[26rem]">
+                                <label
+                                    class="text-surface-500 dark:text-surface-400 block text-xs"
+                                >
+                                    Client
+                                </label>
+                                <AutoComplete
+                                    v-model="clientSelected"
+                                    :suggestions="clientSuggests"
+                                    :option-label="clientLabel"
+                                    @complete="searchClient"
+                                    @item-select="
+                                        onClientSelect(clientSelected)
+                                    "
+                                    @clear="onClientClear"
+                                    placeholder="Nom, prenom, telephone..."
+                                    class="mt-1 w-full"
+                                    input-class="w-full h-10 text-sm"
+                                    dropdown
+                                    force-selection
+                                >
+                                    <template #option="{ option }">
+                                        <div class="py-0.5">
+                                            <div
+                                                class="leading-tight font-medium"
+                                            >
+                                                {{
+                                                    [option.prenom, option.nom]
+                                                        .filter(Boolean)
+                                                        .join(' ')
+                                                }}
+                                            </div>
+                                            <div
+                                                v-if="option.telephone"
+                                                class="text-surface-500 dark:text-surface-400 mt-0.5 text-xs"
+                                            >
+                                                {{ option.telephone }}
+                                            </div>
+                                        </div>
+                                    </template>
+                                </AutoComplete>
+                            </div>
+
+                            <div
+                                v-if="selectedClientId && clientSelected"
+                                class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
+                            >
+                                <span
+                                    class="text-surface-500 dark:text-surface-400"
+                                >
+                                    Client
+                                </span>
+                                <span
+                                    class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
+                                >
+                                    {{
+                                        [
+                                            clientSelected.prenom,
+                                            clientSelected.nom,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' ')
+                                    }}
+                                </span>
                             </div>
                         </div>
 
-                        <div class="mt-1 flex flex-wrap items-center gap-2">
+                        <div
+                            v-if="selectedMode === 'Livreur'"
+                            class="flex flex-wrap items-end gap-3"
+                        >
+                            <div class="w-full sm:w-[22rem] md:w-[26rem]">
+                                <label
+                                    class="text-surface-500 dark:text-surface-400 block text-xs"
+                                >
+                                    Véhicule livraison
+                                </label>
+                                <AutoComplete
+                                    v-model="vehiculeSelected"
+                                    :suggestions="vehiculeSuggests"
+                                    :option-label="vehiculeLabel"
+                                    @complete="searchVehicule"
+                                    @item-select="
+                                        onVehiculeSelect(vehiculeSelected)
+                                    "
+                                    @clear="onVehiculeClear"
+                                    placeholder="Nom, immatriculation, livreur..."
+                                    class="mt-1 w-full"
+                                    input-class="w-full h-10 text-sm"
+                                    dropdown
+                                    force-selection
+                                >
+                                    <template #option="{ option }">
+                                        <div class="py-0.5">
+                                            <div
+                                                class="leading-tight font-medium"
+                                            >
+                                                {{ option.nom_vehicule }}
+                                            </div>
+                                            <div
+                                                class="text-surface-500 dark:text-surface-400 mt-0.5 flex items-center gap-2 text-xs"
+                                            >
+                                                <span class="font-mono">{{
+                                                    option.immatriculation
+                                                }}</span>
+                                                <span
+                                                    v-if="
+                                                        option.capacite_packs !==
+                                                        null
+                                                    "
+                                                >
+                                                    ·
+                                                    {{ option.capacite_packs }}
+                                                    packs
+                                                </span>
+                                                <span v-if="option.livreur_nom">
+                                                    · {{ option.livreur_nom }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </AutoComplete>
+                            </div>
+
+                            <div
+                                v-if="selectedVehiculeId && vehiculeSelected"
+                                class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
+                            >
+                                <span
+                                    class="text-surface-500 dark:text-surface-400"
+                                >
+                                    Véhicule
+                                </span>
+                                <span
+                                    class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
+                                >
+                                    {{ vehiculeSelected.nom_vehicule }}
+                                </span>
+                            </div>
+
+                            <div
+                                v-if="
+                                    selectedVehiculeId &&
+                                    vehiculeSelected?.livreur_nom
+                                "
+                                class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
+                            >
+                                <span
+                                    class="text-surface-500 dark:text-surface-400"
+                                >
+                                    Livreur
+                                </span>
+                                <span
+                                    class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
+                                >
+                                    {{ vehiculeSelected.livreur_nom }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="mt-1 flex flex-wrap items-center gap-1.5">
                             <Button
                                 v-for="category in categories"
                                 :key="category"
@@ -350,7 +597,7 @@ function formatGNF(value: number): string {
                                 "
                                 :outlined="selectedCategory !== category"
                                 size="small"
-                                class="h-9 rounded-full px-3 text-xs font-medium"
+                                class="!border-surface-300 dark:!border-surface-600 !h-8 !rounded-full !px-2.5 !text-[12px] !font-medium"
                                 @click="selectedCategory = category"
                             />
                         </div>
