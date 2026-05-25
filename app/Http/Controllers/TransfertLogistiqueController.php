@@ -75,7 +75,7 @@ class TransfertLogistiqueController extends Controller
             'equipeLivraison:id,nom',
             'commission:id,transfert_logistique_id,statut,montant_total,montant_verse',
             'lignes:id,transfert_logistique_id,produit_id,quantite_chargee,quantite_recue,ecart_type,ecart_motif',
-            'lignes.produit:id,nom',
+            'lignes.produit:id,nom,code_interne,image_url',
         ])->where('organization_id', $orgId);
 
         if ($vue === 'receptions') {
@@ -320,7 +320,7 @@ class TransfertLogistiqueController extends Controller
             'vehicule.equipe:id,nom',
             'vehicule.proprietaire:id,prenom,nom',
             'equipeLivraison:id,nom',
-            'lignes.produit:id,nom',
+            'lignes.produit:id,nom,code_interne,image_url',
             'commission.parts.versements.createur:id,prenom,nom',
             'createur:id,prenom,nom',
             'validateur:id,prenom,nom',
@@ -546,6 +546,8 @@ class TransfertLogistiqueController extends Controller
             'id' => $l->id,
             'produit_id' => $l->produit_id,
             'produit_nom' => $l->produit?->nom,
+            'produit_code' => $l->produit?->code_interne,
+            'produit_image_url' => $l->produit?->image_url,
             'quantite_demandee' => $l->quantite_demandee,
             'quantite_chargee' => $l->quantite_chargee,
             'quantite_recue' => $l->quantite_recue,

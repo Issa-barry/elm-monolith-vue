@@ -312,4 +312,9 @@ Route::middleware(['auth', 'role:client|proprietaire|livreur', 'active.livreur']
     Route::post('/propositions-vehicules', [ClientDashboardController::class, 'storeVehicleProposal'])->name('propositions.store');
 });
 
+// ── Scan QR — accessible par staff et livreur (self-view) ─────────────────────
+Route::middleware(['auth'])->group(function () {
+    Route::get('livreurs/{livreur}', [LivreurController::class, 'show'])->name('livreurs.show');
+});
+
 require __DIR__.'/settings.php';

@@ -81,7 +81,7 @@ const resolveCurrentPrimeVueColors = () => {
 const handleSystemThemeChange = () => {
     const currentAppearance = getStoredAppearance();
 
-    updateTheme(currentAppearance || 'system');
+    updateTheme(currentAppearance || 'light');
 
     if (typeof document === 'undefined') {
         return;
@@ -100,9 +100,9 @@ export function initializeTheme() {
         return;
     }
 
-    // Initialize theme from saved preference or default to system...
+    // Initialize theme from saved preference or default to light...
     const savedAppearance = getStoredAppearance();
-    updateTheme(savedAppearance || 'system');
+    updateTheme(savedAppearance || 'light');
 
     const { primary, surface } = resolveCurrentPrimeVueColors();
     applyAppThemeColors(
@@ -115,7 +115,7 @@ export function initializeTheme() {
     mediaQuery()?.addEventListener('change', handleSystemThemeChange);
 }
 
-const appearance = ref<Appearance>('system');
+const appearance = ref<Appearance>('light');
 const primeVueTheme = ref<PrimeVueThemeName>(resolvePrimeVueThemeFromEnv());
 const primeVuePrimary = ref<PrimeVuePrimaryName>(
     resolvePrimeVuePrimaryFromEnv(primeVueTheme.value),

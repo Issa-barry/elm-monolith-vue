@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\ModePaiement;
 use App\Enums\StatutFactureVente;
 use App\Models\FactureVente;
+use App\Models\Livreur;
 use App\Models\Site;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -26,6 +27,20 @@ class FactureVenteController extends Controller
         $periode = $request->input('periode', 'month');
         $statut = $request->input('statut', 'tous');
         $siteId = $request->input('site_id', $userSiteId ? (string) $userSiteId : 'tous');
+        $livreurId = $request->input('livreur_id');
+        $livreurData = null;
+        if ($livreurId) {
+            $livreurModel = Livreur::where('organization_id', $orgId)->find($livreurId);
+            if ($livreurModel) {
+                $livreurData = [
+                    'id' => $livreurModel->id,
+                    'nom_complet' => $livreurModel->nom_complet,
+                    'telephone' => $livreurModel->telephone,
+                ];
+            } else {
+                $livreurId = null;
+            }
+        }
 
         // Liste de tous les sites de l'org pour le filtre
         $sites = Site::where('organization_id', $orgId)
@@ -59,6 +74,10 @@ class FactureVenteController extends Controller
 
         if ($siteId !== 'tous') {
             $query->whereHas('commande', fn ($q) => $q->where('site_id', $siteId));
+        }
+
+        if ($livreurId) {
+            $query->whereHas('commande.vehicule.equipe.membres', fn ($q) => $q->where('livreur_id', $livreurId));
         }
 
         $factures = $query->orderByDesc('created_at')
@@ -122,6 +141,8 @@ class FactureVenteController extends Controller
             'statut' => $statut,
             'site_id' => $siteId,
             'sites' => $sites,
+            'livreur_id' => $livreurId,
+            'livreur' => $livreurData,
         ]);
     }
 }

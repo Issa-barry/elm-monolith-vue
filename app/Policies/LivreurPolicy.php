@@ -14,6 +14,11 @@ class LivreurPolicy
 
     public function view(User $user, Livreur $livreur): bool
     {
+        // Le livreur peut consulter sa propre fiche (ex: scan QR depuis espace client)
+        if ($livreur->user_id !== null && $livreur->user_id === $user->id) {
+            return true;
+        }
+
         return $user->can('livreurs.read')
             && $this->sameOrganization($user, $livreur);
     }
