@@ -298,10 +298,6 @@ function onVehiculeClear() {
     vehiculeSelected.value = null;
 }
 
-function vehiculeLabel(v: VehiculeOption): string {
-    return `${sanitizeText(v.nom_vehicule)} - ${sanitizeText(v.immatriculation)}`;
-}
-
 function searchClient(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
     const clients = props.clients ?? [];
