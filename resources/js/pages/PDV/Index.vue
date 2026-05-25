@@ -393,12 +393,10 @@ function addToCart(product: Product): void {
 
 function increase(productId: number): void {
     const line = cartRows.value.find((row) => row.productId === productId);
-
     if (!line) {
         return;
     }
-
-    line.quantity += 1;
+    setQuantity(productId, line.quantity + 1);
 }
 
 function decrease(productId: number): void {
@@ -415,7 +413,40 @@ function decrease(productId: number): void {
         return;
     }
 
-    line.quantity -= 1;
+    setQuantity(productId, line.quantity - 1);
+}
+
+function setQuantity(productId: number, rawValue: number): void {
+    const line = cartRows.value.find((row) => row.productId === productId);
+    if (!line) {
+        return;
+    }
+
+    const qty = Math.floor(rawValue);
+    if (!Number.isFinite(qty)) {
+        return;
+    }
+
+    if (qty <= 0) {
+        removeLine(productId);
+        return;
+    }
+
+    line.quantity = qty;
+}
+
+function onQuantityInput(productId: number, event: Event): void {
+    const target = event.target as HTMLInputElement | null;
+    if (!target) {
+        return;
+    }
+
+    const raw = Number(target.value);
+    if (!Number.isFinite(raw)) {
+        return;
+    }
+
+    setQuantity(productId, raw);
 }
 
 function removeLine(productId: number): void {
@@ -807,10 +838,16 @@ function formatGNF(value: number): string {
                                         class="h-7 w-7 !text-primary"
                                         @click="decrease(item.id)"
                                     />
-                                    <span
-                                        class="text-surface-900 dark:text-surface-0 min-w-6 text-center text-sm font-medium"
-                                        >{{ item.quantity }}</span
-                                    >
+                                    <InputText
+                                        :model-value="String(item.quantity)"
+                                        type="number"
+                                        min="1"
+                                        inputmode="numeric"
+                                        class="h-7 w-14 text-center text-sm"
+                                        @input="
+                                            onQuantityInput(item.id, $event)
+                                        "
+                                    />
                                     <Button
                                         icon="pi pi-plus"
                                         text
