@@ -219,6 +219,34 @@ function sanitizeText(value: string | null | undefined): string {
         .trim();
 }
 
+function formatPhone(value: string | null | undefined): string {
+    const raw = sanitizeText(value);
+    if (!raw) {
+        return '';
+    }
+
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) {
+        return raw;
+    }
+
+    if (digits.startsWith('224') && digits.length >= 12) {
+        const local = digits.slice(3, 12);
+        const head = local.slice(0, 3);
+        const g1 = local.slice(3, 5);
+        const g2 = local.slice(5, 7);
+        const g3 = local.slice(7, 9);
+
+        return `+224 ${head} ${g1} ${g2} ${g3}`.trim();
+    }
+
+    if (raw.startsWith('+')) {
+        return `+${digits}`;
+    }
+
+    return digits;
+}
+
 function normalizeVehicule(v: VehiculeOption): VehiculeOption {
     const nomVehicule = sanitizeText(v.nom_vehicule);
     const immatriculation = sanitizeText(v.immatriculation);
@@ -538,7 +566,9 @@ function formatGNF(value: number): string {
                                                     "
                                                 >
                                                     ({{
-                                                        option.livreur_telephone
+                                                        formatPhone(
+                                                            option.livreur_telephone,
+                                                        )
                                                     }})
                                                 </span>
                                             </div>
@@ -570,7 +600,11 @@ function formatGNF(value: number): string {
                                         "
                                         class="text-surface-500 dark:text-surface-400 ml-1"
                                     >
-                                        {{ vehiculeSelected.livreur_telephone }}
+                                        {{
+                                            formatPhone(
+                                                vehiculeSelected.livreur_telephone,
+                                            )
+                                        }}
                                     </span>
                                 </div>
                             </div>
