@@ -411,19 +411,14 @@ function formatGNF(value: number): string {
                 >
                     <div class="flex flex-col gap-4">
                         <div
-                            class="flex flex-wrap items-end justify-between gap-4"
+                            class="flex flex-wrap items-start justify-between gap-4"
                         >
                             <div class="flex flex-wrap items-end gap-4">
                                 <div class="flex flex-col">
-                                    <p
-                                        class="text-surface-500 dark:text-surface-400 text-xs tracking-wide uppercase"
-                                    >
-                                        POS
-                                    </p>
                                     <h1
                                         class="text-surface-900 dark:text-surface-0 text-xl leading-tight font-semibold"
                                     >
-                                        Nouvelle vente
+                                        Point de vente
                                     </h1>
                                 </div>
 
@@ -449,7 +444,7 @@ function formatGNF(value: number): string {
 
                             <div
                                 v-if="selectedMode !== 'Vente rapide'"
-                                class="w-full sm:w-72 md:w-[26rem]"
+                                class="flex w-full flex-col items-end gap-2 sm:w-72 md:w-[26rem]"
                             >
                                 <AutoComplete
                                     v-if="selectedMode === 'Client'"
@@ -534,6 +529,26 @@ function formatGNF(value: number): string {
                                         </div>
                                     </template>
                                 </AutoComplete>
+
+                                <div
+                                    v-if="
+                                        selectedMode === 'Livreur' &&
+                                        selectedVehiculeId &&
+                                        vehiculeSelected?.livreur_nom
+                                    "
+                                    class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
+                                >
+                                    <span
+                                        class="text-surface-500 dark:text-surface-400"
+                                    >
+                                        Livreur
+                                    </span>
+                                    <span
+                                        class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
+                                    >
+                                        {{ vehiculeSelected.livreur_nom }}
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
@@ -561,46 +576,6 @@ function formatGNF(value: number): string {
                                             .filter(Boolean)
                                             .join(' ')
                                     }}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div
-                            v-if="selectedMode === 'Livreur'"
-                            class="flex flex-wrap items-center gap-2"
-                        >
-                            <div
-                                v-if="selectedVehiculeId && vehiculeSelected"
-                                class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
-                            >
-                                <span
-                                    class="text-surface-500 dark:text-surface-400"
-                                >
-                                    Vehicule
-                                </span>
-                                <span
-                                    class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
-                                >
-                                    {{ vehiculeSelected.nom_vehicule }}
-                                </span>
-                            </div>
-
-                            <div
-                                v-if="
-                                    selectedVehiculeId &&
-                                    vehiculeSelected?.livreur_nom
-                                "
-                                class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
-                            >
-                                <span
-                                    class="text-surface-500 dark:text-surface-400"
-                                >
-                                    Livreur
-                                </span>
-                                <span
-                                    class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
-                                >
-                                    {{ vehiculeSelected.livreur_nom }}
                                 </span>
                             </div>
                         </div>
