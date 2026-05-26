@@ -2,8 +2,11 @@
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import AutoComplete from 'primevue/autocomplete';
 import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
-import { computed, ref } from 'vue';
+import { useToast } from 'primevue/usetoast';
+import QRCode from 'qrcode';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 interface Product {
     id: number;
@@ -46,6 +49,22 @@ type CartItem = Product & {
 type SaleMode = 'Vente rapide' | 'Client' | 'Livreur';
 type ProductCategory = 'Tous' | 'Packs' | 'Accessoires' | 'Boissons';
 
+interface TicketLigne {
+    nom: string;
+    qte: number;
+    prix_vente: number;
+    total: number;
+}
+
+interface TicketCommande {
+    commande_id: string;
+    reference: string;
+    created_at: string;
+    org_nom: string;
+    total_commande: number;
+    lignes: TicketLigne[];
+}
+
 const props = defineProps<{
     produits?: Product[];
     vehicules?: VehiculeOption[];
@@ -54,7 +73,7 @@ const props = defineProps<{
 
 const searchQuery = ref('');
 const selectedCategory = ref<ProductCategory>('Tous');
-const selectedMode = ref<SaleMode>('Livreur');
+const selectedMode = ref<SaleMode>('Vente rapide');
 const vehiculeSelected = ref<VehiculeOption | null>(null);
 const selectedVehiculeId = ref<string | null>(null);
 const vehiculeSuggests = ref<VehiculeOption[]>([]);
@@ -242,11 +261,7 @@ const subtotal = computed(() =>
 );
 
 const shippingCost = ref(0);
-const taxRate = ref(0.03);
-const taxAmount = computed(() => Math.round(subtotal.value * taxRate.value));
-const totalAmount = computed(
-    () => subtotal.value + shippingCost.value + taxAmount.value,
-);
+const totalAmount = computed(() => subtotal.value + shippingCost.value);
 
 function addToCart(product: Product): void {
     const line = cartRows.value.find((row) => row.productId === product.id);
@@ -327,25 +342,207 @@ function formatGNF(value: number): string {
     return `${new Intl.NumberFormat('fr-FR').format(value)} GNF`;
 }
 
+const toast = useToast();
+
+const showTicket = ref(false);
+const ticketCommande = ref<TicketCommande | null>(null);
+const ticketQrDataUrl = ref('');
+
+watch(ticketCommande, async (commande) => {
+    if (!commande) {
+        ticketQrDataUrl.value = '';
+        return;
+    }
+    const url = `${window.location.origin}/ventes/${commande.commande_id}`;
+    ticketQrDataUrl.value = await QRCode.toDataURL(url, {
+        width: 96,
+        margin: 1,
+        color: { dark: '#000000', light: '#ffffff' },
+    });
+});
+
+function ensureModeSelection(): boolean {
+    if (selectedMode.value === 'Client' && !selectedClientId.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Client requis',
+            detail: 'Veuillez sélectionner un client.',
+            life: 4000,
+        });
+        return false;
+    }
+
+    if (selectedMode.value === 'Livreur' && !selectedVehiculeId.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Véhicule requis',
+            detail: 'Veuillez sélectionner un véhicule.',
+            life: 4000,
+        });
+        return false;
+    }
+
+    return true;
+}
+
+function closeTicket(): void {
+    showTicket.value = false;
+}
+
+function printTicket(): void {
+    const el = document.getElementById('pdv-ticket-print');
+    if (!el) return;
+
+    const win = window.open('', '_blank', 'width=320,height=600');
+    if (!win) return;
+
+    const styleText = `
+        @page { size: 80mm auto; margin: 0; }
+        html, body { width: 80mm; margin: 0; padding: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: monospace;
+            font-size: 11px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        #ticket-root { width: 72mm; margin: 0 auto; padding: 3mm 2mm; }
+        .text-center { text-align: center; }
+        .text-base { font-size: 14px; }
+        .text-sm { font-size: 12px; }
+        .text-xs { font-size: 10px; }
+        .font-bold { font-weight: bold; }
+        .font-semibold { font-weight: 600; }
+        .font-medium { font-weight: 500; }
+        .uppercase { text-transform: uppercase; }
+        .tracking-wide { letter-spacing: 0.05em; }
+        .truncate { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .justify-between { justify-content: space-between; }
+        .space-y-1 > * + * { margin-top: 4px; }
+        .my-2 { margin: 6px 0; }
+        .my-3 { margin: 8px 0; }
+        .mt-0\\.5 { margin-top: 2px; }
+        .mt-1 { margin-top: 4px; }
+        .border-t { border-top: 1px dashed #999; }
+        .border-dashed { border-style: dashed; }
+        .text-surface-400, .text-surface-500 { color: #888; }
+        .text-surface-900 { color: #111; }
+        .dark\\:text-surface-0 { color: #111; }
+        img { display: block; width: 96px; height: 96px; }
+        .h-24 { height: 96px; } .w-24 { width: 96px; }
+        .text-\\[10px\\] { font-size: 10px; }
+    `;
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Ticket</title>
+    <style>${styleText}</style>
+  </head>
+  <body>
+    <div id="ticket-root">${el.innerHTML}</div>
+  </body>
+</html>`;
+
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+
+    win.onafterprint = () => {
+        win.close();
+    };
+
+    const doPrint = () => {
+        win.focus();
+        win.print();
+    };
+
+    if (win.document.readyState === 'complete') {
+        window.setTimeout(doPrint, 80);
+    } else {
+        win.addEventListener(
+            'load',
+            () => {
+                window.setTimeout(doPrint, 80);
+            },
+            { once: true },
+        );
+    }
+}
+
+const lightboxUrl = ref<string | null>(null);
+const lightboxAlt = ref('');
+
+function openLightbox(url: string, alt: string): void {
+    lightboxUrl.value = url;
+    lightboxAlt.value = alt;
+}
+
+function closeLightbox(): void {
+    lightboxUrl.value = null;
+}
+
+function onKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') closeLightbox();
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown));
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
+
 const checkoutForm = useForm({
     mode: '' as SaleMode,
     client_id: null as string | number | null,
     vehicule_id: null as string | null,
+    action: 'encaisser' as 'encaisser' | 'commande',
     lignes: [] as Array<{ produit_id: number; quantite: number }>,
 });
+const checkoutAction = ref<'encaisser' | 'commande' | null>(null);
 
-function submit(): void {
+function submit(action: 'encaisser' | 'commande'): void {
     if (cartRows.value.length === 0) return;
+
+    if (!ensureModeSelection()) {
+        return;
+    }
 
     checkoutForm.mode = selectedMode.value;
     checkoutForm.client_id = selectedClientId.value;
     checkoutForm.vehicule_id = selectedVehiculeId.value;
+    checkoutForm.action = action;
     checkoutForm.lignes = cartRows.value.map((r) => ({
         produit_id: r.productId,
         quantite: r.quantity,
     }));
+    checkoutAction.value = action;
 
-    checkoutForm.post('/pdv/checkout');
+    checkoutForm.post('/pdv/checkout', {
+        preserveState: true,
+        onSuccess: (page) => {
+            const flash = (page.props as Record<string, unknown>).flash as
+                | Record<string, unknown>
+                | undefined;
+            const commande = flash?.pdv_commande as TicketCommande | undefined;
+            if (commande) {
+                ticketCommande.value = commande;
+                showTicket.value = true;
+                cartRows.value = [];
+            }
+        },
+        onError: (errors) => {
+            const first = Object.values(errors)[0];
+            toast.add({
+                severity: 'error',
+                summary: 'Erreur',
+                detail: first ?? 'Une erreur est survenue.',
+                life: 5000,
+            });
+        },
+        onFinish: () => {
+            checkoutAction.value = null;
+        },
+    });
 }
 </script>
 
@@ -472,7 +669,7 @@ function submit(): void {
                                 </div>
 
                                 <AutoComplete
-                                    v-else
+                                    v-if="selectedMode === 'Livreur'"
                                     v-model="vehiculeSelected"
                                     :suggestions="vehiculeSuggests"
                                     option-label="display"
@@ -604,47 +801,55 @@ function submit(): void {
                         >
                             <div class="flex h-full">
                                 <div
-                                    class="bg-surface-100 dark:bg-surface-800 w-28 min-w-[112px] self-stretch"
+                                    class="bg-surface-100 dark:bg-surface-800 w-28 min-w-[112px] self-stretch overflow-hidden"
+                                    :class="
+                                        product.image ? 'cursor-zoom-in' : ''
+                                    "
+                                    @click="
+                                        product.image &&
+                                        openLightbox(
+                                            product.image,
+                                            product.name,
+                                        )
+                                    "
                                 >
                                     <img
                                         v-if="product.image"
                                         :src="product.image"
                                         :alt="product.name"
-                                        class="h-full w-full object-cover"
+                                        class="h-full w-full object-cover transition-transform duration-300 hover:scale-110"
                                     />
                                     <div
                                         v-else
                                         class="flex h-full w-full items-center justify-center"
                                     >
-                                        <i class="pi pi-box text-surface-400 dark:text-surface-500 text-3xl" />
+                                        <i
+                                            class="pi pi-box text-surface-400 dark:text-surface-500 text-3xl"
+                                        />
                                     </div>
                                 </div>
 
                                 <div class="flex min-w-0 flex-1 flex-col p-3">
-                                    <div
-                                        class="mb-3 flex items-start justify-between gap-3"
-                                    >
-                                        <div class="min-w-0">
-                                            <h3
-                                                class="text-surface-900 dark:text-surface-0 truncate text-sm font-semibold"
-                                            >
-                                                {{ product.name }}
-                                            </h3>
-                                            <p
-                                                class="text-surface-500 dark:text-surface-400 text-xs"
-                                            >
-                                                {{ product.subtitle }}
-                                            </p>
-                                            <p
-                                                class="text-surface-400 dark:text-surface-500 mt-1 text-xs"
-                                            >
-                                                Stock: {{ product.stock }}
-                                            </p>
-                                        </div>
+                                    <div class="mb-3 min-w-0">
+                                        <h3
+                                            class="text-surface-900 dark:text-surface-0 truncate text-sm font-semibold"
+                                        >
+                                            {{ product.name }}
+                                        </h3>
                                         <p
-                                            class="text-surface-900 dark:text-surface-0 text-sm font-semibold whitespace-nowrap"
+                                            class="text-surface-900 dark:text-surface-0 mt-0.5 text-sm font-semibold"
                                         >
                                             {{ formatGNF(product.unitPrice) }}
+                                        </p>
+                                        <p
+                                            class="text-surface-500 dark:text-surface-400 mt-0.5 text-xs"
+                                        >
+                                            {{ product.subtitle }}
+                                        </p>
+                                        <p
+                                            class="text-surface-400 dark:text-surface-500 mt-2 text-xs"
+                                        >
+                                            Stock: {{ product.stock }}
                                         </p>
                                     </div>
 
@@ -698,7 +903,7 @@ function submit(): void {
                     >
                         <div class="flex items-start gap-3">
                             <div
-                                class="bg-surface-100 dark:bg-surface-800 h-16 w-14 shrink-0 rounded-lg overflow-hidden"
+                                class="bg-surface-100 dark:bg-surface-800 h-16 w-14 shrink-0 overflow-hidden rounded-lg"
                             >
                                 <img
                                     v-if="item.image"
@@ -710,7 +915,9 @@ function submit(): void {
                                     v-else
                                     class="flex h-full w-full items-center justify-center"
                                 >
-                                    <i class="pi pi-box text-surface-400 dark:text-surface-500 text-2xl" />
+                                    <i
+                                        class="pi pi-box text-surface-400 dark:text-surface-500 text-2xl"
+                                    />
                                 </div>
                             </div>
 
@@ -758,8 +965,10 @@ function submit(): void {
                                         :model-value="String(item.quantity)"
                                         type="number"
                                         min="1"
+                                        max="999"
+                                        step="1"
                                         inputmode="numeric"
-                                        class="h-7 w-14 text-center text-sm"
+                                        class="h-7 w-20 text-center text-sm"
                                         @input="
                                             onQuantityInput(item.id, $event)
                                         "
@@ -796,14 +1005,6 @@ function submit(): void {
                             formatGNF(shippingCost)
                         }}</span>
                     </div>
-                    <div
-                        class="text-surface-700 dark:text-surface-300 flex items-center justify-between text-sm"
-                    >
-                        <span>Taxe</span>
-                        <span class="font-medium">{{
-                            formatGNF(taxAmount)
-                        }}</span>
-                    </div>
 
                     <div
                         class="text-surface-900 dark:text-surface-0 mt-2 flex items-center justify-between text-base font-semibold"
@@ -812,16 +1013,173 @@ function submit(): void {
                         <span>{{ formatGNF(totalAmount) }}</span>
                     </div>
 
-                    <Button
-                        label="Encaisser"
-                        severity="contrast"
-                        class="mt-2 w-full text-base font-semibold"
-                        :disabled="cartRows.length === 0 || checkoutForm.processing"
-                        :loading="checkoutForm.processing"
-                        @click="submit"
-                    />
+                    <div class="mt-2 grid grid-cols-2 gap-2">
+                        <Button
+                            label="Encaisser"
+                            severity="secondary"
+                            outlined
+                            class="w-full text-base font-semibold"
+                            :disabled="
+                                cartRows.length === 0 || checkoutForm.processing
+                            "
+                            :loading="
+                                checkoutForm.processing &&
+                                checkoutAction === 'encaisser'
+                            "
+                            @click="submit('encaisser')"
+                        />
+                        <Button
+                            label="Créer commande"
+                            severity="contrast"
+                            class="w-full text-base font-semibold"
+                            :disabled="
+                                cartRows.length === 0 || checkoutForm.processing
+                            "
+                            :loading="
+                                checkoutForm.processing &&
+                                checkoutAction === 'commande'
+                            "
+                            @click="submit('commande')"
+                        />
+                    </div>
                 </div>
             </aside>
         </div>
     </div>
+
+    <!-- ── Ticket caisse ─────────────────────────────────────────────────── -->
+    <Dialog
+        v-model:visible="showTicket"
+        modal
+        :closable="true"
+        :style="{ width: '340px' }"
+        :pt="{ header: { class: 'pb-2' }, content: { class: 'px-4 pb-4' } }"
+        @hide="closeTicket"
+    >
+        <template #header>
+            <span class="text-sm font-semibold">Ticket de caisse</span>
+        </template>
+
+        <div
+            v-if="ticketCommande"
+            id="pdv-ticket-print"
+            class="font-mono text-xs"
+        >
+            <!-- En-tête -->
+            <div class="mb-3 text-center">
+                <p class="text-base font-bold uppercase">
+                    {{ ticketCommande.org_nom }}
+                </p>
+                <p class="text-surface-500 mt-0.5">
+                    {{ ticketCommande.created_at }}
+                </p>
+                <p class="mt-1 font-semibold tracking-wide">
+                    {{ ticketCommande.reference }}
+                </p>
+            </div>
+
+            <div
+                class="border-surface-300 dark:border-surface-600 my-2 border-t border-dashed"
+            />
+
+            <!-- Lignes -->
+            <div class="space-y-1">
+                <div
+                    v-for="ligne in ticketCommande.lignes"
+                    :key="ligne.nom"
+                    class="flex flex-col"
+                >
+                    <span class="truncate font-medium">{{ ligne.nom }}</span>
+                    <div
+                        class="text-surface-500 dark:text-surface-400 flex justify-between"
+                    >
+                        <span
+                            >{{ ligne.qte }} ×
+                            {{ formatGNF(ligne.prix_vente) }}</span
+                        >
+                        <span
+                            class="text-surface-900 dark:text-surface-0 font-semibold"
+                            >{{ formatGNF(ligne.total) }}</span
+                        >
+                    </div>
+                </div>
+            </div>
+
+            <div
+                class="border-surface-300 dark:border-surface-600 my-2 border-t border-dashed"
+            />
+
+            <!-- Total -->
+            <div class="flex justify-between text-sm font-bold">
+                <span>TOTAL</span>
+                <span>{{ formatGNF(ticketCommande.total_commande) }}</span>
+            </div>
+
+            <div
+                class="border-surface-300 dark:border-surface-600 my-3 border-t border-dashed"
+            />
+
+            <div
+                v-if="ticketQrDataUrl"
+                class="my-3 flex flex-col items-center gap-1"
+            >
+                <img
+                    :src="ticketQrDataUrl"
+                    alt="QR commande"
+                    class="h-24 w-24"
+                />
+                <p class="text-surface-400 dark:text-surface-500 text-[10px]">
+                    Scanner pour retrouver la commande
+                </p>
+            </div>
+
+            <p class="text-surface-400 dark:text-surface-500 text-center">
+                Merci pour votre achat !
+            </p>
+        </div>
+
+        <template #footer>
+            <div class="flex items-center justify-center gap-2">
+                <Button
+                    label="Imprimer"
+                    icon="pi pi-print"
+                    severity="secondary"
+                    outlined
+                    size="small"
+                    class="h-8 px-3"
+                    @click="
+                        () => {
+                            if (ticketCommande) printTicket();
+                        }
+                    "
+                />
+            </div>
+        </template>
+    </Dialog>
+
+    <Teleport to="body">
+        <div
+            v-if="lightboxUrl"
+            class="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4"
+            @click.self="closeLightbox"
+        >
+            <div class="relative max-h-full max-w-3xl">
+                <button
+                    type="button"
+                    class="absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+                    @click="closeLightbox"
+                >
+                    <i class="pi pi-times" />
+                </button>
+                <img
+                    :src="lightboxUrl"
+                    :alt="lightboxAlt"
+                    class="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl"
+                />
+                <p class="mt-2 text-center text-sm text-white/70">
+                    {{ lightboxAlt }}
+                </p>
+            </div>
+        </div>
+    </Teleport>
 </template>

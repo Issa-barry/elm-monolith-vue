@@ -96,7 +96,23 @@ class PdvController extends Controller
             $userSite->id,
         );
 
-        return redirect()->route('ventes.show', $commande)
-            ->with('success', 'Vente enregistrée avec succès.');
+        $commande->load(['lignes.produit']);
+
+        $ticket = [
+            'commande_id'    => $commande->id,
+            'reference'      => $commande->reference,
+            'created_at'     => $commande->created_at->format('d/m/Y H:i'),
+            'org_nom'        => $user->organization?->nom ?? config('app.name'),
+            'total_commande' => (float) $commande->total_commande,
+            'lignes'         => $commande->lignes->map(fn ($l) => [
+                'nom'        => $l->produit?->nom ?? '—',
+                'qte'        => (int) $l->qte,
+                'prix_vente' => (int) $l->prix_vente_snapshot,
+                'total'      => (float) $l->total_ligne,
+            ])->values()->all(),
+        ];
+
+        return redirect()->route('pdv.index')
+            ->with('pdv_commande', $ticket);
     }
 }
