@@ -4,9 +4,11 @@ import AutoComplete from 'primevue/autocomplete';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
+import ToggleSwitch from 'primevue/toggleswitch';
 import { useToast } from 'primevue/usetoast';
 import QRCode from 'qrcode';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 
 interface Product {
     id: number;
@@ -344,6 +346,38 @@ function formatGNF(value: number): string {
 
 const toast = useToast();
 
+// ── Printer settings ──────────────────────────────────────────────────────────
+
+interface PrinterSettings {
+    autoprint: boolean;
+    paperWidth: 58 | 80;
+    baudRate: number;
+}
+
+const PRINTER_SETTINGS_KEY = 'pdv_printer_settings';
+const defaultPrinterSettings: PrinterSettings = { autoprint: false, paperWidth: 80, baudRate: 9600 };
+
+function loadPrinterSettings(): PrinterSettings {
+    try {
+        const raw = localStorage.getItem(PRINTER_SETTINGS_KEY);
+        if (raw) return { ...defaultPrinterSettings, ...(JSON.parse(raw) as Partial<PrinterSettings>) };
+    } catch { /* ignore */ }
+    return { ...defaultPrinterSettings };
+}
+
+const printerSettings = reactive<PrinterSettings>(loadPrinterSettings());
+watch(printerSettings, (val) => { localStorage.setItem(PRINTER_SETTINGS_KEY, JSON.stringify(val)); }, { deep: true });
+
+const showPrinterSettings = ref(false);
+const lineWidth = computed(() => printerSettings.paperWidth === 80 ? 42 : 32);
+const baudRateOptions = [
+    { label: '9600 baud', value: 9600 },
+    { label: '19200 baud', value: 19200 },
+    { label: '115200 baud', value: 115200 },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const showTicket = ref(false);
 const ticketCommande = ref<TicketCommande | null>(null);
 const ticketQrDataUrl = ref('');
@@ -472,6 +506,186 @@ function printTicket(): void {
     }
 }
 
+// ── ESC/POS direct serial printing ────────────────────────────────────────────
+
+const W = 42; // characters per line on 80mm paper (font A)
+
+function ascii(s: string): string {
+    return s
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^\x0a\x20-\x7E]/g, '?'); // preserve LF (0x0A)
+}
+
+function rjust(left: string, right: string, width = W): string {
+    const gap = width - left.length - right.length;
+    return left + ' '.repeat(Math.max(1, gap)) + right;
+}
+
+function buildEscPosReceipt(ticket: TicketCommande, lw = W): Uint8Array {
+    const buf: number[] = [];
+
+    const push = (...b: number[]) => buf.push(...b);
+    const str = (s: string) => {
+        for (const c of ascii(s)) buf.push(c.charCodeAt(0));
+    };
+    const nl = (n = 1) => { for (let i = 0; i < n; i++) buf.push(0x0a); };
+    const center = () => push(0x1b, 0x61, 0x01);
+    const left = () => push(0x1b, 0x61, 0x00);
+    const bold = (on: boolean) => push(0x1b, 0x45, on ? 1 : 0);
+    const sep = () => str('-'.repeat(lw) + '\n');
+
+    // ── Init
+    push(0x1b, 0x40);
+
+    // ── En-tête
+    center();
+    bold(true);
+    str(ascii(ticket.org_nom).toUpperCase() + '\n');
+    bold(false);
+    str(ticket.created_at + '\n');
+    bold(true);
+    str(ticket.reference + '\n');
+    bold(false);
+    nl();
+
+    // ── Lignes
+    left();
+    sep();
+    for (const l of ticket.lignes) {
+        str(ascii(l.nom).slice(0, lw) + '\n');
+        const detail = `  ${l.qte} x ${l.prix_vente} GNF`;
+        const total = `${l.total} GNF`;
+        str(rjust(detail, total, lw) + '\n');
+    }
+    sep();
+
+    // ── Total
+    bold(true);
+    str(rjust('TOTAL', `${ticket.total_commande} GNF`, lw) + '\n');
+    bold(false);
+    nl();
+
+    // ── QR code (ESC/POS GS ( k)
+    const qrData = `${window.location.origin}/ventes/${ticket.commande_id}`;
+    const qrBytes = new TextEncoder().encode(qrData);
+    const pLen = qrBytes.length + 3;
+    center();
+    push(
+        0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00, // model 2
+        0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, 0x06,        // size 6
+        0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31,        // error M
+        0x1d, 0x28, 0x6b, pLen & 0xff, (pLen >> 8) & 0xff, 0x31, 0x50, 0x30,
+    );
+    qrBytes.forEach((b) => buf.push(b));
+    push(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30); // print QR
+    nl();
+    str('Scanner pour retrouver la commande\n');
+    nl();
+
+    // ── Footer
+    str('Merci pour votre achat !\n');
+    nl(3);
+
+    // ── Cut
+    push(0x1d, 0x56, 0x41, 0x00);
+
+    return new Uint8Array(buf);
+}
+
+type SerialPortLike = {
+    open(o: { baudRate: number }): Promise<void>;
+    close(): Promise<void>;
+    writable: WritableStream<Uint8Array>;
+};
+type SerialLike = {
+    requestPort(): Promise<SerialPortLike>;
+    getPorts(): Promise<SerialPortLike[]>;
+};
+
+const savedSerialPort = ref<SerialPortLike | null>(null);
+
+async function getSerialPort(): Promise<SerialPortLike | null> {
+    const serial = (navigator as Record<string, unknown>).serial as
+        | SerialLike
+        | undefined;
+    if (!serial) return null;
+
+    // Réutilise un port déjà accordé sans pop-up
+    if (!savedSerialPort.value) {
+        const ports = await serial.getPorts();
+        if (ports.length > 0) savedSerialPort.value = ports[0];
+    }
+
+    // Première fois : demande à l'utilisateur de choisir le port
+    if (!savedSerialPort.value) {
+        savedSerialPort.value = await serial.requestPort();
+    }
+
+    return savedSerialPort.value;
+}
+
+async function printTicketSerial(): Promise<void> {
+    if (!ticketCommande.value) return;
+
+    const nav = navigator as Record<string, unknown>;
+    if (!nav.serial) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Non supporté',
+            detail: 'Web Serial non disponible — utilisez Chrome ou Edge.',
+            life: 4000,
+        });
+        printTicket();
+        return;
+    }
+
+    try {
+        const port = await getSerialPort();
+        if (!port) return;
+
+        await port.open({ baudRate: printerSettings.baudRate });
+        const writer = port.writable.getWriter();
+        await writer.write(buildEscPosReceipt(ticketCommande.value, lineWidth.value));
+        writer.releaseLock();
+        await port.close();
+
+        toast.add({
+            severity: 'success',
+            summary: 'Imprimé',
+            detail: "Ticket envoyé à l'imprimante.",
+            life: 3000,
+        });
+    } catch (e: unknown) {
+        if (e instanceof DOMException && e.name === 'NotFoundError') return;
+        // Port peut-être invalide, on le réinitialise pour la prochaine tentative
+        savedSerialPort.value = null;
+        toast.add({
+            severity: 'error',
+            summary: 'Erreur impression',
+            detail: e instanceof Error ? e.message : 'Erreur inconnue',
+            life: 5000,
+        });
+    }
+}
+
+async function connectPrinter(): Promise<void> {
+    const serial = (navigator as Record<string, unknown>).serial as SerialLike | undefined;
+    if (!serial) {
+        toast.add({ severity: 'warn', summary: 'Non supporté', detail: 'Web Serial non disponible — utilisez Chrome ou Edge.', life: 4000 });
+        return;
+    }
+    try {
+        savedSerialPort.value = await serial.requestPort();
+        toast.add({ severity: 'success', summary: 'Connecté', detail: 'Imprimante sélectionnée avec succès.', life: 3000 });
+    } catch (e: unknown) {
+        if (e instanceof DOMException && e.name === 'NotFoundError') return;
+        toast.add({ severity: 'error', summary: 'Erreur connexion', detail: e instanceof Error ? e.message : 'Erreur inconnue', life: 4000 });
+    }
+}
+
+// ── Lightbox ───────────────────────────────────────────────────────────────────
+
 const lightboxUrl = ref<string | null>(null);
 const lightboxAlt = ref('');
 
@@ -528,6 +742,7 @@ function submit(action: 'encaisser' | 'commande'): void {
                 ticketCommande.value = commande;
                 showTicket.value = true;
                 cartRows.value = [];
+                if (printerSettings.autoprint) void printTicketSerial();
             }
         },
         onError: (errors) => {
@@ -562,12 +777,21 @@ function submit(action: 'encaisser' | 'commande'): void {
                             class="flex flex-wrap items-start justify-between gap-4"
                         >
                             <div class="flex flex-wrap items-end gap-4">
-                                <div class="flex flex-col">
+                                <div class="flex items-center gap-2">
                                     <h1
                                         class="text-surface-900 dark:text-surface-0 text-xl leading-tight font-semibold"
                                     >
                                         Point de vente
                                     </h1>
+                                    <Button
+                                        icon="pi pi-cog"
+                                        text
+                                        rounded
+                                        size="small"
+                                        class="h-8 w-8 !text-surface-400 hover:!text-surface-600"
+                                        aria-label="Paramètres imprimante"
+                                        @click="showPrinterSettings = true"
+                                    />
                                 </div>
 
                                 <div
@@ -1147,14 +1371,114 @@ function submit(action: 'encaisser' | 'commande'): void {
                     outlined
                     size="small"
                     class="h-8 px-3"
-                    @click="
-                        () => {
-                            if (ticketCommande) printTicket();
-                        }
-                    "
+                    @click="printTicketSerial"
                 />
             </div>
         </template>
+    </Dialog>
+
+    <!-- ── Paramètres imprimante ──────────────────────────────────────────── -->
+    <Dialog
+        v-model:visible="showPrinterSettings"
+        modal
+        :closable="true"
+        :style="{ width: '380px' }"
+        :pt="{ header: { class: 'pb-2' }, content: { class: 'px-5 pb-5' } }"
+    >
+        <template #header>
+            <span class="text-sm font-semibold">Paramètres imprimante</span>
+        </template>
+
+        <div class="space-y-5 pt-1">
+            <!-- Connexion -->
+            <div>
+                <p class="text-surface-400 dark:text-surface-500 mb-2 text-[11px] font-semibold uppercase tracking-wider">
+                    Connexion
+                </p>
+                <div class="flex items-center gap-3">
+                    <div class="min-w-0 flex-1 text-sm">
+                        <span
+                            v-if="savedSerialPort"
+                            class="text-green-600 dark:text-green-400 flex items-center gap-1 font-medium"
+                        >
+                            <i class="pi pi-check-circle text-xs" />
+                            Imprimante connectée
+                        </span>
+                        <span v-else class="text-surface-400 dark:text-surface-500">
+                            Aucune imprimante sélectionnée
+                        </span>
+                    </div>
+                    <Button
+                        :label="savedSerialPort ? 'Changer' : 'Choisir port'"
+                        icon="pi pi-usb"
+                        severity="secondary"
+                        outlined
+                        size="small"
+                        class="h-8 shrink-0"
+                        @click="connectPrinter"
+                    />
+                </div>
+            </div>
+
+            <div class="border-surface-200 dark:border-surface-700 border-t" />
+
+            <!-- Impression automatique -->
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <p class="text-surface-900 dark:text-surface-0 text-sm font-medium">
+                        Impression automatique
+                    </p>
+                    <p class="text-surface-400 dark:text-surface-500 mt-0.5 text-xs">
+                        Imprimer le ticket après chaque vente
+                    </p>
+                </div>
+                <ToggleSwitch v-model="printerSettings.autoprint" />
+            </div>
+
+            <div class="border-surface-200 dark:border-surface-700 border-t" />
+
+            <!-- Largeur papier -->
+            <div>
+                <p class="text-surface-900 dark:text-surface-0 mb-2 text-sm font-medium">
+                    Largeur du papier
+                </p>
+                <div class="flex gap-2">
+                    <Button
+                        label="80 mm"
+                        :severity="printerSettings.paperWidth === 80 ? 'primary' : 'secondary'"
+                        :outlined="printerSettings.paperWidth !== 80"
+                        size="small"
+                        class="h-8 flex-1"
+                        @click="printerSettings.paperWidth = 80"
+                    />
+                    <Button
+                        label="58 mm"
+                        :severity="printerSettings.paperWidth === 58 ? 'primary' : 'secondary'"
+                        :outlined="printerSettings.paperWidth !== 58"
+                        size="small"
+                        class="h-8 flex-1"
+                        @click="printerSettings.paperWidth = 58"
+                    />
+                </div>
+            </div>
+
+            <div class="border-surface-200 dark:border-surface-700 border-t" />
+
+            <!-- Vitesse -->
+            <div>
+                <p class="text-surface-900 dark:text-surface-0 mb-2 text-sm font-medium">
+                    Vitesse (baud rate)
+                </p>
+                <Select
+                    v-model="printerSettings.baudRate"
+                    :options="baudRateOptions"
+                    option-label="label"
+                    option-value="value"
+                    class="w-full"
+                    size="small"
+                />
+            </div>
+        </div>
     </Dialog>
 
     <Teleport to="body">

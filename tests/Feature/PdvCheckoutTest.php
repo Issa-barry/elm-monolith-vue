@@ -19,33 +19,36 @@ class PdvCheckoutTest extends TestCase
     use HasAdminSetup, RefreshDatabase;
 
     private \App\Models\User $user;
+
     private Organization $org;
+
     private Site $site;
+
     private Produit $produit;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->org  = Organization::factory()->create();
+        $this->org = Organization::factory()->create();
         $this->user = $this->makeUserWithPermissions($this->org, ['ventes.read', 'ventes.create', 'ventes.update']);
 
         $this->site = Site::create([
             'organization_id' => $this->org->id,
-            'nom'             => 'Site PDV',
-            'type'            => 'depot',
-            'localisation'    => 'Conakry',
+            'nom' => 'Site PDV',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
         ]);
         $this->user->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
 
         $this->produit = Produit::create([
             'organization_id' => $this->org->id,
-            'nom'             => 'Pack 30',
-            'type'            => 'fabricable',
-            'statut'          => 'actif',
-            'prix_vente'      => 5000,
-            'prix_usine'      => 3000,
-            'qte_stock'       => 100,
+            'nom' => 'Pack 30',
+            'type' => 'fabricable',
+            'statut' => 'actif',
+            'prix_vente' => 5000,
+            'prix_usine' => 3000,
+            'qte_stock' => 100,
         ]);
     }
 
@@ -74,7 +77,7 @@ class PdvCheckoutTest extends TestCase
     public function test_checkout_vente_rapide_creates_commande_en_cours(): void
     {
         $response = $this->actingAs($this->user)->post('/pdv/checkout', [
-            'mode'   => 'Vente rapide',
+            'mode' => 'Vente rapide',
             'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 2]],
         ]);
 
@@ -91,7 +94,7 @@ class PdvCheckoutTest extends TestCase
     public function test_checkout_decremente_le_stock(): void
     {
         $this->actingAs($this->user)->post('/pdv/checkout', [
-            'mode'   => 'Vente rapide',
+            'mode' => 'Vente rapide',
             'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 5]],
         ]);
 
@@ -101,7 +104,7 @@ class PdvCheckoutTest extends TestCase
     public function test_checkout_cree_une_facture(): void
     {
         $this->actingAs($this->user)->post('/pdv/checkout', [
-            'mode'   => 'Vente rapide',
+            'mode' => 'Vente rapide',
             'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
         ]);
 
@@ -116,7 +119,7 @@ class PdvCheckoutTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post('/pdv/checkout', [
-                'mode'   => 'Client',
+                'mode' => 'Client',
                 'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
             ])
             ->assertSessionHasErrors('client_id');
@@ -128,9 +131,9 @@ class PdvCheckoutTest extends TestCase
 
         $this->actingAs($this->user)
             ->post('/pdv/checkout', [
-                'mode'      => 'Client',
+                'mode' => 'Client',
                 'client_id' => $client->id,
-                'lignes'    => [['produit_id' => $this->produit->id, 'quantite' => 1]],
+                'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
             ])
             ->assertRedirect();
 
@@ -144,7 +147,7 @@ class PdvCheckoutTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post('/pdv/checkout', [
-                'mode'   => 'Livreur',
+                'mode' => 'Livreur',
                 'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
             ])
             ->assertSessionHasErrors('vehicule_id');
@@ -156,14 +159,14 @@ class PdvCheckoutTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'capacite_packs'  => 3,
+            'capacite_packs' => 3,
         ]);
 
         $this->actingAs($this->user)
             ->post('/pdv/checkout', [
-                'mode'        => 'Livreur',
+                'mode' => 'Livreur',
                 'vehicule_id' => $vehicule->id,
-                'lignes'      => [['produit_id' => $this->produit->id, 'quantite' => 10]],
+                'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 10]],
             ])
             ->assertSessionHasErrors('lignes');
     }
@@ -174,7 +177,7 @@ class PdvCheckoutTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post('/pdv/checkout', [
-                'mode'   => 'Vente rapide',
+                'mode' => 'Vente rapide',
                 'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 999]],
             ])
             ->assertSessionHasErrors('lignes');
@@ -186,7 +189,7 @@ class PdvCheckoutTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post('/pdv/checkout', [
-                'mode'   => 'Vente rapide',
+                'mode' => 'Vente rapide',
                 'lignes' => [],
             ])
             ->assertSessionHasErrors('lignes');
@@ -195,7 +198,7 @@ class PdvCheckoutTest extends TestCase
     public function test_checkout_redirects_unauthenticated(): void
     {
         $this->post('/pdv/checkout', [
-            'mode'   => 'Vente rapide',
+            'mode' => 'Vente rapide',
             'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
         ])->assertRedirect(route('login'));
     }
