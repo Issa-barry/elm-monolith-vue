@@ -8,7 +8,14 @@ import Select from 'primevue/select';
 import ToggleSwitch from 'primevue/toggleswitch';
 import { useToast } from 'primevue/usetoast';
 import QRCode from 'qrcode';
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import {
+    computed,
+    onBeforeUnmount,
+    onMounted,
+    reactive,
+    ref,
+    watch,
+} from 'vue';
 
 interface Product {
     id: number;
@@ -355,21 +362,37 @@ interface PrinterSettings {
 }
 
 const PRINTER_SETTINGS_KEY = 'pdv_printer_settings';
-const defaultPrinterSettings: PrinterSettings = { autoprint: false, paperWidth: 80, baudRate: 9600 };
+const defaultPrinterSettings: PrinterSettings = {
+    autoprint: false,
+    paperWidth: 80,
+    baudRate: 9600,
+};
 
 function loadPrinterSettings(): PrinterSettings {
     try {
         const raw = localStorage.getItem(PRINTER_SETTINGS_KEY);
-        if (raw) return { ...defaultPrinterSettings, ...(JSON.parse(raw) as Partial<PrinterSettings>) };
-    } catch { /* ignore */ }
+        if (raw)
+            return {
+                ...defaultPrinterSettings,
+                ...(JSON.parse(raw) as Partial<PrinterSettings>),
+            };
+    } catch {
+        /* ignore */
+    }
     return { ...defaultPrinterSettings };
 }
 
 const printerSettings = reactive<PrinterSettings>(loadPrinterSettings());
-watch(printerSettings, (val) => { localStorage.setItem(PRINTER_SETTINGS_KEY, JSON.stringify(val)); }, { deep: true });
+watch(
+    printerSettings,
+    (val) => {
+        localStorage.setItem(PRINTER_SETTINGS_KEY, JSON.stringify(val));
+    },
+    { deep: true },
+);
 
 const showPrinterSettings = ref(false);
-const lineWidth = computed(() => printerSettings.paperWidth === 80 ? 42 : 32);
+const lineWidth = computed(() => (printerSettings.paperWidth === 80 ? 42 : 32));
 const baudRateOptions = [
     { label: '9600 baud', value: 9600 },
     { label: '19200 baud', value: 19200 },
@@ -529,7 +552,9 @@ function buildEscPosReceipt(ticket: TicketCommande, lw = W): Uint8Array {
     const str = (s: string) => {
         for (const c of ascii(s)) buf.push(c.charCodeAt(0));
     };
-    const nl = (n = 1) => { for (let i = 0; i < n; i++) buf.push(0x0a); };
+    const nl = (n = 1) => {
+        for (let i = 0; i < n; i++) buf.push(0x0a);
+    };
     const center = () => push(0x1b, 0x61, 0x01);
     const left = () => push(0x1b, 0x61, 0x00);
     const bold = (on: boolean) => push(0x1b, 0x45, on ? 1 : 0);
@@ -572,10 +597,39 @@ function buildEscPosReceipt(ticket: TicketCommande, lw = W): Uint8Array {
     const pLen = qrBytes.length + 3;
     center();
     push(
-        0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00, // model 2
-        0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, 0x06,        // size 6
-        0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31,        // error M
-        0x1d, 0x28, 0x6b, pLen & 0xff, (pLen >> 8) & 0xff, 0x31, 0x50, 0x30,
+        0x1d,
+        0x28,
+        0x6b,
+        0x04,
+        0x00,
+        0x31,
+        0x41,
+        0x32,
+        0x00, // model 2
+        0x1d,
+        0x28,
+        0x6b,
+        0x03,
+        0x00,
+        0x31,
+        0x43,
+        0x06, // size 6
+        0x1d,
+        0x28,
+        0x6b,
+        0x03,
+        0x00,
+        0x31,
+        0x45,
+        0x31, // error M
+        0x1d,
+        0x28,
+        0x6b,
+        pLen & 0xff,
+        (pLen >> 8) & 0xff,
+        0x31,
+        0x50,
+        0x30,
     );
     qrBytes.forEach((b) => buf.push(b));
     push(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30); // print QR
@@ -646,7 +700,9 @@ async function printTicketSerial(): Promise<void> {
 
         await port.open({ baudRate: printerSettings.baudRate });
         const writer = port.writable.getWriter();
-        await writer.write(buildEscPosReceipt(ticketCommande.value, lineWidth.value));
+        await writer.write(
+            buildEscPosReceipt(ticketCommande.value, lineWidth.value),
+        );
         writer.releaseLock();
         await port.close();
 
@@ -670,17 +726,34 @@ async function printTicketSerial(): Promise<void> {
 }
 
 async function connectPrinter(): Promise<void> {
-    const serial = (navigator as Record<string, unknown>).serial as SerialLike | undefined;
+    const serial = (navigator as Record<string, unknown>).serial as
+        | SerialLike
+        | undefined;
     if (!serial) {
-        toast.add({ severity: 'warn', summary: 'Non supporté', detail: 'Web Serial non disponible — utilisez Chrome ou Edge.', life: 4000 });
+        toast.add({
+            severity: 'warn',
+            summary: 'Non supporté',
+            detail: 'Web Serial non disponible — utilisez Chrome ou Edge.',
+            life: 4000,
+        });
         return;
     }
     try {
         savedSerialPort.value = await serial.requestPort();
-        toast.add({ severity: 'success', summary: 'Connecté', detail: 'Imprimante sélectionnée avec succès.', life: 3000 });
+        toast.add({
+            severity: 'success',
+            summary: 'Connecté',
+            detail: 'Imprimante sélectionnée avec succès.',
+            life: 3000,
+        });
     } catch (e: unknown) {
         if (e instanceof DOMException && e.name === 'NotFoundError') return;
-        toast.add({ severity: 'error', summary: 'Erreur connexion', detail: e instanceof Error ? e.message : 'Erreur inconnue', life: 4000 });
+        toast.add({
+            severity: 'error',
+            summary: 'Erreur connexion',
+            detail: e instanceof Error ? e.message : 'Erreur inconnue',
+            life: 4000,
+        });
     }
 }
 
@@ -788,7 +861,7 @@ function submit(action: 'encaisser' | 'commande'): void {
                                         text
                                         rounded
                                         size="small"
-                                        class="h-8 w-8 !text-surface-400 hover:!text-surface-600"
+                                        class="!text-surface-400 hover:!text-surface-600 h-8 w-8"
                                         aria-label="Paramètres imprimante"
                                         @click="showPrinterSettings = true"
                                     />
@@ -1392,19 +1465,24 @@ function submit(action: 'encaisser' | 'commande'): void {
         <div class="space-y-5 pt-1">
             <!-- Connexion -->
             <div>
-                <p class="text-surface-400 dark:text-surface-500 mb-2 text-[11px] font-semibold uppercase tracking-wider">
+                <p
+                    class="text-surface-400 dark:text-surface-500 mb-2 text-[11px] font-semibold tracking-wider uppercase"
+                >
                     Connexion
                 </p>
                 <div class="flex items-center gap-3">
                     <div class="min-w-0 flex-1 text-sm">
                         <span
                             v-if="savedSerialPort"
-                            class="text-green-600 dark:text-green-400 flex items-center gap-1 font-medium"
+                            class="flex items-center gap-1 font-medium text-green-600 dark:text-green-400"
                         >
                             <i class="pi pi-check-circle text-xs" />
                             Imprimante connectée
                         </span>
-                        <span v-else class="text-surface-400 dark:text-surface-500">
+                        <span
+                            v-else
+                            class="text-surface-400 dark:text-surface-500"
+                        >
                             Aucune imprimante sélectionnée
                         </span>
                     </div>
@@ -1425,10 +1503,14 @@ function submit(action: 'encaisser' | 'commande'): void {
             <!-- Impression automatique -->
             <div class="flex items-center justify-between gap-4">
                 <div>
-                    <p class="text-surface-900 dark:text-surface-0 text-sm font-medium">
+                    <p
+                        class="text-surface-900 dark:text-surface-0 text-sm font-medium"
+                    >
                         Impression automatique
                     </p>
-                    <p class="text-surface-400 dark:text-surface-500 mt-0.5 text-xs">
+                    <p
+                        class="text-surface-400 dark:text-surface-500 mt-0.5 text-xs"
+                    >
                         Imprimer le ticket après chaque vente
                     </p>
                 </div>
@@ -1439,13 +1521,19 @@ function submit(action: 'encaisser' | 'commande'): void {
 
             <!-- Largeur papier -->
             <div>
-                <p class="text-surface-900 dark:text-surface-0 mb-2 text-sm font-medium">
+                <p
+                    class="text-surface-900 dark:text-surface-0 mb-2 text-sm font-medium"
+                >
                     Largeur du papier
                 </p>
                 <div class="flex gap-2">
                     <Button
                         label="80 mm"
-                        :severity="printerSettings.paperWidth === 80 ? 'primary' : 'secondary'"
+                        :severity="
+                            printerSettings.paperWidth === 80
+                                ? 'primary'
+                                : 'secondary'
+                        "
                         :outlined="printerSettings.paperWidth !== 80"
                         size="small"
                         class="h-8 flex-1"
@@ -1453,7 +1541,11 @@ function submit(action: 'encaisser' | 'commande'): void {
                     />
                     <Button
                         label="58 mm"
-                        :severity="printerSettings.paperWidth === 58 ? 'primary' : 'secondary'"
+                        :severity="
+                            printerSettings.paperWidth === 58
+                                ? 'primary'
+                                : 'secondary'
+                        "
                         :outlined="printerSettings.paperWidth !== 58"
                         size="small"
                         class="h-8 flex-1"
@@ -1466,7 +1558,9 @@ function submit(action: 'encaisser' | 'commande'): void {
 
             <!-- Vitesse -->
             <div>
-                <p class="text-surface-900 dark:text-surface-0 mb-2 text-sm font-medium">
+                <p
+                    class="text-surface-900 dark:text-surface-0 mb-2 text-sm font-medium"
+                >
                     Vitesse (baud rate)
                 </p>
                 <Select
