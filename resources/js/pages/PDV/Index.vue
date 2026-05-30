@@ -1,19 +1,31 @@
 ﻿<script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 import AutoComplete from 'primevue/autocomplete';
 import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
-import { computed, ref } from 'vue';
+import Select from 'primevue/select';
+import ToggleSwitch from 'primevue/toggleswitch';
+import { useToast } from 'primevue/usetoast';
+import QRCode from 'qrcode';
+import {
+    computed,
+    onBeforeUnmount,
+    onMounted,
+    reactive,
+    ref,
+    watch,
+} from 'vue';
 
 interface Product {
     id: number;
     code: string;
     name: string;
     subtitle: string;
-    category: 'Packs' | 'Accessoires' | 'Boissons';
+    category: 'Packs' | 'Accessoires' | 'Boissons' | null;
     stock: number;
     unitPrice: number;
-    image: string;
+    image: string | undefined;
 }
 
 interface CartRow {
@@ -46,23 +58,31 @@ type CartItem = Product & {
 type SaleMode = 'Vente rapide' | 'Client' | 'Livreur';
 type ProductCategory = 'Tous' | 'Packs' | 'Accessoires' | 'Boissons';
 
+interface TicketLigne {
+    nom: string;
+    qte: number;
+    prix_vente: number;
+    total: number;
+}
+
+interface TicketCommande {
+    commande_id: string;
+    reference: string;
+    created_at: string;
+    org_nom: string;
+    total_commande: number;
+    lignes: TicketLigne[];
+}
+
 const props = defineProps<{
+    produits?: Product[];
     vehicules?: VehiculeOption[];
     clients?: ClientOption[];
 }>();
 
-const primeImage1 =
-    'https://fqjltiegiezfetthbags.supabase.co/storage/v1/object/public/block.images/blocks/ecommerce/shoppingcart/extended-slide-over-1.jpg';
-const primeImage2 =
-    'https://fqjltiegiezfetthbags.supabase.co/storage/v1/object/public/block.images/blocks/ecommerce/shoppingcart/extended-slide-over-2.jpg';
-const primeImage3 =
-    'https://fqjltiegiezfetthbags.supabase.co/storage/v1/object/public/block.images/blocks/ecommerce/shoppingcart/extended-slide-over-3.jpg';
-const primeImage4 =
-    'https://fqjltiegiezfetthbags.supabase.co/storage/v1/object/public/block.images/blocks/ecommerce/shoppingcart/extended-slide-over-4.jpg';
-
 const searchQuery = ref('');
 const selectedCategory = ref<ProductCategory>('Tous');
-const selectedMode = ref<SaleMode>('Livreur');
+const selectedMode = ref<SaleMode>('Vente rapide');
 const vehiculeSelected = ref<VehiculeOption | null>(null);
 const selectedVehiculeId = ref<string | null>(null);
 const vehiculeSuggests = ref<VehiculeOption[]>([]);
@@ -70,133 +90,9 @@ const clientSelected = ref<ClientOption | null>(null);
 const selectedClientId = ref<string | number | null>(null);
 const clientSuggests = ref<ClientOption[]>(props.clients ?? []);
 
-const products = ref<Product[]>([
-    {
-        id: 1,
-        code: 'PDV-001',
-        name: 'Pack de 30',
-        subtitle: 'Eau de source',
-        category: 'Packs',
-        stock: 120,
-        unitPrice: 5000,
-        image: primeImage1,
-    },
-    {
-        id: 2,
-        code: 'PDV-002',
-        name: 'Pack de 20',
-        subtitle: 'Eau minerale',
-        category: 'Packs',
-        stock: 85,
-        unitPrice: 3500,
-        image: primeImage2,
-    },
-    {
-        id: 3,
-        code: 'PDV-003',
-        name: 'Bouteille 1.5L',
-        subtitle: 'Carton x6',
-        category: 'Boissons',
-        stock: 240,
-        unitPrice: 1200,
-        image: primeImage3,
-    },
-    {
-        id: 4,
-        code: 'PDV-004',
-        name: 'Bouteille 0.5L',
-        subtitle: 'Carton x12',
-        category: 'Boissons',
-        stock: 300,
-        unitPrice: 900,
-        image: primeImage4,
-    },
-    {
-        id: 5,
-        code: 'PDV-005',
-        name: 'Bidon 10L',
-        subtitle: 'Consigne incluse',
-        category: 'Packs',
-        stock: 50,
-        unitPrice: 8000,
-        image: primeImage1,
-    },
-    {
-        id: 6,
-        code: 'PDV-006',
-        name: 'Distributeur',
-        subtitle: 'Tabletop',
-        category: 'Accessoires',
-        stock: 15,
-        unitPrice: 45000,
-        image: primeImage2,
-    },
-    {
-        id: 7,
-        code: 'PDV-007',
-        name: 'Gobelets',
-        subtitle: 'Pack x50',
-        category: 'Accessoires',
-        stock: 400,
-        unitPrice: 1500,
-        image: primeImage3,
-    },
-    {
-        id: 8,
-        code: 'PDV-008',
-        name: 'Bouchons',
-        subtitle: 'Sachet x100',
-        category: 'Accessoires',
-        stock: 600,
-        unitPrice: 700,
-        image: primeImage4,
-    },
-    {
-        id: 9,
-        code: 'PDV-009',
-        name: 'Pack de 10',
-        subtitle: 'Eau minerale',
-        category: 'Packs',
-        stock: 180,
-        unitPrice: 2000,
-        image: primeImage1,
-    },
-    {
-        id: 10,
-        code: 'PDV-010',
-        name: 'Gallon 5L',
-        subtitle: 'Carton x4',
-        category: 'Boissons',
-        stock: 95,
-        unitPrice: 3000,
-        image: primeImage2,
-    },
-    {
-        id: 11,
-        code: 'PDV-011',
-        name: 'Pompe manuelle',
-        subtitle: 'Compatible bidons',
-        category: 'Accessoires',
-        stock: 60,
-        unitPrice: 2500,
-        image: primeImage3,
-    },
-    {
-        id: 12,
-        code: 'PDV-012',
-        name: 'Verres carton',
-        subtitle: 'Pack x100',
-        category: 'Accessoires',
-        stock: 220,
-        unitPrice: 1800,
-        image: primeImage4,
-    },
-]);
+const products = ref<Product[]>(props.produits ?? []);
 
-const cartRows = ref<CartRow[]>([
-    { productId: 1, quantity: 1 },
-    { productId: 3, quantity: 2 },
-]);
+const cartRows = ref<CartRow[]>([]);
 
 const categories: ProductCategory[] = [
     'Tous',
@@ -374,11 +270,7 @@ const subtotal = computed(() =>
 );
 
 const shippingCost = ref(0);
-const taxRate = ref(0.03);
-const taxAmount = computed(() => Math.round(subtotal.value * taxRate.value));
-const totalAmount = computed(
-    () => subtotal.value + shippingCost.value + taxAmount.value,
-);
+const totalAmount = computed(() => subtotal.value + shippingCost.value);
 
 function addToCart(product: Product): void {
     const line = cartRows.value.find((row) => row.productId === product.id);
@@ -458,6 +350,488 @@ function removeLine(productId: number): void {
 function formatGNF(value: number): string {
     return `${new Intl.NumberFormat('fr-FR').format(value)} GNF`;
 }
+
+const toast = useToast();
+
+// ── Printer settings ──────────────────────────────────────────────────────────
+
+interface PrinterSettings {
+    autoprint: boolean;
+    paperWidth: 58 | 80;
+    baudRate: number;
+}
+
+const PRINTER_SETTINGS_KEY = 'pdv_printer_settings';
+const defaultPrinterSettings: PrinterSettings = {
+    autoprint: false,
+    paperWidth: 80,
+    baudRate: 9600,
+};
+
+function loadPrinterSettings(): PrinterSettings {
+    try {
+        const raw = localStorage.getItem(PRINTER_SETTINGS_KEY);
+        if (raw)
+            return {
+                ...defaultPrinterSettings,
+                ...(JSON.parse(raw) as Partial<PrinterSettings>),
+            };
+    } catch {
+        /* ignore */
+    }
+    return { ...defaultPrinterSettings };
+}
+
+const printerSettings = reactive<PrinterSettings>(loadPrinterSettings());
+watch(
+    printerSettings,
+    (val) => {
+        localStorage.setItem(PRINTER_SETTINGS_KEY, JSON.stringify(val));
+    },
+    { deep: true },
+);
+
+const showPrinterSettings = ref(false);
+const lineWidth = computed(() => (printerSettings.paperWidth === 80 ? 42 : 32));
+const baudRateOptions = [
+    { label: '9600 baud', value: 9600 },
+    { label: '19200 baud', value: 19200 },
+    { label: '115200 baud', value: 115200 },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+const showTicket = ref(false);
+const ticketCommande = ref<TicketCommande | null>(null);
+const ticketQrDataUrl = ref('');
+
+watch(ticketCommande, async (commande) => {
+    if (!commande) {
+        ticketQrDataUrl.value = '';
+        return;
+    }
+    const url = `${window.location.origin}/ventes/${commande.commande_id}`;
+    ticketQrDataUrl.value = await QRCode.toDataURL(url, {
+        width: 96,
+        margin: 1,
+        color: { dark: '#000000', light: '#ffffff' },
+    });
+});
+
+function ensureModeSelection(): boolean {
+    if (selectedMode.value === 'Client' && !selectedClientId.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Client requis',
+            detail: 'Veuillez sélectionner un client.',
+            life: 4000,
+        });
+        return false;
+    }
+
+    if (selectedMode.value === 'Livreur' && !selectedVehiculeId.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Véhicule requis',
+            detail: 'Veuillez sélectionner un véhicule.',
+            life: 4000,
+        });
+        return false;
+    }
+
+    return true;
+}
+
+function closeTicket(): void {
+    showTicket.value = false;
+}
+
+function printTicket(): void {
+    const el = document.getElementById('pdv-ticket-print');
+    if (!el) return;
+
+    const win = window.open('', '_blank', 'width=320,height=600');
+    if (!win) return;
+
+    const styleText = `
+        @page { size: 80mm auto; margin: 0; }
+        html, body { width: 80mm; margin: 0; padding: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: monospace;
+            font-size: 11px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        #ticket-root { width: 72mm; margin: 0 auto; padding: 3mm 2mm; }
+        .text-center { text-align: center; }
+        .text-base { font-size: 14px; }
+        .text-sm { font-size: 12px; }
+        .text-xs { font-size: 10px; }
+        .font-bold { font-weight: bold; }
+        .font-semibold { font-weight: 600; }
+        .font-medium { font-weight: 500; }
+        .uppercase { text-transform: uppercase; }
+        .tracking-wide { letter-spacing: 0.05em; }
+        .truncate { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .justify-between { justify-content: space-between; }
+        .space-y-1 > * + * { margin-top: 4px; }
+        .my-2 { margin: 6px 0; }
+        .my-3 { margin: 8px 0; }
+        .mt-0\\.5 { margin-top: 2px; }
+        .mt-1 { margin-top: 4px; }
+        .border-t { border-top: 1px dashed #999; }
+        .border-dashed { border-style: dashed; }
+        .text-surface-400, .text-surface-500 { color: #888; }
+        .text-surface-900 { color: #111; }
+        .dark\\:text-surface-0 { color: #111; }
+        img { display: block; width: 96px; height: 96px; }
+        .h-24 { height: 96px; } .w-24 { width: 96px; }
+        .text-\\[10px\\] { font-size: 10px; }
+    `;
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Ticket</title>
+    <style>${styleText}</style>
+  </head>
+  <body>
+    <div id="ticket-root">${el.innerHTML}</div>
+  </body>
+</html>`;
+
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+
+    win.onafterprint = () => {
+        win.close();
+    };
+
+    const doPrint = () => {
+        win.focus();
+        win.print();
+    };
+
+    if (win.document.readyState === 'complete') {
+        window.setTimeout(doPrint, 80);
+    } else {
+        win.addEventListener(
+            'load',
+            () => {
+                window.setTimeout(doPrint, 80);
+            },
+            { once: true },
+        );
+    }
+}
+
+// ── ESC/POS direct serial printing ────────────────────────────────────────────
+
+const W = 42; // characters per line on 80mm paper (font A)
+
+function ascii(s: string): string {
+    return s
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^\x0a\x20-\x7E]/g, '?'); // preserve LF (0x0A)
+}
+
+function rjust(left: string, right: string, width = W): string {
+    const gap = width - left.length - right.length;
+    return left + ' '.repeat(Math.max(1, gap)) + right;
+}
+
+function buildEscPosReceipt(ticket: TicketCommande, lw = W): Uint8Array {
+    const buf: number[] = [];
+
+    const push = (...b: number[]) => buf.push(...b);
+    const str = (s: string) => {
+        for (const c of ascii(s)) buf.push(c.charCodeAt(0));
+    };
+    const nl = (n = 1) => {
+        for (let i = 0; i < n; i++) buf.push(0x0a);
+    };
+    const center = () => push(0x1b, 0x61, 0x01);
+    const left = () => push(0x1b, 0x61, 0x00);
+    const bold = (on: boolean) => push(0x1b, 0x45, on ? 1 : 0);
+    const sep = () => str('-'.repeat(lw) + '\n');
+
+    // ── Init
+    push(0x1b, 0x40);
+
+    // ── En-tête
+    center();
+    bold(true);
+    str(ascii(ticket.org_nom).toUpperCase() + '\n');
+    bold(false);
+    str(ticket.created_at + '\n');
+    bold(true);
+    str(ticket.reference + '\n');
+    bold(false);
+    nl();
+
+    // ── Lignes
+    left();
+    sep();
+    for (const l of ticket.lignes) {
+        str(ascii(l.nom).slice(0, lw) + '\n');
+        const detail = `  ${l.qte} x ${l.prix_vente} GNF`;
+        const total = `${l.total} GNF`;
+        str(rjust(detail, total, lw) + '\n');
+    }
+    sep();
+
+    // ── Total
+    bold(true);
+    str(rjust('TOTAL', `${ticket.total_commande} GNF`, lw) + '\n');
+    bold(false);
+    nl();
+
+    // ── QR code (ESC/POS GS ( k)
+    const qrData = `${window.location.origin}/ventes/${ticket.commande_id}`;
+    const qrBytes = new TextEncoder().encode(qrData);
+    const pLen = qrBytes.length + 3;
+    center();
+    push(
+        0x1d,
+        0x28,
+        0x6b,
+        0x04,
+        0x00,
+        0x31,
+        0x41,
+        0x32,
+        0x00, // model 2
+        0x1d,
+        0x28,
+        0x6b,
+        0x03,
+        0x00,
+        0x31,
+        0x43,
+        0x06, // size 6
+        0x1d,
+        0x28,
+        0x6b,
+        0x03,
+        0x00,
+        0x31,
+        0x45,
+        0x31, // error M
+        0x1d,
+        0x28,
+        0x6b,
+        pLen & 0xff,
+        (pLen >> 8) & 0xff,
+        0x31,
+        0x50,
+        0x30,
+    );
+    qrBytes.forEach((b) => buf.push(b));
+    push(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30); // print QR
+    nl();
+    str('Scanner pour retrouver la commande\n');
+    nl();
+
+    // ── Footer
+    str('Merci pour votre achat !\n');
+    nl(3);
+
+    // ── Cut
+    push(0x1d, 0x56, 0x41, 0x00);
+
+    return new Uint8Array(buf);
+}
+
+type SerialPortLike = {
+    open(o: { baudRate: number }): Promise<void>;
+    close(): Promise<void>;
+    writable: WritableStream<Uint8Array>;
+};
+type SerialLike = {
+    requestPort(): Promise<SerialPortLike>;
+    getPorts(): Promise<SerialPortLike[]>;
+};
+
+const savedSerialPort = ref<SerialPortLike | null>(null);
+
+async function getSerialPort(): Promise<SerialPortLike | null> {
+    const serial = (navigator as Record<string, unknown>).serial as
+        | SerialLike
+        | undefined;
+    if (!serial) return null;
+
+    // Réutilise un port déjà accordé sans pop-up
+    if (!savedSerialPort.value) {
+        const ports = await serial.getPorts();
+        if (ports.length > 0) savedSerialPort.value = ports[0];
+    }
+
+    // Première fois : demande à l'utilisateur de choisir le port
+    if (!savedSerialPort.value) {
+        savedSerialPort.value = await serial.requestPort();
+    }
+
+    return savedSerialPort.value;
+}
+
+async function printTicketSerial(): Promise<void> {
+    if (!ticketCommande.value) return;
+
+    const nav = navigator as Record<string, unknown>;
+    if (!nav.serial) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Non supporté',
+            detail: 'Web Serial non disponible — utilisez Chrome ou Edge.',
+            life: 4000,
+        });
+        printTicket();
+        return;
+    }
+
+    try {
+        const port = await getSerialPort();
+        if (!port) return;
+
+        await port.open({ baudRate: printerSettings.baudRate });
+        const writer = port.writable.getWriter();
+        await writer.write(
+            buildEscPosReceipt(ticketCommande.value, lineWidth.value),
+        );
+        writer.releaseLock();
+        await port.close();
+
+        toast.add({
+            severity: 'success',
+            summary: 'Imprimé',
+            detail: "Ticket envoyé à l'imprimante.",
+            life: 3000,
+        });
+    } catch (e: unknown) {
+        if (e instanceof DOMException && e.name === 'NotFoundError') return;
+        // Port peut-être invalide, on le réinitialise pour la prochaine tentative
+        savedSerialPort.value = null;
+        toast.add({
+            severity: 'error',
+            summary: 'Erreur impression',
+            detail: e instanceof Error ? e.message : 'Erreur inconnue',
+            life: 5000,
+        });
+    }
+}
+
+async function connectPrinter(): Promise<void> {
+    const serial = (navigator as Record<string, unknown>).serial as
+        | SerialLike
+        | undefined;
+    if (!serial) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Non supporté',
+            detail: 'Web Serial non disponible — utilisez Chrome ou Edge.',
+            life: 4000,
+        });
+        return;
+    }
+    try {
+        savedSerialPort.value = await serial.requestPort();
+        toast.add({
+            severity: 'success',
+            summary: 'Connecté',
+            detail: 'Imprimante sélectionnée avec succès.',
+            life: 3000,
+        });
+    } catch (e: unknown) {
+        if (e instanceof DOMException && e.name === 'NotFoundError') return;
+        toast.add({
+            severity: 'error',
+            summary: 'Erreur connexion',
+            detail: e instanceof Error ? e.message : 'Erreur inconnue',
+            life: 4000,
+        });
+    }
+}
+
+// ── Lightbox ───────────────────────────────────────────────────────────────────
+
+const lightboxUrl = ref<string | null>(null);
+const lightboxAlt = ref('');
+
+function openLightbox(url: string, alt: string): void {
+    lightboxUrl.value = url;
+    lightboxAlt.value = alt;
+}
+
+function closeLightbox(): void {
+    lightboxUrl.value = null;
+}
+
+function onKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') closeLightbox();
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown));
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
+
+const checkoutForm = useForm({
+    mode: '' as SaleMode,
+    client_id: null as string | number | null,
+    vehicule_id: null as string | null,
+    action: 'encaisser' as 'encaisser' | 'commande',
+    lignes: [] as Array<{ produit_id: number; quantite: number }>,
+});
+const checkoutAction = ref<'encaisser' | 'commande' | null>(null);
+
+function submit(action: 'encaisser' | 'commande'): void {
+    if (cartRows.value.length === 0) return;
+
+    if (!ensureModeSelection()) {
+        return;
+    }
+
+    checkoutForm.mode = selectedMode.value;
+    checkoutForm.client_id = selectedClientId.value;
+    checkoutForm.vehicule_id = selectedVehiculeId.value;
+    checkoutForm.action = action;
+    checkoutForm.lignes = cartRows.value.map((r) => ({
+        produit_id: r.productId,
+        quantite: r.quantity,
+    }));
+    checkoutAction.value = action;
+
+    checkoutForm.post('/pdv/checkout', {
+        preserveState: true,
+        onSuccess: (page) => {
+            const flash = (page.props as Record<string, unknown>).flash as
+                | Record<string, unknown>
+                | undefined;
+            const commande = flash?.pdv_commande as TicketCommande | undefined;
+            if (commande) {
+                ticketCommande.value = commande;
+                showTicket.value = true;
+                cartRows.value = [];
+                if (printerSettings.autoprint) void printTicketSerial();
+            }
+        },
+        onError: (errors) => {
+            const first = Object.values(errors)[0];
+            toast.add({
+                severity: 'error',
+                summary: 'Erreur',
+                detail: first ?? 'Une erreur est survenue.',
+                life: 5000,
+            });
+        },
+        onFinish: () => {
+            checkoutAction.value = null;
+        },
+    });
+}
 </script>
 
 <template>
@@ -476,12 +850,21 @@ function formatGNF(value: number): string {
                             class="flex flex-wrap items-start justify-between gap-4"
                         >
                             <div class="flex flex-wrap items-end gap-4">
-                                <div class="flex flex-col">
+                                <div class="flex items-center gap-2">
                                     <h1
                                         class="text-surface-900 dark:text-surface-0 text-xl leading-tight font-semibold"
                                     >
                                         Point de vente
                                     </h1>
+                                    <Button
+                                        icon="pi pi-cog"
+                                        text
+                                        rounded
+                                        size="small"
+                                        class="!text-surface-400 hover:!text-surface-600 h-8 w-8"
+                                        aria-label="Paramètres imprimante"
+                                        @click="showPrinterSettings = true"
+                                    />
                                 </div>
 
                                 <div
@@ -545,8 +928,45 @@ function formatGNF(value: number): string {
                                     </template>
                                 </AutoComplete>
 
+                                <div
+                                    v-if="
+                                        selectedMode === 'Client' &&
+                                        selectedClientId &&
+                                        clientSelected
+                                    "
+                                    class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
+                                >
+                                    <span
+                                        class="text-surface-500 dark:text-surface-400"
+                                    >
+                                        Client
+                                    </span>
+                                    <span
+                                        class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
+                                    >
+                                        {{
+                                            [
+                                                clientSelected.prenom,
+                                                clientSelected.nom,
+                                            ]
+                                                .filter(Boolean)
+                                                .join(' ')
+                                        }}
+                                    </span>
+                                    <span
+                                        v-if="clientSelected.telephone"
+                                        class="text-surface-500 dark:text-surface-400 ml-1"
+                                    >
+                                        {{
+                                            formatPhone(
+                                                clientSelected.telephone,
+                                            )
+                                        }}
+                                    </span>
+                                </div>
+
                                 <AutoComplete
-                                    v-else
+                                    v-if="selectedMode === 'Livreur'"
                                     v-model="vehiculeSelected"
                                     :suggestions="vehiculeSuggests"
                                     option-label="display"
@@ -638,34 +1058,6 @@ function formatGNF(value: number): string {
                         </div>
 
                         <div
-                            v-if="selectedMode === 'Client'"
-                            class="flex flex-wrap items-center gap-2"
-                        >
-                            <div
-                                v-if="selectedClientId && clientSelected"
-                                class="bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 rounded-full border px-3 py-1.5 text-xs"
-                            >
-                                <span
-                                    class="text-surface-500 dark:text-surface-400"
-                                >
-                                    Client
-                                </span>
-                                <span
-                                    class="text-surface-900 dark:text-surface-0 ml-1 font-medium"
-                                >
-                                    {{
-                                        [
-                                            clientSelected.prenom,
-                                            clientSelected.nom,
-                                        ]
-                                            .filter(Boolean)
-                                            .join(' ')
-                                    }}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div
                             class="mt-1 flex flex-wrap items-center justify-between gap-2"
                         >
                             <div class="flex flex-wrap items-center gap-1.5">
@@ -706,40 +1098,55 @@ function formatGNF(value: number): string {
                         >
                             <div class="flex h-full">
                                 <div
-                                    class="bg-surface-100 dark:bg-surface-800 w-28 min-w-[112px] self-stretch"
+                                    class="bg-surface-100 dark:bg-surface-800 w-28 min-w-[112px] self-stretch overflow-hidden"
+                                    :class="
+                                        product.image ? 'cursor-zoom-in' : ''
+                                    "
+                                    @click="
+                                        product.image &&
+                                        openLightbox(
+                                            product.image,
+                                            product.name,
+                                        )
+                                    "
                                 >
                                     <img
+                                        v-if="product.image"
                                         :src="product.image"
                                         :alt="product.name"
-                                        class="h-full w-full object-cover"
+                                        class="h-full w-full object-cover transition-transform duration-300 hover:scale-110"
                                     />
+                                    <div
+                                        v-else
+                                        class="flex h-full w-full items-center justify-center"
+                                    >
+                                        <i
+                                            class="pi pi-box text-surface-400 dark:text-surface-500 text-3xl"
+                                        />
+                                    </div>
                                 </div>
 
                                 <div class="flex min-w-0 flex-1 flex-col p-3">
-                                    <div
-                                        class="mb-3 flex items-start justify-between gap-3"
-                                    >
-                                        <div class="min-w-0">
-                                            <h3
-                                                class="text-surface-900 dark:text-surface-0 truncate text-sm font-semibold"
-                                            >
-                                                {{ product.name }}
-                                            </h3>
-                                            <p
-                                                class="text-surface-500 dark:text-surface-400 text-xs"
-                                            >
-                                                {{ product.subtitle }}
-                                            </p>
-                                            <p
-                                                class="text-surface-400 dark:text-surface-500 mt-1 text-xs"
-                                            >
-                                                Stock: {{ product.stock }}
-                                            </p>
-                                        </div>
+                                    <div class="mb-3 min-w-0">
+                                        <h3
+                                            class="text-surface-900 dark:text-surface-0 truncate text-sm font-semibold"
+                                        >
+                                            {{ product.name }}
+                                        </h3>
                                         <p
-                                            class="text-surface-900 dark:text-surface-0 text-sm font-semibold whitespace-nowrap"
+                                            class="text-surface-900 dark:text-surface-0 mt-0.5 text-sm font-semibold"
                                         >
                                             {{ formatGNF(product.unitPrice) }}
+                                        </p>
+                                        <p
+                                            class="text-surface-500 dark:text-surface-400 mt-0.5 text-xs"
+                                        >
+                                            {{ product.subtitle }}
+                                        </p>
+                                        <p
+                                            class="text-surface-400 dark:text-surface-500 mt-2 text-xs"
+                                        >
+                                            Stock: {{ product.stock }}
                                         </p>
                                     </div>
 
@@ -792,11 +1199,24 @@ function formatGNF(value: number): string {
                         class="border-surface-200 dark:border-surface-700 border-b py-4"
                     >
                         <div class="flex items-start gap-3">
-                            <img
-                                :src="item.image"
-                                :alt="item.name"
-                                class="h-16 w-14 shrink-0 rounded-lg object-cover"
-                            />
+                            <div
+                                class="bg-surface-100 dark:bg-surface-800 h-16 w-14 shrink-0 overflow-hidden rounded-lg"
+                            >
+                                <img
+                                    v-if="item.image"
+                                    :src="item.image"
+                                    :alt="item.name"
+                                    class="h-full w-full object-cover"
+                                />
+                                <div
+                                    v-else
+                                    class="flex h-full w-full items-center justify-center"
+                                >
+                                    <i
+                                        class="pi pi-box text-surface-400 dark:text-surface-500 text-2xl"
+                                    />
+                                </div>
+                            </div>
 
                             <div class="min-w-0 flex-1">
                                 <div
@@ -842,8 +1262,10 @@ function formatGNF(value: number): string {
                                         :model-value="String(item.quantity)"
                                         type="number"
                                         min="1"
+                                        max="999"
+                                        step="1"
                                         inputmode="numeric"
-                                        class="h-7 w-14 text-center text-sm"
+                                        class="h-7 w-20 text-center text-sm"
                                         @input="
                                             onQuantityInput(item.id, $event)
                                         "
@@ -880,14 +1302,6 @@ function formatGNF(value: number): string {
                             formatGNF(shippingCost)
                         }}</span>
                     </div>
-                    <div
-                        class="text-surface-700 dark:text-surface-300 flex items-center justify-between text-sm"
-                    >
-                        <span>Taxe</span>
-                        <span class="font-medium">{{
-                            formatGNF(taxAmount)
-                        }}</span>
-                    </div>
 
                     <div
                         class="text-surface-900 dark:text-surface-0 mt-2 flex items-center justify-between text-base font-semibold"
@@ -896,13 +1310,294 @@ function formatGNF(value: number): string {
                         <span>{{ formatGNF(totalAmount) }}</span>
                     </div>
 
-                    <Button
-                        label="Encaisser"
-                        severity="contrast"
-                        class="mt-2 w-full text-base font-semibold"
-                    />
+                    <div class="mt-2 grid grid-cols-2 gap-2">
+                        <Button
+                            label="Encaisser"
+                            severity="secondary"
+                            outlined
+                            class="w-full text-base font-semibold"
+                            :disabled="
+                                cartRows.length === 0 || checkoutForm.processing
+                            "
+                            :loading="
+                                checkoutForm.processing &&
+                                checkoutAction === 'encaisser'
+                            "
+                            @click="submit('encaisser')"
+                        />
+                        <Button
+                            label="Créer commande"
+                            severity="contrast"
+                            class="w-full text-base font-semibold"
+                            :disabled="
+                                cartRows.length === 0 || checkoutForm.processing
+                            "
+                            :loading="
+                                checkoutForm.processing &&
+                                checkoutAction === 'commande'
+                            "
+                            @click="submit('commande')"
+                        />
+                    </div>
                 </div>
             </aside>
         </div>
     </div>
+
+    <!-- ── Ticket caisse ─────────────────────────────────────────────────── -->
+    <Dialog
+        v-model:visible="showTicket"
+        modal
+        :closable="true"
+        :style="{ width: '340px' }"
+        :pt="{ header: { class: 'pb-2' }, content: { class: 'px-4 pb-4' } }"
+        @hide="closeTicket"
+    >
+        <template #header>
+            <span class="text-sm font-semibold">Ticket de caisse</span>
+        </template>
+
+        <div
+            v-if="ticketCommande"
+            id="pdv-ticket-print"
+            class="font-mono text-xs"
+        >
+            <!-- En-tête -->
+            <div class="mb-3 text-center">
+                <p class="text-base font-bold uppercase">
+                    {{ ticketCommande.org_nom }}
+                </p>
+                <p class="text-surface-500 mt-0.5">
+                    {{ ticketCommande.created_at }}
+                </p>
+                <p class="mt-1 font-semibold tracking-wide">
+                    {{ ticketCommande.reference }}
+                </p>
+            </div>
+
+            <div
+                class="border-surface-300 dark:border-surface-600 my-2 border-t border-dashed"
+            />
+
+            <!-- Lignes -->
+            <div class="space-y-1">
+                <div
+                    v-for="ligne in ticketCommande.lignes"
+                    :key="ligne.nom"
+                    class="flex flex-col"
+                >
+                    <span class="truncate font-medium">{{ ligne.nom }}</span>
+                    <div
+                        class="text-surface-500 dark:text-surface-400 flex justify-between"
+                    >
+                        <span
+                            >{{ ligne.qte }} ×
+                            {{ formatGNF(ligne.prix_vente) }}</span
+                        >
+                        <span
+                            class="text-surface-900 dark:text-surface-0 font-semibold"
+                            >{{ formatGNF(ligne.total) }}</span
+                        >
+                    </div>
+                </div>
+            </div>
+
+            <div
+                class="border-surface-300 dark:border-surface-600 my-2 border-t border-dashed"
+            />
+
+            <!-- Total -->
+            <div class="flex justify-between text-sm font-bold">
+                <span>TOTAL</span>
+                <span>{{ formatGNF(ticketCommande.total_commande) }}</span>
+            </div>
+
+            <div
+                class="border-surface-300 dark:border-surface-600 my-3 border-t border-dashed"
+            />
+
+            <div
+                v-if="ticketQrDataUrl"
+                class="my-3 flex flex-col items-center gap-1"
+            >
+                <img
+                    :src="ticketQrDataUrl"
+                    alt="QR commande"
+                    class="h-24 w-24"
+                />
+                <p class="text-surface-400 dark:text-surface-500 text-[10px]">
+                    Scanner pour retrouver la commande
+                </p>
+            </div>
+
+            <p class="text-surface-400 dark:text-surface-500 text-center">
+                Merci pour votre achat !
+            </p>
+        </div>
+
+        <template #footer>
+            <div class="flex items-center justify-center gap-2">
+                <Button
+                    label="Imprimer"
+                    icon="pi pi-print"
+                    severity="secondary"
+                    outlined
+                    size="small"
+                    class="h-8 px-3"
+                    @click="printTicketSerial"
+                />
+            </div>
+        </template>
+    </Dialog>
+
+    <!-- ── Paramètres imprimante ──────────────────────────────────────────── -->
+    <Dialog
+        v-model:visible="showPrinterSettings"
+        modal
+        :closable="true"
+        :style="{ width: '380px' }"
+        :pt="{ header: { class: 'pb-2' }, content: { class: 'px-5 pb-5' } }"
+    >
+        <template #header>
+            <span class="text-sm font-semibold">Paramètres imprimante</span>
+        </template>
+
+        <div class="space-y-5 pt-1">
+            <!-- Connexion -->
+            <div>
+                <p
+                    class="text-surface-400 dark:text-surface-500 mb-2 text-[11px] font-semibold tracking-wider uppercase"
+                >
+                    Connexion
+                </p>
+                <div class="flex items-center gap-3">
+                    <div class="min-w-0 flex-1 text-sm">
+                        <span
+                            v-if="savedSerialPort"
+                            class="flex items-center gap-1 font-medium text-green-600 dark:text-green-400"
+                        >
+                            <i class="pi pi-check-circle text-xs" />
+                            Imprimante connectée
+                        </span>
+                        <span
+                            v-else
+                            class="text-surface-400 dark:text-surface-500"
+                        >
+                            Aucune imprimante sélectionnée
+                        </span>
+                    </div>
+                    <Button
+                        :label="savedSerialPort ? 'Changer' : 'Choisir port'"
+                        icon="pi pi-usb"
+                        severity="secondary"
+                        outlined
+                        size="small"
+                        class="h-8 shrink-0"
+                        @click="connectPrinter"
+                    />
+                </div>
+            </div>
+
+            <div class="border-surface-200 dark:border-surface-700 border-t" />
+
+            <!-- Impression automatique -->
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <p
+                        class="text-surface-900 dark:text-surface-0 text-sm font-medium"
+                    >
+                        Impression automatique
+                    </p>
+                    <p
+                        class="text-surface-400 dark:text-surface-500 mt-0.5 text-xs"
+                    >
+                        Imprimer le ticket après chaque vente
+                    </p>
+                </div>
+                <ToggleSwitch v-model="printerSettings.autoprint" />
+            </div>
+
+            <div class="border-surface-200 dark:border-surface-700 border-t" />
+
+            <!-- Largeur papier -->
+            <div>
+                <p
+                    class="text-surface-900 dark:text-surface-0 mb-2 text-sm font-medium"
+                >
+                    Largeur du papier
+                </p>
+                <div class="flex gap-2">
+                    <Button
+                        label="80 mm"
+                        :severity="
+                            printerSettings.paperWidth === 80
+                                ? 'primary'
+                                : 'secondary'
+                        "
+                        :outlined="printerSettings.paperWidth !== 80"
+                        size="small"
+                        class="h-8 flex-1"
+                        @click="printerSettings.paperWidth = 80"
+                    />
+                    <Button
+                        label="58 mm"
+                        :severity="
+                            printerSettings.paperWidth === 58
+                                ? 'primary'
+                                : 'secondary'
+                        "
+                        :outlined="printerSettings.paperWidth !== 58"
+                        size="small"
+                        class="h-8 flex-1"
+                        @click="printerSettings.paperWidth = 58"
+                    />
+                </div>
+            </div>
+
+            <div class="border-surface-200 dark:border-surface-700 border-t" />
+
+            <!-- Vitesse -->
+            <div>
+                <p
+                    class="text-surface-900 dark:text-surface-0 mb-2 text-sm font-medium"
+                >
+                    Vitesse (baud rate)
+                </p>
+                <Select
+                    v-model="printerSettings.baudRate"
+                    :options="baudRateOptions"
+                    option-label="label"
+                    option-value="value"
+                    class="w-full"
+                    size="small"
+                />
+            </div>
+        </div>
+    </Dialog>
+
+    <Teleport to="body">
+        <div
+            v-if="lightboxUrl"
+            class="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4"
+            @click.self="closeLightbox"
+        >
+            <div class="relative max-h-full max-w-3xl">
+                <button
+                    type="button"
+                    class="absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+                    @click="closeLightbox"
+                >
+                    <i class="pi pi-times" />
+                </button>
+                <img
+                    :src="lightboxUrl"
+                    :alt="lightboxAlt"
+                    class="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl"
+                />
+                <p class="mt-2 text-center text-sm text-white/70">
+                    {{ lightboxAlt }}
+                </p>
+            </div>
+        </div>
+    </Teleport>
 </template>
