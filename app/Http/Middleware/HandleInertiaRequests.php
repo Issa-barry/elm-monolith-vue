@@ -188,7 +188,10 @@ class HandleInertiaRequests extends Middleware
             'transferts_a_receptionner' => $this->transfertsAReceptionner($request),
             'propositions_a_traiter' => $this->propositionsATraiter($request),
             'module_flags' => $this->moduleFlags($request),
-            'flash' => ['success' => $request->session()->get('success')],
+            'flash' => [
+                'success' => $request->session()->get('success'),
+                'pdv_commande' => $request->session()->get('pdv_commande'),
+            ],
         ];
     }
 }
