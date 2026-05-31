@@ -2,19 +2,28 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Cache;
 
 class OtpService
 {
     // TODO: Remplacer par un vrai code généré aléatoirement et envoyé par SMS.
     // Intégrations possibles : Africa's Talking, Twilio, Orange SMS API, etc.
-    // La méthode generate() devra appeler le provider configuré en injection.
     private const FIXED_CODE = '12345';
 
-    private const SESSION_KEY = 'register_otp';
+    private const TTL_MINUTES = 10;
+
+    private function key(string $telephone): string
+    {
+        return 'otp:'.md5($telephone);
+    }
+
+    private function verifiedKey(string $telephone): string
+    {
+        return 'otp:verified:'.md5($telephone);
+    }
 
     /**
-     * Génère un OTP pour le numéro de téléphone donné et le stocke en session.
+     * Génère un OTP pour le numéro de téléphone donné et le stocke en cache.
      *
      * TODO: Envoyer le code par SMS via le provider configuré.
      */
@@ -23,40 +32,26 @@ class OtpService
         // TODO: $code = (string) random_int(10000, 99999);
         $code = self::FIXED_CODE;
 
-        Session::put(self::SESSION_KEY.'.'.$telephone, [
-            'code' => $code,
-            'verified' => false,
-            'generated_at' => now()->timestamp,
-        ]);
+        Cache::put($this->key($telephone), $code, now()->addMinutes(self::TTL_MINUTES));
+        Cache::forget($this->verifiedKey($telephone));
 
         return $code;
     }
 
     /**
-     * Vérifie si le code fourni correspond à celui stocké en session pour ce téléphone.
+     * Vérifie si le code fourni correspond à celui stocké en cache pour ce téléphone.
      */
     public function verify(string $telephone, string $code): bool
     {
-        $data = Session::get(self::SESSION_KEY.'.'.$telephone);
-
-        if (! $data) {
-            return false;
-        }
-
-        return $data['code'] === $code;
+        return Cache::get($this->key($telephone)) === $code;
     }
 
     /**
-     * Marque l'OTP comme vérifié pour ce numéro.
+     * Marque l'OTP comme vérifié pour ce numéro (TTL identique).
      */
     public function markVerified(string $telephone): void
     {
-        $data = Session::get(self::SESSION_KEY.'.'.$telephone);
-
-        if ($data) {
-            $data['verified'] = true;
-            Session::put(self::SESSION_KEY.'.'.$telephone, $data);
-        }
+        Cache::put($this->verifiedKey($telephone), true, now()->addMinutes(self::TTL_MINUTES));
     }
 
     /**
@@ -64,16 +59,15 @@ class OtpService
      */
     public function isVerified(string $telephone): bool
     {
-        $data = Session::get(self::SESSION_KEY.'.'.$telephone);
-
-        return (bool) ($data['verified'] ?? false);
+        return (bool) Cache::get($this->verifiedKey($telephone));
     }
 
     /**
-     * Supprime l'OTP de la session (après utilisation).
+     * Supprime l'OTP du cache (après utilisation).
      */
     public function clear(string $telephone): void
     {
-        Session::forget(self::SESSION_KEY.'.'.$telephone);
+        Cache::forget($this->key($telephone));
+        Cache::forget($this->verifiedKey($telephone));
     }
 }
