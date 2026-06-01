@@ -23,6 +23,14 @@ class VehiculesController extends Controller
 
         $vehicules = $this->vehiculesPartenaires($organizationId, $proprietaire, $livreur);
 
+        // IDs des véhicules actuellement en transit
+        $enTransit = \App\Models\TransfertLogistique::query()
+            ->where('statut', \App\Enums\StatutTransfert::TRANSIT->value)
+            ->whereNotNull('vehicule_id')
+            ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
+            ->pluck('vehicule_id')
+            ->flip();
+
         return response()->json(
             $vehicules->map(fn (Vehicule $v) => [
                 'id'             => $v->id,
@@ -34,6 +42,7 @@ class VehiculesController extends Controller
                 'photo_url'      => $v->photo_path
                                     ? request()->getSchemeAndHttpHost().'/api/vehicules/'.$v->id.'/photo'
                                     : null,
+                'en_livraison'   => isset($enTransit[$v->id]),
                 'role'           => $proprietaire && $v->proprietaire_id === $proprietaire->id
                                     ? 'proprietaire'
                                     : 'livreur',
