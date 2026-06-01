@@ -39,6 +39,23 @@ Route::prefix('auth')->name('api.auth.')->group(function () {
     });
 });
 
+// ── Photo véhicule (publique — contourne le symlink storage Windows) ─────────
+Route::get('vehicules/{vehiculeId}/photo', function (string $vehiculeId) {
+    $vehicule = \App\Models\Vehicule::find($vehiculeId);
+
+    if (! $vehicule || ! $vehicule->photo_path) {
+        abort(404);
+    }
+
+    $disk = \Illuminate\Support\Facades\Storage::disk('public');
+
+    if (! $disk->exists($vehicule->photo_path)) {
+        abort(404);
+    }
+
+    return $disk->response($vehicule->photo_path);
+})->name('vehicule.photo');
+
 // ── Routes mobile ─────────────────────────────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('vehicules/mine', \App\Http\Controllers\Api\Client\VehiculesController::class)

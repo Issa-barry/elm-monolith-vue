@@ -31,7 +31,9 @@ class VehiculesController extends Controller
                 'type'           => $v->type_label,
                 'capacite'       => $v->capacite_packs,
                 'is_active'      => (bool) $v->is_active,
-                'photo_url'      => $v->photo_url,
+                'photo_url'      => $v->photo_path
+                                    ? request()->getSchemeAndHttpHost().'/api/vehicules/'.$v->id.'/photo'
+                                    : null,
                 'role'           => $proprietaire && $v->proprietaire_id === $proprietaire->id
                                     ? 'proprietaire'
                                     : 'livreur',
