@@ -37,5 +37,6 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Forcer JSON sur toutes les routes /api/* quel que soit le header Accept
+        $exceptions->shouldRenderJsonWhen(fn (Request $request): bool => $request->is('api/*'));
     })->create();

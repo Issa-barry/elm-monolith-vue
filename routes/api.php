@@ -38,3 +38,13 @@ Route::prefix('auth')->name('api.auth.')->group(function () {
         Route::get('me',      MeController::class)->name('me');
     });
 });
+
+// ── Routes mobile ─────────────────────────────────────────────────────────────
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('vehicules/mine', \App\Http\Controllers\Api\Client\VehiculesController::class)
+        ->name('client.vehicules.mine');
+    Route::get('vehicules/{vehiculeId}/commissions', \App\Http\Controllers\Api\Client\VehiculeCommissionsController::class)
+        ->name('client.vehicules.commissions');
+    Route::get('gains/mine', \App\Http\Controllers\Api\Client\GainsController::class)
+        ->name('client.gains.mine');
+});
