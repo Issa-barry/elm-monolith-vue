@@ -62,6 +62,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('client.vehicules.mine');
     Route::get('vehicules/{vehiculeId}/commissions', \App\Http\Controllers\Api\Client\VehiculeCommissionsController::class)
         ->name('client.vehicules.commissions');
+    Route::get('vehicules/{vehiculeId}/frais', \App\Http\Controllers\Api\Client\VehiculeFraisController::class)
+        ->name('client.vehicules.frais');
     Route::get('gains/mine', \App\Http\Controllers\Api\Client\GainsController::class)
         ->name('client.gains.mine');
     Route::get('livraisons/en-cours', \App\Http\Controllers\Api\Client\LivraisonsEnCoursController::class)

@@ -29,6 +29,13 @@ function decode(s: string): string {
         .join('');
 }
 
+// ULID Crockford base32 : 26 caractères parmi 0-9 a-z (sans i l o u)
+const ULID_RE = /^[0-9a-hjkmnp-tv-z]{26}$/i;
+
+function isUlid(s: string): boolean {
+    return ULID_RE.test(s);
+}
+
 function resolveInternalUrl(raw: string): string | null {
     const origin = window.location.origin;
     const isInternal = (u: string) =>
@@ -39,23 +46,36 @@ function resolveInternalUrl(raw: string): string | null {
     return null;
 }
 
+async function resolveUlidUrl(ulid: string): Promise<string | null> {
+    try {
+        const res = await fetch(`/scan/user/${ulid}`, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+        if (!res.ok) return null;
+        const json = await res.json() as { url?: string };
+        return json.url ?? null;
+    } catch {
+        return null;
+    }
+}
+
 export function useScanInterceptor() {
-    let buffer = '';
-    let lastKeyTime = 0;
-    let fastCount = 0;
+    let buffer          = '';
+    let bufferStartMs   = 0;          // horodatage du 1er caractère
     let resetTimer: ReturnType<typeof setTimeout> | null = null;
 
     function reset() {
-        buffer = '';
-        fastCount = 0;
+        buffer        = '';
+        bufferStartMs = 0;
         if (resetTimer) clearTimeout(resetTimer);
         resetTimer = null;
     }
 
     function scheduleReset() {
         if (resetTimer) clearTimeout(resetTimer);
-        // Si aucune touche n'arrive dans 400ms, on abandonne le buffer
-        resetTimer = setTimeout(reset, 400);
+        // Abandon si aucune touche pendant 500ms
+        resetTimer = setTimeout(reset, 500);
     }
 
     function onKeydown(e: KeyboardEvent) {
@@ -63,25 +83,39 @@ export function useScanInterceptor() {
 
         // Ne pas intercepter si un champ de saisie est actif
         if (
-            target.tagName === 'INPUT' ||
+            target.tagName === 'INPUT'    ||
             target.tagName === 'TEXTAREA' ||
-            target.tagName === 'SELECT' ||
+            target.tagName === 'SELECT'   ||
             target.isContentEditable
-        )
-            return;
+        ) return;
 
         if (e.key === 'Enter') {
-            // Valider seulement si au moins 10 frappes rapides consécutives
-            // (évite les faux positifs sur de courtes frappes humaines)
-            if (fastCount >= 10 && buffer.length >= 10) {
-                const url = resolveInternalUrl(buffer.trim());
+            const raw       = buffer.trim();
+            const elapsed   = Date.now() - bufferStartMs;
+
+            // Scanner USB : ≥ 8 caractères arrivés en < 500 ms
+            // Frappe humaine : trop longue ou trop courte
+            if (raw.length >= 8 && elapsed < 500) {
+                e.preventDefault();
+                reset();
+
+                // Cas 1 : URL complète (QR du dashboard client)
+                const url = resolveInternalUrl(raw);
                 if (url) {
-                    e.preventDefault();
-                    reset();
                     window.location.href = url;
                     return;
                 }
+
+                // Cas 2 : ULID nu (QR de l'app mobile)
+                const decoded = decode(raw);
+                if (isUlid(decoded)) {
+                    resolveUlidUrl(decoded).then((resolved) => {
+                        if (resolved) window.location.href = resolved;
+                    });
+                    return;
+                }
             }
+
             reset();
             return;
         }
@@ -89,20 +123,11 @@ export function useScanInterceptor() {
         // Ignorer les touches non-imprimables (Shift, Ctrl, F1…)
         if (e.key.length !== 1) return;
 
-        const now = Date.now();
-        const interval = now - lastKeyTime;
-        lastKeyTime = now;
-
-        // < 50ms entre deux touches = vitesse scanner
-        if (buffer.length === 0 || interval < 50) {
-            if (interval < 50) fastCount++;
-            buffer += e.key;
-        } else {
-            // Frappe trop lente → pas un scanner, reset
-            reset();
-            buffer = e.key;
+        if (buffer.length === 0) {
+            bufferStartMs = Date.now();
         }
 
+        buffer += e.key;
         scheduleReset();
     }
 
