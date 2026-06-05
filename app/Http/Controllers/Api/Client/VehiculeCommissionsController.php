@@ -75,8 +75,9 @@ class VehiculeCommissionsController extends Controller
                     : null;
 
                 $statutMobile = match ($row->statut) {
-                    StatutCommission::PAYE->value, 'paye' => 'paye',
-                    default => 'en_attente',
+                    StatutCommission::PAYE->value     => 'paye',
+                    StatutCommission::PARTIEL->value  => 'partiel',
+                    default                           => 'en_attente',
                 };
 
                 return [
