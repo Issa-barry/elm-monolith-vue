@@ -16,7 +16,7 @@ class LoginController extends Controller
     {
         $request->validate([
             'telephone' => ['required', 'string'],
-            'password'  => ['required', 'string'],
+            'password' => ['required', 'string'],
             'device_name' => ['required', 'string', 'max:255'],
         ]);
 
@@ -46,19 +46,19 @@ class LoginController extends Controller
 
         return response()->json([
             'token' => $token,
-            'user'  => $this->userResource($user),
+            'user' => $this->userResource($user),
         ]);
     }
 
     private function userResource(User $user): array
     {
         return [
-            'id'        => $user->id,
-            'prenom'    => $user->prenom,
-            'nom'       => $user->nom,
+            'id' => $user->id,
+            'prenom' => $user->prenom,
+            'nom' => $user->nom,
             'telephone' => $user->telephone,
-            'email'     => $user->email,
-            'roles'     => $user->getRoleNames(),
+            'email' => $user->email,
+            'roles' => $user->getRoleNames(),
         ];
     }
 }

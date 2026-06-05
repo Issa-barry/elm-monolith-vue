@@ -16,13 +16,13 @@ class MeController extends Controller
         $user = $request->user();
 
         return response()->json([
-            'id'         => $user->id,
-            'prenom'     => $user->prenom,
-            'nom'        => $user->nom,
-            'telephone'  => $user->telephone,
-            'email'      => $user->email,
-            'roles'      => $user->getRoleNames(),
-            'is_active'  => $user->is_active,
+            'id' => $user->id,
+            'prenom' => $user->prenom,
+            'nom' => $user->nom,
+            'telephone' => $user->telephone,
+            'email' => $user->email,
+            'roles' => $user->getRoleNames(),
+            'is_active' => $user->is_active,
             'qr_payload' => $this->resolveQrPayload($user),
         ]);
     }

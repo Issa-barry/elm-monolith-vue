@@ -14,7 +14,7 @@ class RegisterOtpController extends Controller
     {
         $request->validate([
             'telephone' => ['required', 'string'],
-            'code'      => ['required', 'string', 'digits:5'],
+            'code' => ['required', 'string', 'digits:5'],
         ]);
 
         $phone = PhoneNormalizer::normalize($request->input('telephone', ''));

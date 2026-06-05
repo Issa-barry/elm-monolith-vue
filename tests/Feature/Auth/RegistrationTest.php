@@ -24,6 +24,7 @@ class RegistrationTest extends TestCase
     private function withVerifiedOtp(string $phone): static
     {
         app(OtpService::class)->markVerified($phone);
+
         return $this;
     }
 

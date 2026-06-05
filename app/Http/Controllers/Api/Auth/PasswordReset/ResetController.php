@@ -16,8 +16,8 @@ class ResetController extends Controller
     public function __invoke(Request $request, OtpService $otp): JsonResponse
     {
         $request->validate([
-            'telephone'             => ['required', 'string'],
-            'password'              => ['required', 'confirmed', Password::default()],
+            'telephone' => ['required', 'string'],
+            'password' => ['required', 'confirmed', Password::default()],
             'password_confirmation' => ['required', 'string'],
         ]);
 

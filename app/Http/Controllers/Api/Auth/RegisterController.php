@@ -21,7 +21,7 @@ class RegisterController extends Controller
         } catch (ValidationException $e) {
             return response()->json([
                 'message' => 'Les données fournies sont invalides.',
-                'errors'  => $e->errors(),
+                'errors' => $e->errors(),
             ], 422);
         }
 
@@ -29,13 +29,13 @@ class RegisterController extends Controller
 
         return response()->json([
             'token' => $token,
-            'user'  => [
-                'id'        => $user->id,
-                'prenom'    => $user->prenom,
-                'nom'       => $user->nom,
+            'user' => [
+                'id' => $user->id,
+                'prenom' => $user->prenom,
+                'nom' => $user->nom,
                 'telephone' => $user->telephone,
-                'email'     => $user->email,
-                'roles'     => $user->getRoleNames(),
+                'email' => $user->email,
+                'roles' => $user->getRoleNames(),
             ],
         ], 201);
     }

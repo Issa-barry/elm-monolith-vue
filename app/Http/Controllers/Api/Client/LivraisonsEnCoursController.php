@@ -22,14 +22,14 @@ class LivraisonsEnCoursController extends Controller
         $user = $request->user();
 
         $proprietaire = $this->findProprietaire($user);
-        $livreur      = $this->findLivreur($user);
+        $livreur = $this->findLivreur($user);
 
         if ($proprietaire === null && $livreur === null) {
             return response()->json([]);
         }
 
         $vehiculeIds = $this->vehiculeIdsDuProprietaire($proprietaire);
-        $equipeIds   = $this->equipeIdsDuLivreur($livreur);
+        $equipeIds = $this->equipeIdsDuLivreur($livreur);
 
         if ($vehiculeIds->isEmpty() && $equipeIds->isEmpty()) {
             return response()->json([]);
@@ -47,7 +47,7 @@ class LivraisonsEnCoursController extends Controller
             ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
             ->where(fn (Builder $q) => $q
                 ->when($vehiculeIds->isNotEmpty(), fn (Builder $q2) => $q2->orWhereIn('vehicule_id', $vehiculeIds))
-                ->when($equipeIds->isNotEmpty(),   fn (Builder $q2) => $q2->orWhereIn('equipe_livraison_id', $equipeIds))
+                ->when($equipeIds->isNotEmpty(), fn (Builder $q2) => $q2->orWhereIn('equipe_livraison_id', $equipeIds))
             )
             ->orderByDesc('date_depart_reelle')
             ->get()
@@ -97,20 +97,20 @@ class LivraisonsEnCoursController extends Controller
     private function formatTransfert(TransfertLogistique $t): array
     {
         return [
-            'id'                  => $t->id,
-            'reference'           => $t->reference,
-            'statut'              => $t->statut instanceof \BackedEnum ? $t->statut->value : $t->statut,
-            'statut_label'        => 'Livraison en cours',
-            'site_source'         => $t->siteSource?->nom ?? '—',
-            'site_destination'    => $t->siteDestination?->nom ?? '—',
-            'vehicule'            => $t->vehicule ? [
-                'nom'             => $t->vehicule->nom_vehicule,
+            'id' => $t->id,
+            'reference' => $t->reference,
+            'statut' => $t->statut instanceof \BackedEnum ? $t->statut->value : $t->statut,
+            'statut_label' => 'Livraison en cours',
+            'site_source' => $t->siteSource?->nom ?? '—',
+            'site_destination' => $t->siteDestination?->nom ?? '—',
+            'vehicule' => $t->vehicule ? [
+                'nom' => $t->vehicule->nom_vehicule,
                 'immatriculation' => $t->vehicule->immatriculation,
             ] : null,
-            'equipe_nom'          => $t->equipeLivraison?->nom ?? '—',
-            'date_depart'         => $t->date_depart_reelle?->toDateString(),
+            'equipe_nom' => $t->equipeLivraison?->nom ?? '—',
+            'date_depart' => $t->date_depart_reelle?->toDateString(),
             'date_arrivee_prevue' => $t->date_arrivee_prevue?->toDateString(),
-            'nb_packs'            => (int) $t->lignes->sum('quantite_chargee'),
+            'nb_packs' => (int) $t->lignes->sum('quantite_chargee'),
         ];
     }
 }

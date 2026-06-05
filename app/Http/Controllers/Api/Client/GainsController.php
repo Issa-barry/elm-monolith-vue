@@ -66,36 +66,36 @@ class GainsController extends Controller
             ->orderBy('vehicules.nom_vehicule')
             ->get()
             ->map(fn ($row) => [
-                'vehicule_id'    => $row->vehicule_id,
-                'nom'            => $row->nom,
-                'immatriculation'=> $row->immatriculation,
-                'total_brut'     => (float) $row->total_brut,
-                'total_net'      => (float) $row->total_net,
-                'total_verse'    => (float) $row->total_verse,
-                'total_restant'  => max(0.0, (float) $row->total_net - (float) $row->total_verse),
-                'nb_commandes'   => (int) $row->nb_commandes,
+                'vehicule_id' => $row->vehicule_id,
+                'nom' => $row->nom,
+                'immatriculation' => $row->immatriculation,
+                'total_brut' => (float) $row->total_brut,
+                'total_net' => (float) $row->total_net,
+                'total_verse' => (float) $row->total_verse,
+                'total_restant' => max(0.0, (float) $row->total_net - (float) $row->total_verse),
+                'nb_commandes' => (int) $row->nb_commandes,
             ])
             ->values();
 
         return response()->json([
-            'total_brut'    => (float) $parVehicule->sum('total_brut'),
-            'total_net'     => (float) $parVehicule->sum('total_net'),
-            'total_verse'   => (float) $parVehicule->sum('total_verse'),
+            'total_brut' => (float) $parVehicule->sum('total_brut'),
+            'total_net' => (float) $parVehicule->sum('total_net'),
+            'total_verse' => (float) $parVehicule->sum('total_verse'),
             'total_restant' => (float) $parVehicule->sum('total_restant'),
-            'nb_commandes'  => (int) $parVehicule->sum('nb_commandes'),
-            'par_vehicule'  => $parVehicule,
+            'nb_commandes' => (int) $parVehicule->sum('nb_commandes'),
+            'par_vehicule' => $parVehicule,
         ]);
     }
 
     private function emptyResponse(): array
     {
         return [
-            'total_brut'    => 0.0,
-            'total_net'     => 0.0,
-            'total_verse'   => 0.0,
+            'total_brut' => 0.0,
+            'total_net' => 0.0,
+            'total_verse' => 0.0,
             'total_restant' => 0.0,
-            'nb_commandes'  => 0,
-            'par_vehicule'  => [],
+            'nb_commandes' => 0,
+            'par_vehicule' => [],
         ];
     }
 }

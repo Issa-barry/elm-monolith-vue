@@ -33,17 +33,17 @@ class VehiculesController extends Controller
 
         return response()->json(
             $vehicules->map(fn (Vehicule $v) => [
-                'id'             => $v->id,
-                'nom'            => $v->nom_vehicule,
-                'immatriculation'=> $v->immatriculation,
-                'type'           => $v->type_label,
-                'capacite'       => $v->capacite_packs,
-                'is_active'      => (bool) $v->is_active,
-                'photo_url'      => $v->photo_path
+                'id' => $v->id,
+                'nom' => $v->nom_vehicule,
+                'immatriculation' => $v->immatriculation,
+                'type' => $v->type_label,
+                'capacite' => $v->capacite_packs,
+                'is_active' => (bool) $v->is_active,
+                'photo_url' => $v->photo_path
                                     ? request()->getSchemeAndHttpHost().'/api/vehicules/'.$v->id.'/photo'
                                     : null,
-                'en_livraison'   => isset($enTransit[$v->id]),
-                'role'           => $proprietaire && $v->proprietaire_id === $proprietaire->id
+                'en_livraison' => isset($enTransit[$v->id]),
+                'role' => $proprietaire && $v->proprietaire_id === $proprietaire->id
                                     ? 'proprietaire'
                                     : 'livreur',
             ])->values()
@@ -53,7 +53,7 @@ class VehiculesController extends Controller
     /** @return array{0:?string,1:?Proprietaire,2:?Livreur} */
     private function resolveContext(User $user): array
     {
-        $orgId     = $user->organization_id;
+        $orgId = $user->organization_id;
         $telephone = $user->telephone;
 
         $client = Client::query()

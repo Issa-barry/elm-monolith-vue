@@ -75,20 +75,20 @@ class VehiculeCommissionsController extends Controller
                     : null;
 
                 $statutMobile = match ($row->statut) {
-                    StatutCommission::PAYE->value     => 'paye',
-                    StatutCommission::PARTIEL->value  => 'partiel',
-                    default                           => 'en_attente',
+                    StatutCommission::PAYE->value => 'paye',
+                    StatutCommission::PARTIEL->value => 'partiel',
+                    default => 'en_attente',
                 };
 
                 return [
-                    'id'              => $row->id,
-                    'reference'       => $row->reference ?? '—',
-                    'date'            => $date?->toISOString(),
-                    'montant_net'     => (float) $row->montant_net,
-                    'montant_verse'   => (float) $row->montant_verse,
+                    'id' => $row->id,
+                    'reference' => $row->reference ?? '—',
+                    'date' => $date?->toISOString(),
+                    'montant_net' => (float) $row->montant_net,
+                    'montant_verse' => (float) $row->montant_verse,
                     'montant_restant' => max(0.0, (float) $row->montant_net - (float) $row->montant_verse),
-                    'statut'          => $statutMobile,
-                    'mois'            => $date ? $this->labelMois($date) : '—',
+                    'statut' => $statutMobile,
+                    'mois' => $date ? $this->labelMois($date) : '—',
                 ];
             });
 
@@ -103,6 +103,6 @@ class VehiculeCommissionsController extends Controller
             9 => 'Septembre', 10 => 'Octobre', 11 => 'Novembre', 12 => 'Décembre',
         ];
 
-        return ($mois[$date->month] ?? '') . ' ' . $date->year;
+        return ($mois[$date->month] ?? '').' '.$date->year;
     }
 }

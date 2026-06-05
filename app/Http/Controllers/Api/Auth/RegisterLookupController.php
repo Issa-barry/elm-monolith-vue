@@ -54,7 +54,7 @@ class RegisterLookupController extends Controller
         $otp->generate($phone);
 
         return response()->json([
-            'status'  => $prefill ? 'prefill_available' : 'not_found',
+            'status' => $prefill ? 'prefill_available' : 'not_found',
             'prefill' => $prefill,
         ]);
     }
