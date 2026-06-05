@@ -23,11 +23,8 @@ class RegistrationTest extends TestCase
      */
     private function withVerifiedOtp(string $phone): static
     {
-        return $this->withSession([
-            'register_otp' => [
-                $phone => ['code' => '12345', 'verified' => true, 'generated_at' => time()],
-            ],
-        ]);
+        app(OtpService::class)->markVerified($phone);
+        return $this;
     }
 
     /**
