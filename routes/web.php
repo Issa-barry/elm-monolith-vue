@@ -318,6 +318,8 @@ Route::middleware(['auth', 'role:client|proprietaire|livreur', 'active.livreur']
 // ── Scan QR — accessible par staff et livreur (self-view) ─────────────────────
 Route::middleware(['auth'])->group(function () {
     Route::get('livreurs/{livreur}', [LivreurController::class, 'show'])->name('livreurs.show');
+    // Résolution ULID → URL fiche (pour le scanner USB qui lit le QR mobile)
+    Route::get('scan/user/{userId}', \App\Http\Controllers\ScanUserController::class)->name('scan.user');
 });
 
 require __DIR__.'/settings.php';
