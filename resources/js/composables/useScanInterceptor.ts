@@ -53,7 +53,7 @@ async function resolveUlidUrl(ulid: string): Promise<string | null> {
             credentials: 'same-origin',
         });
         if (!res.ok) return null;
-        const json = await res.json() as { url?: string };
+        const json = (await res.json()) as { url?: string };
         return json.url ?? null;
     } catch {
         return null;
@@ -61,12 +61,12 @@ async function resolveUlidUrl(ulid: string): Promise<string | null> {
 }
 
 export function useScanInterceptor() {
-    let buffer          = '';
-    let bufferStartMs   = 0;          // horodatage du 1er caractère
+    let buffer = '';
+    let bufferStartMs = 0; // horodatage du 1er caractère
     let resetTimer: ReturnType<typeof setTimeout> | null = null;
 
     function reset() {
-        buffer        = '';
+        buffer = '';
         bufferStartMs = 0;
         if (resetTimer) clearTimeout(resetTimer);
         resetTimer = null;
@@ -83,15 +83,16 @@ export function useScanInterceptor() {
 
         // Ne pas intercepter si un champ de saisie est actif
         if (
-            target.tagName === 'INPUT'    ||
+            target.tagName === 'INPUT' ||
             target.tagName === 'TEXTAREA' ||
-            target.tagName === 'SELECT'   ||
+            target.tagName === 'SELECT' ||
             target.isContentEditable
-        ) return;
+        )
+            return;
 
         if (e.key === 'Enter') {
-            const raw       = buffer.trim();
-            const elapsed   = Date.now() - bufferStartMs;
+            const raw = buffer.trim();
+            const elapsed = Date.now() - bufferStartMs;
 
             // Scanner USB : ≥ 8 caractères arrivés en < 500 ms
             // Frappe humaine : trop longue ou trop courte
