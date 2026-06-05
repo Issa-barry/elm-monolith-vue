@@ -23,12 +23,12 @@ class ScanUserController extends Controller
             return response()->json(['url' => null, 'message' => 'Utilisateur introuvable.'], 404);
         }
 
-        $proprietaire = Proprietaire::where('phone', $user->phone)->first();
+        $proprietaire = Proprietaire::where('telephone', $user->telephone)->first();
         if ($proprietaire) {
             return response()->json(['url' => route('proprietaires.show', $proprietaire->id)]);
         }
 
-        $livreur = Livreur::where('phone', $user->phone)->first();
+        $livreur = Livreur::where('telephone', $user->telephone)->first();
         if ($livreur) {
             return response()->json(['url' => route('livreurs.show', $livreur->id)]);
         }

@@ -13,15 +13,32 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('personal_access_tokens', function (Blueprint $table) {
-            $table->string('tokenable_id', 26)->change();
-        });
+        if (! Schema::hasTable('personal_access_tokens')) {
+            Schema::create('personal_access_tokens', function (Blueprint $table) {
+                $table->id();
+                $table->string('tokenable_type');
+                $table->string('tokenable_id', 26);
+                $table->index(['tokenable_type', 'tokenable_id']);
+                $table->string('name');
+                $table->string('token', 64)->unique();
+                $table->text('abilities')->nullable();
+                $table->timestamp('last_used_at')->nullable();
+                $table->timestamp('expires_at')->nullable();
+                $table->timestamps();
+            });
+        } else {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->string('tokenable_id', 26)->change();
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('personal_access_tokens', function (Blueprint $table) {
-            $table->unsignedBigInteger('tokenable_id')->change();
-        });
+        if (Schema::hasTable('personal_access_tokens')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->unsignedBigInteger('tokenable_id')->change();
+            });
+        }
     }
 };
