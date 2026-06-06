@@ -6,10 +6,6 @@ use Illuminate\Support\Facades\Cache;
 
 class OtpService
 {
-    // TODO: Remplacer par un vrai code généré aléatoirement et envoyé par SMS.
-    // Intégrations possibles : Africa's Talking, Twilio, Orange SMS API, etc.
-    private const FIXED_CODE = '12345';
-
     private const TTL_MINUTES = 10;
 
     private function key(string $telephone): string
@@ -23,14 +19,11 @@ class OtpService
     }
 
     /**
-     * Génère un OTP pour le numéro de téléphone donné et le stocke en cache.
-     *
-     * TODO: Envoyer le code par SMS via le provider configuré.
+     * Génère un OTP aléatoire pour le numéro de téléphone donné et le stocke en cache.
      */
     public function generate(string $telephone): string
     {
-        // TODO: $code = (string) random_int(10000, 99999);
-        $code = self::FIXED_CODE;
+        $code = str_pad((string) random_int(0, 99999), 5, '0', STR_PAD_LEFT);
 
         Cache::put($this->key($telephone), $code, now()->addMinutes(self::TTL_MINUTES));
         Cache::forget($this->verifiedKey($telephone));

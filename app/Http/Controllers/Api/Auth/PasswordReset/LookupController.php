@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api\Auth\PasswordReset;
 
 use App\Http\Controllers\Controller;
+use App\Mail\OtpPasswordResetMail;
 use App\Models\User;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 
 class LookupController extends Controller
 {
@@ -23,13 +25,29 @@ class LookupController extends Controller
             return response()->json(['error' => 'Numéro de téléphone invalide.'], 422);
         }
 
-        if (! User::where('telephone', $phone)->exists()) {
-            // Réponse volontairement neutre pour ne pas exposer les comptes existants.
-            return response()->json(['message' => 'Si ce numéro est enregistré, un code vous a été envoyé.']);
+        $user = User::where('telephone', $phone)->first();
+
+        if (! $user) {
+            return response()->json(['error' => 'Aucun compte trouvé pour ce numéro de téléphone.'], 404);
         }
 
-        $otp->generate($phone);
+        $code = $otp->generate($phone);
 
-        return response()->json(['message' => 'Si ce numéro est enregistré, un code vous a été envoyé.']);
+        Mail::to($user->email)->send(new OtpPasswordResetMail($code));
+
+        return response()->json([
+            'message'      => 'Un code de vérification a été envoyé à votre adresse email.',
+            'masked_email' => $this->maskEmail($user->email),
+        ]);
+    }
+
+    private function maskEmail(string $email): string
+    {
+        [$local, $domain] = explode('@', $email, 2);
+
+        $visible = substr($local, 0, 1);
+        $masked  = $visible.str_repeat('*', max(1, strlen($local) - 1));
+
+        return $masked.'@'.$domain;
     }
 }
