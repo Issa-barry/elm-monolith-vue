@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Enums\UserStatus;
+use App\Mail\EmailVerificationMail;
 use App\Models\Client;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -10,7 +11,6 @@ use App\Models\Proprietaire;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
-use App\Mail\EmailVerificationMail;
 use Tests\TestCase;
 
 class ApiRegistrationTest extends TestCase
@@ -22,11 +22,11 @@ class ApiRegistrationTest extends TestCase
     private function validPayload(array $overrides = []): array
     {
         return array_merge([
-            'telephone'             => '+224620000100',
-            'prenom'                => 'Mamadou',
-            'nom'                   => 'Diallo',
-            'email'                 => 'mamadou@example.com',
-            'password'              => 'Password@123',
+            'telephone' => '+224620000100',
+            'prenom' => 'Mamadou',
+            'nom' => 'Diallo',
+            'email' => 'mamadou@example.com',
+            'password' => 'Password@123',
             'password_confirmation' => 'Password@123',
         ], $overrides);
     }
@@ -54,16 +54,16 @@ class ApiRegistrationTest extends TestCase
         $org = Organization::factory()->create();
         Client::factory()->create([
             'organization_id' => $org->id,
-            'telephone'       => '+224620000201',
-            'user_id'         => null,
-            'prenom'          => 'Fatoumata',
-            'nom'             => 'BALDE',
+            'telephone' => '+224620000201',
+            'user_id' => null,
+            'prenom' => 'Fatoumata',
+            'nom' => 'BALDE',
         ]);
 
         $this->postJson(route('api.auth.register.check-phone'), ['telephone' => '+224620000201'])
             ->assertOk()
             ->assertJson([
-                'status'  => 'prefill_available',
+                'status' => 'prefill_available',
                 'prefill' => ['prenom' => 'Fatoumata', 'nom' => 'BALDE'],
             ]);
     }
@@ -73,16 +73,16 @@ class ApiRegistrationTest extends TestCase
         $org = Organization::factory()->create();
         Livreur::factory()->create([
             'organization_id' => $org->id,
-            'telephone'       => '+224620000202',
-            'user_id'         => null,
-            'prenom'          => 'Ibrahima',
-            'nom'             => 'CAMARA',
+            'telephone' => '+224620000202',
+            'user_id' => null,
+            'prenom' => 'Ibrahima',
+            'nom' => 'CAMARA',
         ]);
 
         $this->postJson(route('api.auth.register.check-phone'), ['telephone' => '+224620000202'])
             ->assertOk()
             ->assertJson([
-                'status'  => 'prefill_available',
+                'status' => 'prefill_available',
                 'prefill' => ['prenom' => 'Ibrahima', 'nom' => 'CAMARA'],
             ]);
     }
@@ -92,16 +92,16 @@ class ApiRegistrationTest extends TestCase
         $org = Organization::factory()->create();
         Proprietaire::factory()->create([
             'organization_id' => $org->id,
-            'telephone'       => '+224620000203',
-            'user_id'         => null,
-            'prenom'          => 'Alpha',
-            'nom'             => 'BARRY',
+            'telephone' => '+224620000203',
+            'user_id' => null,
+            'prenom' => 'Alpha',
+            'nom' => 'BARRY',
         ]);
 
         $this->postJson(route('api.auth.register.check-phone'), ['telephone' => '+224620000203'])
             ->assertOk()
             ->assertJson([
-                'status'  => 'prefill_available',
+                'status' => 'prefill_available',
                 'prefill' => ['prenom' => 'Alpha', 'nom' => 'BARRY'],
             ]);
     }
@@ -132,10 +132,10 @@ class ApiRegistrationTest extends TestCase
             ->assertJsonPath('user.is_active', false);
 
         $this->assertDatabaseHas('users', [
-            'telephone'         => '+224620000100',
-            'email'             => 'mamadou@example.com',
-            'status'            => UserStatus::PENDING->value,
-            'is_active'         => false,
+            'telephone' => '+224620000100',
+            'email' => 'mamadou@example.com',
+            'status' => UserStatus::PENDING->value,
+            'is_active' => false,
             'email_verified_at' => null,
         ]);
     }
@@ -178,12 +178,12 @@ class ApiRegistrationTest extends TestCase
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload([
             'prenom' => 'mamadou',
-            'nom'    => 'diallo',
+            'nom' => 'diallo',
         ]));
 
         $this->assertDatabaseHas('users', [
             'prenom' => 'Mamadou',
-            'nom'    => 'DIALLO',
+            'nom' => 'DIALLO',
         ]);
     }
 
@@ -261,7 +261,7 @@ class ApiRegistrationTest extends TestCase
         Mail::fake();
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload([
-            'password'              => 'password@123',
+            'password' => 'password@123',
             'password_confirmation' => 'password@123',
         ]))->assertStatus(422)->assertJsonValidationErrors('password');
     }
@@ -271,7 +271,7 @@ class ApiRegistrationTest extends TestCase
         Mail::fake();
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload([
-            'password'              => 'Password@abc',
+            'password' => 'Password@abc',
             'password_confirmation' => 'Password@abc',
         ]))->assertStatus(422)->assertJsonValidationErrors('password');
     }
@@ -281,7 +281,7 @@ class ApiRegistrationTest extends TestCase
         Mail::fake();
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload([
-            'password'              => 'Password123',
+            'password' => 'Password123',
             'password_confirmation' => 'Password123',
         ]))->assertStatus(422)->assertJsonValidationErrors('password');
     }
@@ -291,7 +291,7 @@ class ApiRegistrationTest extends TestCase
         Mail::fake();
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload([
-            'password'              => 'Password@123',
+            'password' => 'Password@123',
             'password_confirmation' => 'Different@456',
         ]))->assertStatus(422)->assertJsonValidationErrors('password');
     }
@@ -301,11 +301,11 @@ class ApiRegistrationTest extends TestCase
     public function test_register_links_existing_client(): void
     {
         Mail::fake();
-        $org    = Organization::factory()->create();
+        $org = Organization::factory()->create();
         $client = Client::factory()->create([
             'organization_id' => $org->id,
-            'telephone'       => '+224620000100',
-            'user_id'         => null,
+            'telephone' => '+224620000100',
+            'user_id' => null,
         ]);
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload());
@@ -317,11 +317,11 @@ class ApiRegistrationTest extends TestCase
     public function test_register_links_livreur_and_assigns_role(): void
     {
         Mail::fake();
-        $org     = Organization::factory()->create();
+        $org = Organization::factory()->create();
         $livreur = Livreur::factory()->create([
             'organization_id' => $org->id,
-            'telephone'       => '+224620000100',
-            'user_id'         => null,
+            'telephone' => '+224620000100',
+            'user_id' => null,
         ]);
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload());
@@ -334,11 +334,11 @@ class ApiRegistrationTest extends TestCase
     public function test_register_links_proprietaire_and_assigns_role(): void
     {
         Mail::fake();
-        $org          = Organization::factory()->create();
+        $org = Organization::factory()->create();
         $proprietaire = Proprietaire::factory()->create([
             'organization_id' => $org->id,
-            'telephone'       => '+224620000100',
-            'user_id'         => null,
+            'telephone' => '+224620000100',
+            'user_id' => null,
         ]);
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload());
@@ -398,11 +398,11 @@ class ApiRegistrationTest extends TestCase
         $this->postJson(route('api.auth.register.store'), $this->validPayload());
 
         $this->postJson(route('api.auth.login'), [
-            'telephone'   => '+224620000100',
-            'password'    => 'Password@123',
+            'telephone' => '+224620000100',
+            'password' => 'Password@123',
             'device_name' => 'test',
         ])->assertStatus(403)
-          ->assertJsonPath('code', 'email_not_verified');
+            ->assertJsonPath('code', 'email_not_verified');
     }
 
     public function test_login_allowed_after_email_verification(): void
@@ -411,16 +411,16 @@ class ApiRegistrationTest extends TestCase
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload());
 
-        $user  = User::where('email', 'mamadou@example.com')->first();
+        $user = User::where('email', 'mamadou@example.com')->first();
         $token = $user->email_verification_token;
 
         $this->get(route('api.auth.verify-email', ['token' => $token]));
 
         $this->postJson(route('api.auth.login'), [
-            'telephone'   => '+224620000100',
-            'password'    => 'Password@123',
+            'telephone' => '+224620000100',
+            'password' => 'Password@123',
             'device_name' => 'test',
         ])->assertOk()
-          ->assertJsonStructure(['token', 'user']);
+            ->assertJsonStructure(['token', 'user']);
     }
 }

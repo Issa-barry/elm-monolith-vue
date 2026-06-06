@@ -13,16 +13,16 @@ class RegisterRequest extends FormRequest
     {
         return [
             'telephone' => ['required', 'string', 'max:30'],
-            'prenom'    => ['required', 'string', 'min:2', 'max:100'],
-            'nom'       => ['required', 'string', 'min:2', 'max:100'],
-            'email'     => [
+            'prenom' => ['required', 'string', 'min:2', 'max:100'],
+            'nom' => ['required', 'string', 'min:2', 'max:100'],
+            'email' => [
                 'required',
                 'string',
                 'email',
                 'max:255',
                 Rule::unique(User::class, 'email'),
             ],
-            'password'  => [
+            'password' => [
                 'required',
                 'string',
                 'confirmed',
@@ -34,17 +34,17 @@ class RegisterRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'telephone.required'  => 'Le numéro de téléphone est obligatoire.',
-            'prenom.required'     => 'Le prénom est obligatoire.',
-            'prenom.min'          => 'Le prénom doit contenir au moins :min caractères.',
-            'nom.required'        => 'Le nom est obligatoire.',
-            'nom.min'             => 'Le nom doit contenir au moins :min caractères.',
-            'email.required'      => 'L\'adresse email est obligatoire.',
-            'email.email'         => 'L\'adresse email n\'est pas valide.',
-            'email.unique'        => 'Un compte existe déjà avec cette adresse email. Veuillez vous connecter.',
-            'password.required'   => 'Le mot de passe est obligatoire.',
-            'password.confirmed'  => 'Les mots de passe ne correspondent pas.',
-            'password.min'        => 'Le mot de passe doit contenir au moins :min caractères.',
+            'telephone.required' => 'Le numéro de téléphone est obligatoire.',
+            'prenom.required' => 'Le prénom est obligatoire.',
+            'prenom.min' => 'Le prénom doit contenir au moins :min caractères.',
+            'nom.required' => 'Le nom est obligatoire.',
+            'nom.min' => 'Le nom doit contenir au moins :min caractères.',
+            'email.required' => 'L\'adresse email est obligatoire.',
+            'email.email' => 'L\'adresse email n\'est pas valide.',
+            'email.unique' => 'Un compte existe déjà avec cette adresse email. Veuillez vous connecter.',
+            'password.required' => 'Le mot de passe est obligatoire.',
+            'password.confirmed' => 'Les mots de passe ne correspondent pas.',
+            'password.min' => 'Le mot de passe doit contenir au moins :min caractères.',
         ];
     }
 }

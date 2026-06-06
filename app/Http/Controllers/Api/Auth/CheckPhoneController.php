@@ -17,7 +17,7 @@ class CheckPhoneController extends Controller
         } catch (ValidationException $e) {
             return response()->json([
                 'message' => 'Les données fournies sont invalides.',
-                'errors'  => $e->errors(),
+                'errors' => $e->errors(),
             ], 422);
         }
 

@@ -24,6 +24,7 @@ class RegistrationService
      * Retourne le statut et les données de pré-remplissage si disponibles.
      *
      * @return array{status: string, prefill: array{prenom: string, nom: string}|null}
+     *
      * @throws ValidationException si le numéro est invalide
      */
     public function lookupPhone(string $rawPhone): array
@@ -73,15 +74,15 @@ class RegistrationService
             $token = Str::random(64);
 
             $user = User::create([
-                'prenom'                        => self::formatPrenom($data->prenom),
-                'nom'                           => mb_strtoupper($data->nom),
-                'email'                         => mb_strtolower($data->email),
-                'telephone'                     => $phone,
-                'password'                      => $data->password,
-                'status'                        => UserStatus::PENDING->value,
-                'is_active'                     => false,
-                'email_verified_at'             => null,
-                'email_verification_token'      => $token,
+                'prenom' => self::formatPrenom($data->prenom),
+                'nom' => mb_strtoupper($data->nom),
+                'email' => mb_strtolower($data->email),
+                'telephone' => $phone,
+                'password' => $data->password,
+                'status' => UserStatus::PENDING->value,
+                'is_active' => false,
+                'email_verified_at' => null,
+                'email_verification_token' => $token,
                 'email_verification_expires_at' => now()->addHours(self::TOKEN_TTL_HOURS),
             ]);
 
@@ -116,10 +117,10 @@ class RegistrationService
         }
 
         $user->update([
-            'status'                        => UserStatus::ACTIVE->value,
-            'is_active'                     => true,
-            'email_verified_at'             => now(),
-            'email_verification_token'      => null,
+            'status' => UserStatus::ACTIVE->value,
+            'is_active' => true,
+            'email_verified_at' => now(),
+            'email_verification_token' => null,
             'email_verification_expires_at' => null,
         ]);
 
@@ -186,10 +187,10 @@ class RegistrationService
         } else {
             Client::create([
                 'organization_id' => $organizationId,
-                'user_id'         => $user->id,
-                'nom'             => $user->nom,
-                'prenom'          => $user->prenom,
-                'telephone'       => $phone,
+                'user_id' => $user->id,
+                'nom' => $user->nom,
+                'prenom' => $user->prenom,
+                'telephone' => $phone,
             ]);
         }
     }

@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Api\Auth;
 
+use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Enums\UserStatus;
 use Illuminate\Http\Response;
 
 class EmailVerificationController extends Controller
@@ -24,10 +24,10 @@ class EmailVerificationController extends Controller
         }
 
         $user->update([
-            'status'                        => UserStatus::ACTIVE->value,
-            'is_active'                     => true,
-            'email_verified_at'             => now(),
-            'email_verification_token'      => null,
+            'status' => UserStatus::ACTIVE->value,
+            'is_active' => true,
+            'email_verified_at' => now(),
+            'email_verification_token' => null,
             'email_verification_expires_at' => null,
         ]);
 

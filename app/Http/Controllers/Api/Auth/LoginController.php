@@ -39,7 +39,7 @@ class LoginController extends Controller
         if (! $user->hasVerifiedEmail() && ! $user->isSuperAdmin()) {
             return response()->json([
                 'message' => 'Veuillez vérifier votre adresse email pour activer votre compte. Consultez votre boîte de réception.',
-                'code'    => 'email_not_verified',
+                'code' => 'email_not_verified',
             ], 403);
         }
 

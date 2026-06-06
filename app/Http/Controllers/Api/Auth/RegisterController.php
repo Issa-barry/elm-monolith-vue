@@ -16,10 +16,10 @@ class RegisterController extends Controller
     {
         $data = new RegisterData(
             telephone: $request->input('telephone'),
-            prenom:    $request->input('prenom'),
-            nom:       $request->input('nom'),
-            email:     $request->input('email'),
-            password:  $request->input('password'),
+            prenom: $request->input('prenom'),
+            nom: $request->input('nom'),
+            email: $request->input('email'),
+            password: $request->input('password'),
         );
 
         try {
@@ -27,13 +27,13 @@ class RegisterController extends Controller
         } catch (ValidationException $e) {
             return response()->json([
                 'message' => 'Les données fournies sont invalides.',
-                'errors'  => $e->errors(),
+                'errors' => $e->errors(),
             ], 422);
         }
 
         return response()->json([
             'message' => 'Compte créé avec succès. Un email de validation a été envoyé à '.$user->email.'. Vérifiez votre boîte de réception pour activer votre compte.',
-            'user'    => new UserResource($user),
+            'user' => new UserResource($user),
         ], 201);
     }
 }
