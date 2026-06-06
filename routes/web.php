@@ -74,19 +74,19 @@ Route::post('/invitations/accept/{token}', [AcceptInvitationController::class, '
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
-        'canRegister' => ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
+        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
     ]);
 })->name('home');
 
 Route::get('/contact', function () {
     return Inertia::render('Contact', [
-        'canRegister' => ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
+        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
     ]);
 })->name('contact');
 
 Route::get('/help', function () {
     return Inertia::render('Help', [
-        'canRegister' => ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
+        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
     ]);
 })->name('help');
 
@@ -318,6 +318,8 @@ Route::middleware(['auth', 'role:client|proprietaire|livreur', 'active.livreur']
 // ── Scan QR — accessible par staff et livreur (self-view) ─────────────────────
 Route::middleware(['auth'])->group(function () {
     Route::get('livreurs/{livreur}', [LivreurController::class, 'show'])->name('livreurs.show');
+    // Résolution ULID → URL fiche (pour le scanner USB qui lit le QR mobile)
+    Route::get('scan/user/{userId}', \App\Http\Controllers\ScanUserController::class)->name('scan.user');
 });
 
 require __DIR__.'/settings.php';

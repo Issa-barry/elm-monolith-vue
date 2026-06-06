@@ -9,11 +9,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
+use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, HasRoles, HasUlids, Notifiable, TwoFactorAuthenticatable;
+    use HasApiTokens, HasFactory, HasRoles, HasUlids, Notifiable, TwoFactorAuthenticatable;
 
     protected $fillable = [
         'prenom',
@@ -22,6 +23,10 @@ class User extends Authenticatable
         'password',
         'telephone',
         'is_active',
+        'status',
+        'email_verified_at',
+        'email_verification_token',
+        'email_verification_expires_at',
         'pays',
         'code_pays',
         'code_phone_pays',
@@ -47,10 +52,16 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime:Y-m-d H:i:s',
+            'email_verification_expires_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
             'is_active' => 'boolean',
         ];
+    }
+
+    public function hasVerifiedEmail(): bool
+    {
+        return $this->email_verified_at !== null;
     }
 
     public function organization(): BelongsTo

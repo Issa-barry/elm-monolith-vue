@@ -8,7 +8,7 @@ use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class RegisterLookupTest extends TestCase
@@ -141,8 +141,8 @@ class RegisterLookupTest extends TestCase
         $this->postJson(route('register.lookup'), ['telephone' => '+224620000007']);
 
         $this->assertTrue(
-            Session::has('register_otp.+224620000007'),
-            'OTP should be stored in session after lookup.',
+            Cache::has('otp:'.md5('+224620000007')),
+            'OTP should be stored in cache after lookup.',
         );
     }
 
@@ -153,7 +153,7 @@ class RegisterLookupTest extends TestCase
         $this->postJson(route('register.lookup'), ['telephone' => '+224620000008']);
 
         $this->assertFalse(
-            Session::has('register_otp.+224620000008'),
+            Cache::has('otp:'.md5('+224620000008')),
             'OTP should NOT be stored when phone already in users.',
         );
     }

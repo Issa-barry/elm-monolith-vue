@@ -7,8 +7,8 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\UserInvitation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Session;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -437,7 +437,7 @@ class UserInvitationTest extends TestCase
         ])->assertOk()
             ->assertJson(['status' => 'not_found']);
 
-        $this->assertTrue(Session::has('register_otp.+224620000099'));
+        $this->assertTrue(Cache::has('otp:'.md5('+224620000099')));
     }
 
     // ── AcceptInvitationController::verifyOtp ─────────────────────────────────
