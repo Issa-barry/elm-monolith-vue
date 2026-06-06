@@ -116,12 +116,17 @@ class FortifyServiceProvider extends ServiceProvider
     }
 
     /**
-     * L'inscription est active si:
-     * 1) La feature Fortify registration est active
-     * 2) Le flag Pennant module.inscription est actif pour l'organisation publique
+     * L'inscription web est active si:
+     * 1) WEB_REGISTRATION_ENABLED n'est pas explicitement false
+     * 2) La feature Fortify registration est active
+     * 3) Le flag Pennant module.inscription est actif pour l'organisation publique
      */
     private function canRegister(): bool
     {
+        if (! env('WEB_REGISTRATION_ENABLED', true)) {
+            return false;
+        }
+
         if (! Features::enabled(Features::registration())) {
             return false;
         }

@@ -36,6 +36,13 @@ class LoginController extends Controller
             ]);
         }
 
+        if (! $user->hasVerifiedEmail() && ! $user->isSuperAdmin()) {
+            return response()->json([
+                'message' => 'Veuillez vérifier votre adresse email pour activer votre compte. Consultez votre boîte de réception.',
+                'code' => 'email_not_verified',
+            ], 403);
+        }
+
         if (! $user->is_active && ! $user->isSuperAdmin()) {
             return response()->json([
                 'message' => 'Votre compte est inactif. Veuillez contacter l\'administration.',

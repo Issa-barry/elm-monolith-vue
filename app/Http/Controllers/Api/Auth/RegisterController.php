@@ -2,22 +2,28 @@
 
 namespace App\Http\Controllers\Api\Auth;
 
-use App\Actions\Fortify\CreateNewUser;
+use App\DTOs\RegisterData;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\Auth\RegisterRequest;
+use App\Http\Resources\UserResource;
+use App\Services\RegistrationService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 class RegisterController extends Controller
 {
-    public function __invoke(Request $request, CreateNewUser $creator): JsonResponse
+    public function __invoke(RegisterRequest $request, RegistrationService $service): JsonResponse
     {
-        $request->validate([
-            'device_name' => ['required', 'string', 'max:255'],
-        ]);
+        $data = new RegisterData(
+            telephone: $request->input('telephone'),
+            prenom: $request->input('prenom'),
+            nom: $request->input('nom'),
+            email: $request->input('email'),
+            password: $request->input('password'),
+        );
 
         try {
-            $user = $creator->create($request->all());
+            $user = $service->register($data);
         } catch (ValidationException $e) {
             return response()->json([
                 'message' => 'Les données fournies sont invalides.',
@@ -25,18 +31,9 @@ class RegisterController extends Controller
             ], 422);
         }
 
-        $token = $user->createToken($request->input('device_name'))->plainTextToken;
-
         return response()->json([
-            'token' => $token,
-            'user' => [
-                'id' => $user->id,
-                'prenom' => $user->prenom,
-                'nom' => $user->nom,
-                'telephone' => $user->telephone,
-                'email' => $user->email,
-                'roles' => $user->getRoleNames(),
-            ],
+            'message' => 'Compte créé avec succès. Un email de validation a été envoyé à '.$user->email.'. Vérifiez votre boîte de réception pour activer votre compte.',
+            'user' => new UserResource($user),
         ], 201);
     }
 }

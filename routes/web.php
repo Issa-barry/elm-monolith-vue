@@ -74,19 +74,19 @@ Route::post('/invitations/accept/{token}', [AcceptInvitationController::class, '
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
-        'canRegister' => ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
+        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
     ]);
 })->name('home');
 
 Route::get('/contact', function () {
     return Inertia::render('Contact', [
-        'canRegister' => ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
+        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
     ]);
 })->name('contact');
 
 Route::get('/help', function () {
     return Inertia::render('Help', [
-        'canRegister' => ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
+        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
     ]);
 })->name('help');
 

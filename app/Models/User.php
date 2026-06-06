@@ -23,6 +23,10 @@ class User extends Authenticatable
         'password',
         'telephone',
         'is_active',
+        'status',
+        'email_verified_at',
+        'email_verification_token',
+        'email_verification_expires_at',
         'pays',
         'code_pays',
         'code_phone_pays',
@@ -48,10 +52,16 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime:Y-m-d H:i:s',
+            'email_verification_expires_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
             'is_active' => 'boolean',
         ];
+    }
+
+    public function hasVerifiedEmail(): bool
+    {
+        return $this->email_verified_at !== null;
     }
 
     public function organization(): BelongsTo
