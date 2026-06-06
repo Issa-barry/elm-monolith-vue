@@ -75,6 +75,8 @@ Route::middleware('auth:sanctum')->group(function () {
             ->name('client.vehicules.commissions');
         Route::get('vehicules/{vehiculeId}/frais', \App\Http\Controllers\Api\Client\VehiculeFraisController::class)
             ->name('client.vehicules.frais');
+        Route::post('push-token', \App\Http\Controllers\Api\Mobile\PushTokenController::class)
+            ->name('client.push-token');
     });
     Route::get('gains/mine', \App\Http\Controllers\Api\Client\GainsController::class)
         ->name('client.gains.mine');

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Livreur;
+use App\Models\Proprietaire;
 use App\Models\User;
 use App\Services\PhoneNormalizer;
 use Illuminate\Http\JsonResponse;
@@ -45,9 +47,12 @@ class LoginController extends Controller
 
         if (! $user->is_active && ! $user->isSuperAdmin()) {
             return response()->json([
-                'message' => 'Votre compte est inactif. Veuillez contacter l\'administration.',
+                'message' => 'Votre compte a été bloqué. Veuillez contacter notre service client pour plus d\'informations.',
+                'code' => 'account_blocked',
             ], 403);
         }
+
+        $this->lierCompteParTelephone($user);
 
         $token = $user->createToken($request->input('device_name'))->plainTextToken;
 
@@ -55,6 +60,25 @@ class LoginController extends Controller
             'token' => $token,
             'user' => $this->userResource($user),
         ]);
+    }
+
+    /**
+     * Si le téléphone de l'utilisateur correspond à un livreur ou propriétaire
+     * sans user_id, on établit le lien automatiquement.
+     */
+    private function lierCompteParTelephone(User $user): void
+    {
+        if (! $user->telephone) {
+            return;
+        }
+
+        Livreur::where('telephone', $user->telephone)
+            ->whereNull('user_id')
+            ->update(['user_id' => $user->id]);
+
+        Proprietaire::where('telephone', $user->telephone)
+            ->whereNull('user_id')
+            ->update(['user_id' => $user->id]);
     }
 
     private function userResource(User $user): array

@@ -36,6 +36,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserInvitationController;
 use App\Http\Controllers\VehiculeController;
@@ -196,6 +197,10 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
             ->name('sites.invitations.store')
             ->middleware('throttle:10,1');
     });
+
+    // ── Comptes (super admin) ─────────────────────────────────────────────────
+    Route::get('comptes', [AccountController::class, 'index'])->name('comptes.index');
+    Route::patch('comptes/{user}/toggle-active', [AccountController::class, 'toggleActive'])->name('comptes.toggle-active');
 
     // ── Module : Utilisateurs ─────────────────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::UTILISATEURS)->group(function () {

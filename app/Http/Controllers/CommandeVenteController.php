@@ -12,6 +12,7 @@ use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\Produit;
 use App\Models\Vehicule;
+use App\Jobs\NotifierLivreursCommandeVenteJob;
 use App\Services\AuditLogService;
 use App\Services\CommandeVenteService;
 use Illuminate\Http\RedirectResponse;
@@ -476,6 +477,10 @@ class CommandeVenteController extends Controller
             ['statut' => $oldStatut],
             ['statut' => StatutCommandeVente::EN_COURS->value],
         );
+
+        if ($commande_vente->vehicule_id) {
+            NotifierLivreursCommandeVenteJob::dispatch($commande_vente->id, $commande_vente->reference);
+        }
 
         return back()->with('success', 'Commande validée. Facture créée.');
     }

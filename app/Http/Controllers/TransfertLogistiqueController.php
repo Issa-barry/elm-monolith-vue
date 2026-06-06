@@ -10,6 +10,7 @@ use App\Models\Produit;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
+use App\Jobs\NotifierLivreursTransfertJob;
 use App\Services\TransfertActiviteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -302,6 +303,10 @@ class TransfertLogistiqueController extends Controller
         });
 
         TransfertActiviteService::log($transfert, 'creation');
+
+        if ($transfert->equipe_livraison_id) {
+            NotifierLivreursTransfertJob::dispatch($transfert->id, $transfert->reference);
+        }
 
         return redirect()->route('logistique.show', $transfert)
             ->with('success', 'Transfert créé avec succès.');

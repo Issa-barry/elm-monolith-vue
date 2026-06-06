@@ -70,9 +70,15 @@ class FortifyServiceProvider extends ServiceProvider
                 return null;
             }
 
+            if (! $user->hasVerifiedEmail() && ! $user->isSuperAdmin()) {
+                throw ValidationException::withMessages([
+                    'telephone' => ['Veuillez vérifier votre adresse email pour activer votre compte. Consultez votre boîte de réception.'],
+                ]);
+            }
+
             if (! $user->is_active) {
                 throw ValidationException::withMessages([
-                    'telephone' => ['Votre compte est désactivé. Veuillez contacter l\'administrateur.'],
+                    'telephone' => ['Votre compte a été bloqué. Veuillez contacter notre service client pour plus d\'informations.'],
                 ]);
             }
 

@@ -34,6 +34,7 @@ class User extends Authenticatable
         'adresse',
         'organization_id',
         'matricule',
+        'expo_push_token',
     ];
 
     public function getNameAttribute(): string
