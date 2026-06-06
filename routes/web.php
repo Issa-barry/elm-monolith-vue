@@ -325,6 +325,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('livreurs/{livreur}', [LivreurController::class, 'show'])->name('livreurs.show');
     // Résolution ULID → URL fiche (pour le scanner USB qui lit le QR mobile)
     Route::get('scan/user/{userId}', \App\Http\Controllers\ScanUserController::class)->name('scan.user');
+    // Résolution référence livraison → URL page backoffice (scanner QR de la livraison)
+    Route::get('scan/livraison/{reference}', \App\Http\Controllers\ScanLivraisonController::class)->name('scan.livraison');
 });
 
 require __DIR__.'/settings.php';

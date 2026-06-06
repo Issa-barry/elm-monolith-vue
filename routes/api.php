@@ -77,6 +77,8 @@ Route::middleware('auth:sanctum')->group(function () {
             ->name('client.vehicules.frais');
         Route::post('push-token', \App\Http\Controllers\Api\Mobile\PushTokenController::class)
             ->name('client.push-token');
+        Route::post('auth/change-password', \App\Http\Controllers\Api\Mobile\ChangePasswordController::class)
+            ->name('client.change-password');
         Route::prefix('notifications')->name('client.notifications.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\Mobile\NotificationsController::class, 'index'])->name('index');
             Route::post('mark-all-read', [\App\Http\Controllers\Api\Mobile\NotificationsController::class, 'markAllRead'])->name('mark-all-read');
