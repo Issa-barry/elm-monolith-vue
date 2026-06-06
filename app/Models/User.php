@@ -24,6 +24,7 @@ class User extends Authenticatable
         'telephone',
         'is_active',
         'status',
+        'email_verified_at',
         'email_verification_token',
         'email_verification_expires_at',
         'pays',
