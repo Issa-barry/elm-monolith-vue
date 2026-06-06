@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Api\Auth\CheckPhoneController;
+use App\Http\Controllers\Api\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\Auth\LoginController;
 use App\Http\Controllers\Api\Auth\LogoutController;
 use App\Http\Controllers\Api\Auth\MeController;
@@ -18,11 +20,19 @@ Route::prefix('auth')->name('api.auth.')->group(function () {
     Route::post('login', LoginController::class)->name('login')
         ->middleware('throttle:10,1');
 
+    // Vérification email (accessible sans authentification)
+    Route::get('verify-email/{token}', EmailVerificationController::class)
+        ->name('verify-email');
+
     // Inscription multi-étapes
     Route::prefix('register')->name('register.')->middleware('throttle:20,1')->group(function () {
+        // Nouveau flow (vérification email)
+        Route::post('check-phone', CheckPhoneController::class)->name('check-phone');
+        Route::post('/', RegisterController::class)->name('store');
+
+        // Ancien flow OTP (rétro-compatibilité)
         Route::post('lookup', RegisterLookupController::class)->name('lookup');
         Route::post('otp', RegisterOtpController::class)->name('otp');
-        Route::post('/', RegisterController::class)->name('store');
     });
 
     // Réinitialisation de mot de passe par OTP

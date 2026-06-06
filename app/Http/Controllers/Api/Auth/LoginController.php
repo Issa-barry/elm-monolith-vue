@@ -42,6 +42,13 @@ class LoginController extends Controller
             ], 403);
         }
 
+        if (! $user->hasVerifiedEmail() && ! $user->isSuperAdmin()) {
+            return response()->json([
+                'message' => 'Veuillez vérifier votre adresse email pour activer votre compte. Consultez votre boîte de réception.',
+                'code'    => 'email_not_verified',
+            ], 403);
+        }
+
         $token = $user->createToken($request->input('device_name'))->plainTextToken;
 
         return response()->json([
