@@ -60,6 +60,23 @@ async function resolveUlidUrl(ulid: string): Promise<string | null> {
     }
 }
 
+// Références de livraison : VT-xxxxx (commande vente) ou TR-xxxxx (transfert logistique)
+const LIVRAISON_REF_RE = /^(VT|TR)-/i;
+
+async function resolveLivraisonUrl(ref: string): Promise<string | null> {
+    try {
+        const res = await fetch(`/scan/livraison/${encodeURIComponent(ref)}`, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+        if (!res.ok) return null;
+        const json = (await res.json()) as { url?: string };
+        return json.url ?? null;
+    } catch {
+        return null;
+    }
+}
+
 export function useScanInterceptor() {
     let buffer = '';
     let bufferStartMs = 0; // horodatage du 1er caractère
@@ -107,10 +124,19 @@ export function useScanInterceptor() {
                     return;
                 }
 
-                // Cas 2 : ULID nu (QR de l'app mobile)
+                // Cas 2 : ULID nu (QR propriétaire/livreur de l'app mobile)
                 const decoded = decode(raw);
                 if (isUlid(decoded)) {
                     resolveUlidUrl(decoded).then((resolved) => {
+                        if (resolved) window.location.href = resolved;
+                    });
+                    return;
+                }
+
+                // Cas 3 : Référence livraison brute VT-xxxxx / TR-xxxxx (QR anciens format)
+                // On teste raw (avant décodage AZERTY) car le tiret '-' est converti en '6' par decode()
+                if (LIVRAISON_REF_RE.test(raw)) {
+                    resolveLivraisonUrl(raw).then((resolved) => {
                         if (resolved) window.location.href = resolved;
                     });
                     return;
