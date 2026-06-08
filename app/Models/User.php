@@ -62,6 +62,10 @@ class User extends Authenticatable
 
     public function hasVerifiedEmail(): bool
     {
+        if ($this->email === null) {
+            return true;
+        }
+
         return $this->email_verified_at !== null;
     }
 

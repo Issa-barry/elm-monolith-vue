@@ -218,7 +218,7 @@ function confirmDelete(u: StaffUser) {
                 </div>
             </div>
 
-            <div class="overflow-hidden rounded-xl border bg-card">
+            <div class="overflow-hidden rounded-xl border bg-card" data-testid="staff-users-table">
                 <DataTable
                     :value="filteredUsers"
                     :paginator="props.users.length > 20"
