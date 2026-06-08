@@ -7,6 +7,7 @@ use App\Enums\MotifAnnulation;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Enums\StatutCommandeVente;
+use App\Jobs\NotifierLivreursCommandeVenteJob;
 use App\Models\AuditLog;
 use App\Models\Client;
 use App\Models\CommandeVente;
@@ -476,6 +477,10 @@ class CommandeVenteController extends Controller
             ['statut' => $oldStatut],
             ['statut' => StatutCommandeVente::EN_COURS->value],
         );
+
+        if ($commande_vente->vehicule_id) {
+            NotifierLivreursCommandeVenteJob::dispatch($commande_vente->id, $commande_vente->reference);
+        }
 
         return back()->with('success', 'Commande validée. Facture créée.');
     }

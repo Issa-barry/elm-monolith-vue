@@ -17,7 +17,7 @@ import AuthBase from '@/layouts/AuthLayout.vue';
 import { home, register } from '@/routes';
 import { store } from '@/routes/login';
 import { Form, Head, Link } from '@inertiajs/vue3';
-import { Eye, EyeOff } from 'lucide-vue-next';
+import { Eye, EyeOff, MailWarning, ShieldX } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed, ref, watch } from 'vue';
 
@@ -174,6 +174,55 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                     v-slot="{ errors, processing }"
                     class="flex flex-1 flex-col"
                 >
+                    <!-- Email non vérifié -->
+                    <div
+                        v-if="
+                            errors.telephone?.includes(
+                                'vérifier votre adresse email',
+                            )
+                        "
+                        class="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/40"
+                    >
+                        <MailWarning
+                            class="mt-0.5 h-5 w-5 shrink-0 text-amber-500"
+                        />
+                        <div>
+                            <p
+                                class="text-sm font-semibold text-amber-700 dark:text-amber-400"
+                            >
+                                Email non vérifié
+                            </p>
+                            <p
+                                class="mt-0.5 text-sm text-amber-600 dark:text-amber-300"
+                            >
+                                Veuillez vérifier votre adresse email pour
+                                activer votre compte. Consultez votre boîte de
+                                réception.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Compte bloqué -->
+                    <div
+                        v-if="errors.telephone?.includes('bloqué')"
+                        class="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/40 dark:bg-red-950/40"
+                    >
+                        <ShieldX class="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+                        <div>
+                            <p
+                                class="text-sm font-semibold text-red-700 dark:text-red-400"
+                            >
+                                Compte bloqué
+                            </p>
+                            <p
+                                class="mt-0.5 text-sm text-red-600 dark:text-red-300"
+                            >
+                                Votre compte a été bloqué. Veuillez contacter
+                                notre service client pour plus d'informations.
+                            </p>
+                        </div>
+                    </div>
+
                     <!-- Champ téléphone caché (valeur complète) -->
                     <input type="hidden" name="telephone" :value="fullPhone" />
 
@@ -250,7 +299,14 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                                 />
                             </div>
                             <InputError
-                                :message="phoneClientError ?? errors.telephone"
+                                :message="
+                                    errors.telephone?.includes('bloqué') ||
+                                    errors.telephone?.includes(
+                                        'vérifier votre adresse email',
+                                    )
+                                        ? undefined
+                                        : (phoneClientError ?? errors.telephone)
+                                "
                             />
                         </div>
 

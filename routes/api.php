@@ -75,6 +75,19 @@ Route::middleware('auth:sanctum')->group(function () {
             ->name('client.vehicules.commissions');
         Route::get('vehicules/{vehiculeId}/frais', \App\Http\Controllers\Api\Client\VehiculeFraisController::class)
             ->name('client.vehicules.frais');
+        Route::post('push-token', \App\Http\Controllers\Api\Mobile\PushTokenController::class)
+            ->name('client.push-token');
+        Route::post('auth/change-password', \App\Http\Controllers\Api\Mobile\ChangePasswordController::class)
+            ->name('client.change-password');
+        Route::get('livraisons/scan/{reference}', \App\Http\Controllers\Api\Mobile\ScanCommandeController::class)
+            ->name('client.livraisons.scan');
+        Route::post('contact', \App\Http\Controllers\Api\Mobile\ContactController::class)
+            ->name('client.contact');
+        Route::prefix('notifications')->name('client.notifications.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\Mobile\NotificationsController::class, 'index'])->name('index');
+            Route::post('mark-all-read', [\App\Http\Controllers\Api\Mobile\NotificationsController::class, 'markAllRead'])->name('mark-all-read');
+            Route::post('{id}/read', [\App\Http\Controllers\Api\Mobile\NotificationsController::class, 'markRead'])->name('mark-read');
+        });
     });
     Route::get('gains/mine', \App\Http\Controllers\Api\Client\GainsController::class)
         ->name('client.gains.mine');

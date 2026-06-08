@@ -34,7 +34,7 @@ test('search by name filters the list', async ({ page }) => {
     // Recherche par prénom – doit trouver
     const search = getVisibleSearchInput(page);
     await search.fill(prenom);
-    const rows = page.locator('tbody tr:visible');
+    const rows = page.locator('[data-testid="staff-users-table"] tbody tr:visible');
     await expect(rows.first()).toBeVisible();
     const count = await rows.count();
     for (let i = 0; i < count; i++) {
@@ -109,7 +109,7 @@ test('inactive filter shows only inactive users', async ({ page }) => {
     const statusSelect = page.locator('[role="combobox"]:visible').first();
     await selectOptionFromCombobox(page, statusSelect, /^inactif$/i);
 
-    const rows = page.locator('tbody tr:visible');
+    const rows = page.locator('[data-testid="staff-users-table"] tbody tr:visible');
     const count = await rows.count();
     expect(count).toBeGreaterThan(0);
     for (let i = 0; i < count; i++) {

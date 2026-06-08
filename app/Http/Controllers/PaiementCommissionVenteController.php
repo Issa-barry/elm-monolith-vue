@@ -5,7 +5,11 @@ namespace App\Http\Controllers;
 use App\Enums\ModePaiement;
 use App\Models\CommissionPart;
 use App\Models\Depense;
+use App\Models\Livreur;
+use App\Models\Proprietaire;
+use App\Models\User;
 use App\Models\Vehicule;
+use App\Notifications\CommissionPayeeNotification;
 use App\Services\CommissionVentePaiementService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -61,7 +65,44 @@ class PaiementCommissionVenteController extends Controller
             return back()->withErrors(['montant' => $e->getMessage()]);
         }
 
+        $this->notifierBeneficiaire($type, $beneficiaireId, (float) $data['montant'], $data['mode_paiement'], $data['note'] ?? null);
+
         return back()->with('success', 'Paiement groupé enregistré.');
+    }
+
+    private function notifierBeneficiaire(string $type, string $beneficiaireId, float $montant, string $modePaiement, ?string $note): void
+    {
+        $user = $type === 'livreur'
+            ? $this->userDuLivreur(Livreur::find($beneficiaireId))
+            : $this->userDuProprietaire(Proprietaire::find($beneficiaireId));
+
+        $user?->notify(new CommissionPayeeNotification($montant, $modePaiement, $note));
+    }
+
+    private function userDuLivreur(?Livreur $livreur): ?User
+    {
+        if (! $livreur) {
+            return null;
+        }
+
+        if ($livreur->user_id) {
+            return User::find($livreur->user_id);
+        }
+
+        return $livreur->telephone ? User::where('telephone', $livreur->telephone)->first() : null;
+    }
+
+    private function userDuProprietaire(?Proprietaire $proprietaire): ?User
+    {
+        if (! $proprietaire) {
+            return null;
+        }
+
+        if ($proprietaire->user_id) {
+            return User::find($proprietaire->user_id);
+        }
+
+        return $proprietaire->telephone ? User::where('telephone', $proprietaire->telephone)->first() : null;
     }
 
     /**

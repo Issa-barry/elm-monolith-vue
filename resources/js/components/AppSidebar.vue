@@ -29,12 +29,16 @@ import {
     UserCog,
     UserRoundCheck,
     Users,
+    UsersRound,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
 const { can } = usePermissions();
 const page = usePage();
+const isSuperAdmin = computed(() =>
+    (page.props as any).auth?.roles?.includes('super_admin'),
+);
 const stockAlertes = computed(
     () => (page.props as any).stock_alertes ?? { total: 0 },
 );
@@ -186,6 +190,9 @@ const mainNavItems = computed((): NavItem[] => {
 
     if (canSee('users.read', 'utilisateurs'))
         items.push({ title: 'Utilisateurs', href: '/users', icon: UserCog });
+
+    if (isSuperAdmin.value)
+        items.push({ title: 'Comptes', href: '/comptes', icon: UsersRound });
 
     return items;
 });

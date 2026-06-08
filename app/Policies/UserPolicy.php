@@ -38,8 +38,15 @@ class UserPolicy
             return false;
         }
 
-        return $user->isSuperAdmin()
-            && $user->id !== $target->id
-            && $user->organization_id === $target->organization_id;
+        if (! $user->isSuperAdmin() || $user->id === $target->id) {
+            return false;
+        }
+
+        // Super admin peut supprimer les comptes en attente (sans organisation)
+        if (is_null($target->organization_id)) {
+            return true;
+        }
+
+        return $user->organization_id === $target->organization_id;
     }
 }

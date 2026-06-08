@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\BaseCalculLogistique;
 use App\Enums\StatutTransfert;
 use App\Enums\TypeEcartLogistique;
+use App\Jobs\NotifierLivreursTransfertJob;
 use App\Models\EquipeLivraison;
 use App\Models\Produit;
 use App\Models\Site;
@@ -302,6 +303,10 @@ class TransfertLogistiqueController extends Controller
         });
 
         TransfertActiviteService::log($transfert, 'creation');
+
+        if ($transfert->equipe_livraison_id) {
+            NotifierLivreursTransfertJob::dispatch($transfert->id, $transfert->reference);
+        }
 
         return redirect()->route('logistique.show', $transfert)
             ->with('success', 'Transfert créé avec succès.');
