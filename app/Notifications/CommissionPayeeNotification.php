@@ -22,12 +22,12 @@ class CommissionPayeeNotification extends Notification
         $montantFormate = number_format($this->montant, 0, ',', ' ');
 
         return [
-            'type'          => 'commission_payee',
-            'titre'         => 'Commission reçue',
-            'message'       => "{$montantFormate} GNF versé ({$this->modePaiement})",
-            'montant'       => $this->montant,
+            'type' => 'commission_payee',
+            'titre' => 'Commission reçue',
+            'message' => "{$montantFormate} GNF versé ({$this->modePaiement})",
+            'montant' => $this->montant,
             'mode_paiement' => $this->modePaiement,
-            'note'          => $this->note,
+            'note' => $this->note,
         ];
     }
 }

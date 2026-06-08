@@ -38,8 +38,8 @@ class NotifierLivreursCommandeVenteJob implements ShouldQueue
             return;
         }
 
-        $siteNom    = $commande->site?->nom ?? '—';
-        $notif      = new CommandeValideeNotification($this->commandeId, $this->reference, $siteNom);
+        $siteNom = $commande->site?->nom ?? '—';
+        $notif = new CommandeValideeNotification($this->commandeId, $this->reference, $siteNom);
         $pushTokens = [];
 
         // ── Livreurs de l'équipe ─────────────────────────────────────────────
@@ -77,14 +77,14 @@ class NotifierLivreursCommandeVenteJob implements ShouldQueue
                 'Nouvelle commande assignée',
                 "Réf. {$this->reference} — Vous avez une livraison à effectuer.",
                 [
-                    'type'        => 'commande_vente_validee',
+                    'type' => 'commande_vente_validee',
                     'commande_id' => $this->commandeId,
                 ]
             );
         } catch (\Throwable $e) {
             Log::error('NotifierLivreursCommandeVenteJob: push échoué', [
                 'commande_id' => $this->commandeId,
-                'error'       => $e->getMessage(),
+                'error' => $e->getMessage(),
             ]);
 
             throw $e;

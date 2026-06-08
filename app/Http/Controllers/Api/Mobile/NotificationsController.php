@@ -17,17 +17,17 @@ class NotificationsController extends Controller
             ->limit(50)
             ->get()
             ->map(fn ($n) => [
-                'id'         => $n->id,
-                'type'       => $n->data['type'] ?? null,
-                'titre'      => $n->data['titre'] ?? null,
-                'message'    => $n->data['message'] ?? null,
-                'data'       => $n->data,
-                'lu'         => $n->read_at !== null,
+                'id' => $n->id,
+                'type' => $n->data['type'] ?? null,
+                'titre' => $n->data['titre'] ?? null,
+                'message' => $n->data['message'] ?? null,
+                'data' => $n->data,
+                'lu' => $n->read_at !== null,
                 'created_at' => $n->created_at->toISOString(),
             ]);
 
         return response()->json([
-            'data'         => $notifications,
+            'data' => $notifications,
             'unread_count' => $user->unreadNotifications()->count(),
         ]);
     }

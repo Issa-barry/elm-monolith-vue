@@ -1,6 +1,7 @@
 <?php
 
 use App\Features\ModuleFeature;
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\Auth\AcceptInvitationController;
 use App\Http\Controllers\Auth\LivreurRegistrationController;
 use App\Http\Controllers\CashbackController;
@@ -36,7 +37,6 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
-use App\Http\Controllers\AccountController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserInvitationController;
 use App\Http\Controllers\VehiculeController;

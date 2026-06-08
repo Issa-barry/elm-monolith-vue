@@ -40,30 +40,30 @@ class ScanCommandeController extends Controller
 
         $client = $commande->client;
         $clientNom = $client
-            ? trim(($client->prenom ?? '') . ' ' . ($client->nom ?? ''))
+            ? trim(($client->prenom ?? '').' '.($client->nom ?? ''))
             : 'Vente directe';
 
         return response()->json([
-            'type'                => 'commande',
-            'reference'           => $commande->reference ?? '—',
-            'statut'              => $commande->statut?->value ?? '—',
-            'statut_label'        => $commande->statut?->label() ?? '—',
-            'site_source'         => $commande->site?->nom ?? '—',
-            'client_nom'          => $clientNom,
-            'client_telephone'    => $client?->telephone,
-            'client_adresse'      => implode(', ', array_filter([
+            'type' => 'commande',
+            'reference' => $commande->reference ?? '—',
+            'statut' => $commande->statut?->value ?? '—',
+            'statut_label' => $commande->statut?->label() ?? '—',
+            'site_source' => $commande->site?->nom ?? '—',
+            'client_nom' => $clientNom,
+            'client_telephone' => $client?->telephone,
+            'client_adresse' => implode(', ', array_filter([
                 $client?->adresse,
                 $client?->quartier,
                 $client?->ville,
             ])) ?: null,
-            'vehicule'            => $commande->vehicule ? [
-                'nom'             => $commande->vehicule->nom_vehicule,
+            'vehicule' => $commande->vehicule ? [
+                'nom' => $commande->vehicule->nom_vehicule,
                 'immatriculation' => $commande->vehicule->immatriculation,
             ] : null,
-            'equipe_nom'          => $commande->vehicule?->equipe?->nom ?? '—',
-            'date_commande'       => $commande->validated_at?->toDateString(),
-            'nb_packs'            => (int) $commande->lignes->sum('qte'),
-            'total'               => (float) $commande->total_commande,
+            'equipe_nom' => $commande->vehicule?->equipe?->nom ?? '—',
+            'date_commande' => $commande->validated_at?->toDateString(),
+            'nb_packs' => (int) $commande->lignes->sum('qte'),
+            'total' => (float) $commande->total_commande,
         ]);
     }
 
@@ -82,20 +82,20 @@ class ScanCommandeController extends Controller
         }
 
         return response()->json([
-            'type'                => 'transfert',
-            'reference'           => $transfert->reference,
-            'statut'              => $transfert->statut instanceof \BackedEnum ? $transfert->statut->value : $transfert->statut,
-            'statut_label'        => 'Livraison en cours',
-            'site_source'         => $transfert->siteSource?->nom ?? '—',
-            'site_destination'    => $transfert->siteDestination?->nom ?? '—',
-            'vehicule'            => $transfert->vehicule ? [
-                'nom'             => $transfert->vehicule->nom_vehicule,
+            'type' => 'transfert',
+            'reference' => $transfert->reference,
+            'statut' => $transfert->statut instanceof \BackedEnum ? $transfert->statut->value : $transfert->statut,
+            'statut_label' => 'Livraison en cours',
+            'site_source' => $transfert->siteSource?->nom ?? '—',
+            'site_destination' => $transfert->siteDestination?->nom ?? '—',
+            'vehicule' => $transfert->vehicule ? [
+                'nom' => $transfert->vehicule->nom_vehicule,
                 'immatriculation' => $transfert->vehicule->immatriculation,
             ] : null,
-            'equipe_nom'          => $transfert->equipeLivraison?->nom ?? '—',
-            'date_depart'         => $transfert->date_depart_reelle?->toDateString(),
+            'equipe_nom' => $transfert->equipeLivraison?->nom ?? '—',
+            'date_depart' => $transfert->date_depart_reelle?->toDateString(),
             'date_arrivee_prevue' => $transfert->date_arrivee_prevue?->toDateString(),
-            'nb_packs'            => (int) $transfert->lignes->sum('quantite_chargee'),
+            'nb_packs' => (int) $transfert->lignes->sum('quantite_chargee'),
         ]);
     }
 }

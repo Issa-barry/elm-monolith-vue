@@ -36,7 +36,7 @@ class LookupController extends Controller
         Mail::to($user->email)->send(new OtpPasswordResetMail($code));
 
         return response()->json([
-            'message'      => 'Un code de vérification a été envoyé à votre adresse email.',
+            'message' => 'Un code de vérification a été envoyé à votre adresse email.',
             'masked_email' => $this->maskEmail($user->email),
         ]);
     }
@@ -46,7 +46,7 @@ class LookupController extends Controller
         [$local, $domain] = explode('@', $email, 2);
 
         $visible = substr($local, 0, 1);
-        $masked  = $visible.str_repeat('*', max(1, strlen($local) - 1));
+        $masked = $visible.str_repeat('*', max(1, strlen($local) - 1));
 
         return $masked.'@'.$domain;
     }

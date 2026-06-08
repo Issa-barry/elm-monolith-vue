@@ -30,8 +30,8 @@ class LivraisonsEnCoursController extends Controller
             return response()->json([]);
         }
 
-        $vehiculeIds    = $this->vehiculeIdsDuProprietaire($proprietaire);
-        $equipeIds      = $this->equipeIdsDuLivreur($livreur);
+        $vehiculeIds = $this->vehiculeIdsDuProprietaire($proprietaire);
+        $equipeIds = $this->equipeIdsDuLivreur($livreur);
         $vehiculeIdsLiv = $this->vehiculeIdsDuLivreur($livreur);
 
         $tousVehiculeIds = $vehiculeIds->merge($vehiculeIdsLiv)->unique()->values();
@@ -130,20 +130,20 @@ class LivraisonsEnCoursController extends Controller
             : 'Vente directe';
 
         return [
-            'id'                  => $c->id,
-            'reference'           => $c->reference ?? '—',
-            'statut'              => 'commande',
-            'statut_label'        => 'Commande en cours',
-            'site_source'         => $c->site?->nom ?? '—',
-            'site_destination'    => $clientNom,
-            'vehicule'            => $c->vehicule ? [
-                'nom'             => $c->vehicule->nom_vehicule,
+            'id' => $c->id,
+            'reference' => $c->reference ?? '—',
+            'statut' => 'commande',
+            'statut_label' => 'Commande en cours',
+            'site_source' => $c->site?->nom ?? '—',
+            'site_destination' => $clientNom,
+            'vehicule' => $c->vehicule ? [
+                'nom' => $c->vehicule->nom_vehicule,
                 'immatriculation' => $c->vehicule->immatriculation,
             ] : null,
-            'equipe_nom'          => $c->vehicule?->equipe?->nom ?? '—',
-            'date_depart'         => $c->validated_at?->toDateString(),
+            'equipe_nom' => $c->vehicule?->equipe?->nom ?? '—',
+            'date_depart' => $c->validated_at?->toDateString(),
             'date_arrivee_prevue' => null,
-            'nb_packs'            => (int) $c->lignes->sum('qte'),
+            'nb_packs' => (int) $c->lignes->sum('qte'),
         ];
     }
 

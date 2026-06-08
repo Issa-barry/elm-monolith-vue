@@ -2,7 +2,6 @@
 
 namespace App\Notifications;
 
-use App\Models\CommandeVente;
 use Illuminate\Notifications\Notification;
 
 class CommandeValideeNotification extends Notification
@@ -21,11 +20,11 @@ class CommandeValideeNotification extends Notification
     public function toArray(object $notifiable): array
     {
         return [
-            'type'        => 'commande_validee',
-            'titre'       => 'Nouvelle commande assignée',
-            'message'     => "Réf. {$this->reference} — {$this->siteNom}",
+            'type' => 'commande_validee',
+            'titre' => 'Nouvelle commande assignée',
+            'message' => "Réf. {$this->reference} — {$this->siteNom}",
             'commande_id' => $this->commandeId,
-            'reference'   => $this->reference,
+            'reference' => $this->reference,
         ];
     }
 }

@@ -22,10 +22,10 @@ class ContactController extends Controller
         $user = $request->user();
 
         $contact = ContactMessage::create([
-            'name'            => trim(($user->prenom ?? '') . ' ' . ($user->nom ?? '')) ?: null,
-            'email'           => $user->email,
-            'phone'           => $user->telephone,
-            'message'         => $request->string('message'),
+            'name' => trim(($user->prenom ?? '').' '.($user->nom ?? '')) ?: null,
+            'email' => $user->email,
+            'phone' => $user->telephone,
+            'message' => $request->string('message'),
             'organization_id' => $user->organization_id,
         ]);
 

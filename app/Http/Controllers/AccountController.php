@@ -31,14 +31,14 @@ class AccountController extends Controller
                 }
 
                 return [
-                    'id'             => $u->id,
-                    'nom_complet'    => $u->name,
-                    'email'          => $u->email,
-                    'telephone'      => $u->telephone,
-                    'is_active'      => $u->is_active,
+                    'id' => $u->id,
+                    'nom_complet' => $u->name,
+                    'email' => $u->email,
+                    'telephone' => $u->telephone,
+                    'is_active' => $u->is_active,
                     'email_verified' => ! is_null($u->email_verified_at),
-                    'type'           => $type,
-                    'created_at'     => $u->created_at?->format('d/m/Y'),
+                    'type' => $type,
+                    'created_at' => $u->created_at?->format('d/m/Y'),
                 ];
             });
 
