@@ -78,7 +78,7 @@ class FortifyServiceProvider extends ServiceProvider
 
             if (! $user->is_active) {
                 throw ValidationException::withMessages([
-                    'telephone' => ['Votre compte a été bloqué. Veuillez contacter notre service client pour plus d\'informations.'],
+                    'telephone' => ['Votre compte a été désactivé. Veuillez contacter notre service client pour plus d\'informations.'],
                 ]);
             }
 
