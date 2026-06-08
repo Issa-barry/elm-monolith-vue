@@ -23,7 +23,8 @@ class OtpService
      */
     public function generate(string $telephone): string
     {
-        $code = str_pad((string) random_int(0, 99999), 5, '0', STR_PAD_LEFT);
+        $code = config('otp.fixed_code')
+            ?? str_pad((string) random_int(0, 99999), 5, '0', STR_PAD_LEFT);
 
         Cache::put($this->key($telephone), $code, now()->addMinutes(self::TTL_MINUTES));
         Cache::forget($this->verifiedKey($telephone));
