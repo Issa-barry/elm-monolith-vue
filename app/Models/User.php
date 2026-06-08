@@ -34,6 +34,7 @@ class User extends Authenticatable
         'adresse',
         'organization_id',
         'matricule',
+        'expo_push_token',
     ];
 
     public function getNameAttribute(): string
@@ -61,6 +62,10 @@ class User extends Authenticatable
 
     public function hasVerifiedEmail(): bool
     {
+        if ($this->email === null) {
+            return true;
+        }
+
         return $this->email_verified_at !== null;
     }
 

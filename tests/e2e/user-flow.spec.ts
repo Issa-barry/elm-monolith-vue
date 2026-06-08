@@ -165,7 +165,7 @@ test('status filter → shows only active users', async ({ page }) => {
     const statusSelect = page.locator('[role="combobox"]:visible').first();
     await selectOptionFromCombobox(page, statusSelect, /^actif$/i);
 
-    const rows = page.locator('tbody tr:visible');
+    const rows = page.locator('[data-testid="staff-users-table"] tbody tr:visible');
     const count = await rows.count();
     for (let i = 0; i < count; i++) {
         await expect(rows.nth(i)).toContainText(/actif/i);
@@ -173,7 +173,7 @@ test('status filter → shows only active users', async ({ page }) => {
     }
 
     await selectOptionFromCombobox(page, statusSelect, /^tous$/i);
-    await expect(page.locator('tbody tr:visible').first()).toBeVisible();
+    await expect(page.locator('[data-testid="staff-users-table"] tbody tr:visible').first()).toBeVisible();
 });
 
 // ─── Suppression ──────────────────────────────────────────────────────────────

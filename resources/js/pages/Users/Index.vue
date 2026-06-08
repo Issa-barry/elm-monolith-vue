@@ -15,6 +15,8 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     Building2,
+    CheckCircle,
+    Clock,
     MoreVertical,
     Pencil,
     Plus,
@@ -48,7 +50,21 @@ interface StaffUser {
     is_me: boolean;
 }
 
-const props = defineProps<{ users: StaffUser[] }>();
+interface PendingUser {
+    id: number;
+    nom: string;
+    prenom: string;
+    nom_complet: string;
+    email: string | null;
+    telephone: string | null;
+    email_verified: boolean;
+    created_at: string | null;
+}
+
+const props = defineProps<{
+    users: StaffUser[];
+    pending_registrations: PendingUser[];
+}>();
 
 const { can } = usePermissions();
 const confirm = useConfirm();
@@ -205,7 +221,10 @@ function confirmDelete(u: StaffUser) {
                 </div>
             </div>
 
-            <div class="overflow-hidden rounded-xl border bg-card">
+            <div
+                class="overflow-hidden rounded-xl border bg-card"
+                data-testid="staff-users-table"
+            >
                 <DataTable
                     :value="filteredUsers"
                     :paginator="props.users.length > 20"
@@ -457,6 +476,134 @@ function confirmDelete(u: StaffUser) {
                             </Link>
                         </div>
                     </template>
+                </DataTable>
+            </div>
+            <!-- Comptes en attente (super admin seulement) -->
+            <div
+                v-if="isSuperAdmin && pending_registrations.length > 0"
+                class="overflow-hidden rounded-xl border bg-card"
+            >
+                <div
+                    class="border-b border-border bg-amber-50/60 px-4 py-3 dark:bg-amber-900/10"
+                >
+                    <div class="flex items-center gap-2">
+                        <Clock
+                            class="h-4 w-4 text-amber-600 dark:text-amber-400"
+                        />
+                        <h2
+                            class="text-sm font-semibold text-amber-700 dark:text-amber-400"
+                        >
+                            Comptes en attente de validation
+                            <span
+                                class="ml-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                            >
+                                {{ pending_registrations.length }}
+                            </span>
+                        </h2>
+                    </div>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Ces comptes ont été créés via l'inscription et n'ont pas
+                        encore été associés à une organisation.
+                    </p>
+                </div>
+                <DataTable
+                    :value="pending_registrations"
+                    data-key="id"
+                    striped-rows
+                    class="text-sm"
+                    table-class="w-full"
+                >
+                    <Column
+                        field="nom_complet"
+                        header="Utilisateur"
+                        style="min-width: 200px"
+                    >
+                        <template #body="{ data }">
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                >
+                                    {{ initials(data.nom_complet) }}
+                                </div>
+                                <div>
+                                    <div class="font-medium">
+                                        {{ data.nom_complet }}
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        {{ data.email }}
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </Column>
+                    <Column
+                        field="telephone"
+                        header="Téléphone"
+                        style="width: 180px"
+                    >
+                        <template #body="{ data }">
+                            <span class="text-sm text-muted-foreground">{{
+                                data.telephone ?? '—'
+                            }}</span>
+                        </template>
+                    </Column>
+                    <Column
+                        field="email_verified"
+                        header="Email vérifié"
+                        style="width: 140px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                v-if="data.email_verified"
+                                class="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"
+                            >
+                                <CheckCircle class="h-3.5 w-3.5" /> Vérifié
+                            </span>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >Non vérifié</span
+                            >
+                        </template>
+                    </Column>
+                    <Column
+                        field="created_at"
+                        header="Inscrit le"
+                        style="width: 150px"
+                    >
+                        <template #body="{ data }">
+                            <span class="text-xs text-muted-foreground">{{
+                                data.created_at ?? '—'
+                            }}</span>
+                        </template>
+                    </Column>
+                    <Column header="" style="width: 56px">
+                        <template #body="{ data }">
+                            <div class="flex justify-end">
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger as-child>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-8 w-8"
+                                        >
+                                            <MoreVertical class="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                        align="end"
+                                        class="w-44"
+                                    >
+                                        <DropdownMenuItem
+                                            class="cursor-pointer text-destructive focus:text-destructive"
+                                            @click="confirmDelete(data)"
+                                        >
+                                            <Trash2 class="h-4 w-4" />
+                                            Supprimer
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                        </template>
+                    </Column>
                 </DataTable>
             </div>
         </div>

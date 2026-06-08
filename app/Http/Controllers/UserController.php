@@ -80,7 +80,8 @@ class UserController extends Controller
     {
         $this->authorize('viewAny', User::class);
 
-        $orgId = auth()->user()->organization_id;
+        $authUser = auth()->user();
+        $orgId = $authUser->organization_id;
 
         $users = User::with([
             'roles:id,name',
@@ -111,8 +112,26 @@ class UserController extends Controller
                 ];
             });
 
+        $pendingRegistrations = collect();
+        if ($authUser->isSuperAdmin()) {
+            $pendingRegistrations = User::whereNull('organization_id')
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(fn (User $u) => [
+                    'id' => $u->id,
+                    'nom' => $u->nom,
+                    'prenom' => $u->prenom,
+                    'nom_complet' => $u->name,
+                    'email' => $u->email,
+                    'telephone' => $u->telephone,
+                    'email_verified' => ! is_null($u->email_verified_at),
+                    'created_at' => $u->created_at?->format('d/m/Y H:i'),
+                ]);
+        }
+
         return Inertia::render('Users/Index', [
             'users' => $users,
+            'pending_registrations' => $pendingRegistrations,
         ]);
     }
 

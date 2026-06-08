@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Api\Client;
 
+use App\Enums\StatutCommandeVente;
 use App\Enums\StatutTransfert;
 use App\Http\Controllers\Controller;
+use App\Models\CommandeVente;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\TransfertLogistique;
@@ -30,8 +32,11 @@ class LivraisonsEnCoursController extends Controller
 
         $vehiculeIds = $this->vehiculeIdsDuProprietaire($proprietaire);
         $equipeIds = $this->equipeIdsDuLivreur($livreur);
+        $vehiculeIdsLiv = $this->vehiculeIdsDuLivreur($livreur);
 
-        if ($vehiculeIds->isEmpty() && $equipeIds->isEmpty()) {
+        $tousVehiculeIds = $vehiculeIds->merge($vehiculeIdsLiv)->unique()->values();
+
+        if ($tousVehiculeIds->isEmpty() && $equipeIds->isEmpty()) {
             return response()->json([]);
         }
 
@@ -53,7 +58,19 @@ class LivraisonsEnCoursController extends Controller
             ->get()
             ->map(fn ($t) => $this->formatTransfert($t));
 
-        return response()->json($transferts->values());
+        $commandes = collect();
+        if ($tousVehiculeIds->isNotEmpty()) {
+            $commandes = CommandeVente::query()
+                ->with(['site:id,nom', 'vehicule:id,nom_vehicule,immatriculation', 'vehicule.equipe:id,nom', 'client:id,nom,prenom', 'lignes:id,commande_vente_id,qte'])
+                ->where('statut', StatutCommandeVente::EN_COURS->value)
+                ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
+                ->whereIn('vehicule_id', $tousVehiculeIds)
+                ->orderByDesc('validated_at')
+                ->get()
+                ->map(fn ($c) => $this->formatCommande($c));
+        }
+
+        return response()->json($transferts->toBase()->merge($commandes)->values());
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -85,6 +102,17 @@ class LivraisonsEnCoursController extends Controller
         return Vehicule::where('proprietaire_id', $proprietaire->id)->pluck('id');
     }
 
+    private function vehiculeIdsDuLivreur(?Livreur $livreur): Collection
+    {
+        if ($livreur === null) {
+            return collect();
+        }
+
+        $equipeIds = $livreur->equipes()->pluck('equipes_livraison.id');
+
+        return Vehicule::whereHas('equipe', fn ($q) => $q->whereIn('id', $equipeIds))->pluck('id');
+    }
+
     private function equipeIdsDuLivreur(?Livreur $livreur): Collection
     {
         if ($livreur === null) {
@@ -92,6 +120,31 @@ class LivraisonsEnCoursController extends Controller
         }
 
         return $livreur->equipes()->pluck('equipes_livraison.id');
+    }
+
+    private function formatCommande(CommandeVente $c): array
+    {
+        $client = $c->client;
+        $clientNom = $client
+            ? trim(($client->prenom ?? '').' '.($client->nom ?? ''))
+            : 'Vente directe';
+
+        return [
+            'id' => $c->id,
+            'reference' => $c->reference ?? '—',
+            'statut' => 'commande',
+            'statut_label' => 'Commande en cours',
+            'site_source' => $c->site?->nom ?? '—',
+            'site_destination' => $clientNom,
+            'vehicule' => $c->vehicule ? [
+                'nom' => $c->vehicule->nom_vehicule,
+                'immatriculation' => $c->vehicule->immatriculation,
+            ] : null,
+            'equipe_nom' => $c->vehicule?->equipe?->nom ?? '—',
+            'date_depart' => $c->validated_at?->toDateString(),
+            'date_arrivee_prevue' => null,
+            'nb_packs' => (int) $c->lignes->sum('qte'),
+        ];
     }
 
     private function formatTransfert(TransfertLogistique $t): array

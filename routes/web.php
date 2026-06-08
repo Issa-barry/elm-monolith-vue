@@ -1,6 +1,7 @@
 <?php
 
 use App\Features\ModuleFeature;
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\Auth\AcceptInvitationController;
 use App\Http\Controllers\Auth\LivreurRegistrationController;
 use App\Http\Controllers\CashbackController;
@@ -197,6 +198,10 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
             ->middleware('throttle:10,1');
     });
 
+    // ── Comptes (super admin) ─────────────────────────────────────────────────
+    Route::get('comptes', [AccountController::class, 'index'])->name('comptes.index');
+    Route::patch('comptes/{user}/toggle-active', [AccountController::class, 'toggleActive'])->name('comptes.toggle-active');
+
     // ── Module : Utilisateurs ─────────────────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::UTILISATEURS)->group(function () {
         Route::resource('users', UserController::class)->except(['show']);
@@ -320,6 +325,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('livreurs/{livreur}', [LivreurController::class, 'show'])->name('livreurs.show');
     // Résolution ULID → URL fiche (pour le scanner USB qui lit le QR mobile)
     Route::get('scan/user/{userId}', \App\Http\Controllers\ScanUserController::class)->name('scan.user');
+    // Résolution référence livraison → URL page backoffice (scanner QR de la livraison)
+    Route::get('scan/livraison/{reference}', \App\Http\Controllers\ScanLivraisonController::class)->name('scan.livraison');
 });
 
 require __DIR__.'/settings.php';
