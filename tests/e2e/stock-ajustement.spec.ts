@@ -40,7 +40,7 @@ test('ajuster stock depuis la liste — augmenter', async ({ page }) => {
 
     // Read current stock from the modal
     const stockText = await dialog.locator('.text-xl').first().innerText();
-    const stockAvant = parseInt(stockText.trim(), 10);
+    const _stockAvant = parseInt(stockText.trim(), 10);
 
     // Fill "augmenter"
     await dialog.locator('#ajuster-augmenter').fill('5');
@@ -118,7 +118,9 @@ test('ajuster stock depuis la fiche produit', async ({ page }) => {
     await expect(dialog).toBeHidden({ timeout: 10_000 });
 });
 
-test('ajuster stock — erreur si deux champs renseignes', async ({ page }) => {
+test('ajuster stock — remplir un champ efface lautre (exclusion mutuelle)', async ({
+    page,
+}) => {
     await page.goto('/produits');
     await expect(page).toHaveURL(/\/produits$/);
 
@@ -136,14 +138,22 @@ test('ajuster stock — erreur si deux champs renseignes', async ({ page }) => {
         .filter({ hasText: /ajuster le stock/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
-    await dialog.locator('#ajuster-augmenter').fill('10');
-    await dialog.locator('#ajuster-diminuer').fill('5');
-    await dialog.locator('button', { hasText: /valider/i }).click();
+    const augInput = dialog.locator('#ajuster-augmenter');
+    const dimInput = dialog.locator('#ajuster-diminuer');
 
-    // Error message should appear
-    await expect(
-        dialog.locator('text=/renseignez uniquement/i, text=/un des deux/i'),
-    ).toBeVisible({ timeout: 5_000 });
+    // Fill augmenter → diminuer should clear
+    await augInput.fill('10');
+    await expect(augInput).toHaveValue('10');
+    await expect(dimInput).toHaveValue('');
+
+    // Fill diminuer → augmenter should clear
+    await dimInput.fill('5');
+    await expect(dimInput).toHaveValue('5');
+    await expect(augInput).toHaveValue('');
+
+    // Cancel without submitting
+    await dialog.locator('button', { hasText: /annuler/i }).click();
+    await expect(dialog).toBeHidden({ timeout: 5_000 });
 });
 
 test('ajuster stock — bouton Valider désactivé si aucun champ renseigne', async ({
