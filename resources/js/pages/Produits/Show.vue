@@ -25,7 +25,7 @@ import { ref } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
 
 interface Produit {
-    id: number;
+    id: string;
     nom: string;
     code_interne: string | null;
     code_fournisseur: string | null;
