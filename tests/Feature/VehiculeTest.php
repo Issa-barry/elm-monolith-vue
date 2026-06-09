@@ -86,7 +86,7 @@ class VehiculeTest extends TestCase
             ->where('immatriculation', 'RC-001-GN')
             ->firstOrFail();
 
-        $response->assertRedirect(route('vehicules.edit', $vehicule));
+        $response->assertRedirect(route('vehicules.show', $vehicule));
 
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,
@@ -113,7 +113,7 @@ class VehiculeTest extends TestCase
             ->where('immatriculation', 'TC-TEST-GN')
             ->firstOrFail();
 
-        $response->assertRedirect(route('vehicules.edit', $vehicule));
+        $response->assertRedirect(route('vehicules.show', $vehicule));
 
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,

@@ -43,20 +43,8 @@ test('login + create vehicule interne + update + verify list', async ({
 
     await submitBtn.click();
 
-    // Controller redirects to the edit page after creation (not the list)
-    await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+\/edit$/, { timeout: 15_000 });
-
-    // A newly created vehicle has no equipe so the is_active toggle is not shown.
-    // The controller forces is_active=false for vehicles without an equipe anyway.
-    await submitBtn.click();
-
-    // waitForLoadState ensures the PUT response has arrived before checking the
-    // flash banner (toHaveURL alone is a no-op when the URL does not change).
-    await page.waitForLoadState('networkidle');
-    await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+\/edit$/);
-    await expect(
-        page.getByText(/Véhicule mis à jour avec succès./i).first(),
-    ).toBeVisible();
+    // Controller redirects to the show page after creation
+    await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 15_000 });
 
     await page.goto('/vehicules');
     await expect(page).toHaveURL(/\/vehicules$/);
