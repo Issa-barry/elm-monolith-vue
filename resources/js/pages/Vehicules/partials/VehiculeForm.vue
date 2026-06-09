@@ -77,8 +77,7 @@ function onCategorieChange(value: string | null) {
         categorie: value,
         proprietaire_id:
             value === 'interne' ? null : props.form.proprietaire_id,
-        pris_en_charge_par_usine:
-            value === 'interne' ? true : null,
+        pris_en_charge_par_usine: value === 'interne' ? true : null,
     });
 }
 
@@ -477,12 +476,17 @@ function handleSubmit() {
                     {{ errors.pris_en_charge_par_usine }}
                 </p>
                 <p
-                    v-else-if="form.categorie && form.pris_en_charge_par_usine === null"
+                    v-else-if="
+                        form.categorie && form.pris_en_charge_par_usine === null
+                    "
                     class="mt-1.5 text-xs text-muted-foreground"
                 >
                     Sélectionnez Oui ou Non.
                 </p>
-                <p v-else-if="!form.categorie" class="mt-1.5 text-xs text-muted-foreground">
+                <p
+                    v-else-if="!form.categorie"
+                    class="mt-1.5 text-xs text-muted-foreground"
+                >
                     Sélectionnez d'abord une catégorie.
                 </p>
             </template>

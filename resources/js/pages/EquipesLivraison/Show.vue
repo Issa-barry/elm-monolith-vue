@@ -67,7 +67,9 @@ function roleLabel(role: string, numero?: number): string {
         <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="space-y-1">
-                    <p class="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                    <p
+                        class="text-xs font-medium tracking-widest text-muted-foreground uppercase"
+                    >
                         Équipe de livraison
                     </p>
                     <h1 class="text-2xl font-semibold tracking-tight">

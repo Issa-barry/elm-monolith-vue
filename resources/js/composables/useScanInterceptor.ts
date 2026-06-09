@@ -135,7 +135,11 @@ export function useScanInterceptor() {
                 // On essaie decoded (AZERTY→QWERTY), puis raw si decoded n'est pas un ULID valide
                 // (ex: le 'M' du ULID est converti en ':' par decode, ce qui l'invalide)
                 const decoded = decode(raw);
-                const ulidCandidate = isUlid(decoded) ? decoded : isUlid(raw) ? raw : null;
+                const ulidCandidate = isUlid(decoded)
+                    ? decoded
+                    : isUlid(raw)
+                      ? raw
+                      : null;
                 if (ulidCandidate) {
                     resolveUlidUrl(ulidCandidate).then((resolved) => {
                         if (resolved) window.location.href = resolved;
