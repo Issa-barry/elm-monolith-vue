@@ -206,7 +206,10 @@ test('create equipe with chauffeur and partage config + verify list', async ({
     await expect(partageDialog).toBeHidden({ timeout: 5_000 });
 
     await page.locator('form button[type="submit"]:visible').first().click();
-    await expect(page).toHaveURL(/\/equipes-livraison$/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/equipes-livraison\/[a-z0-9]+$/, { timeout: 20_000 });
+
+    await page.goto('/equipes-livraison');
+    await expect(page).toHaveURL(/\/equipes-livraison$/);
 
     const searchInput = page
         .locator('input[placeholder*="recherche" i]:visible')

@@ -18,17 +18,17 @@ class MeController extends Controller
             ?? $user->sites()->first();
 
         return response()->json([
-            'id'         => $user->id,
-            'prenom'     => $user->prenom,
-            'nom'        => $user->nom,
-            'telephone'  => $user->telephone,
-            'email'      => $user->email,
-            'roles'      => $user->getRoleNames(),
-            'is_active'  => $user->is_active,
+            'id' => $user->id,
+            'prenom' => $user->prenom,
+            'nom' => $user->nom,
+            'telephone' => $user->telephone,
+            'email' => $user->email,
+            'roles' => $user->getRoleNames(),
+            'is_active' => $user->is_active,
             'qr_payload' => $user->id,
-            'site'       => $site ? [
-                'id'   => $site->id,
-                'nom'  => $site->nom,
+            'site' => $site ? [
+                'id' => $site->id,
+                'nom' => $site->nom,
                 'code' => $site->code,
                 'ville' => $site->ville,
             ] : null,

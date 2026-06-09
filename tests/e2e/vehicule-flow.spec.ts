@@ -113,7 +113,7 @@ test('create vehicule externe avec prise en charge Oui', async ({ page }) => {
     await page.locator('#immatriculation').fill(immatriculation);
 
     const comboboxes = page.locator('#vehicule-form').getByRole('combobox');
-    await selectOptionFromCombobox(page, comboboxes.nth(0), 1); // externe
+    await selectOptionFromCombobox(page, comboboxes.nth(0), /externe/i); // externe
     await selectOptionFromCombobox(page, comboboxes.nth(1));    // type
 
     // Sélectionner "Oui"
