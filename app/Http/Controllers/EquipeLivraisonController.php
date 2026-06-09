@@ -96,7 +96,8 @@ class EquipeLivraisonController extends Controller
         $this->validateUniquePhones($data['membres']);
         $this->validateMembresExclusivite($data['membres'], $orgId);
 
-        DB::transaction(function () use ($data, $orgId, $commission, $montantProp, $isExterne) {
+        $equipe = null;
+        DB::transaction(function () use ($data, $orgId, $commission, $montantProp, $isExterne, &$equipe) {
             $tauxProp = $commission > 0 ? round($montantProp / $commission * 100, 2) : 0.0;
 
             $equipe = EquipeLivraison::create([
@@ -128,7 +129,7 @@ class EquipeLivraisonController extends Controller
             }
         });
 
-        return redirect()->route('equipes-livraison.index')
+        return redirect()->route('equipes-livraison.show', $equipe)
             ->with('success', 'Équipe créée avec succès.');
     }
 
@@ -270,9 +271,10 @@ class EquipeLivraisonController extends Controller
     {
         $membres = $e->relationLoaded('membres') ? $e->membres : $e->load('membres.livreur')->membres;
         $sorted = $membres->sortBy('ordre');
-        $premierChauffeur = $sorted->firstWhere('role', 'chauffeur');
 
         $commission = (float) $e->commission_unitaire_par_pack;
+
+        $premierChauffeur = $sorted->firstWhere('role', 'chauffeur');
 
         $roleCounts = [];
         $membresData = $sorted->map(function (EquipeLivreur $m) use (&$roleCounts) {
@@ -309,11 +311,13 @@ class EquipeLivraisonController extends Controller
             'commission_unitaire_par_pack' => $commission,
             'montant_par_pack_proprietaire' => $e->montant_par_pack_proprietaire !== null ? (float) $e->montant_par_pack_proprietaire : null,
             'taux_commission_proprietaire' => $e->taux_commission_proprietaire !== null ? (float) $e->taux_commission_proprietaire : null,
+            'premier_chauffeur_nom' => $premierChauffeur
+                ? trim(($premierChauffeur->livreur?->prenom ?? '').' '.($premierChauffeur->livreur?->nom ?? ''))
+                : null,
+            'premier_chauffeur_telephone' => $premierChauffeur?->livreur?->telephone,
             'nb_membres' => $membres->count(),
             'nb_convoyeurs' => $membres->where('role', 'convoyeur')->count(),
             'somme_taux' => (float) $membres->sum('taux_commission'),
-            'premier_chauffeur_nom' => $premierChauffeur?->livreur ? trim($premierChauffeur->livreur->prenom.' '.$premierChauffeur->livreur->nom) : null,
-            'premier_chauffeur_telephone' => $premierChauffeur?->livreur?->telephone,
             'membres' => $membresData,
         ];
     }

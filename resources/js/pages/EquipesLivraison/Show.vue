@@ -31,8 +31,6 @@ interface EquipeData {
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     taux_commission_proprietaire: number | null;
-    premier_chauffeur_nom: string | null;
-    premier_chauffeur_telephone: string | null;
     nb_membres: number;
     nb_convoyeurs: number;
     somme_taux: number;
@@ -66,9 +64,14 @@ function roleLabel(role: string, numero?: number): string {
     </Head>
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-6 p-4 sm:p-6">
+        <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="space-y-1">
+                    <p
+                        class="text-xs font-medium tracking-widest text-muted-foreground uppercase"
+                    >
+                        Équipe de livraison
+                    </p>
                     <h1 class="text-2xl font-semibold tracking-tight">
                         {{ equipe.nom }}
                     </h1>
@@ -107,7 +110,7 @@ function roleLabel(role: string, numero?: number): string {
                 </div>
             </div>
 
-            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
                     <p class="text-xs text-muted-foreground uppercase">
                         Véhicule
@@ -145,24 +148,6 @@ function roleLabel(role: string, numero?: number): string {
                             equipe.proprietaire_telephone
                                 ? formatPhoneDisplay(
                                       equipe.proprietaire_telephone,
-                                  )
-                                : 'Aucun numéro'
-                        }}
-                    </p>
-                </div>
-
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-xs text-muted-foreground uppercase">
-                        Chauffeur
-                    </p>
-                    <p class="mt-2 text-sm font-medium">
-                        {{ equipe.premier_chauffeur_nom || '—' }}
-                    </p>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        {{
-                            equipe.premier_chauffeur_telephone
-                                ? formatPhoneDisplay(
-                                      equipe.premier_chauffeur_telephone,
                                   )
                                 : 'Aucun numéro'
                         }}

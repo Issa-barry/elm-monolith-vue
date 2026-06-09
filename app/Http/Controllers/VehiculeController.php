@@ -131,16 +131,17 @@ class VehiculeController extends Controller
                 'string',
                 Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
-            'pris_en_charge_par_usine' => 'boolean',
+            'pris_en_charge_par_usine' => 'required|boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
         ], $this->messages());
 
         $data = $this->normalizeStrings($data);
 
-        // Interne : pas de propriétaire externe
+        // Interne : pas de propriétaire externe, prise en charge obligatoire
         if ($data['categorie'] === 'interne') {
             $data['proprietaire_id'] = null;
+            $data['pris_en_charge_par_usine'] = true;
         }
 
         if ($request->hasFile('photo')) {
@@ -151,7 +152,7 @@ class VehiculeController extends Controller
         $data['is_active'] = false; // inactif jusqu'à attribution d'une équipe
         $vehicule = Vehicule::create([...$data, 'organization_id' => $orgId]);
 
-        return redirect()->route('vehicules.edit', $vehicule)
+        return redirect()->route('vehicules.show', $vehicule)
             ->with('success', 'Véhicule créé avec succès.');
     }
 
@@ -313,7 +314,7 @@ class VehiculeController extends Controller
                 'string',
                 Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
-            'pris_en_charge_par_usine' => 'boolean',
+            'pris_en_charge_par_usine' => 'required|boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
         ], $this->messages());
@@ -322,6 +323,7 @@ class VehiculeController extends Controller
 
         if ($data['categorie'] === 'interne') {
             $data['proprietaire_id'] = null;
+            $data['pris_en_charge_par_usine'] = true;
         }
 
         if ($request->hasFile('photo')) {
@@ -404,6 +406,7 @@ class VehiculeController extends Controller
             'photo.image' => 'Le fichier doit être une image.',
             'photo.mimes' => 'La photo doit être au format jpg, jpeg, png ou webp.',
             'photo.max' => 'La photo ne peut pas dépasser 3 Mo.',
+            'pris_en_charge_par_usine.required' => 'Veuillez indiquer si les frais sont pris en charge par l\'usine (Oui ou Non).',
         ];
     }
 }
