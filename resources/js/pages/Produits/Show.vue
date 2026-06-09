@@ -7,19 +7,26 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
 import {
     AlertTriangle,
+    ArrowDown,
     ArrowLeft,
+    ArrowUp,
     Factory,
+    History,
     Layers,
     Package,
     Pencil,
     ShoppingCart,
+    Sliders,
     Tag,
     TrendingDown,
     Warehouse,
 } from 'lucide-vue-next';
+import { ref } from 'vue';
+import AjusterStockModal from './partials/AjusterStockModal.vue';
+import HistoriqueModal from './partials/HistoriqueModal.vue';
 
 interface Produit {
-    id: number;
+    id: string;
     nom: string;
     code_interne: string | null;
     code_fournisseur: string | null;
@@ -43,9 +50,36 @@ interface Produit {
     updated_at: string | null;
 }
 
-const props = defineProps<{ produit: Produit }>();
+interface MouvementStock {
+    id: string;
+    type: 'entree' | 'sortie';
+    quantite: number;
+    stock_avant: number | null;
+    stock_apres: number | null;
+    notes: string | null;
+    created_at: string | null;
+    createur_nom: string | null;
+}
+
+interface AuditEntry {
+    id: string;
+    event_code: string;
+    event_label: string;
+    actor_name: string;
+    old_values: Record<string, unknown> | null;
+    new_values: Record<string, unknown> | null;
+    created_at: string;
+}
+
+const props = defineProps<{
+    produit: Produit;
+    mouvements: MouvementStock[];
+    historiques: AuditEntry[];
+}>();
 
 const { can } = usePermissions();
+const showStockModal = ref(false);
+const showHistoriqueModal = ref(false);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -63,6 +97,17 @@ function formatDate(iso: string | null): string {
     return new Intl.DateTimeFormat('fr-FR', {
         dateStyle: 'long',
         timeStyle: 'short',
+    }).format(new Date(iso));
+}
+
+function formatDateShort(iso: string | null): string {
+    if (!iso) return '—';
+    return new Intl.DateTimeFormat('fr-FR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
     }).format(new Date(iso));
 }
 
@@ -128,15 +173,32 @@ function stockColorClass(produit: Produit): string {
                         </p>
                     </div>
                 </div>
-                <Link
-                    v-if="can('produits.update')"
-                    :href="`/produits/${produit.id}/edit`"
-                >
-                    <Button>
-                        <Pencil class="mr-2 h-4 w-4" />
-                        Modifier
+                <div class="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        @click="showHistoriqueModal = true"
+                    >
+                        <History class="mr-2 h-4 w-4" />
+                        Historique
                     </Button>
-                </Link>
+                    <Button
+                        v-if="can('produits.update') && produit.has_stock"
+                        variant="outline"
+                        @click="showStockModal = true"
+                    >
+                        <Sliders class="mr-2 h-4 w-4" />
+                        Ajuster le stock
+                    </Button>
+                    <Link
+                        v-if="can('produits.update')"
+                        :href="`/produits/${produit.id}/edit`"
+                    >
+                        <Button>
+                            <Pencil class="mr-2 h-4 w-4" />
+                            Modifier
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             <!-- ─── Image + infos principales ─── -->
@@ -401,6 +463,104 @@ function stockColorClass(produit: Produit): string {
                     </div>
                 </div>
             </div>
+
+            <!-- ─── Historique du stock ─── -->
+            <div v-if="produit.has_stock" class="rounded-xl border bg-card p-5">
+                <h2
+                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
+                >
+                    <History class="h-4 w-4" />
+                    Historique du stock
+                </h2>
+
+                <div
+                    v-if="mouvements.length === 0"
+                    class="py-6 text-center text-sm text-muted-foreground"
+                >
+                    Aucun mouvement de stock enregistré.
+                </div>
+
+                <div v-else class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b text-xs text-muted-foreground">
+                                <th class="pb-2 text-left font-medium">
+                                    Date &amp; heure
+                                </th>
+                                <th class="pb-2 text-left font-medium">Par</th>
+                                <th class="pb-2 text-center font-medium">
+                                    Action
+                                </th>
+                                <th class="pb-2 text-right font-medium">
+                                    Avant
+                                </th>
+                                <th class="pb-2 text-right font-medium">
+                                    Après
+                                </th>
+                                <th class="pb-2 text-left font-medium">
+                                    Motif
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-border/50">
+                            <tr
+                                v-for="m in mouvements"
+                                :key="m.id"
+                                class="group"
+                            >
+                                <td
+                                    class="py-2.5 pr-4 font-mono text-xs text-muted-foreground"
+                                >
+                                    {{ formatDateShort(m.created_at) }}
+                                </td>
+                                <td class="py-2.5 pr-4">
+                                    {{ m.createur_nom || '—' }}
+                                </td>
+                                <td class="py-2.5 pr-4 text-center">
+                                    <span
+                                        v-if="m.type === 'entree'"
+                                        class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+                                    >
+                                        <ArrowUp class="h-3 w-3" />
+                                        +{{ m.quantite }}
+                                    </span>
+                                    <span
+                                        v-else
+                                        class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950/30 dark:text-red-400"
+                                    >
+                                        <ArrowDown class="h-3 w-3" />
+                                        -{{ m.quantite }}
+                                    </span>
+                                </td>
+                                <td
+                                    class="py-2.5 pr-4 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ m.stock_avant ?? '—' }}
+                                </td>
+                                <td
+                                    class="py-2.5 pr-4 text-right font-semibold tabular-nums"
+                                >
+                                    {{ m.stock_apres ?? '—' }}
+                                </td>
+                                <td
+                                    class="py-2.5 text-xs text-muted-foreground"
+                                >
+                                    {{ m.notes || '—' }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
+        <HistoriqueModal
+            v-model:visible="showHistoriqueModal"
+            :historiques="historiques"
+            :title="`Historique — ${produit.nom}`"
+        />
+        <AjusterStockModal
+            v-model:visible="showStockModal"
+            :produit="produit"
+        />
     </AppLayout>
 </template>

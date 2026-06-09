@@ -1,0 +1,211 @@
+<script setup lang="ts">
+import { Button } from '@/components/ui/button';
+import { useForm } from '@inertiajs/vue3';
+import { ArrowDown, ArrowUp, Package } from 'lucide-vue-next';
+import Dialog from 'primevue/dialog';
+import InputNumber from 'primevue/inputnumber';
+import InputText from 'primevue/inputtext';
+import { computed } from 'vue';
+
+interface ProduitMin {
+    id: string;
+    nom: string;
+    code_interne: string | null;
+    qte_stock: number | null;
+}
+
+const props = defineProps<{
+    visible: boolean;
+    produit: ProduitMin;
+}>();
+
+const emit = defineEmits<{
+    (e: 'update:visible', val: boolean): void;
+}>();
+
+const localVisible = computed({
+    get: () => props.visible,
+    set: (val) => emit('update:visible', val),
+});
+
+const form = useForm({
+    augmenter: null as number | null,
+    diminuer: null as number | null,
+    motif: '',
+});
+
+const stockActuel = computed(() => props.produit.qte_stock ?? 0);
+
+const stockPreview = computed(() => {
+    if (form.augmenter && form.augmenter > 0)
+        return stockActuel.value + form.augmenter;
+    if (form.diminuer && form.diminuer > 0)
+        return stockActuel.value - form.diminuer;
+    return null;
+});
+
+function onAugmenterChange() {
+    if (form.augmenter) form.diminuer = null;
+}
+
+function onDiminuerChange() {
+    if (form.diminuer) form.augmenter = null;
+}
+
+function close() {
+    localVisible.value = false;
+    form.reset();
+    form.clearErrors();
+}
+
+function submit() {
+    form.post(`/produits/${props.produit.id}/ajuster-stock`, {
+        preserveScroll: true,
+        onSuccess: () => close(),
+    });
+}
+</script>
+
+<template>
+    <Dialog
+        v-model:visible="localVisible"
+        modal
+        :header="'Ajuster le stock'"
+        :style="{ width: '32rem' }"
+        :draggable="false"
+        @hide="
+            form.reset();
+            form.clearErrors();
+        "
+    >
+        <!-- Produit info -->
+        <div
+            class="mb-5 flex items-center gap-3 rounded-lg bg-muted/50 px-4 py-3"
+        >
+            <Package class="h-5 w-5 shrink-0 text-muted-foreground" />
+            <div class="min-w-0">
+                <p class="truncate text-sm font-semibold">{{ produit.nom }}</p>
+                <p
+                    v-if="produit.code_interne"
+                    class="font-mono text-xs text-muted-foreground"
+                >
+                    {{ produit.code_interne }}
+                </p>
+            </div>
+            <div class="ml-auto shrink-0 text-right">
+                <p class="text-xs text-muted-foreground">Stock actuel</p>
+                <p class="text-xl font-bold tabular-nums">{{ stockActuel }}</p>
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <!-- Augmenter + Diminuer côte à côte -->
+            <div class="grid grid-cols-2 gap-3">
+                <!-- Augmenter -->
+                <div class="space-y-1.5">
+                    <label
+                        for="ajuster-augmenter"
+                        class="flex items-center gap-1.5 text-sm font-medium"
+                    >
+                        <ArrowUp class="h-4 w-4 text-emerald-600" />
+                        Augmenter
+                    </label>
+                    <InputNumber
+                        v-model="form.augmenter"
+                        input-id="ajuster-augmenter"
+                        :min="1"
+                        :use-grouping="false"
+                        class="w-full"
+                        :input-class="
+                            form.errors.augmenter
+                                ? 'p-invalid w-full'
+                                : 'w-full'
+                        "
+                        @update:model-value="onAugmenterChange"
+                    />
+                    <p
+                        v-if="form.errors.augmenter"
+                        class="text-xs text-destructive"
+                    >
+                        {{ form.errors.augmenter }}
+                    </p>
+                </div>
+
+                <!-- Diminuer -->
+                <div class="space-y-1.5">
+                    <label
+                        for="ajuster-diminuer"
+                        class="flex items-center gap-1.5 text-sm font-medium"
+                    >
+                        <ArrowDown class="h-4 w-4 text-destructive" />
+                        Diminuer
+                    </label>
+                    <InputNumber
+                        v-model="form.diminuer"
+                        input-id="ajuster-diminuer"
+                        :min="1"
+                        :use-grouping="false"
+                        class="w-full"
+                        :input-class="
+                            form.errors.diminuer ? 'p-invalid w-full' : 'w-full'
+                        "
+                        @update:model-value="onDiminuerChange"
+                    />
+                    <p
+                        v-if="form.errors.diminuer"
+                        class="text-xs text-destructive"
+                    >
+                        {{ form.errors.diminuer }}
+                    </p>
+                </div>
+            </div>
+
+            <!-- Motif -->
+            <div class="space-y-1.5">
+                <label
+                    for="ajuster-motif"
+                    class="text-sm font-medium text-muted-foreground"
+                >
+                    Motif <span class="font-normal">(optionnel)</span>
+                </label>
+                <InputText
+                    id="ajuster-motif"
+                    v-model="form.motif"
+                    placeholder="Ex : inventaire, correction, retour..."
+                    class="w-full"
+                    maxlength="500"
+                />
+            </div>
+
+            <!-- Aperçu stock après -->
+            <div
+                v-if="stockPreview !== null"
+                class="flex items-center justify-between rounded-lg border px-4 py-2.5 text-sm"
+                :class="
+                    stockPreview < 0
+                        ? 'border-destructive/30 bg-destructive/5 text-destructive'
+                        : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-400'
+                "
+            >
+                <span>Stock après ajustement</span>
+                <span class="text-base font-bold tabular-nums">{{
+                    stockPreview
+                }}</span>
+            </div>
+        </div>
+
+        <template #footer>
+            <div class="flex justify-end gap-2">
+                <Button variant="outline" @click="close">Annuler</Button>
+                <Button
+                    :disabled="
+                        form.processing || (!form.augmenter && !form.diminuer)
+                    "
+                    @click="submit"
+                >
+                    Valider
+                </Button>
+            </div>
+        </template>
+    </Dialog>
+</template>
