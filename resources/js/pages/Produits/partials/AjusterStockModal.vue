@@ -71,7 +71,7 @@ function submit() {
         v-model:visible="localVisible"
         modal
         :header="'Ajuster le stock'"
-        :style="{ width: '26rem' }"
+        :style="{ width: '32rem' }"
         :draggable="false"
         @hide="
             form.reset();
@@ -99,53 +99,65 @@ function submit() {
         </div>
 
         <div class="space-y-4">
-            <!-- Augmenter -->
-            <div class="space-y-1.5">
-                <label class="flex items-center gap-1.5 text-sm font-medium">
-                    <ArrowUp class="h-4 w-4 text-emerald-600" />
-                    Augmenter le stock
-                </label>
-                <InputNumber
-                    v-model="form.augmenter"
-                    input-id="ajuster-augmenter"
-                    :min="1"
-                    :use-grouping="false"
-                    placeholder="Quantité à ajouter"
-                    class="w-full"
-                    :input-class="
-                        form.errors.augmenter ? 'p-invalid w-full' : 'w-full'
-                    "
-                    @update:model-value="onAugmenterChange"
-                />
-                <p
-                    v-if="form.errors.augmenter"
-                    class="text-xs text-destructive"
-                >
-                    {{ form.errors.augmenter }}
-                </p>
-            </div>
+            <!-- Augmenter + Diminuer côte à côte -->
+            <div class="grid grid-cols-2 gap-3">
+                <!-- Augmenter -->
+                <div class="space-y-1.5">
+                    <label
+                        for="ajuster-augmenter"
+                        class="flex items-center gap-1.5 text-sm font-medium"
+                    >
+                        <ArrowUp class="h-4 w-4 text-emerald-600" />
+                        Augmenter
+                    </label>
+                    <InputNumber
+                        v-model="form.augmenter"
+                        input-id="ajuster-augmenter"
+                        :min="1"
+                        :use-grouping="false"
+                        class="w-full"
+                        :input-class="
+                            form.errors.augmenter
+                                ? 'p-invalid w-full'
+                                : 'w-full'
+                        "
+                        @update:model-value="onAugmenterChange"
+                    />
+                    <p
+                        v-if="form.errors.augmenter"
+                        class="text-xs text-destructive"
+                    >
+                        {{ form.errors.augmenter }}
+                    </p>
+                </div>
 
-            <!-- Diminuer -->
-            <div class="space-y-1.5">
-                <label class="flex items-center gap-1.5 text-sm font-medium">
-                    <ArrowDown class="h-4 w-4 text-destructive" />
-                    Diminuer le stock
-                </label>
-                <InputNumber
-                    v-model="form.diminuer"
-                    input-id="ajuster-diminuer"
-                    :min="1"
-                    :use-grouping="false"
-                    placeholder="Quantité à retirer"
-                    class="w-full"
-                    :input-class="
-                        form.errors.diminuer ? 'p-invalid w-full' : 'w-full'
-                    "
-                    @update:model-value="onDiminuerChange"
-                />
-                <p v-if="form.errors.diminuer" class="text-xs text-destructive">
-                    {{ form.errors.diminuer }}
-                </p>
+                <!-- Diminuer -->
+                <div class="space-y-1.5">
+                    <label
+                        for="ajuster-diminuer"
+                        class="flex items-center gap-1.5 text-sm font-medium"
+                    >
+                        <ArrowDown class="h-4 w-4 text-destructive" />
+                        Diminuer
+                    </label>
+                    <InputNumber
+                        v-model="form.diminuer"
+                        input-id="ajuster-diminuer"
+                        :min="1"
+                        :use-grouping="false"
+                        class="w-full"
+                        :input-class="
+                            form.errors.diminuer ? 'p-invalid w-full' : 'w-full'
+                        "
+                        @update:model-value="onDiminuerChange"
+                    />
+                    <p
+                        v-if="form.errors.diminuer"
+                        class="text-xs text-destructive"
+                    >
+                        {{ form.errors.diminuer }}
+                    </p>
+                </div>
             </div>
 
             <!-- Motif -->

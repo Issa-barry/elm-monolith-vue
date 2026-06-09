@@ -114,6 +114,24 @@ class ProduitController extends Controller
     {
         $this->authorize('view', $produit);
 
+        $mouvements = MouvementStock::where('produit_id', $produit->id)
+            ->with('createur:id,prenom,nom')
+            ->orderByDesc('created_at')
+            ->take(100)
+            ->get()
+            ->map(fn (MouvementStock $m) => [
+                'id' => $m->id,
+                'type' => $m->type,
+                'quantite' => $m->quantite,
+                'stock_avant' => $m->stock_avant,
+                'stock_apres' => $m->stock_apres,
+                'notes' => $m->notes,
+                'created_at' => $m->created_at?->toISOString(),
+                'createur_nom' => $m->createur
+                    ? trim(($m->createur->prenom ?? '').' '.($m->createur->nom ?? ''))
+                    : null,
+            ]);
+
         return Inertia::render('Produits/Show', [
             'produit' => [
                 'id' => $produit->id,
@@ -139,6 +157,7 @@ class ProduitController extends Controller
                 'created_at' => $produit->created_at?->toISOString(),
                 'updated_at' => $produit->updated_at?->toISOString(),
             ],
+            'mouvements' => $mouvements,
         ]);
     }
 
