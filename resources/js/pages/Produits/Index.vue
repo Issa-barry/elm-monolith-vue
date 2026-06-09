@@ -16,6 +16,7 @@ import {
     AlertTriangle,
     Download,
     Eye,
+    History,
     MoreVertical,
     Package,
     Pencil,
@@ -34,6 +35,7 @@ import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
+import HistoriqueModal from './partials/HistoriqueModal.vue';
 import ProduitsMobile from './partials/ProduitsMobile.vue';
 
 const lightboxUrl = ref<string | null>(null);
@@ -273,6 +275,39 @@ const showStockModal = ref(false);
 function openStockModal(produit: Produit) {
     stockAjustementProduit.value = produit;
     showStockModal.value = true;
+}
+
+interface AuditEntry {
+    id: string;
+    event_code: string;
+    event_label: string;
+    actor_name: string;
+    old_values: Record<string, unknown> | null;
+    new_values: Record<string, unknown> | null;
+    created_at: string;
+}
+
+const historiqueProduitNom = ref('');
+const historiques = ref<AuditEntry[]>([]);
+const showHistoriqueModal = ref(false);
+const historiqueLoading = ref(false);
+
+async function openHistoriqueModal(produit: Produit) {
+    historiqueProduitNom.value = produit.nom;
+    historiques.value = [];
+    showHistoriqueModal.value = true;
+    historiqueLoading.value = true;
+    try {
+        const res = await fetch(`/produits/${produit.id}/historique`, {
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        historiques.value = await res.json();
+    } finally {
+        historiqueLoading.value = false;
+    }
 }
 
 function confirmDelete(produit: Produit) {
@@ -580,6 +615,13 @@ function confirmDelete(produit: Produit) {
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
+                                            class="cursor-pointer"
+                                            @click="openHistoriqueModal(data)"
+                                        >
+                                            <History class="h-4 w-4" />
+                                            Historique
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
                                             v-if="
                                                 can('produits.update') &&
                                                 data.has_stock
@@ -687,6 +729,13 @@ function confirmDelete(produit: Produit) {
             v-if="stockAjustementProduit"
             v-model:visible="showStockModal"
             :produit="stockAjustementProduit"
+        />
+
+        <!-- Modal historique -->
+        <HistoriqueModal
+            v-model:visible="showHistoriqueModal"
+            :historiques="historiques"
+            :title="`Historique — ${historiqueProduitNom}`"
         />
 
         <!-- Lightbox -->

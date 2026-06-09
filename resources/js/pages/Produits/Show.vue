@@ -23,6 +23,7 @@ import {
 } from 'lucide-vue-next';
 import { ref } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
+import HistoriqueModal from './partials/HistoriqueModal.vue';
 
 interface Produit {
     id: string;
@@ -60,10 +61,25 @@ interface MouvementStock {
     createur_nom: string | null;
 }
 
-const props = defineProps<{ produit: Produit; mouvements: MouvementStock[] }>();
+interface AuditEntry {
+    id: string;
+    event_code: string;
+    event_label: string;
+    actor_name: string;
+    old_values: Record<string, unknown> | null;
+    new_values: Record<string, unknown> | null;
+    created_at: string;
+}
+
+const props = defineProps<{
+    produit: Produit;
+    mouvements: MouvementStock[];
+    historiques: AuditEntry[];
+}>();
 
 const { can } = usePermissions();
 const showStockModal = ref(false);
+const showHistoriqueModal = ref(false);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -158,6 +174,13 @@ function stockColorClass(produit: Produit): string {
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        @click="showHistoriqueModal = true"
+                    >
+                        <History class="mr-2 h-4 w-4" />
+                        Historique
+                    </Button>
                     <Button
                         v-if="can('produits.update') && produit.has_stock"
                         variant="outline"
@@ -530,6 +553,11 @@ function stockColorClass(produit: Produit): string {
                 </div>
             </div>
         </div>
+        <HistoriqueModal
+            v-model:visible="showHistoriqueModal"
+            :historiques="historiques"
+            :title="`Historique — ${produit.nom}`"
+        />
         <AjusterStockModal
             v-model:visible="showStockModal"
             :produit="produit"

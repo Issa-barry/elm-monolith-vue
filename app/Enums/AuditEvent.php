@@ -11,17 +11,19 @@ enum AuditEvent: string
     case ENCAISSEMENT_ADDED = 'encaissement_added';
     case ENCAISSEMENT_DELETED = 'encaissement_deleted';
     case DELETED = 'deleted';
+    case STOCK_ADJUSTED = 'stock_adjusted';
 
     public function label(): string
     {
         return match ($this) {
-            self::CREATED => 'Commande créée',
-            self::UPDATED => 'Commande modifiée',
-            self::VALIDATED => 'Commande validée',
-            self::CANCELLED => 'Commande annulée',
+            self::CREATED => 'Créé',
+            self::UPDATED => 'Modifié',
+            self::VALIDATED => 'Validé',
+            self::CANCELLED => 'Annulé',
             self::ENCAISSEMENT_ADDED => 'Encaissement enregistré',
             self::ENCAISSEMENT_DELETED => 'Encaissement supprimé',
-            self::DELETED => 'Commande supprimée',
+            self::DELETED => 'Supprimé',
+            self::STOCK_ADJUSTED => 'Stock ajusté',
         };
     }
 
@@ -35,6 +37,7 @@ enum AuditEvent: string
             self::ENCAISSEMENT_ADDED => 'violet',
             self::ENCAISSEMENT_DELETED => 'orange',
             self::DELETED => 'red',
+            self::STOCK_ADJUSTED => 'teal',
         };
     }
 }

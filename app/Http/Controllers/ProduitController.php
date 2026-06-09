@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AuditEvent;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
+use App\Models\AuditLog;
 use App\Models\MouvementStock;
 use App\Models\Produit;
+use App\Services\AuditLogService;
 use App\Services\ImageService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +21,8 @@ use Inertia\Response;
 
 class ProduitController extends Controller
 {
+    public function __construct(private readonly AuditLogService $auditService) {}
+
     public function index(): Response
     {
         $this->authorize('viewAny', Produit::class);
@@ -101,10 +107,18 @@ class ProduitController extends Controller
         $orgId = auth()->user()->organization_id;
         abort_if(! $orgId, 403, 'Votre compte n\'est associé à aucune organisation.');
 
-        Produit::create([
+        $produit = Produit::create([
             ...$data,
             'organization_id' => $orgId,
         ]);
+
+        $this->auditService->record(
+            $produit,
+            AuditEvent::CREATED,
+            auth()->user(),
+            null,
+            $this->produitSnapshot($produit),
+        );
 
         return redirect()->route('produits.index')
             ->with('success', 'Produit créé avec succès.');
@@ -132,6 +146,8 @@ class ProduitController extends Controller
                     : null,
             ]);
 
+        $historiques = $this->loadHistoriques($produit);
+
         return Inertia::render('Produits/Show', [
             'produit' => [
                 'id' => $produit->id,
@@ -158,7 +174,15 @@ class ProduitController extends Controller
                 'updated_at' => $produit->updated_at?->toISOString(),
             ],
             'mouvements' => $mouvements,
+            'historiques' => $historiques,
         ]);
+    }
+
+    public function historique(Produit $produit): JsonResponse
+    {
+        $this->authorize('view', $produit);
+
+        return response()->json($this->loadHistoriques($produit));
     }
 
     public function edit(Produit $produit): Response
@@ -216,7 +240,21 @@ class ProduitController extends Controller
         }
         unset($data['image']);
 
+        $oldSnapshot = $this->produitSnapshot($produit);
         $produit->update($data);
+        $produit->refresh();
+        $newSnapshot = $this->produitSnapshot($produit);
+
+        [$oldDiff, $newDiff] = $this->produitDiff($oldSnapshot, $newSnapshot);
+        if ($oldDiff !== null || $newDiff !== null) {
+            $this->auditService->record(
+                $produit,
+                AuditEvent::UPDATED,
+                auth()->user(),
+                $oldDiff,
+                $newDiff,
+            );
+        }
 
         return redirect()->route('produits.index')
             ->with('success', 'Produit mis à jour avec succès.');
@@ -225,6 +263,14 @@ class ProduitController extends Controller
     public function destroy(Produit $produit): RedirectResponse
     {
         $this->authorize('delete', $produit);
+
+        $this->auditService->record(
+            $produit,
+            AuditEvent::DELETED,
+            auth()->user(),
+            $this->produitSnapshot($produit),
+            null,
+        );
 
         if ($produit->image_url) {
             Storage::disk('public')->delete(str_replace('/storage/', '', $produit->image_url));
@@ -290,7 +336,7 @@ class ProduitController extends Controller
             $quantite = (int) $data['diminuer'];
         }
 
-        DB::transaction(function () use ($produit, $type, $quantite, $stockAvant, $stockApres, $data, $site) {
+        DB::transaction(function () use ($produit, $type, $quantite, $stockAvant, $stockApres, $data, $site, $user) {
             $produit->update(['qte_stock' => $stockApres]);
 
             MouvementStock::create([
@@ -302,10 +348,80 @@ class ProduitController extends Controller
                 'stock_avant' => $stockAvant,
                 'stock_apres' => $stockApres,
                 'notes' => $data['motif'] ?? null,
-                'created_by' => auth()->id(),
+                'created_by' => $user->id,
             ]);
+
+            $this->auditService->record(
+                $produit,
+                AuditEvent::STOCK_ADJUSTED,
+                $user,
+                ['qte_stock' => $stockAvant],
+                array_filter([
+                    'qte_stock' => $stockApres,
+                    'motif' => $data['motif'] ?? null,
+                ], fn ($v) => $v !== null),
+            );
         });
 
         return back()->with('success', 'Stock mis à jour avec succès.');
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private function loadHistoriques(Produit $produit): array
+    {
+        return AuditLog::where('organization_id', $produit->organization_id)
+            ->where('auditable_type', Produit::class)
+            ->where('auditable_id', $produit->id)
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (AuditLog $log) => [
+                'id' => $log->id,
+                'event_code' => $log->event_code,
+                'event_label' => $log->event_label,
+                'actor_name' => $log->actor_name_snapshot ?? 'Système',
+                'old_values' => $log->old_values,
+                'new_values' => $log->new_values,
+                'created_at' => $log->created_at->format('d/m/Y H:i'),
+            ])
+            ->all();
+    }
+
+    private function produitSnapshot(Produit $produit): array
+    {
+        return array_filter([
+            'nom' => $produit->nom,
+            'type' => $produit->type?->label(),
+            'statut' => $produit->statut?->label(),
+            'prix_vente' => $produit->prix_vente,
+            'prix_achat' => $produit->prix_achat,
+            'prix_usine' => $produit->prix_usine,
+            'cout' => $produit->cout,
+            'qte_stock' => $produit->qte_stock,
+            'seuil_alerte_stock' => $produit->seuil_alerte_stock,
+            'is_critique' => $produit->is_critique,
+            'description' => $produit->description,
+            'code_fournisseur' => $produit->code_fournisseur,
+        ], fn ($v) => $v !== null && $v !== '');
+    }
+
+    private function produitDiff(array $before, array $after): array
+    {
+        $allKeys = array_unique(array_merge(array_keys($before), array_keys($after)));
+        $oldDiff = [];
+        $newDiff = [];
+
+        $normalize = fn ($v) => is_numeric($v) ? rtrim(number_format((float) $v, 2, '.', ''), '0') : (string) ($v ?? '');
+
+        foreach ($allKeys as $key) {
+            $oldVal = $before[$key] ?? null;
+            $newVal = $after[$key] ?? null;
+            if ($normalize($oldVal) !== $normalize($newVal)) {
+                $oldDiff[$key] = $oldVal;
+                $newDiff[$key] = $newVal;
+            }
+        }
+
+        return [empty($oldDiff) ? null : $oldDiff, empty($newDiff) ? null : $newDiff];
     }
 }

@@ -190,6 +190,8 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::resource('produits', ProduitController::class);
         Route::post('produits/{produit}/ajuster-stock', [ProduitController::class, 'ajusterStock'])
             ->name('produits.ajuster-stock');
+        Route::get('produits/{produit}/historique', [ProduitController::class, 'historique'])
+            ->name('produits.historique');
     });
 
     // ── Module : Sites ────────────────────────────────────────────────────────
