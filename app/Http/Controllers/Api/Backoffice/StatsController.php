@@ -26,21 +26,21 @@ class StatsController extends Controller
             $base->where('site_id', $site->id);
         }
 
-        $totalMontant  = (clone $base)->sum('montant_net');
-        $nbTotal       = (clone $base)->count();
+        $totalMontant = (clone $base)->sum('montant_net');
+        $nbTotal = (clone $base)->count();
         $payeesMontant = (clone $base)->where('statut_facture', StatutFactureVente::PAYEE)->sum('montant_net');
-        $nbPayees      = (clone $base)->where('statut_facture', StatutFactureVente::PAYEE)->count();
-        $nbImpayees    = (clone $base)->where('statut_facture', StatutFactureVente::IMPAYEE)->count();
-        $nbAnnulees    = (clone $base)->where('statut_facture', StatutFactureVente::ANNULEE)->count();
+        $nbPayees = (clone $base)->where('statut_facture', StatutFactureVente::PAYEE)->count();
+        $nbImpayees = (clone $base)->where('statut_facture', StatutFactureVente::IMPAYEE)->count();
+        $nbAnnulees = (clone $base)->where('statut_facture', StatutFactureVente::ANNULEE)->count();
 
         return response()->json([
-            'total_factures'  => (float) $totalMontant,
-            'nb_total'        => $nbTotal,
+            'total_factures' => (float) $totalMontant,
+            'nb_total' => $nbTotal,
             'factures_payees' => (float) $payeesMontant,
-            'nb_payees'       => $nbPayees,
+            'nb_payees' => $nbPayees,
             'reste_encaisser' => (float) ($totalMontant - $payeesMontant),
-            'nb_impayees'     => $nbImpayees,
-            'nb_annulees'     => $nbAnnulees,
+            'nb_impayees' => $nbImpayees,
+            'nb_annulees' => $nbAnnulees,
         ]);
     }
 }
