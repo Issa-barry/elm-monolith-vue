@@ -13,10 +13,13 @@ import {
     Package,
     Pencil,
     ShoppingCart,
+    Sliders,
     Tag,
     TrendingDown,
     Warehouse,
 } from 'lucide-vue-next';
+import { ref } from 'vue';
+import AjusterStockModal from './partials/AjusterStockModal.vue';
 
 interface Produit {
     id: number;
@@ -46,6 +49,7 @@ interface Produit {
 const props = defineProps<{ produit: Produit }>();
 
 const { can } = usePermissions();
+const showStockModal = ref(false);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -128,15 +132,25 @@ function stockColorClass(produit: Produit): string {
                         </p>
                     </div>
                 </div>
-                <Link
-                    v-if="can('produits.update')"
-                    :href="`/produits/${produit.id}/edit`"
-                >
-                    <Button>
-                        <Pencil class="mr-2 h-4 w-4" />
-                        Modifier
+                <div class="flex items-center gap-2">
+                    <Button
+                        v-if="can('produits.update') && produit.has_stock"
+                        variant="outline"
+                        @click="showStockModal = true"
+                    >
+                        <Sliders class="mr-2 h-4 w-4" />
+                        Ajuster le stock
                     </Button>
-                </Link>
+                    <Link
+                        v-if="can('produits.update')"
+                        :href="`/produits/${produit.id}/edit`"
+                    >
+                        <Button>
+                            <Pencil class="mr-2 h-4 w-4" />
+                            Modifier
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             <!-- ─── Image + infos principales ─── -->
@@ -402,5 +416,9 @@ function stockColorClass(produit: Produit): string {
                 </div>
             </div>
         </div>
+        <AjusterStockModal
+            v-model:visible="showStockModal"
+            :produit="produit"
+        />
     </AppLayout>
 </template>

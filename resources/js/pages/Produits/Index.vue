@@ -21,6 +21,7 @@ import {
     Pencil,
     Plus,
     Search,
+    Sliders,
     Trash2,
     X,
 } from 'lucide-vue-next';
@@ -32,6 +33,7 @@ import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import AjusterStockModal from './partials/AjusterStockModal.vue';
 import ProduitsMobile from './partials/ProduitsMobile.vue';
 
 const lightboxUrl = ref<string | null>(null);
@@ -263,6 +265,14 @@ function exportExcel(): void {
         detail: `${rows.length} produit${rows.length > 1 ? 's' : ''} exporté${rows.length > 1 ? 's' : ''}.`,
         life: 2500,
     });
+}
+
+const stockAjustementProduit = ref<Produit | null>(null);
+const showStockModal = ref(false);
+
+function openStockModal(produit: Produit) {
+    stockAjustementProduit.value = produit;
+    showStockModal.value = true;
 }
 
 function confirmDelete(produit: Produit) {
@@ -558,7 +568,7 @@ function confirmDelete(produit: Produit) {
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent
                                         align="end"
-                                        class="w-44"
+                                        class="w-48"
                                     >
                                         <DropdownMenuItem as-child>
                                             <Link
@@ -568,6 +578,17 @@ function confirmDelete(produit: Produit) {
                                                 <Eye class="h-4 w-4" />
                                                 Voir le détail
                                             </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            v-if="
+                                                can('produits.update') &&
+                                                data.has_stock
+                                            "
+                                            class="cursor-pointer"
+                                            @click="openStockModal(data)"
+                                        >
+                                            <Sliders class="h-4 w-4" />
+                                            Ajuster le stock
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator
                                             v-if="
@@ -661,6 +682,13 @@ function confirmDelete(produit: Produit) {
                 :on-delete="confirmDelete"
             />
         </div>
+        <!-- Modal ajustement stock -->
+        <AjusterStockModal
+            v-if="stockAjustementProduit"
+            v-model:visible="showStockModal"
+            :produit="stockAjustementProduit"
+        />
+
         <!-- Lightbox -->
         <Teleport to="body">
             <div
