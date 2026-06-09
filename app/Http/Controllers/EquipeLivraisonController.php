@@ -274,6 +274,8 @@ class EquipeLivraisonController extends Controller
 
         $commission = (float) $e->commission_unitaire_par_pack;
 
+        $premierChauffeur = $sorted->firstWhere('role', 'chauffeur');
+
         $roleCounts = [];
         $membresData = $sorted->map(function (EquipeLivreur $m) use (&$roleCounts) {
             $role = $m->role;
@@ -309,6 +311,10 @@ class EquipeLivraisonController extends Controller
             'commission_unitaire_par_pack' => $commission,
             'montant_par_pack_proprietaire' => $e->montant_par_pack_proprietaire !== null ? (float) $e->montant_par_pack_proprietaire : null,
             'taux_commission_proprietaire' => $e->taux_commission_proprietaire !== null ? (float) $e->taux_commission_proprietaire : null,
+            'premier_chauffeur_nom' => $premierChauffeur
+                ? trim(($premierChauffeur->livreur?->prenom ?? '').' '.($premierChauffeur->livreur?->nom ?? ''))
+                : null,
+            'premier_chauffeur_telephone' => $premierChauffeur?->livreur?->telephone,
             'nb_membres' => $membres->count(),
             'nb_convoyeurs' => $membres->where('role', 'convoyeur')->count(),
             'somme_taux' => (float) $membres->sum('taux_commission'),
