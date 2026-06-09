@@ -43,7 +43,7 @@ test.beforeAll(async ({ browser }) => {
             .locator('#vehicule-form button[type="submit"]:visible')
             .first()
             .click();
-        await page.waitForURL(/\/vehicules\/[a-z0-9]+\/edit$/, {
+        await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, {
             timeout: 20_000,
         });
 
