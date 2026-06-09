@@ -26,12 +26,34 @@ class MeController extends Controller
             'roles' => $user->getRoleNames(),
             'is_active' => $user->is_active,
             'qr_payload' => $user->id,
-            'site' => $site ? [
+            'site' => $this->resolveSite($user, $site),
+        ]);
+    }
+
+    private function resolveSite(\App\Models\User $user, ?\App\Models\Site $site): ?array
+    {
+        if ($site) {
+            return [
                 'id' => $site->id,
                 'nom' => $site->nom,
                 'code' => $site->code,
                 'ville' => $site->ville,
-            ] : null,
-        ]);
+            ];
+        }
+
+        // Fallback : nom de l'organisation si le compte n'est rattaché à aucun site
+        if ($user->organization_id) {
+            $user->loadMissing('organization');
+            if ($user->organization) {
+                return [
+                    'id' => $user->organization_id,
+                    'nom' => $user->organization->name,
+                    'code' => null,
+                    'ville' => null,
+                ];
+            }
+        }
+
+        return null;
     }
 }
