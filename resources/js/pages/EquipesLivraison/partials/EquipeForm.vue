@@ -62,6 +62,11 @@ const vehiculeSelected = ref<VehiculeOption | null>(
     props.vehicules.find((v) => v.value === props.form.vehicule_id) ?? null,
 );
 
+if (vehiculeSelected.value && !props.form.nom) {
+    // eslint-disable-next-line vue/no-mutating-props
+    props.form.nom = vehiculeSelected.value.label;
+}
+
 if (
     !props.form.proprietaire_id &&
     vehiculeSelected.value?.categorie === 'externe' &&

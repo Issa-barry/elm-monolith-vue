@@ -37,13 +37,20 @@ function isUlid(s: string): boolean {
 }
 
 function resolveInternalUrl(raw: string): string | null {
-    const origin = window.location.origin;
-    const isInternal = (u: string) =>
-        u.startsWith(origin + '/') || u === origin;
-    if (isInternal(raw)) return raw;
-    const decoded = decode(raw);
-    if (isInternal(decoded)) return decoded;
-    return null;
+    function tryParse(s: string): string | null {
+        try {
+            const u = new URL(s);
+            if (u.protocol === 'http:' || u.protocol === 'https:') {
+                // On garde le chemin et reconstruit sur l'origine courante :
+                // robuste aux décalages APP_URL et aux corruptions AZERTY du host.
+                return window.location.origin + u.pathname + u.search + u.hash;
+            }
+        } catch {
+            // s n'est pas une URL valide
+        }
+        return null;
+    }
+    return tryParse(raw) ?? tryParse(decode(raw));
 }
 
 async function resolveUlidUrl(ulid: string): Promise<string | null> {
@@ -125,9 +132,12 @@ export function useScanInterceptor() {
                 }
 
                 // Cas 2 : ULID nu (QR propriétaire/livreur de l'app mobile)
+                // On essaie decoded (AZERTY→QWERTY), puis raw si decoded n'est pas un ULID valide
+                // (ex: le 'M' du ULID est converti en ':' par decode, ce qui l'invalide)
                 const decoded = decode(raw);
-                if (isUlid(decoded)) {
-                    resolveUlidUrl(decoded).then((resolved) => {
+                const ulidCandidate = isUlid(decoded) ? decoded : isUlid(raw) ? raw : null;
+                if (ulidCandidate) {
+                    resolveUlidUrl(ulidCandidate).then((resolved) => {
                         if (resolved) window.location.href = resolved;
                     });
                     return;
