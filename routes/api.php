@@ -66,6 +66,11 @@ Route::get('vehicules/{vehiculeId}/photo', function (string $vehiculeId) {
     return $disk->response($vehicule->photo_path);
 })->name('vehicule.photo');
 
+// ── Routes back-office mobile ─────────────────────────────────────────────────
+Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice.')->group(function () {
+    Route::get('me', \App\Http\Controllers\Api\Backoffice\MeController::class)->name('me');
+});
+
 // ── Routes mobile ─────────────────────────────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('v1/mobile')->group(function () {

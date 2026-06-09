@@ -25,7 +25,7 @@ interface VehiculeData {
     categorie: string | null;
     capacite_packs: number | null;
     proprietaire_id: number | null;
-    pris_en_charge_par_usine: boolean;
+    pris_en_charge_par_usine: boolean | null;
     photo_url: string | null;
     is_active: boolean;
     equipe_id: number | null;
@@ -68,7 +68,8 @@ const canSubmit = computed(() => {
         (form.categorie === 'interne' || !!form.proprietaire_id) &&
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
-        !!form.type_vehicule
+        !!form.type_vehicule &&
+        form.pris_en_charge_par_usine !== null
     );
 });
 

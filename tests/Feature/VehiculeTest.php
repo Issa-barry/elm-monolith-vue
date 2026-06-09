@@ -86,7 +86,7 @@ class VehiculeTest extends TestCase
             ->where('immatriculation', 'RC-001-GN')
             ->firstOrFail();
 
-        $response->assertRedirect(route('vehicules.edit', $vehicule));
+        $response->assertRedirect(route('vehicules.show', $vehicule));
 
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,
@@ -113,7 +113,7 @@ class VehiculeTest extends TestCase
             ->where('immatriculation', 'TC-TEST-GN')
             ->firstOrFail();
 
-        $response->assertRedirect(route('vehicules.edit', $vehicule));
+        $response->assertRedirect(route('vehicules.show', $vehicule));
 
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,
@@ -126,7 +126,82 @@ class VehiculeTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [])
-            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule', 'categorie']);
+            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule', 'categorie', 'pris_en_charge_par_usine']);
+    }
+
+    public function test_store_fails_sans_pris_en_charge_par_usine(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Sans Charge',
+                'immatriculation' => 'RC-050-GN',
+                'type_vehicule' => 'camion',
+                'categorie' => 'externe',
+                'proprietaire_id' => $proprietaire->id,
+            ])
+            ->assertSessionHasErrors('pris_en_charge_par_usine');
+    }
+
+    public function test_store_creates_vehicule_avec_pris_en_charge_oui(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Oui',
+                'immatriculation' => 'RC-051-GN',
+                'type_vehicule' => 'camion',
+                'categorie' => 'externe',
+                'proprietaire_id' => $proprietaire->id,
+                'pris_en_charge_par_usine' => true,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('vehicules', [
+            'immatriculation' => 'RC-051-GN',
+            'pris_en_charge_par_usine' => true,
+        ]);
+    }
+
+    public function test_store_creates_vehicule_avec_pris_en_charge_non(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Non',
+                'immatriculation' => 'RC-052-GN',
+                'type_vehicule' => 'camion',
+                'categorie' => 'externe',
+                'proprietaire_id' => $proprietaire->id,
+                'pris_en_charge_par_usine' => false,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('vehicules', [
+            'immatriculation' => 'RC-052-GN',
+            'pris_en_charge_par_usine' => false,
+        ]);
+    }
+
+    public function test_store_vehicule_interne_force_pris_en_charge_a_true(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Interne Charge',
+                'immatriculation' => 'TC-053-GN',
+                'type_vehicule' => 'tricycle',
+                'categorie' => 'interne',
+                'pris_en_charge_par_usine' => false, // ignoré par le backend
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('vehicules', [
+            'immatriculation' => 'TC-053-GN',
+            'pris_en_charge_par_usine' => true,
+        ]);
     }
 
     public function test_store_fails_with_invalid_type_vehicule(): void
@@ -135,7 +210,7 @@ class VehiculeTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
-                'nom_vehicule' => 'Camion Test',
+                'nom_vehicule' => 'Camion Type Invalide',
                 'immatriculation' => 'RC-002-GN',
                 'type_vehicule' => 'avion',
                 'categorie' => 'externe',
@@ -151,7 +226,7 @@ class VehiculeTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
-                'nom_vehicule' => 'Camion Test',
+                'nom_vehicule' => 'Camion Autre Org',
                 'immatriculation' => 'RC-003-GN',
                 'type_vehicule' => 'camion',
                 'categorie' => 'externe',
@@ -164,7 +239,7 @@ class VehiculeTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
-                'nom_vehicule' => 'Camion Test',
+                'nom_vehicule' => 'Camion Externe Sans Proprio',
                 'immatriculation' => 'RC-004-GN',
                 'type_vehicule' => 'camion',
                 'categorie' => 'externe',
@@ -225,7 +300,45 @@ class VehiculeTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('vehicules.update', $vehicule), [])
-            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule', 'categorie']);
+            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule', 'categorie', 'pris_en_charge_par_usine']);
+    }
+
+    public function test_update_modifie_pris_en_charge(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['pris_en_charge_par_usine' => false]);
+
+        $this->actingAs($this->user)
+            ->put(route('vehicules.update', $vehicule), [
+                'nom_vehicule' => $vehicule->nom_vehicule,
+                'immatriculation' => $vehicule->immatriculation,
+                'type_vehicule' => $vehicule->type_vehicule->value,
+                'categorie' => $vehicule->categorie,
+                'proprietaire_id' => $vehicule->proprietaire_id,
+                'pris_en_charge_par_usine' => true,
+            ])
+            ->assertRedirect(route('vehicules.edit', $vehicule));
+
+        $this->assertDatabaseHas('vehicules', [
+            'id' => $vehicule->id,
+            'pris_en_charge_par_usine' => true,
+        ]);
+    }
+
+    public function test_update_fails_sans_pris_en_charge_par_usine(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+
+        $this->actingAs($this->user)
+            ->put(route('vehicules.update', $vehicule), [
+                'nom_vehicule' => $vehicule->nom_vehicule,
+                'immatriculation' => $vehicule->immatriculation,
+                'type_vehicule' => $vehicule->type_vehicule->value,
+                'categorie' => $vehicule->categorie,
+                'proprietaire_id' => $vehicule->proprietaire_id,
+                // pris_en_charge_par_usine absent
+            ])
+            ->assertSessionHasErrors('pris_en_charge_par_usine');
     }
 
     public function test_update_autorise_meme_categorie_et_immatriculation(): void

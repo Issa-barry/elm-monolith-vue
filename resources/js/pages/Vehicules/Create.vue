@@ -39,7 +39,7 @@ const form = useForm({
         : (null as string | null),
     capacite_packs: null as number | null,
     proprietaire_id: props.initial_proprietaire_id,
-    pris_en_charge_par_usine: false,
+    pris_en_charge_par_usine: null as boolean | null,
     photo: null as File | null,
     is_active: true,
 });
@@ -51,7 +51,8 @@ const canSubmit = computed(() => {
         (form.categorie === 'interne' || !!form.proprietaire_id) &&
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
-        !!form.type_vehicule
+        !!form.type_vehicule &&
+        form.pris_en_charge_par_usine !== null
     );
 });
 

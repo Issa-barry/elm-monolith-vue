@@ -34,7 +34,7 @@ interface FormData {
     categorie: string | null;
     capacite_packs: number | null;
     proprietaire_id: number | null;
-    pris_en_charge_par_usine: boolean;
+    pris_en_charge_par_usine: boolean | null;
     photo: File | null;
     is_active: boolean;
 }
@@ -77,8 +77,7 @@ function onCategorieChange(value: string | null) {
         categorie: value,
         proprietaire_id:
             value === 'interne' ? null : props.form.proprietaire_id,
-        pris_en_charge_par_usine:
-            value === 'interne' ? true : props.form.pris_en_charge_par_usine,
+        pris_en_charge_par_usine: value === 'interne' ? true : null,
     });
 }
 
@@ -147,7 +146,8 @@ const canSubmit = computed(
         (props.form.categorie === 'interne' || !!props.form.proprietaire_id) &&
         props.form.nom_vehicule.trim().length > 0 &&
         props.form.immatriculation.trim().length > 0 &&
-        !!props.form.type_vehicule,
+        !!props.form.type_vehicule &&
+        props.form.pris_en_charge_par_usine !== null,
 );
 
 function handleSubmit() {
@@ -401,45 +401,95 @@ function handleSubmit() {
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
                 Prise en charge par l'usine ?
+                <span class="text-destructive">*</span>
             </h3>
-            <div
-                class="flex items-center gap-4"
-                :class="{ 'opacity-60': form.categorie === 'interne' }"
-            >
-                <label
-                    class="flex items-center gap-2"
-                    :class="
-                        form.categorie === 'interne'
-                            ? 'cursor-not-allowed'
-                            : 'cursor-pointer'
-                    "
+
+            <!-- Interne : verrouillé à Oui -->
+            <template v-if="form.categorie === 'interne'">
+                <div
+                    class="flex h-10 w-48 items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
                 >
-                    <Checkbox
-                        id="pris_en_charge_par_usine"
-                        :model-value="Boolean(form.pris_en_charge_par_usine)"
-                        :disabled="form.categorie === 'interne'"
-                        @update:model-value="
-                            form.categorie !== 'interne' &&
-                            $emit('update:form', {
-                                ...form,
-                                pris_en_charge_par_usine: $event === true,
-                            })
-                        "
-                    />
-                    <span class="text-sm font-medium">
-                        {{ form.pris_en_charge_par_usine ? 'Oui' : 'Non' }}
-                    </span>
-                </label>
-                <p class="text-xs text-muted-foreground">
-                    <template v-if="form.categorie === 'interne'"
-                        >Obligatoire pour un véhicule interne</template
+                    <span class="text-foreground">Oui</span>
+                    <span class="text-xs text-muted-foreground"
+                        >(automatique)</span
                     >
-                    <template v-else
-                        >Les frais du véhicule sont supportés par
-                        l'organisation</template
-                    >
+                </div>
+                <p class="mt-1.5 text-xs text-muted-foreground">
+                    Obligatoire pour un véhicule interne.
                 </p>
-            </div>
+            </template>
+
+            <!-- Externe ou non défini : radio Oui / Non -->
+            <template v-else>
+                <div class="flex items-center gap-6">
+                    <label
+                        class="flex cursor-pointer items-center gap-2.5"
+                        :class="{
+                            'opacity-50': !form.categorie,
+                        }"
+                    >
+                        <input
+                            type="radio"
+                            name="pris_en_charge_par_usine"
+                            :value="true"
+                            :checked="form.pris_en_charge_par_usine === true"
+                            :disabled="!form.categorie"
+                            class="h-4 w-4 accent-primary"
+                            @change="
+                                $emit('update:form', {
+                                    ...form,
+                                    pris_en_charge_par_usine: true,
+                                })
+                            "
+                        />
+                        <span class="text-sm font-medium">Oui</span>
+                    </label>
+
+                    <label
+                        class="flex cursor-pointer items-center gap-2.5"
+                        :class="{
+                            'opacity-50': !form.categorie,
+                        }"
+                    >
+                        <input
+                            type="radio"
+                            name="pris_en_charge_par_usine"
+                            :value="false"
+                            :checked="form.pris_en_charge_par_usine === false"
+                            :disabled="!form.categorie"
+                            class="h-4 w-4 accent-primary"
+                            @change="
+                                $emit('update:form', {
+                                    ...form,
+                                    pris_en_charge_par_usine: false,
+                                })
+                            "
+                        />
+                        <span class="text-sm font-medium">Non</span>
+                    </label>
+                </div>
+
+                <p
+                    v-if="errors.pris_en_charge_par_usine"
+                    class="mt-1.5 text-xs text-destructive"
+                >
+                    {{ errors.pris_en_charge_par_usine }}
+                </p>
+                <p
+                    v-else-if="
+                        form.categorie && form.pris_en_charge_par_usine === null
+                    "
+                    class="mt-1.5 text-xs text-muted-foreground"
+                >
+                    Sélectionnez Oui ou Non.
+                </p>
+                <p
+                    v-else-if="!form.categorie"
+                    class="mt-1.5 text-xs text-muted-foreground"
+                >
+                    Sélectionnez d'abord une catégorie.
+                </p>
+            </template>
         </div>
 
         <!-- Photo -->

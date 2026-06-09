@@ -92,10 +92,10 @@ function submit() {
         <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
             <div class="hidden sm:block">
                 <Link
-                    href="/equipes-livraison"
+                    :href="`/equipes-livraison/${equipe.id}`"
                     class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
                 >
-                    <ArrowLeft class="h-4 w-4" /> Équipes
+                    <ArrowLeft class="h-4 w-4" /> {{ equipe.nom }}
                 </Link>
                 <h1 class="text-2xl font-semibold tracking-tight">
                     {{ equipe.nom }}
