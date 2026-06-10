@@ -21,17 +21,17 @@ class ProduitHistoriqueController extends Controller
             ->take(200)
             ->get()
             ->map(fn (MouvementStock $m) => [
-                'id'          => $m->id,
-                'type'        => $m->type,
-                'quantite'    => $m->quantite,
+                'id' => $m->id,
+                'type' => $m->type,
+                'quantite' => $m->quantite,
                 'stock_avant' => $m->stock_avant,
                 'stock_apres' => $m->stock_apres,
-                'notes'       => $m->notes,
-                'createur'    => $m->createur
+                'notes' => $m->notes,
+                'createur' => $m->createur
                     ? trim(($m->createur->prenom ?? '').' '.($m->createur->nom ?? ''))
                     : null,
-                'created_at'  => $m->created_at?->toISOString(),
-                'is_initial'  => false,
+                'created_at' => $m->created_at?->toISOString(),
+                'is_initial' => false,
             ])
             ->toArray();
 
@@ -43,15 +43,15 @@ class ProduitHistoriqueController extends Controller
 
         if ($creation && isset($creation->new_values['qte_stock']) && (float) $creation->new_values['qte_stock'] > 0) {
             $mouvements[] = [
-                'id'          => 'initial-'.$produit->id,
-                'type'        => 'entree',
-                'quantite'    => (int) $creation->new_values['qte_stock'],
+                'id' => 'initial-'.$produit->id,
+                'type' => 'entree',
+                'quantite' => (int) $creation->new_values['qte_stock'],
                 'stock_avant' => 0,
                 'stock_apres' => (int) $creation->new_values['qte_stock'],
-                'notes'       => 'Stock initial — création du produit',
-                'createur'    => $creation->actor_name_snapshot,
-                'created_at'  => $creation->created_at?->toISOString(),
-                'is_initial'  => true,
+                'notes' => 'Stock initial — création du produit',
+                'createur' => $creation->actor_name_snapshot,
+                'created_at' => $creation->created_at?->toISOString(),
+                'is_initial' => true,
             ];
         }
 
@@ -61,7 +61,7 @@ class ProduitHistoriqueController extends Controller
             ->orderByDesc('created_at')
             ->get()
             ->map(fn (AuditLog $log) => [
-                'id'         => $log->id,
+                'id' => $log->id,
                 'event_code' => $log->event_code,
                 'event_label' => $log->event_label,
                 'actor_name' => $log->actor_name_snapshot ?? 'Système',
@@ -72,7 +72,7 @@ class ProduitHistoriqueController extends Controller
 
         return response()->json([
             'mouvements' => $mouvements,
-            'historique'  => $historique,
+            'historique' => $historique,
         ]);
     }
 }
