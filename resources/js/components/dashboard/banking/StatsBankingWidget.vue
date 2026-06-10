@@ -8,6 +8,7 @@ interface StatsFactures {
     total_montant: number;
     payees_count: number;
     payees_montant: number;
+    total_encaisse: number;
     impayees_count: number;
     annulees_count: number;
     reste_a_encaisser: number;
@@ -31,9 +32,9 @@ const kpiItems = computed<KpiWidgetItem[]>(() => [
     },
     {
         id: 'factures-payees',
-        title: 'Factures payees',
-        value: formatGNF(props.stats.payees_montant),
-        subtitle: `${props.stats.payees_count} facture${props.stats.payees_count > 1 ? 's' : ''} payee${props.stats.payees_count > 1 ? 's' : ''}`,
+        title: 'Déjà encaissé',
+        value: formatGNF(props.stats.total_encaisse),
+        subtitle: `${props.stats.payees_count} facture${props.stats.payees_count > 1 ? 's' : ''} payee${props.stats.payees_count > 1 ? 's' : ''} + acomptes`,
         align: 'center',
         desktopClass: 'col-span-12 md:col-span-6 xl:col-span-4',
     },

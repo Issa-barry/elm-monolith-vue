@@ -16,11 +16,13 @@ import {
     AlertTriangle,
     Download,
     Eye,
+    History,
     MoreVertical,
     Package,
     Pencil,
     Plus,
     Search,
+    Sliders,
     Trash2,
     X,
 } from 'lucide-vue-next';
@@ -32,6 +34,8 @@ import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import AjusterStockModal from './partials/AjusterStockModal.vue';
+import HistoriqueModal from './partials/HistoriqueModal.vue';
 import ProduitsMobile from './partials/ProduitsMobile.vue';
 
 const lightboxUrl = ref<string | null>(null);
@@ -62,7 +66,7 @@ interface Produit {
     type: string | null;
     type_label: string | null;
     image_url: string | null;
-    is_critique: boolean;
+    is_alerte: boolean;
     statut: string | null;
     statut_label: string | null;
     prix_usine: number | null;
@@ -199,7 +203,7 @@ function exportExcel(): void {
         { label: 'seuil_alerte_stock', value: (p) => p.seuil_alerte_stock },
         { label: 'description', value: (p) => p.description },
         { label: 'image_url', value: (p) => p.image_url },
-        { label: 'is_critique', value: (p) => p.is_critique },
+        { label: 'is_alerte', value: (p) => p.is_alerte },
         {
             label: 'last_stockout_notified_at',
             value: (p) => p.last_stockout_notified_at,
@@ -263,6 +267,47 @@ function exportExcel(): void {
         detail: `${rows.length} produit${rows.length > 1 ? 's' : ''} exporté${rows.length > 1 ? 's' : ''}.`,
         life: 2500,
     });
+}
+
+const stockAjustementProduit = ref<Produit | null>(null);
+const showStockModal = ref(false);
+
+function openStockModal(produit: Produit) {
+    stockAjustementProduit.value = produit;
+    showStockModal.value = true;
+}
+
+interface AuditEntry {
+    id: string;
+    event_code: string;
+    event_label: string;
+    actor_name: string;
+    old_values: Record<string, unknown> | null;
+    new_values: Record<string, unknown> | null;
+    created_at: string;
+}
+
+const historiqueProduitNom = ref('');
+const historiques = ref<AuditEntry[]>([]);
+const showHistoriqueModal = ref(false);
+const historiqueLoading = ref(false);
+
+async function openHistoriqueModal(produit: Produit) {
+    historiqueProduitNom.value = produit.nom;
+    historiques.value = [];
+    showHistoriqueModal.value = true;
+    historiqueLoading.value = true;
+    try {
+        const res = await fetch(`/produits/${produit.id}/historique`, {
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        historiques.value = await res.json();
+    } finally {
+        historiqueLoading.value = false;
+    }
 }
 
 function confirmDelete(produit: Produit) {
@@ -460,7 +505,7 @@ function confirmDelete(produit: Produit) {
                             >
                                 <span class="font-medium">{{ data.nom }}</span>
                                 <AlertTriangle
-                                    v-if="data.is_critique"
+                                    v-if="data.is_alerte"
                                     class="h-3.5 w-3.5 shrink-0 text-amber-500"
                                 />
                             </Link>
@@ -558,7 +603,7 @@ function confirmDelete(produit: Produit) {
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent
                                         align="end"
-                                        class="w-44"
+                                        class="w-48"
                                     >
                                         <DropdownMenuItem as-child>
                                             <Link
@@ -568,6 +613,24 @@ function confirmDelete(produit: Produit) {
                                                 <Eye class="h-4 w-4" />
                                                 Voir le détail
                                             </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            class="cursor-pointer"
+                                            @click="openHistoriqueModal(data)"
+                                        >
+                                            <History class="h-4 w-4" />
+                                            Historique
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            v-if="
+                                                can('produits.update') &&
+                                                data.has_stock
+                                            "
+                                            class="cursor-pointer"
+                                            @click="openStockModal(data)"
+                                        >
+                                            <Sliders class="h-4 w-4" />
+                                            Ajuster le stock
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator
                                             v-if="
@@ -661,6 +724,20 @@ function confirmDelete(produit: Produit) {
                 :on-delete="confirmDelete"
             />
         </div>
+        <!-- Modal ajustement stock -->
+        <AjusterStockModal
+            v-if="stockAjustementProduit"
+            v-model:visible="showStockModal"
+            :produit="stockAjustementProduit"
+        />
+
+        <!-- Modal historique -->
+        <HistoriqueModal
+            v-model:visible="showHistoriqueModal"
+            :historiques="historiques"
+            :title="`Historique — ${historiqueProduitNom}`"
+        />
+
         <!-- Lightbox -->
         <Teleport to="body">
             <div

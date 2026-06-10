@@ -8,6 +8,7 @@ use App\Models\CommandeVente;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\Organization;
+use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -342,6 +343,75 @@ class CommandeVenteTest extends TestCase
         $this->assertDatabaseHas('commandes_ventes', ['client_id' => $client->id]);
     }
 
+    // ── store : paramètre autoriser_saisie_dessous_qte_max ───────────────────
+
+    public function test_create_exposes_autoriser_saisie_dessous_qte_max_prop(): void
+    {
+        Parametre::setVentesAutorisationSaisieDessousQteMax($this->org->id, false);
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.create'))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Ventes/Create')
+                ->where('autoriser_saisie_dessous_qte_max', false)
+            );
+    }
+
+    public function test_store_fails_when_below_capacity_and_chargement_complet_required(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        $vehicule->update(['capacite_packs' => 10]);
+        Parametre::setVentesAutorisationSaisieDessousQteMax($this->org->id, false);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 3, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertSessionHasErrors('lignes');
+
+        $this->assertDatabaseMissing('commandes_ventes', ['vehicule_id' => $vehicule->id]);
+    }
+
+    public function test_store_succeeds_when_exactly_at_capacity_with_chargement_complet_required(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        $vehicule->update(['capacite_packs' => 3]);
+        Parametre::setVentesAutorisationSaisieDessousQteMax($this->org->id, false);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 3, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commandes_ventes', ['vehicule_id' => $vehicule->id]);
+    }
+
+    public function test_store_below_capacity_still_allowed_when_param_enabled(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        $vehicule->update(['capacite_packs' => 10]);
+        Parametre::setVentesAutorisationSaisieDessousQteMax($this->org->id, true);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 4, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commandes_ventes', ['vehicule_id' => $vehicule->id]);
+    }
+
     // ── update : capacité véhicule ────────────────────────────────────────────
 
     public function test_update_accepts_qte_within_capacity(): void
@@ -451,6 +521,56 @@ class CommandeVenteTest extends TestCase
                 ],
             ])
             ->assertSessionHasErrors('vehicule_id');
+    }
+
+    // ── update : paramètre autoriser_saisie_dessous_qte_max ──────────────────
+
+    public function test_update_fails_when_below_capacity_and_chargement_complet_required(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        $vehicule->update(['capacite_packs' => 10]);
+        Parametre::setVentesAutorisationSaisieDessousQteMax($this->org->id, false);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => 2000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('ventes.update', $commande), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 5, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertSessionHasErrors('lignes');
+    }
+
+    public function test_update_succeeds_when_exactly_at_capacity_with_chargement_complet_required(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        $vehicule->update(['capacite_packs' => 5]);
+        Parametre::setVentesAutorisationSaisieDessousQteMax($this->org->id, false);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => 2000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('ventes.update', $commande), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 5, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertRedirect();
     }
 
     public function test_update_with_client_only_accepts_any_valid_qte(): void

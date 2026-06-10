@@ -168,7 +168,7 @@ onMounted(() => {
                             href="/produits"
                             class="block px-4 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
                         >
-                            Voir les produits à seuil critique →
+                            Voir les produits en alerte →
                         </Link>
                     </div>
 

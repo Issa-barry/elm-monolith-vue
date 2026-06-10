@@ -19,6 +19,8 @@ class MouvementStock extends Model
         'produit_id',
         'type',
         'quantite',
+        'stock_avant',
+        'stock_apres',
         'source_type',
         'source_id',
         'notes',
@@ -29,6 +31,8 @@ class MouvementStock extends Model
     {
         return [
             'quantite' => 'integer',
+            'stock_avant' => 'integer',
+            'stock_apres' => 'integer',
         ];
     }
 

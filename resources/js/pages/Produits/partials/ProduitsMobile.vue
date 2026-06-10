@@ -26,7 +26,7 @@ interface Produit {
     nom: string;
     code_interne: string | null;
     image_url: string | null;
-    is_critique: boolean;
+    is_alerte: boolean;
     statut: string;
     statut_label: string;
     qte_stock: number | null;
@@ -145,7 +145,7 @@ const filteredProduits = computed(() => {
                             {{ data.nom }}
                         </p>
                         <AlertTriangle
-                            v-if="data.is_critique"
+                            v-if="data.is_alerte"
                             class="h-3.5 w-3.5 shrink-0 text-amber-500"
                         />
                     </div>

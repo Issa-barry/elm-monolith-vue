@@ -66,9 +66,21 @@ Route::get('vehicules/{vehiculeId}/photo', function (string $vehiculeId) {
     return $disk->response($vehicule->photo_path);
 })->name('vehicule.photo');
 
+// ── Auth backoffice mobile (publique — avant le middleware Sanctum) ────────────
+Route::post('v1/backoffice/auth/login', \App\Http\Controllers\Api\Auth\BackofficeLoginController::class)
+    ->middleware('throttle:10,1')
+    ->name('api.backoffice.auth.login');
+
 // ── Routes back-office mobile ─────────────────────────────────────────────────
 Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice.')->group(function () {
     Route::get('me', \App\Http\Controllers\Api\Backoffice\MeController::class)->name('me');
+    Route::get('stats', \App\Http\Controllers\Api\Backoffice\StatsController::class)->name('stats');
+
+    Route::apiResource('produits', \App\Http\Controllers\Api\Produits\ProduitController::class);
+    Route::post('produits/{produit}/ajuster-stock', [\App\Http\Controllers\Api\Produits\ProduitController::class, 'ajusterStock'])
+        ->name('produits.ajuster-stock');
+    Route::get('produits/{produit}/historique', \App\Http\Controllers\Api\Produits\ProduitHistoriqueController::class)
+        ->name('produits.historique');
 });
 
 // ── Routes mobile ─────────────────────────────────────────────────────────────

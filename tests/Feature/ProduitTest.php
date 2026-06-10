@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\MouvementStock;
 use App\Models\Organization;
 use App\Models\Produit;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -62,7 +63,7 @@ class ProduitTest extends TestCase
                 'statut' => 'actif',
                 'prix_achat' => 1000,
                 'qte_stock' => 100,
-                'is_critique' => false,
+                'is_alerte' => false,
             ])
             ->assertRedirect(route('produits.index'));
 
@@ -98,7 +99,7 @@ class ProduitTest extends TestCase
             'statut' => 'actif',
             'prix_achat' => 500,
             'qte_stock' => 50,
-            'is_critique' => false,
+            'is_alerte' => false,
         ]);
     }
 
@@ -145,7 +146,7 @@ class ProduitTest extends TestCase
                 'nom' => 'Nouveau nom produit',
                 'type' => 'materiel',
                 'statut' => 'actif',
-                'is_critique' => false,
+                'is_alerte' => false,
             ])
             ->assertRedirect(route('produits.index'));
 
@@ -185,5 +186,153 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->delete(route('produits.destroy', $produit))
             ->assertStatus(403);
+    }
+
+    // ── ajuster-stock ─────────────────────────────────────────────────────────
+
+    public function test_ajuster_stock_augmente_le_stock(): void
+    {
+        $produit = $this->makeProduit($this->org); // qte_stock = 50
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'augmenter' => 20,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produits', [
+            'id' => $produit->id,
+            'qte_stock' => 70,
+        ]);
+
+        $this->assertDatabaseHas('mouvements_stock', [
+            'produit_id' => $produit->id,
+            'type' => 'entree',
+            'quantite' => 20,
+            'stock_avant' => 50,
+            'stock_apres' => 70,
+        ]);
+    }
+
+    public function test_ajuster_stock_diminue_le_stock(): void
+    {
+        $produit = $this->makeProduit($this->org); // qte_stock = 50
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'diminuer' => 15,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produits', [
+            'id' => $produit->id,
+            'qte_stock' => 35,
+        ]);
+
+        $this->assertDatabaseHas('mouvements_stock', [
+            'produit_id' => $produit->id,
+            'type' => 'sortie',
+            'quantite' => 15,
+            'stock_avant' => 50,
+            'stock_apres' => 35,
+        ]);
+    }
+
+    public function test_ajuster_stock_enregistre_le_motif(): void
+    {
+        $produit = $this->makeProduit($this->org);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'augmenter' => 10,
+                'motif' => 'Correction inventaire',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('mouvements_stock', [
+            'produit_id' => $produit->id,
+            'notes' => 'Correction inventaire',
+        ]);
+    }
+
+    public function test_ajuster_stock_echoue_si_deux_champs_renseignes(): void
+    {
+        $produit = $this->makeProduit($this->org);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'augmenter' => 10,
+                'diminuer' => 5,
+            ])
+            ->assertSessionHasErrors('augmenter');
+    }
+
+    public function test_ajuster_stock_echoue_si_aucun_champ_renseigne(): void
+    {
+        $produit = $this->makeProduit($this->org);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [])
+            ->assertSessionHasErrors('augmenter');
+    }
+
+    public function test_ajuster_stock_echoue_si_quantite_nulle_ou_negative(): void
+    {
+        $produit = $this->makeProduit($this->org);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'augmenter' => 0,
+            ])
+            ->assertSessionHasErrors('augmenter');
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'diminuer' => -5,
+            ])
+            ->assertSessionHasErrors('diminuer');
+    }
+
+    public function test_ajuster_stock_echoue_si_retrait_depasse_stock(): void
+    {
+        $produit = $this->makeProduit($this->org); // qte_stock = 50
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'diminuer' => 100,
+            ])
+            ->assertSessionHasErrors('diminuer');
+
+        // Le stock ne doit pas avoir changé
+        $this->assertDatabaseHas('produits', [
+            'id' => $produit->id,
+            'qte_stock' => 50,
+        ]);
+    }
+
+    public function test_ajuster_stock_retourne_403_pour_autre_organisation(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $produit = $this->makeProduit($otherOrg);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'augmenter' => 10,
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_ajuster_stock_ne_cree_pas_mouvement_si_validation_echoue(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $countBefore = MouvementStock::where('produit_id', $produit->id)->count();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'diminuer' => 9999,
+            ])
+            ->assertSessionHasErrors('diminuer');
+
+        $this->assertSame($countBefore, MouvementStock::where('produit_id', $produit->id)->count());
     }
 }

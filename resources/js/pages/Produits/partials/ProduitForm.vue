@@ -27,7 +27,7 @@ interface FormData {
     qte_stock: number;
     seuil_alerte_stock: number | null;
     description: string | null;
-    is_critique: boolean;
+    is_alerte: boolean;
     image: File | null;
 }
 
@@ -331,20 +331,20 @@ const displayImage = computed(
 
                 <div class="flex items-center gap-3 sm:pt-6">
                     <Checkbox
-                        id="is_critique"
-                        :model-value="Boolean(form.is_critique)"
+                        id="is_alerte"
+                        :model-value="Boolean(form.is_alerte)"
                         @update:model-value="
                             $emit('update:form', {
                                 ...form,
-                                is_critique: $event === true,
+                                is_alerte: $event === true,
                             })
                         "
                     />
                     <div>
                         <Label
-                            for="is_critique"
+                            for="is_alerte"
                             class="cursor-pointer font-medium"
-                            >Produit critique</Label
+                            >Produit en alerte</Label
                         >
                         <p class="text-xs text-muted-foreground">
                             Déclenche une alerte en cas de rupture

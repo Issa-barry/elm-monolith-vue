@@ -209,6 +209,7 @@ class DashboardController extends Controller
                 'total_montant' => (float) $row->total_montant,
                 'payees_count' => (int) $row->payees_count,
                 'payees_montant' => (float) $row->payees_montant,
+                'total_encaisse' => (float) $row->payees_montant + (float) $encaisseActif,
                 'impayees_count' => (int) $row->impayees_count,
                 'annulees_count' => (int) $row->annulees_count,
                 'reste_a_encaisser' => $resteAEncaisser,

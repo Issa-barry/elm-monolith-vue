@@ -65,6 +65,7 @@ class VenteParametrageTest extends TestCase
                 'commission_generation_mode' => Parametre::COMMISSION_MODE_COMMANDE_VALIDEE,
                 'quantity_edit_role_names' => [],
                 'price_edit_role_names' => ['commerciale'],
+                'autoriser_saisie_dessous_qte_max' => true,
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -74,5 +75,78 @@ class VenteParametrageTest extends TestCase
 
         $this->assertTrue($commercialeRole->hasPermissionTo('ventes.prix.update'));
         $this->assertFalse($managerRole->hasPermissionTo('ventes.prix.update'));
+    }
+
+    public function test_edit_exposes_autoriser_saisie_dessous_qte_max_prop(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.read');
+
+        $this->actingAs($user)
+            ->get(route('settings.ventes.edit'))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('settings/Ventes')
+                ->has('autoriser_saisie_dessous_qte_max')
+                ->where('autoriser_saisie_dessous_qte_max', true) // défaut = true
+            );
+    }
+
+    public function test_update_persists_autoriser_saisie_dessous_qte_max_as_false(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), [
+                'commission_generation_mode' => Parametre::COMMISSION_MODE_COMMANDE_VALIDEE,
+                'quantity_edit_role_names' => [],
+                'price_edit_role_names' => [],
+                'autoriser_saisie_dessous_qte_max' => false,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertFalse(
+            Parametre::isVentesAutorisationSaisieDessousQteMax($user->organization_id)
+        );
+    }
+
+    public function test_update_persists_autoriser_saisie_dessous_qte_max_as_true(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.update');
+
+        // D'abord désactiver pour s'assurer qu'on repart d'un état connu
+        Parametre::setVentesAutorisationSaisieDessousQteMax($user->organization_id, false);
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), [
+                'commission_generation_mode' => Parametre::COMMISSION_MODE_COMMANDE_VALIDEE,
+                'quantity_edit_role_names' => [],
+                'price_edit_role_names' => [],
+                'autoriser_saisie_dessous_qte_max' => true,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertTrue(
+            Parametre::isVentesAutorisationSaisieDessousQteMax($user->organization_id)
+        );
+    }
+
+    public function test_update_requires_autoriser_saisie_dessous_qte_max_field(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), [
+                'commission_generation_mode' => Parametre::COMMISSION_MODE_COMMANDE_VALIDEE,
+                'quantity_edit_role_names' => [],
+                'price_edit_role_names' => [],
+                // autoriser_saisie_dessous_qte_max absent intentionnellement
+            ])
+            ->assertSessionHasErrors('autoriser_saisie_dessous_qte_max');
     }
 }
