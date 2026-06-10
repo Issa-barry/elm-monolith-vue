@@ -25,7 +25,7 @@ interface ProduitData {
     qte_stock: number;
     seuil_alerte_stock: number | null;
     description: string | null;
-    is_critique: boolean;
+    is_alerte: boolean;
     image_url: string | null;
 }
 
@@ -53,7 +53,7 @@ const form = useForm({
     qte_stock: props.produit.qte_stock,
     seuil_alerte_stock: props.produit.seuil_alerte_stock,
     description: props.produit.description,
-    is_critique: props.produit.is_critique,
+    is_alerte: props.produit.is_alerte,
     image: null as File | null,
     _method: 'PUT',
 });

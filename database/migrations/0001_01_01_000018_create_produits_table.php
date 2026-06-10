@@ -24,7 +24,7 @@ return new class extends Migration
             $table->string('statut', 30)->default('actif')->index();
             $table->text('description')->nullable();
             $table->text('image_url')->nullable();
-            $table->boolean('is_critique')->default(false)->index();
+            $table->boolean('is_alerte')->default(false)->index();
             $table->timestamp('last_stockout_notified_at')->nullable();
             $table->timestamp('archived_at')->nullable();
             $table->foreignUlid('created_by')->nullable()->constrained('users')->nullOnDelete();

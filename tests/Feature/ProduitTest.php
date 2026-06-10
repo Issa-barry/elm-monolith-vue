@@ -63,7 +63,7 @@ class ProduitTest extends TestCase
                 'statut' => 'actif',
                 'prix_achat' => 1000,
                 'qte_stock' => 100,
-                'is_critique' => false,
+                'is_alerte' => false,
             ])
             ->assertRedirect(route('produits.index'));
 
@@ -99,7 +99,7 @@ class ProduitTest extends TestCase
             'statut' => 'actif',
             'prix_achat' => 500,
             'qte_stock' => 50,
-            'is_critique' => false,
+            'is_alerte' => false,
         ]);
     }
 
@@ -146,7 +146,7 @@ class ProduitTest extends TestCase
                 'nom' => 'Nouveau nom produit',
                 'type' => 'materiel',
                 'statut' => 'actif',
-                'is_critique' => false,
+                'is_alerte' => false,
             ])
             ->assertRedirect(route('produits.index'));
 

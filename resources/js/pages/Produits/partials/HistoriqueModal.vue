@@ -68,7 +68,7 @@ const FIELD_LABELS: Record<string, string> = {
     cout: 'Coût',
     qte_stock: 'Stock',
     seuil_alerte_stock: "Seuil d'alerte",
-    is_critique: 'Critique',
+    is_alerte: 'Alerte',
     description: 'Description',
     code_fournisseur: 'Code fournisseur',
     motif: 'Motif',
@@ -76,7 +76,7 @@ const FIELD_LABELS: Record<string, string> = {
 
 function formatVal(key: string, val: unknown): string {
     if (val === null || val === undefined) return '—';
-    if (key === 'is_critique') return val ? 'Oui' : 'Non';
+    if (key === 'is_alerte') return val ? 'Oui' : 'Non';
     if (
         key === 'prix_vente' ||
         key === 'prix_achat' ||

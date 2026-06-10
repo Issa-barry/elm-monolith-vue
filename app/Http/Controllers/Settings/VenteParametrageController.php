@@ -46,6 +46,7 @@ class VenteParametrageController extends Controller
             'roles' => $roles,
             'commission_generation_mode' => Parametre::getVentesCommissionMode($orgId),
             'commission_options' => $this->commissionOptions(),
+            'autoriser_saisie_dessous_qte_max' => Parametre::isVentesAutorisationSaisieDessousQteMax($orgId),
         ]);
     }
 
@@ -61,6 +62,7 @@ class VenteParametrageController extends Controller
             'quantity_edit_role_names.*' => ['string', Rule::exists('roles', 'name')],
             'price_edit_role_names' => ['array'],
             'price_edit_role_names.*' => ['string', Rule::exists('roles', 'name')],
+            'autoriser_saisie_dessous_qte_max' => ['required', 'boolean'],
         ]);
 
         $enabledQuantityRoleNames = collect($validated['quantity_edit_role_names'] ?? [])
@@ -89,6 +91,11 @@ class VenteParametrageController extends Controller
         Parametre::setVentesCommissionMode(
             auth()->user()->organization_id,
             $validated['commission_generation_mode'],
+        );
+
+        Parametre::setVentesAutorisationSaisieDessousQteMax(
+            auth()->user()->organization_id,
+            (bool) $validated['autoriser_saisie_dessous_qte_max'],
         );
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
