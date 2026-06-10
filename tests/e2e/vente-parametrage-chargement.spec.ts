@@ -32,12 +32,12 @@ async function setChargementCompletRequired(
             wantOn ? 'true' : 'false',
             { timeout: 5_000 },
         );
-    }
 
-    await page.getByRole('button', { name: /enregistrer/i }).last().click();
-    await expect(page.locator('body')).toContainText(/mis a jour/i, {
-        timeout: 10_000,
-    });
+        await page.getByRole('button', { name: /enregistrer/i }).last().click();
+        await expect(page.locator('body')).toContainText(/mis a jour/i, {
+            timeout: 10_000,
+        });
+    }
 }
 
 async function selectFirstVehiculeAndGetCapacity(
