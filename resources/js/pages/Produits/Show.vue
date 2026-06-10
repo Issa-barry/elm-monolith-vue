@@ -42,7 +42,7 @@ interface Produit {
     qte_stock: number | null;
     seuil_alerte_stock: number | null;
     description: string | null;
-    is_critique: boolean;
+    is_alerte: boolean;
     in_stock: boolean;
     is_low_stock: boolean;
     has_stock: boolean;
@@ -59,6 +59,7 @@ interface MouvementStock {
     notes: string | null;
     created_at: string | null;
     createur_nom: string | null;
+    is_initial?: boolean;
 }
 
 interface AuditEntry {
@@ -230,7 +231,7 @@ function stockColorClass(produit: Produit): string {
                                 produit.nom
                             }}</span>
                             <AlertTriangle
-                                v-if="produit.is_critique"
+                                v-if="produit.is_alerte"
                                 class="h-4 w-4 shrink-0 text-amber-500"
                             />
                         </div>
@@ -258,7 +259,7 @@ function stockColorClass(produit: Produit): string {
                             {{ produit.type_label || '—' }}
                         </span>
                         <span
-                            v-if="produit.is_critique"
+                            v-if="produit.is_alerte"
                             class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
                         >
                             <AlertTriangle class="h-3 w-3" />
@@ -518,7 +519,13 @@ function stockColorClass(produit: Produit): string {
                                 </td>
                                 <td class="py-2.5 pr-4 text-center">
                                     <span
-                                        v-if="m.type === 'entree'"
+                                        v-if="m.is_initial"
+                                        class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-400"
+                                    >
+                                        {{ m.quantite }}
+                                    </span>
+                                    <span
+                                        v-else-if="m.type === 'entree'"
                                         class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
                                     >
                                         <ArrowUp class="h-3 w-3" />

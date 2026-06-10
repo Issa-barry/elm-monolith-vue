@@ -31,7 +31,7 @@ class UpdateProduitRequest extends FormRequest
             'qte_stock' => ['nullable', 'integer', 'min:0'],
             'seuil_alerte_stock' => ['nullable', 'integer', 'min:0'],
             'description' => ['nullable', 'string'],
-            'is_critique' => ['boolean'],
+            'is_alerte' => ['boolean'],
             'image' => ['nullable', 'image', 'max:2048'],
         ];
     }
@@ -57,7 +57,7 @@ class UpdateProduitRequest extends FormRequest
             'qte_stock.min' => 'La quantité en stock ne peut pas être négative.',
             'seuil_alerte_stock.integer' => 'Le seuil d\'alerte doit être un nombre entier.',
             'seuil_alerte_stock.min' => 'Le seuil d\'alerte ne peut pas être négatif.',
-            'is_critique.boolean' => 'Le champ critique doit être vrai ou faux.',
+            'is_alerte.boolean' => 'Le champ alerte doit être vrai ou faux.',
             'image.image' => 'Le fichier doit être une image.',
             'image.max' => 'L\'image ne peut pas dépasser 2 Mo.',
         ];

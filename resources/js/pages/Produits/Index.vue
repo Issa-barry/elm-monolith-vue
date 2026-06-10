@@ -66,7 +66,7 @@ interface Produit {
     type: string | null;
     type_label: string | null;
     image_url: string | null;
-    is_critique: boolean;
+    is_alerte: boolean;
     statut: string | null;
     statut_label: string | null;
     prix_usine: number | null;
@@ -203,7 +203,7 @@ function exportExcel(): void {
         { label: 'seuil_alerte_stock', value: (p) => p.seuil_alerte_stock },
         { label: 'description', value: (p) => p.description },
         { label: 'image_url', value: (p) => p.image_url },
-        { label: 'is_critique', value: (p) => p.is_critique },
+        { label: 'is_alerte', value: (p) => p.is_alerte },
         {
             label: 'last_stockout_notified_at',
             value: (p) => p.last_stockout_notified_at,
@@ -505,7 +505,7 @@ function confirmDelete(produit: Produit) {
                             >
                                 <span class="font-medium">{{ data.nom }}</span>
                                 <AlertTriangle
-                                    v-if="data.is_critique"
+                                    v-if="data.is_alerte"
                                     class="h-3.5 w-3.5 shrink-0 text-amber-500"
                                 />
                             </Link>

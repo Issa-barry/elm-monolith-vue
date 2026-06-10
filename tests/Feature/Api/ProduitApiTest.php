@@ -31,7 +31,7 @@ class ProduitApiTest extends TestCase
             'statut' => 'actif',
             'prix_achat' => 500,
             'qte_stock' => 50,
-            'is_critique' => false,
+            'is_alerte' => false,
         ], $overrides));
     }
 
@@ -95,7 +95,7 @@ class ProduitApiTest extends TestCase
                 'statut' => 'actif',
                 'statut_label' => 'Actif',
                 'qte_stock' => 50,
-                'is_critique' => false,
+                'is_alerte' => false,
             ]);
     }
 
@@ -122,7 +122,7 @@ class ProduitApiTest extends TestCase
             'statut' => 'actif',
             'prix_achat' => 1500,
             'qte_stock' => 100,
-            'is_critique' => false,
+            'is_alerte' => false,
         ]);
 
         $response->assertCreated()

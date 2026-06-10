@@ -207,7 +207,7 @@ class ProduitController extends Controller
             'cout' => $produit->cout,
             'qte_stock' => $produit->qte_stock,
             'seuil_alerte_stock' => $produit->seuil_alerte_stock,
-            'is_critique' => $produit->is_critique,
+            'is_alerte' => $produit->is_alerte,
             'description' => $produit->description,
             'code_fournisseur' => $produit->code_fournisseur,
         ], fn ($v) => $v !== null && $v !== '');

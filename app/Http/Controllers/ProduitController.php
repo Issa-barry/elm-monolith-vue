@@ -48,7 +48,7 @@ class ProduitController extends Controller
                 'qte_stock' => $p->qte_stock,
                 'seuil_alerte_stock' => $p->seuil_alerte_stock,
                 'description' => $p->description,
-                'is_critique' => $p->is_critique,
+                'is_alerte' => $p->is_alerte,
                 'last_stockout_notified_at' => $p->last_stockout_notified_at ? (string) $p->last_stockout_notified_at : null,
                 'archived_at' => $p->archived_at?->toISOString(),
                 'created_by' => $p->created_by,
@@ -94,7 +94,7 @@ class ProduitController extends Controller
             'qte_stock' => 'nullable|integer|min:0',
             'seuil_alerte_stock' => 'nullable|integer|min:0',
             'description' => 'nullable|string',
-            'is_critique' => 'boolean',
+            'is_alerte' => 'boolean',
             'image' => 'nullable|image|max:2048',
         ]);
 
@@ -144,7 +144,31 @@ class ProduitController extends Controller
                 'createur_nom' => $m->createur
                     ? trim(($m->createur->prenom ?? '').' '.($m->createur->nom ?? ''))
                     : null,
-            ]);
+                'is_initial' => false,
+            ])
+            ->toArray();
+
+        // Stock initial dérivé de l'audit de création
+        $creation = AuditLog::where('auditable_type', Produit::class)
+            ->where('auditable_id', $produit->id)
+            ->where('event_code', 'CREATED')
+            ->first();
+
+        if ($creation && isset($creation->new_values['qte_stock']) && (float) $creation->new_values['qte_stock'] > 0) {
+            $mouvements[] = [
+                'id' => 'initial-'.$produit->id,
+                'type' => 'entree',
+                'quantite' => (int) $creation->new_values['qte_stock'],
+                'stock_avant' => 0,
+                'stock_apres' => (int) $creation->new_values['qte_stock'],
+                'notes' => 'Stock initial — création du produit',
+                'created_at' => $creation->created_at?->toISOString(),
+                'createur_nom' => $creation->actor_name_snapshot,
+                'is_initial' => true,
+            ];
+        }
+
+        $mouvements = collect($mouvements);
 
         $historiques = $this->loadHistoriques($produit);
 
@@ -166,7 +190,7 @@ class ProduitController extends Controller
                 'qte_stock' => $produit->qte_stock,
                 'seuil_alerte_stock' => $produit->seuil_alerte_stock,
                 'description' => $produit->description,
-                'is_critique' => $produit->is_critique,
+                'is_alerte' => $produit->is_alerte,
                 'in_stock' => $produit->in_stock,
                 'is_low_stock' => $produit->is_low_stock,
                 'has_stock' => $produit->type?->hasStock() ?? true,
@@ -205,7 +229,7 @@ class ProduitController extends Controller
                 'qte_stock' => $produit->qte_stock,
                 'seuil_alerte_stock' => $produit->seuil_alerte_stock,
                 'description' => $produit->description,
-                'is_critique' => $produit->is_critique,
+                'is_alerte' => $produit->is_alerte,
             ],
             'types' => ProduitType::options(),
             'statuts' => ProduitStatut::options(),
@@ -228,7 +252,7 @@ class ProduitController extends Controller
             'qte_stock' => 'nullable|integer|min:0',
             'seuil_alerte_stock' => 'nullable|integer|min:0',
             'description' => 'nullable|string',
-            'is_critique' => 'boolean',
+            'is_alerte' => 'boolean',
             'image' => 'nullable|image|max:2048',
         ]);
 
@@ -399,7 +423,7 @@ class ProduitController extends Controller
             'cout' => $produit->cout,
             'qte_stock' => $produit->qte_stock,
             'seuil_alerte_stock' => $produit->seuil_alerte_stock,
-            'is_critique' => $produit->is_critique,
+            'is_alerte' => $produit->is_alerte,
             'description' => $produit->description,
             'code_fournisseur' => $produit->code_fournisseur,
         ], fn ($v) => $v !== null && $v !== '');

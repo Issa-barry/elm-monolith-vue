@@ -34,7 +34,7 @@ const form = useForm({
     qte_stock: 0,
     seuil_alerte_stock: null as number | null,
     description: null as string | null,
-    is_critique: false,
+    is_alerte: false,
     image: null as File | null,
 });
 

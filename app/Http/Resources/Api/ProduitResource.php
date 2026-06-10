@@ -27,7 +27,7 @@ class ProduitResource extends JsonResource
             'seuil_alerte_stock' => $this->seuil_alerte_stock,
             'description' => $this->description,
             'image_url' => $this->image_url ? url($this->image_url) : null,
-            'is_critique' => $this->is_critique,
+            'is_alerte' => $this->is_alerte,
             'in_stock' => $this->in_stock,
             'is_low_stock' => $this->is_low_stock,
             'archived_at' => $this->archived_at?->toISOString(),

@@ -82,7 +82,7 @@ class ParametreController extends Controller
                         'qte_stock',
                         'seuil_alerte_stock',
                         'description',
-                        'is_critique',
+                        'is_alerte',
                     ],
                 ]],
             ],
