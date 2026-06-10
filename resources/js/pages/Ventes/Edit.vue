@@ -63,6 +63,8 @@ const props = defineProps<{
     vehicules: VehiculeOption[];
     clients: ClientOption[];
     user_site: UserSite;
+    can_modifier_qte: boolean;
+    autoriser_saisie_dessous_qte_max: boolean;
 }>();
 
 const { can } = usePermissions();
@@ -259,15 +261,17 @@ const capaciteVehiculeSelectionne = computed(
 );
 
 const capaciteVehiculeConforme = computed(() => {
-    if (form.vehicule_id === null) {
-        return true;
-    }
+    if (form.vehicule_id === null) return true;
+    if (capaciteVehiculeSelectionne.value === null) return false;
 
-    if (capaciteVehiculeSelectionne.value === null) {
-        return false;
-    }
+    const qte = quantiteTotale.value;
+    const cap = capaciteVehiculeSelectionne.value;
 
-    return quantiteTotale.value <= capaciteVehiculeSelectionne.value;
+    if (props.can_modifier_qte) return qte >= 1;
+    if (qte > cap) return false;
+    if (qte < cap) return props.autoriser_saisie_dessous_qte_max;
+
+    return true;
 });
 
 // ── Reset au montage (évite la persistance SPA entre navigations) ─────────────
@@ -517,9 +521,11 @@ function submit() {
                         v-if="form.vehicule_id !== null"
                         class="mb-3 text-xs"
                         :class="
-                            capaciteVehiculeConforme
-                                ? 'text-muted-foreground'
-                                : 'text-amber-600 dark:text-amber-400'
+                            !capaciteVehiculeConforme
+                                ? 'text-destructive'
+                                : quantiteTotale === capaciteVehiculeSelectionne
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-amber-600 dark:text-amber-400'
                         "
                     >
                         Capacité véhicule:
@@ -529,6 +535,37 @@ function submit() {
                                 : `${capaciteVehiculeSelectionne} packs`
                         }}
                         · Quantité saisie: {{ quantiteTotale }} packs
+                        <template v-if="capaciteVehiculeSelectionne !== null">
+                            <span
+                                v-if="
+                                    quantiteTotale ===
+                                    capaciteVehiculeSelectionne
+                                "
+                                >— capacité atteinte ✓</span
+                            >
+                            <span
+                                v-else-if="
+                                    quantiteTotale < capaciteVehiculeSelectionne
+                                "
+                            >
+                                —
+                                {{
+                                    capaciteVehiculeSelectionne - quantiteTotale
+                                }}
+                                pack(s) manquant(s){{
+                                    !autoriser_saisie_dessous_qte_max
+                                        ? ' — chargement complet requis'
+                                        : ''
+                                }}</span
+                            >
+                            <span v-else>
+                                —
+                                {{
+                                    quantiteTotale - capaciteVehiculeSelectionne
+                                }}
+                                pack(s) en trop</span
+                            >
+                        </template>
                     </p>
 
                     <!-- ── Tableau desktop ── -->

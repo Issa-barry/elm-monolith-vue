@@ -5,7 +5,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import { Cog, Lock, ShieldCheck } from 'lucide-vue-next';
+import { Cog, Lock, PackageCheck, ShieldCheck } from 'lucide-vue-next';
 
 interface RoleQuantite {
     name: string;
@@ -25,6 +25,7 @@ const props = defineProps<{
     roles: RoleQuantite[];
     commission_generation_mode: string;
     commission_options: CommissionOption[];
+    autoriser_saisie_dessous_qte_max: boolean;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -40,6 +41,7 @@ const form = useForm({
     price_edit_role_names: props.roles
         .filter((role) => role.can_update_prix_unitaire && !role.locked)
         .map((role) => role.name),
+    autoriser_saisie_dessous_qte_max: props.autoriser_saisie_dessous_qte_max,
 });
 
 type EditableRoleField = 'quantity_edit_role_names' | 'price_edit_role_names';
@@ -244,6 +246,58 @@ function submit() {
                                 </p>
                             </div>
                         </label>
+                    </div>
+                </div>
+
+                <div class="overflow-hidden rounded-xl border bg-card">
+                    <div
+                        class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
+                    >
+                        <PackageCheck class="h-4 w-4 text-muted-foreground" />
+                        <h3 class="text-sm font-semibold text-foreground">
+                            Quantite de chargement
+                        </h3>
+                    </div>
+
+                    <div
+                        class="flex items-center justify-between gap-4 px-5 py-4"
+                    >
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-medium text-foreground">
+                                Autoriser la saisie en dessous de la quantite
+                                maximale
+                            </p>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                Si desactive, chaque commande doit remplir
+                                exactement la capacite du vehicule.
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            role="switch"
+                            :aria-checked="form.autoriser_saisie_dessous_qte_max"
+                            :disabled="form.processing"
+                            class="relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                            :class="
+                                form.autoriser_saisie_dessous_qte_max
+                                    ? 'bg-primary'
+                                    : 'bg-input'
+                            "
+                            @click="
+                                form.autoriser_saisie_dessous_qte_max =
+                                    !form.autoriser_saisie_dessous_qte_max
+                            "
+                        >
+                            <span
+                                class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
+                                :class="
+                                    form.autoriser_saisie_dessous_qte_max
+                                        ? 'translate-x-5'
+                                        : 'translate-x-0'
+                                "
+                            />
+                        </button>
                     </div>
                 </div>
 

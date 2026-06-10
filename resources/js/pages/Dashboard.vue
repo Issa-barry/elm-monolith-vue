@@ -16,6 +16,7 @@ interface StatsFactures {
     total_montant: number;
     payees_count: number;
     payees_montant: number;
+    total_encaisse: number;
     impayees_count: number;
     annulees_count: number;
     reste_a_encaisser: number;

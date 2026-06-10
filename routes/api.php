@@ -70,6 +70,10 @@ Route::get('vehicules/{vehiculeId}/photo', function (string $vehiculeId) {
 Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice.')->group(function () {
     Route::get('me', \App\Http\Controllers\Api\Backoffice\MeController::class)->name('me');
     Route::get('stats', \App\Http\Controllers\Api\Backoffice\StatsController::class)->name('stats');
+
+    Route::apiResource('produits', \App\Http\Controllers\Api\Produits\ProduitController::class);
+    Route::post('produits/{produit}/ajuster-stock', [\App\Http\Controllers\Api\Produits\ProduitController::class, 'ajusterStock'])
+        ->name('produits.ajuster-stock');
 });
 
 // ── Routes mobile ─────────────────────────────────────────────────────────────

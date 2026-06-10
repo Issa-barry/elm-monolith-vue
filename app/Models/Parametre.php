@@ -51,6 +51,8 @@ class Parametre extends Model
 
     public const CLE_VENTES_COMMISSION_MODE = 'ventes_commission_mode';
 
+    public const CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX = 'ventes_autoriser_saisie_dessous_qte_max';
+
     public const COMMISSION_MODE_COMMANDE_VALIDEE = 'commande_validee';
 
     public const COMMISSION_MODE_FACTURE_PAYEE = 'facture_payee';
@@ -117,6 +119,7 @@ class Parametre extends Model
             self::CLE_CASHBACK_SEUIL_ACHAT,
             self::CLE_CASHBACK_MONTANT_GAIN,
             self::CLE_VENTES_COMMISSION_MODE,
+            self::CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX,
         ] as $cle) {
             Cache::forget(self::cacheKey($orgId, $cle));
         }
@@ -192,6 +195,26 @@ class Parametre extends Model
         );
 
         Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_COMMISSION_MODE));
+    }
+
+    public static function isVentesAutorisationSaisieDessousQteMax(string $orgId): bool
+    {
+        return (bool) self::get($orgId, self::CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX, true);
+    }
+
+    public static function setVentesAutorisationSaisieDessousQteMax(string $orgId, bool $valeur): void
+    {
+        static::updateOrCreate(
+            ['organization_id' => $orgId, 'cle' => self::CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX],
+            [
+                'valeur' => $valeur ? '1' : '0',
+                'type' => self::TYPE_BOOLEAN,
+                'groupe' => self::GROUPE_VENTES,
+                'description' => 'Autoriser la saisie d\'une quantite inferieure a la capacite du vehicule',
+            ],
+        );
+
+        Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX));
     }
 
     public static function ventesCommissionModes(): array
