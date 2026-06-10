@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { Cog, Lock, PackageCheck, ShieldCheck } from 'lucide-vue-next';
+import { computed } from 'vue';
 
 interface RoleQuantite {
     name: string;
@@ -32,6 +33,11 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Parametres', href: '/settings/profile' },
     { title: 'Parametrage ventes', href: '/settings/ventes' },
 ];
+
+const page = usePage();
+const flashSuccess = computed(
+    () => (page.props.flash as Record<string, string>)?.success ?? null,
+);
 
 const form = useForm({
     commission_generation_mode: props.commission_generation_mode,
@@ -301,6 +307,13 @@ function submit() {
                             />
                         </button>
                     </div>
+                </div>
+
+                <div
+                    v-if="flashSuccess"
+                    class="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                >
+                    {{ flashSuccess }}
                 </div>
 
                 <div class="flex justify-end">
