@@ -585,10 +585,6 @@ class CommandeVenteController extends Controller
 
     private function ensureQuantiteMatchesVehiculeCapacity(array $data): void
     {
-        if (auth()->user()->can('ventes.qte.update')) {
-            return;
-        }
-
         if (empty($data['vehicule_id'])) {
             return;
         }
@@ -612,12 +608,14 @@ class CommandeVenteController extends Controller
         );
         $capacite = (int) $vehicule->capacite_packs;
 
-        if ($qteTotale > $capacite) {
+        // Dépassement : seul l'admin avec ventes.qte.update peut dépasser
+        if ($qteTotale > $capacite && ! auth()->user()->can('ventes.qte.update')) {
             throw ValidationException::withMessages([
                 'lignes' => "La quantité totale ({$qteTotale} packs) dépasse la capacité du véhicule ({$capacite} packs maximum).",
             ]);
         }
 
+        // Chargement complet : paramètre organisationnel, s'applique à tous
         $orgId = auth()->user()->organization_id;
         if (! Parametre::isVentesAutorisationSaisieDessousQteMax($orgId) && $qteTotale < $capacite) {
             throw ValidationException::withMessages([

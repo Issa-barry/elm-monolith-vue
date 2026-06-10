@@ -141,9 +141,8 @@ test.describe('Paramétrage chargement complet', () => {
             .locator('input')
             .first();
         await expect(qteInput).toBeVisible({ timeout: 5_000 });
-        await qteInput.click({ clickCount: 3 });
-        await page.keyboard.type('1');
-        await page.keyboard.press('Tab');
+        await qteInput.fill('1');
+        await qteInput.press('Tab');
 
         // Le bouton doit être désactivé
         await expect(submitBtn).toBeDisabled({ timeout: 5_000 });
@@ -180,9 +179,8 @@ test.describe('Paramétrage chargement complet', () => {
             .locator('input')
             .first();
         await expect(qteInput).toBeVisible({ timeout: 5_000 });
-        await qteInput.click({ clickCount: 3 });
-        await page.keyboard.type('1');
-        await page.keyboard.press('Tab');
+        await qteInput.fill('1');
+        await qteInput.press('Tab');
 
         // Le bouton doit rester actif (partiel autorisé)
         const submitBtn = page

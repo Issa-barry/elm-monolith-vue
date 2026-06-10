@@ -267,8 +267,7 @@ const capaciteVehiculeConforme = computed(() => {
     const qte = quantiteTotale.value;
     const cap = capaciteVehiculeSelectionne.value;
 
-    if (props.can_modifier_qte) return qte >= 1;
-    if (qte > cap) return false;
+    if (qte > cap) return props.can_modifier_qte;
     if (qte < cap) return props.autoriser_saisie_dessous_qte_max;
 
     return true;

@@ -250,13 +250,10 @@ const capaciteVehiculeConforme = computed(() => {
     const qte = quantiteTotale.value;
     const cap = capaciteVehiculeSelectionne.value;
 
-    // Utilisateur avec droit de modifier la qté → pas de contrainte de capacité
-    if (props.can_modifier_qte) return qte >= 1;
+    // Dépassement : admin (can_modifier_qte) peut dépasser la capacité
+    if (qte > cap) return props.can_modifier_qte;
 
-    // Dépassement → toujours refusé
-    if (qte > cap) return false;
-
-    // En dessous → selon le paramètre
+    // En dessous → paramètre organisationnel, s'applique à tous
     if (qte < cap) return props.autoriser_saisie_dessous_qte_max;
 
     return true;
