@@ -53,6 +53,7 @@ const props = defineProps<{
     proprietaires: ProprietaireOption[];
     vehicules: VehiculeOption[];
     currentSiteName: string;
+    backHref?: string;
 }>();
 const emit = defineEmits<{ submit: [] }>();
 
@@ -741,7 +742,7 @@ function handleSubmit() {
 
         <!-- Pied de formulaire -->
         <div class="flex items-center justify-between">
-            <a href="/equipes-livraison">
+            <a :href="backHref ?? '/equipes-livraison'">
                 <Button type="button" variant="outline">Retour</Button>
             </a>
             <Button
