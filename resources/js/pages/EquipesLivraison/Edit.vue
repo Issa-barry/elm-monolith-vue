@@ -117,6 +117,7 @@ function submit() {
                 :proprietaires="proprietaires"
                 :vehicules="vehicules"
                 :current-site-name="currentSiteName"
+                :back-href="equipe.vehicule_id ? `/vehicules/${equipe.vehicule_id}` : '/equipes-livraison'"
                 @submit="submit"
             />
         </div>

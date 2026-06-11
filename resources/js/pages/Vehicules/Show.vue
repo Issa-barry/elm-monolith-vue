@@ -5,7 +5,16 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/vue3';
-import { ArrowLeft, Car, CheckCircle, CircleHelp, Pencil, Plus, Receipt, Users } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    Car,
+    CheckCircle,
+    CircleHelp,
+    Pencil,
+    Plus,
+    Receipt,
+    Users,
+} from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface EquipeMembre {
@@ -109,7 +118,11 @@ function formatGNF(val: number): string {
                     :href="`/vehicules/${vehicule.id}/edit`"
                     class="absolute right-4"
                 >
-                    <Button size="sm" variant="outline" class="h-8 gap-1.5 px-3 text-xs">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        class="h-8 gap-1.5 px-3 text-xs"
+                    >
                         <Pencil class="h-3.5 w-3.5" />
                         Modifier
                     </Button>
@@ -128,7 +141,9 @@ function formatGNF(val: number): string {
             </div>
 
             <!-- Header desktop -->
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div
+                class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+            >
                 <div class="flex items-start gap-4">
                     <div
                         class="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border bg-muted/30"
@@ -147,7 +162,9 @@ function formatGNF(val: number): string {
                                 {{ vehicule.nom_vehicule }}
                             </h1>
                             <StatusDot
-                                :label="vehicule.is_active ? 'Actif' : 'Inactif'"
+                                :label="
+                                    vehicule.is_active ? 'Actif' : 'Inactif'
+                                "
                                 :dot-class="
                                     vehicule.is_active
                                         ? 'bg-emerald-500'
@@ -156,7 +173,9 @@ function formatGNF(val: number): string {
                                 class="text-sm text-muted-foreground"
                             />
                         </div>
-                        <p class="mt-0.5 font-mono text-sm text-muted-foreground">
+                        <p
+                            class="mt-0.5 font-mono text-sm text-muted-foreground"
+                        >
                             {{ vehicule.immatriculation }}
                         </p>
                         <div class="mt-1.5 flex items-center gap-2">
@@ -165,7 +184,10 @@ function formatGNF(val: number): string {
                             >
                                 {{ vehicule.type_label }}
                             </span>
-                            <span v-if="vehicule.capacite_packs" class="text-xs text-muted-foreground">
+                            <span
+                                v-if="vehicule.capacite_packs"
+                                class="text-xs text-muted-foreground"
+                            >
                                 {{ vehicule.capacite_packs }} packs
                             </span>
                         </div>
@@ -285,41 +307,68 @@ function formatGNF(val: number): string {
                     </div>
                     <div class="mt-5 grid gap-4 sm:grid-cols-2">
                         <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">Nom du véhicule</p>
-                            <p class="mt-1 text-sm font-medium">{{ vehicule.nom_vehicule }}</p>
-                        </div>
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">Immatriculation</p>
-                            <p class="mt-1 font-mono text-sm font-medium">{{ vehicule.immatriculation }}</p>
-                        </div>
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">Type</p>
-                            <p class="mt-1 text-sm font-medium">{{ vehicule.type_label }}</p>
-                        </div>
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">Capacité</p>
+                            <p class="text-xs text-muted-foreground">
+                                Nom du véhicule
+                            </p>
                             <p class="mt-1 text-sm font-medium">
-                                {{ vehicule.capacite_packs !== null ? `${vehicule.capacite_packs} packs` : '—' }}
+                                {{ vehicule.nom_vehicule }}
                             </p>
                         </div>
                         <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">Propriétaire</p>
-                            <p class="mt-1 text-sm font-medium">{{ vehicule.proprietaire_nom ?? '—' }}</p>
-                            <p v-if="vehicule.proprietaire_telephone" class="font-mono text-xs text-muted-foreground">
+                            <p class="text-xs text-muted-foreground">
+                                Immatriculation
+                            </p>
+                            <p class="mt-1 font-mono text-sm font-medium">
+                                {{ vehicule.immatriculation }}
+                            </p>
+                        </div>
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">Type</p>
+                            <p class="mt-1 text-sm font-medium">
+                                {{ vehicule.type_label }}
+                            </p>
+                        </div>
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">
+                                Capacité
+                            </p>
+                            <p class="mt-1 text-sm font-medium">
+                                {{
+                                    vehicule.capacite_packs !== null
+                                        ? `${vehicule.capacite_packs} packs`
+                                        : '—'
+                                }}
+                            </p>
+                        </div>
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">
+                                Propriétaire
+                            </p>
+                            <p class="mt-1 text-sm font-medium">
+                                {{ vehicule.proprietaire_nom ?? '—' }}
+                            </p>
+                            <p
+                                v-if="vehicule.proprietaire_telephone"
+                                class="font-mono text-xs text-muted-foreground"
+                            >
                                 {{ vehicule.proprietaire_telephone }}
                             </p>
                         </div>
                         <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">Commission prise en charge par l'usine</p>
+                            <p class="text-xs text-muted-foreground">
+                                Commission prise en charge par l'usine
+                            </p>
                             <p class="mt-1">
                                 <span
                                     v-if="vehicule.pris_en_charge_par_usine"
                                     class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
-                                >Oui</span>
+                                    >Oui</span
+                                >
                                 <span
                                     v-else
                                     class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-                                >Non</span>
+                                    >Non</span
+                                >
                             </p>
                         </div>
                     </div>
@@ -330,13 +379,21 @@ function formatGNF(val: number): string {
                     v-else-if="activeTab === 'equipe'"
                     class="rounded-xl border bg-card p-5 sm:p-6"
                 >
-                    <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div
+                        class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
                         <div>
-                            <h2 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+                            <h2
+                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
                                 Équipe de livraison
                             </h2>
                             <p class="mt-1 text-sm text-muted-foreground">
-                                {{ vehicule.equipe_membres.length }} membre{{ vehicule.equipe_membres.length > 1 ? 's' : '' }}
+                                {{ vehicule.equipe_membres.length }} membre{{
+                                    vehicule.equipe_membres.length > 1
+                                        ? 's'
+                                        : ''
+                                }}
                             </p>
                         </div>
                         <Link
@@ -361,41 +418,68 @@ function formatGNF(val: number): string {
 
                     <div class="space-y-3">
                         <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">Nom de l'équipe</p>
-                            <p class="mt-1 text-sm font-medium">{{ vehicule.equipe_nom ?? '—' }}</p>
+                            <p class="text-xs text-muted-foreground">
+                                Nom de l'équipe
+                            </p>
+                            <p class="mt-1 text-sm font-medium">
+                                {{ vehicule.equipe_nom ?? '—' }}
+                            </p>
                         </div>
 
                         <div
                             v-if="vehicule.equipe_membres.length === 0"
                             class="rounded-lg border border-dashed py-10 text-center"
                         >
-                            <p class="text-sm text-muted-foreground">Aucun membre dans l'équipe.</p>
+                            <p class="text-sm text-muted-foreground">
+                                Aucun membre dans l'équipe.
+                            </p>
                         </div>
 
                         <div v-else class="overflow-x-auto rounded-lg border">
                             <table class="w-full text-sm">
-                                <thead class="bg-muted/30 text-left text-muted-foreground">
+                                <thead
+                                    class="bg-muted/30 text-left text-muted-foreground"
+                                >
                                     <tr>
-                                        <th class="px-4 py-3 font-medium">Membre</th>
-                                        <th class="px-4 py-3 font-medium">Rôle</th>
-                                        <th class="px-4 py-3 font-medium">Commission</th>
+                                        <th class="px-4 py-3 font-medium">
+                                            Membre
+                                        </th>
+                                        <th class="px-4 py-3 font-medium">
+                                            Rôle
+                                        </th>
+                                        <th class="px-4 py-3 font-medium">
+                                            Commission
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y">
                                     <tr
-                                        v-for="(m, i) in vehicule.equipe_membres"
+                                        v-for="(
+                                            m, i
+                                        ) in vehicule.equipe_membres"
                                         :key="i"
                                         class="hover:bg-muted/20"
                                     >
-                                        <td class="px-4 py-3 font-medium">{{ m.livreur_nom ?? '—' }}</td>
+                                        <td class="px-4 py-3 font-medium">
+                                            {{ m.livreur_nom ?? '—' }}
+                                        </td>
                                         <td class="px-4 py-3">
                                             <span
                                                 v-if="m.role === 'principal'"
                                                 class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
-                                            >Principal</span>
-                                            <span v-else class="capitalize text-muted-foreground">{{ m.role }}</span>
+                                                >Principal</span
+                                            >
+                                            <span
+                                                v-else
+                                                class="text-muted-foreground capitalize"
+                                                >{{ m.role }}</span
+                                            >
                                         </td>
-                                        <td class="px-4 py-3 text-muted-foreground">{{ m.taux_commission }}%</td>
+                                        <td
+                                            class="px-4 py-3 text-muted-foreground"
+                                        >
+                                            {{ m.taux_commission }}%
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -405,13 +489,18 @@ function formatGNF(val: number): string {
 
                 <!-- Dépenses tab -->
                 <div v-else class="rounded-xl border bg-card p-5 sm:p-6">
-                    <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div
+                        class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+                    >
                         <div>
-                            <h2 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+                            <h2
+                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
                                 Dépenses du véhicule
                             </h2>
                             <p class="mt-1 text-xs text-muted-foreground">
-                                Frais opérationnels gérés via le module Dépenses.
+                                Frais opérationnels gérés via le module
+                                Dépenses.
                             </p>
                         </div>
                         <span
@@ -443,15 +532,22 @@ function formatGNF(val: number): string {
                                 </div>
                                 <div class="text-xs text-muted-foreground">
                                     {{ d.libelle }}
-                                    <span v-if="d.commentaire"> · {{ d.commentaire }}</span>
+                                    <span v-if="d.commentaire">
+                                        · {{ d.commentaire }}</span
+                                    >
                                 </div>
                             </div>
-                            <div class="hidden text-xs text-muted-foreground sm:block">
+                            <div
+                                class="hidden text-xs text-muted-foreground sm:block"
+                            >
                                 {{ d.date_depense ?? '—' }}
                             </div>
                             <span
                                 class="shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
-                                :class="statutBadge[d.statut] ?? 'bg-muted text-muted-foreground'"
+                                :class="
+                                    statutBadge[d.statut] ??
+                                    'bg-muted text-muted-foreground'
+                                "
                             >
                                 {{ statutLabel[d.statut] ?? d.statut }}
                             </span>
