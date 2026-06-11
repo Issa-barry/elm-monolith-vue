@@ -431,11 +431,10 @@ function stockColorClass(produit: Produit): string {
                 >
                     Description
                 </h2>
-                <p
-                    class="text-sm leading-relaxed whitespace-pre-wrap text-foreground/80"
-                >
-                    {{ produit.description }}
-                </p>
+                <div
+                    class="prose prose-sm max-w-none text-sm leading-relaxed text-foreground/80"
+                    v-html="produit.description"
+                />
             </div>
 
             <!-- ─── Méta ─── -->

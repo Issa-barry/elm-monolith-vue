@@ -210,6 +210,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'pays' => $paysNom,
                 'code_phone_pays' => $codePhone,
                 'email' => null,
+                'email_verified_at' => now(),
                 'password' => Hash::make(self::PASSWORD),
                 'organization_id' => $org->id,
             ]);
