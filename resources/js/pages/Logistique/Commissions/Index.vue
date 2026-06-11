@@ -39,6 +39,11 @@ interface SelectOption {
     label: string;
 }
 
+interface SiteOption {
+    value: string;
+    label: string;
+}
+
 interface PeriodeOption {
     code: string;
     label: string;
@@ -51,8 +56,10 @@ const props = defineProps<{
     kpis: Kpis;
     search: string;
     filtre_statut: string;
+    filtre_site: string;
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
+    sites: SiteOption[];
     can_payer: boolean;
 }>();
 
@@ -68,6 +75,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const searchVal = ref(props.search ?? '');
 const statutFiltre = ref<string | null>(props.filtre_statut || null);
 const periodeFiltre = ref<string | null>(props.selected_periode || null);
+const siteFiltre = ref<string | null>(props.filtre_site || null);
 
 const STATUT_OPTIONS: SelectOption[] = [
     { value: null, label: 'Tous les statuts' },
@@ -83,6 +91,11 @@ const PERIODE_OPTIONS = computed<SelectOption[]>(() => [
     })),
 ]);
 
+const SITE_OPTIONS = computed<SelectOption[]>(() => [
+    { value: null, label: 'Toutes les agences' },
+    ...(props.sites ?? []).map((s) => ({ value: s.value, label: s.label })),
+]);
+
 function appliquerFiltres() {
     router.get(
         '/logistique/commissions',
@@ -90,6 +103,7 @@ function appliquerFiltres() {
             search: searchVal.value || undefined,
             statut: statutFiltre.value ?? undefined,
             periode: periodeFiltre.value ?? undefined,
+            site: siteFiltre.value ?? undefined,
         },
         { preserveState: true, replace: true },
     );
@@ -102,6 +116,7 @@ watch(searchVal, () => {
 });
 watch(statutFiltre, appliquerFiltres);
 watch(periodeFiltre, appliquerFiltres);
+watch(siteFiltre, appliquerFiltres);
 
 // ── KPIs calculés ─────────────────────────────────────────────────────────────
 
@@ -278,6 +293,16 @@ function formatPhone(tel: string | null): string {
                     placeholder="Toutes les périodes"
                     class="w-72 text-sm"
                     @change="(e) => (periodeFiltre = e.value)"
+                />
+                <PvDropdown
+                    v-if="sites && sites.length > 0"
+                    :options="SITE_OPTIONS"
+                    option-label="label"
+                    option-value="value"
+                    :model-value="siteFiltre"
+                    placeholder="Toutes les agences"
+                    class="w-52 text-sm"
+                    @change="(e) => (siteFiltre = e.value)"
                 />
                 <span class="text-xs text-muted-foreground">
                     {{ livreurs.length }} résultat{{

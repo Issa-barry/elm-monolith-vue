@@ -6,6 +6,7 @@ use App\Enums\StatutCommission;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPayment;
 use App\Models\Livreur;
+use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommissionPaymentService;
 use App\Services\CommissionSearchService;
@@ -31,10 +32,12 @@ class CommissionVehiculeController extends Controller
         $search = trim((string) $request->input('search', ''));
         $filtreStatut = (string) $request->input('statut', '');
         $filtrePeriode = trim((string) $request->input('periode', ''));
+        $filtreSite = trim((string) $request->input('site', ''));
 
         $rows = CommissionPaymentService::soldesParLivreur(
             $orgId,
-            $filtrePeriode !== '' ? $filtrePeriode : null
+            $filtrePeriode !== '' ? $filtrePeriode : null,
+            $filtreSite !== '' ? $filtreSite : null
         );
 
         $periodesDisponibles = CommissionLogistiquePart::query()
@@ -62,6 +65,7 @@ class CommissionVehiculeController extends Controller
             ->where('type_beneficiaire', 'livreur')
             ->whereNotNull('livreur_id')
             ->when($filtrePeriode !== '', fn ($q) => $q->where('periode', $filtrePeriode))
+            ->when($filtreSite !== '', fn ($q) => $q->whereHas('commission.transfert', fn ($t) => $t->where('site_source_id', $filtreSite)->orWhere('site_destination_id', $filtreSite)))
             ->get()
             ->groupBy('livreur_id')
             ->map(fn ($parts) => $parts
@@ -101,13 +105,19 @@ class CommissionVehiculeController extends Controller
             'total_paye' => (float) collect($list)->sum('paye'),
         ];
 
+        $sites = Site::where('organization_id', $orgId)
+            ->orderBy('nom')
+            ->get(['id', 'nom']);
+
         return Inertia::render('Logistique/Commissions/Index', [
             'livreurs' => $list,
             'kpis' => $kpis,
             'search' => $search,
             'filtre_statut' => $filtreStatut,
+            'filtre_site' => $filtreSite,
             'selected_periode' => $filtrePeriode,
             'periodes_disponibles' => $periodesDisponibles,
+            'sites' => $sites->map(fn ($s) => ['value' => $s->id, 'label' => $s->nom])->values(),
             'statuts' => StatutCommission::options(),
             'can_payer' => auth()->user()->can('logistique.commission.verser'),
         ]);
