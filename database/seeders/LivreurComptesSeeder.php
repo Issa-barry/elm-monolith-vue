@@ -32,14 +32,16 @@ class LivreurComptesSeeder extends Seeder
         // 1) Livreurs actifs
         $actifs = [
             [
-                'telephone' => '+224622000001', // Ibrahima CAMARA
+                'telephone' => '+224622000001',
                 'prenom' => 'Ibrahima',
                 'nom' => 'CAMARA',
+                'email' => 'ibrahima.camara@elm.gn',
             ],
             [
-                'telephone' => '+224622000004', // Mamadou SOUMAH
+                'telephone' => '+224622000004',
                 'prenom' => 'Mamadou',
                 'nom' => 'SOUMAH',
+                'email' => 'mamadou.soumah@elm.gn',
             ],
         ];
 
@@ -69,6 +71,7 @@ class LivreurComptesSeeder extends Seeder
                 'telephone' => '+224628000099',
                 'prenom' => 'Oumar',
                 'nom' => 'BALDE',
+                'email' => 'oumar.balde@elm.gn',
             ],
         ];
 
@@ -95,9 +98,10 @@ class LivreurComptesSeeder extends Seeder
 
         // 3) Livreur + proprietaire (double role)
         $dual = [
-            'telephone' => '+224622000007', // Alpha BARRY
+            'telephone' => '+224622000007',
             'prenom' => 'Alpha',
             'nom' => 'BARRY',
+            'email' => 'alpha.barry@elm.gn',
         ];
 
         $dualLivreur = Livreur::firstOrCreate(
@@ -159,8 +163,10 @@ class LivreurComptesSeeder extends Seeder
             [
                 'prenom' => $data['prenom'],
                 'nom' => $data['nom'],
+                'email' => $data['email'] ?? null,
                 'telephone' => $data['telephone'],
                 'password' => Hash::make(self::PASSWORD),
+                'email_verified_at' => isset($data['email']) ? now() : null,
                 'organization_id' => $organizationId,
             ]
         );
