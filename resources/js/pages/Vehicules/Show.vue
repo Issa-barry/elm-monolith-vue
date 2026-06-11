@@ -5,8 +5,8 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/vue3';
-import { ArrowLeft, Car, CheckCircle, Pencil, Plus } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { ArrowLeft, Car, CheckCircle, CircleHelp, Pencil, Plus, Receipt, Users } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 interface EquipeMembre {
     livreur_nom: string | null;
@@ -47,6 +47,8 @@ const page = usePage();
 const flashSuccess = computed(
     () => (page.props as { flash?: { success?: string } }).flash?.success,
 );
+
+const activeTab = ref<'informations' | 'equipe' | 'depenses'>('informations');
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -107,11 +109,7 @@ function formatGNF(val: number): string {
                     :href="`/vehicules/${vehicule.id}/edit`"
                     class="absolute right-4"
                 >
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        class="h-8 gap-1.5 px-3 text-xs"
-                    >
+                    <Button size="sm" variant="outline" class="h-8 gap-1.5 px-3 text-xs">
                         <Pencil class="h-3.5 w-3.5" />
                         Modifier
                     </Button>
@@ -119,7 +117,7 @@ function formatGNF(val: number): string {
             </div>
         </div>
 
-        <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
+        <div class="w-full space-y-6 p-4 sm:p-6">
             <!-- Flash success -->
             <div
                 v-if="flashSuccess"
@@ -130,11 +128,10 @@ function formatGNF(val: number): string {
             </div>
 
             <!-- Header desktop -->
-            <div class="hidden items-start justify-between gap-6 sm:flex">
-                <div class="flex items-center gap-5">
-                    <!-- Photo -->
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex items-start gap-4">
                     <div
-                        class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-muted/30"
+                        class="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border bg-muted/30"
                     >
                         <img
                             v-if="vehicule.photo_url"
@@ -142,21 +139,15 @@ function formatGNF(val: number): string {
                             :alt="vehicule.nom_vehicule"
                             class="h-full w-full object-cover"
                         />
-                        <Car
-                            v-else
-                            class="h-10 w-10 text-muted-foreground/30"
-                        />
+                        <Car v-else class="h-7 w-7 text-muted-foreground/30" />
                     </div>
-                    <!-- Title -->
                     <div>
                         <div class="flex items-center gap-2">
                             <h1 class="text-2xl font-semibold tracking-tight">
                                 {{ vehicule.nom_vehicule }}
                             </h1>
                             <StatusDot
-                                :label="
-                                    vehicule.is_active ? 'Actif' : 'Inactif'
-                                "
+                                :label="vehicule.is_active ? 'Actif' : 'Inactif'"
                                 :dot-class="
                                     vehicule.is_active
                                         ? 'bg-emerald-500'
@@ -165,9 +156,7 @@ function formatGNF(val: number): string {
                                 class="text-sm text-muted-foreground"
                             />
                         </div>
-                        <p
-                            class="mt-0.5 font-mono text-sm text-muted-foreground"
-                        >
+                        <p class="mt-0.5 font-mono text-sm text-muted-foreground">
                             {{ vehicule.immatriculation }}
                         </p>
                         <div class="mt-1.5 flex items-center gap-2">
@@ -176,15 +165,13 @@ function formatGNF(val: number): string {
                             >
                                 {{ vehicule.type_label }}
                             </span>
-                            <span
-                                v-if="vehicule.capacite_packs"
-                                class="text-xs text-muted-foreground"
-                            >
+                            <span v-if="vehicule.capacite_packs" class="text-xs text-muted-foreground">
                                 {{ vehicule.capacite_packs }} packs
                             </span>
                         </div>
                     </div>
                 </div>
+
                 <div class="flex items-center gap-2">
                     <Link href="/vehicules">
                         <Button variant="outline" size="sm">
@@ -204,26 +191,160 @@ function formatGNF(val: number): string {
                 </div>
             </div>
 
-            <!-- Cards grid -->
-            <div class="grid gap-4 sm:grid-cols-2 sm:gap-6">
-                <!-- Affectation -->
-                <div class="rounded-xl border bg-card p-4 sm:p-5">
-                    <div class="mb-4 flex items-center justify-between">
-                        <h3
-                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+            <!-- Tab layout -->
+            <div class="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+                <!-- Sidebar tabs -->
+                <aside class="h-fit rounded-xl border bg-card p-2">
+                    <button
+                        type="button"
+                        class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'informations'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        @click="activeTab = 'informations'"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <CircleHelp class="h-4 w-4" />
+                            Informations
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'equipe'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        @click="activeTab = 'equipe'"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <Users class="h-4 w-4" />
+                            Equipe
+                        </span>
+                        <span
+                            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px]"
+                            :class="
+                                activeTab === 'equipe'
+                                    ? 'bg-white/20 text-primary-foreground'
+                                    : 'bg-muted text-muted-foreground'
+                            "
                         >
-                            Affectation
-                        </h3>
+                            {{ vehicule.equipe_membres.length }}
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'depenses'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        @click="activeTab = 'depenses'"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <Receipt class="h-4 w-4" />
+                            Dépenses
+                        </span>
+                        <span
+                            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px]"
+                            :class="
+                                activeTab === 'depenses'
+                                    ? 'bg-white/20 text-primary-foreground'
+                                    : 'bg-muted text-muted-foreground'
+                            "
+                        >
+                            {{ depenses.length }}
+                        </span>
+                    </button>
+                </aside>
+
+                <!-- Informations tab -->
+                <div
+                    v-if="activeTab === 'informations'"
+                    class="rounded-xl border bg-card p-5 sm:p-6"
+                >
+                    <div class="flex items-center justify-between gap-2">
+                        <h2
+                            class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
+                            Informations du véhicule
+                        </h2>
+                        <Link
+                            v-if="can('vehicules.update')"
+                            :href="`/vehicules/${vehicule.id}/edit`"
+                        >
+                            <Button size="sm" variant="outline">
+                                <Pencil class="mr-1.5 h-4 w-4" />
+                                Modifier
+                            </Button>
+                        </Link>
+                    </div>
+                    <div class="mt-5 grid gap-4 sm:grid-cols-2">
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">Nom du véhicule</p>
+                            <p class="mt-1 text-sm font-medium">{{ vehicule.nom_vehicule }}</p>
+                        </div>
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">Immatriculation</p>
+                            <p class="mt-1 font-mono text-sm font-medium">{{ vehicule.immatriculation }}</p>
+                        </div>
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">Type</p>
+                            <p class="mt-1 text-sm font-medium">{{ vehicule.type_label }}</p>
+                        </div>
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">Capacité</p>
+                            <p class="mt-1 text-sm font-medium">
+                                {{ vehicule.capacite_packs !== null ? `${vehicule.capacite_packs} packs` : '—' }}
+                            </p>
+                        </div>
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">Propriétaire</p>
+                            <p class="mt-1 text-sm font-medium">{{ vehicule.proprietaire_nom ?? '—' }}</p>
+                            <p v-if="vehicule.proprietaire_telephone" class="font-mono text-xs text-muted-foreground">
+                                {{ vehicule.proprietaire_telephone }}
+                            </p>
+                        </div>
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">Commission prise en charge par l'usine</p>
+                            <p class="mt-1">
+                                <span
+                                    v-if="vehicule.pris_en_charge_par_usine"
+                                    class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
+                                >Oui</span>
+                                <span
+                                    v-else
+                                    class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                                >Non</span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Equipe tab -->
+                <div
+                    v-else-if="activeTab === 'equipe'"
+                    class="rounded-xl border bg-card p-5 sm:p-6"
+                >
+                    <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h2 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+                                Équipe de livraison
+                            </h2>
+                            <p class="mt-1 text-sm text-muted-foreground">
+                                {{ vehicule.equipe_membres.length }} membre{{ vehicule.equipe_membres.length > 1 ? 's' : '' }}
+                            </p>
+                        </div>
                         <Link
                             v-if="can('vehicules.update') && vehicule.equipe_id"
                             :href="`/equipes-livraison/${vehicule.equipe_id}/edit`"
                         >
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                class="h-7 gap-1 px-2.5 text-xs"
-                            >
-                                <Pencil class="h-3 w-3" />
+                            <Button size="sm">
+                                <Pencil class="mr-1.5 h-4 w-4" />
                                 Modifier l'équipe
                             </Button>
                         </Link>
@@ -231,169 +352,117 @@ function formatGNF(val: number): string {
                             v-else-if="can('vehicules.update')"
                             :href="`/equipes-livraison/create?vehicule_id=${vehicule.id}`"
                         >
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                class="h-7 gap-1 px-2.5 text-xs"
-                            >
-                                <Plus class="h-3 w-3" />
+                            <Button size="sm">
+                                <Plus class="mr-1.5 h-4 w-4" />
                                 Ajouter une équipe
                             </Button>
                         </Link>
                     </div>
-                    <dl class="space-y-3">
-                        <div>
-                            <dt class="text-xs text-muted-foreground">
-                                Équipe
-                            </dt>
-                            <dd class="mt-0.5 text-sm font-medium">
-                                {{ vehicule.equipe_nom ?? '—' }}
-                            </dd>
+
+                    <div class="space-y-3">
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">Nom de l'équipe</p>
+                            <p class="mt-1 text-sm font-medium">{{ vehicule.equipe_nom ?? '—' }}</p>
                         </div>
-                        <div>
-                            <dt class="text-xs text-muted-foreground">
-                                Propriétaire
-                            </dt>
-                            <dd class="mt-0.5 text-sm font-medium">
-                                {{ vehicule.proprietaire_nom ?? '—' }}
-                            </dd>
-                            <dd
-                                v-if="vehicule.proprietaire_telephone"
-                                class="font-mono text-xs text-muted-foreground"
-                            >
-                                {{ vehicule.proprietaire_telephone }}
-                            </dd>
+
+                        <div
+                            v-if="vehicule.equipe_membres.length === 0"
+                            class="rounded-lg border border-dashed py-10 text-center"
+                        >
+                            <p class="text-sm text-muted-foreground">Aucun membre dans l'équipe.</p>
                         </div>
-                        <div v-if="vehicule.equipe_membres.length">
-                            <dt class="mb-1.5 text-xs text-muted-foreground">
-                                Membres de l'équipe
-                            </dt>
-                            <dd>
-                                <div class="space-y-1">
-                                    <div
-                                        v-for="(
-                                            m, i
-                                        ) in vehicule.equipe_membres"
+
+                        <div v-else class="overflow-x-auto rounded-lg border">
+                            <table class="w-full text-sm">
+                                <thead class="bg-muted/30 text-left text-muted-foreground">
+                                    <tr>
+                                        <th class="px-4 py-3 font-medium">Membre</th>
+                                        <th class="px-4 py-3 font-medium">Rôle</th>
+                                        <th class="px-4 py-3 font-medium">Commission</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y">
+                                    <tr
+                                        v-for="(m, i) in vehicule.equipe_membres"
                                         :key="i"
-                                        class="flex items-center justify-between rounded-md bg-muted/40 px-2.5 py-1.5 text-xs"
+                                        class="hover:bg-muted/20"
                                     >
-                                        <span class="font-medium">
-                                            {{ m.livreur_nom ?? '—' }}
-                                        </span>
-                                        <span class="text-muted-foreground">
+                                        <td class="px-4 py-3 font-medium">{{ m.livreur_nom ?? '—' }}</td>
+                                        <td class="px-4 py-3">
                                             <span
                                                 v-if="m.role === 'principal'"
-                                                class="mr-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
-                                                >Principal</span
-                                            >
-                                            {{ m.taux_commission }}%
-                                        </span>
-                                    </div>
-                                </div>
-                            </dd>
+                                                class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+                                            >Principal</span>
+                                            <span v-else class="capitalize text-muted-foreground">{{ m.role }}</span>
+                                        </td>
+                                        <td class="px-4 py-3 text-muted-foreground">{{ m.taux_commission }}%</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
-                    </dl>
-                </div>
-
-                <!-- Commission -->
-                <div class="rounded-xl border bg-card p-4 sm:p-5">
-                    <h3
-                        class="mb-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                    >
-                        Commission
-                    </h3>
-                    <dl class="space-y-3">
-                        <div>
-                            <dt class="text-xs text-muted-foreground">
-                                Pris en charge par l'usine
-                            </dt>
-                            <dd class="mt-0.5">
-                                <span
-                                    v-if="vehicule.pris_en_charge_par_usine"
-                                    class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
-                                    >Oui</span
-                                >
-                                <span
-                                    v-else
-                                    class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-                                    >Non</span
-                                >
-                            </dd>
-                        </div>
-                    </dl>
-                </div>
-            </div>
-
-            <!-- ── Dépenses du véhicule ───────────────────────────────────── -->
-            <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-                <div class="mb-4 flex items-start justify-between gap-4">
-                    <div>
-                        <h3
-                            class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                        >
-                            Dépenses du véhicule
-                        </h3>
-                        <p class="mt-0.5 text-xs text-muted-foreground">
-                            Frais opérationnels gérés via le module Dépenses.
-                        </p>
                     </div>
-                    <span
-                        v-if="totalApprouve > 0"
-                        class="shrink-0 rounded-lg bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700 tabular-nums"
-                    >
-                        Approuvés : {{ formatGNF(totalApprouve) }}
-                    </span>
                 </div>
 
-                <!-- État vide -->
-                <div
-                    v-if="!depenses.length"
-                    class="rounded-lg border border-dashed py-10 text-center"
-                >
-                    <p class="text-sm text-muted-foreground">
-                        Aucune dépense enregistrée pour ce véhicule.
-                    </p>
-                </div>
-
-                <!-- Liste -->
-                <div v-else class="divide-y rounded-lg border">
-                    <div
-                        v-for="d in depenses"
-                        :key="d.id"
-                        class="flex items-center gap-4 px-4 py-3 hover:bg-muted/30"
-                    >
-                        <div class="min-w-0 flex-1">
-                            <div class="text-sm font-semibold tabular-nums">
-                                {{ formatGNF(d.montant) }}
-                            </div>
-                            <div class="text-xs text-muted-foreground">
-                                {{ d.libelle }}
-                                <span v-if="d.commentaire">
-                                    · {{ d.commentaire }}</span
-                                >
-                            </div>
-                        </div>
-                        <div
-                            class="hidden text-xs text-muted-foreground sm:block"
-                        >
-                            {{ d.date_depense ?? '—' }}
+                <!-- Dépenses tab -->
+                <div v-else class="rounded-xl border bg-card p-5 sm:p-6">
+                    <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <h2 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+                                Dépenses du véhicule
+                            </h2>
+                            <p class="mt-1 text-xs text-muted-foreground">
+                                Frais opérationnels gérés via le module Dépenses.
+                            </p>
                         </div>
                         <span
-                            class="shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
-                            :class="
-                                statutBadge[d.statut] ??
-                                'bg-muted text-muted-foreground'
-                            "
+                            v-if="totalApprouve > 0"
+                            class="shrink-0 rounded-lg bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700 tabular-nums"
                         >
-                            {{ statutLabel[d.statut] ?? d.statut }}
+                            Approuvés : {{ formatGNF(totalApprouve) }}
                         </span>
-                        <Link
-                            v-if="can('depenses.update')"
-                            :href="`/depenses/${d.id}/edit`"
-                            class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                    </div>
+
+                    <div
+                        v-if="!depenses.length"
+                        class="rounded-lg border border-dashed py-10 text-center"
+                    >
+                        <p class="text-sm text-muted-foreground">
+                            Aucune dépense enregistrée pour ce véhicule.
+                        </p>
+                    </div>
+
+                    <div v-else class="divide-y rounded-lg border">
+                        <div
+                            v-for="d in depenses"
+                            :key="d.id"
+                            class="flex items-center gap-4 px-4 py-3 hover:bg-muted/30"
                         >
-                            <Pencil class="h-3.5 w-3.5" />
-                        </Link>
+                            <div class="min-w-0 flex-1">
+                                <div class="text-sm font-semibold tabular-nums">
+                                    {{ formatGNF(d.montant) }}
+                                </div>
+                                <div class="text-xs text-muted-foreground">
+                                    {{ d.libelle }}
+                                    <span v-if="d.commentaire"> · {{ d.commentaire }}</span>
+                                </div>
+                            </div>
+                            <div class="hidden text-xs text-muted-foreground sm:block">
+                                {{ d.date_depense ?? '—' }}
+                            </div>
+                            <span
+                                class="shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
+                                :class="statutBadge[d.statut] ?? 'bg-muted text-muted-foreground'"
+                            >
+                                {{ statutLabel[d.statut] ?? d.statut }}
+                            </span>
+                            <Link
+                                v-if="can('depenses.update')"
+                                :href="`/depenses/${d.id}/edit`"
+                                class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                            >
+                                <Pencil class="h-3.5 w-3.5" />
+                            </Link>
+                        </div>
                     </div>
                 </div>
             </div>
