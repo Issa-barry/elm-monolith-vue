@@ -432,7 +432,7 @@ function stockColorClass(produit: Produit): string {
                     Description
                 </h2>
                 <div
-                    class="text-sm leading-relaxed text-foreground/80 prose prose-sm max-w-none"
+                    class="prose prose-sm max-w-none text-sm leading-relaxed text-foreground/80"
                     v-html="produit.description"
                 />
             </div>

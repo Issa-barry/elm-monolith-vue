@@ -73,6 +73,7 @@ class ProprietairesSeeder extends Seeder
             [
                 'nom' => 'DIALLO',
                 'prenom' => 'Amadou',
+                'email' => 'amadou.diallo@elm.gn',
                 'telephone' => '+33754158797',
                 'code_pays' => 'FR',
                 'is_active' => true,
@@ -85,7 +86,8 @@ class ProprietairesSeeder extends Seeder
                 [
                     'prenom' => $data['prenom'],
                     'nom' => $data['nom'],
-                    'email' => null,
+                    'email' => $data['email'] ?? null,
+                    'email_verified_at' => isset($data['email']) ? now() : null,
                     'password' => Hash::make(self::PASSWORD),
                 ]
             );
