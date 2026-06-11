@@ -95,7 +95,7 @@ class CommissionPaymentService
      * Soldes agrégés par livreur pour toute une organisation.
      * Retourne les colonnes : livreur_id, beneficiaire_nom, impaye, paye.
      */
-    public static function soldesParLivreur(string $orgId, ?string $periode = null): Collection
+    public static function soldesParLivreur(string $orgId, ?string $periode = null, ?string $siteId = null): Collection
     {
         return CommissionLogistiquePart::query()
             ->selectRaw(
@@ -111,7 +111,12 @@ class CommissionPaymentService
             ->where('type_beneficiaire', 'livreur')
             ->whereNotNull('livreur_id')
             ->when($periode, fn ($q) => $q->where('periode', $periode))
-            ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
+            ->whereHas('commission', function ($q) use ($orgId, $siteId) {
+                $q->where('organization_id', $orgId);
+                if ($siteId) {
+                    $q->whereHas('transfert', fn ($t) => $t->where('site_source_id', $siteId)->orWhere('site_destination_id', $siteId));
+                }
+            })
             ->groupBy('livreur_id')
             ->orderByRaw('impaye DESC')
             ->get();
