@@ -38,7 +38,7 @@ class MesLivraisonsController extends Controller
 
         $tab = $request->query('tab', 'en_cours');
 
-        $statutsEnCours   = [StatutTransfert::BROUILLON->value, StatutTransfert::CHARGEMENT->value, StatutTransfert::TRANSIT->value];
+        $statutsEnCours = [StatutTransfert::BROUILLON->value, StatutTransfert::CHARGEMENT->value, StatutTransfert::TRANSIT->value];
         $statutsHistorique = [StatutTransfert::RECEPTION->value, StatutTransfert::CLOTURE->value, StatutTransfert::ANNULE->value];
 
         $statuts = $tab === 'historique' ? $statutsHistorique : $statutsEnCours;

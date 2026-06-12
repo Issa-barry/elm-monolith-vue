@@ -33,8 +33,8 @@ class ValidationAdminController extends Controller
         $motif = $request->validated()['motif'] ?? null;
 
         match ($decision) {
-            'accord'    => $this->handleAccord($transfert, $user),
-            'refus'     => $this->handleRefus($transfert, $motif, $user),
+            'accord' => $this->handleAccord($transfert, $user),
+            'refus' => $this->handleRefus($transfert, $motif, $user),
             'invalider' => $this->handleInvalider($transfert, $user),
         };
 
@@ -56,9 +56,9 @@ class ValidationAdminController extends Controller
         DB::transaction(function () use ($transfert, $user) {
             $transfert->update([
                 'validation_reception' => 'accord',
-                'validation_motif'     => null,
-                'validated_by'         => $user->id,
-                'validated_at'         => now(),
+                'validation_motif' => null,
+                'validated_by' => $user->id,
+                'validated_at' => now(),
             ]);
 
             CommissionLogistiqueService::genererAutomatique($transfert);
@@ -71,9 +71,9 @@ class ValidationAdminController extends Controller
     {
         $transfert->update([
             'validation_reception' => 'refus',
-            'validation_motif'     => $motif,
-            'validated_by'         => $user->id,
-            'validated_at'         => now(),
+            'validation_motif' => $motif,
+            'validated_by' => $user->id,
+            'validated_at' => now(),
         ]);
 
         TransfertActiviteService::log($transfert, 'validation_refus', ['motif' => $motif], $user->id);
@@ -81,14 +81,14 @@ class ValidationAdminController extends Controller
 
     private function handleInvalider(TransfertLogistique $transfert, User $user): void
     {
-        DB::transaction(function () use ($transfert, $user) {
+        DB::transaction(function () use ($transfert) {
             $transfert->update([
                 'validation_reception' => null,
-                'validation_motif'     => null,
-                'validated_by'         => null,
-                'validated_at'         => null,
-                'statut'               => StatutTransfert::TRANSIT->value,
-                'date_arrivee_reelle'  => null,
+                'validation_motif' => null,
+                'validated_by' => null,
+                'validated_at' => null,
+                'statut' => StatutTransfert::TRANSIT->value,
+                'date_arrivee_reelle' => null,
             ]);
 
             MouvementStockService::supprimerEntreeDestination($transfert);

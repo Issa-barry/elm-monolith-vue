@@ -35,8 +35,8 @@ class SaisirReceptionController extends Controller
                     $data = $lignesData[$ligne->id];
                     $ligne->update([
                         'quantite_recue' => $data['quantite_recue'],
-                        'ecart_type'     => $data['ecart_type'],
-                        'ecart_motif'    => $data['ecart_motif'] ?? null,
+                        'ecart_type' => $data['ecart_type'],
+                        'ecart_motif' => $data['ecart_motif'] ?? null,
                     ]);
                 }
             });
