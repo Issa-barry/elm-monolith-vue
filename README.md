@@ -6,7 +6,7 @@ git commit -m "build: production"
 git push  
  
 ## CI/CD Hostinger (GitHub Actions)
-
+b
 Flux de branches:
 - `dev` -> `pre-prod` -> `main`
 
