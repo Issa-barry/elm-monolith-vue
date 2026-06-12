@@ -85,6 +85,26 @@ Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice
         ->name('api.produits.archiver');
 });
 
+// ── Logistique backoffice ─────────────────────────────────────────────────────
+Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice.')->group(function () {
+    Route::prefix('logistique')->name('logistique.')->group(function () {
+        Route::get('transferts', [\App\Http\Controllers\Api\Backoffice\Logistique\TransfertsController::class, 'index'])
+            ->name('transferts.index');
+        Route::get('transferts/{transfert}', [\App\Http\Controllers\Api\Backoffice\Logistique\TransfertsController::class, 'show'])
+            ->name('transferts.show');
+        Route::put('transferts/{transfert}/reception', \App\Http\Controllers\Api\Backoffice\Logistique\SaisirReceptionController::class)
+            ->name('transferts.reception');
+        Route::post('transferts/{transfert}/valider-reception', \App\Http\Controllers\Api\Backoffice\Logistique\ValiderReceptionController::class)
+            ->name('transferts.valider-reception');
+        Route::post('transferts/{transfert}/validation-admin', \App\Http\Controllers\Api\Backoffice\Logistique\ValidationAdminController::class)
+            ->name('transferts.validation-admin');
+        Route::get('commissions', [\App\Http\Controllers\Api\Backoffice\Logistique\CommissionsController::class, 'index'])
+            ->name('commissions.index');
+        Route::get('commissions/{commission}', [\App\Http\Controllers\Api\Backoffice\Logistique\CommissionsController::class, 'show'])
+            ->name('commissions.show');
+    });
+});
+
 // ── Routes mobile ─────────────────────────────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('v1/mobile')->group(function () {
@@ -102,6 +122,20 @@ Route::middleware('auth:sanctum')->group(function () {
             ->name('client.livraisons.scan');
         Route::post('contact', \App\Http\Controllers\Api\Mobile\ContactController::class)
             ->name('client.contact');
+
+        // Logistique livreur
+        Route::prefix('livraisons-transferts')->name('client.logistique.')->group(function () {
+            Route::get('/', \App\Http\Controllers\Api\Mobile\Logistique\MesLivraisonsController::class)
+                ->name('index');
+            Route::get('{transfert}', \App\Http\Controllers\Api\Mobile\Logistique\LivraisonDetailController::class)
+                ->name('show');
+            Route::post('{transfert}/demarrer-chargement', \App\Http\Controllers\Api\Mobile\Logistique\DemarrerChargementController::class)
+                ->name('demarrer-chargement');
+            Route::put('{transfert}/quantites-chargees', \App\Http\Controllers\Api\Mobile\Logistique\SaisirQuantitesChargeesController::class)
+                ->name('quantites-chargees');
+            Route::post('{transfert}/confirmer-depart', \App\Http\Controllers\Api\Mobile\Logistique\ConfirmerDepartController::class)
+                ->name('confirmer-depart');
+        });
         Route::prefix('notifications')->name('client.notifications.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\Mobile\NotificationsController::class, 'index'])->name('index');
             Route::post('mark-all-read', [\App\Http\Controllers\Api\Mobile\NotificationsController::class, 'markAllRead'])->name('mark-all-read');
