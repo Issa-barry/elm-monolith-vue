@@ -29,42 +29,53 @@ class ProduitController extends Controller
 
         $produits = Produit::where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom')
-            ->get()
-            ->map(fn (Produit $p) => [
-                'id' => $p->id,
-                'organization_id' => $p->organization_id,
-                'nom' => $p->nom,
-                'code_interne' => $p->code_interne,
-                'code_fournisseur' => $p->code_fournisseur,
-                'type' => $p->type?->value,
-                'type_label' => $p->type?->label(),
-                'statut' => $p->statut?->value,
-                'statut_label' => $p->statut?->label(),
-                'image_url' => $p->image_url,
-                'prix_usine' => $p->prix_usine,
-                'prix_vente' => $p->prix_vente,
-                'prix_achat' => $p->prix_achat,
-                'cout' => $p->cout,
-                'qte_stock' => $p->qte_stock,
-                'seuil_alerte_stock' => $p->seuil_alerte_stock,
-                'description' => $p->description,
-                'is_alerte' => $p->is_alerte,
-                'last_stockout_notified_at' => $p->last_stockout_notified_at ? (string) $p->last_stockout_notified_at : null,
-                'archived_at' => $p->archived_at?->toISOString(),
-                'created_by' => $p->created_by,
-                'updated_by' => $p->updated_by,
-                'deleted_by' => $p->deleted_by,
-                'archived_by' => $p->archived_by,
-                'created_at' => $p->created_at?->toISOString(),
-                'updated_at' => $p->updated_at?->toISOString(),
-                'deleted_at' => $p->deleted_at?->toISOString(),
-                'in_stock' => $p->in_stock,
-                'is_low_stock' => $p->is_low_stock,
-                'has_stock' => $p->type?->hasStock() ?? true,
-            ]);
+            ->get();
+
+        $produitIds = $produits->pluck('id')->all();
+
+        $usedIds = collect()
+            ->merge(DB::table('commande_vente_lignes')->whereIn('produit_id', $produitIds)->pluck('produit_id'))
+            ->merge(DB::table('commande_achat_lignes')->whereIn('produit_id', $produitIds)->whereNotNull('produit_id')->pluck('produit_id'))
+            ->unique()
+            ->flip()
+            ->all();
+
+        $mapped = $produits->map(fn (Produit $p) => [
+            'id' => $p->id,
+            'organization_id' => $p->organization_id,
+            'nom' => $p->nom,
+            'code_interne' => $p->code_interne,
+            'code_fournisseur' => $p->code_fournisseur,
+            'type' => $p->type?->value,
+            'type_label' => $p->type?->label(),
+            'statut' => $p->statut?->value,
+            'statut_label' => $p->statut?->label(),
+            'image_url' => $p->image_url,
+            'prix_usine' => $p->prix_usine,
+            'prix_vente' => $p->prix_vente,
+            'prix_achat' => $p->prix_achat,
+            'cout' => $p->cout,
+            'qte_stock' => $p->qte_stock,
+            'seuil_alerte_stock' => $p->seuil_alerte_stock,
+            'description' => $p->description,
+            'is_alerte' => $p->is_alerte,
+            'last_stockout_notified_at' => $p->last_stockout_notified_at ? (string) $p->last_stockout_notified_at : null,
+            'archived_at' => $p->archived_at?->toISOString(),
+            'created_by' => $p->created_by,
+            'updated_by' => $p->updated_by,
+            'deleted_by' => $p->deleted_by,
+            'archived_by' => $p->archived_by,
+            'created_at' => $p->created_at?->toISOString(),
+            'updated_at' => $p->updated_at?->toISOString(),
+            'deleted_at' => $p->deleted_at?->toISOString(),
+            'in_stock' => $p->in_stock,
+            'is_low_stock' => $p->is_low_stock,
+            'has_stock' => $p->type?->hasStock() ?? true,
+            'is_used' => isset($usedIds[$p->id]),
+        ]);
 
         return Inertia::render('Produits/Index', [
-            'produits' => $produits,
+            'produits' => $mapped,
         ]);
     }
 
@@ -282,6 +293,23 @@ class ProduitController extends Controller
 
         return redirect()->route('produits.index')
             ->with('success', 'Produit mis à jour avec succès.');
+    }
+
+    public function archiver(Produit $produit): RedirectResponse
+    {
+        $this->authorize('update', $produit);
+
+        $this->auditService->record(
+            $produit,
+            AuditEvent::UPDATED,
+            auth()->user(),
+            ['statut' => $produit->statut?->value],
+            ['statut' => ProduitStatut::ARCHIVE->value],
+        );
+
+        $produit->update(['statut' => ProduitStatut::ARCHIVE]);
+
+        return redirect()->back()->with('success', "{$produit->nom} a été archivé.");
     }
 
     public function destroy(Produit $produit): RedirectResponse

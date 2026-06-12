@@ -39,7 +39,7 @@ test('ajuster stock depuis la liste — augmenter', async ({ page }) => {
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
     // Read current stock from the modal
-    const stockText = await dialog.locator('.text-xl').first().innerText();
+    const stockText = await dialog.locator('.text-2xl').first().innerText();
     const _stockAvant = parseInt(stockText.trim(), 10);
 
     // Fill "augmenter"

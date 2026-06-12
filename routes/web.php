@@ -192,6 +192,8 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
             ->name('produits.ajuster-stock');
         Route::get('produits/{produit}/historique', [ProduitController::class, 'historique'])
             ->name('produits.historique');
+        Route::patch('produits/{produit}/archiver', [ProduitController::class, 'archiver'])
+            ->name('produits.archiver');
     });
 
     // ── Module : Sites ────────────────────────────────────────────────────────
