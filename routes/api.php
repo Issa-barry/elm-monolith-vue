@@ -81,6 +81,8 @@ Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice
         ->name('produits.ajuster-stock');
     Route::get('produits/{produit}/historique', \App\Http\Controllers\Api\Produits\ProduitHistoriqueController::class)
         ->name('produits.historique');
+    Route::patch('produits/{produit}/archiver', [\App\Http\Controllers\Api\Produits\ProduitController::class, 'archiver'])
+        ->name('api.produits.archiver');
 });
 
 // ── Routes mobile ─────────────────────────────────────────────────────────────

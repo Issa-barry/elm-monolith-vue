@@ -58,6 +58,10 @@ function close() {
     form.clearErrors();
 }
 
+function formatNum(val: number): string {
+    return new Intl.NumberFormat('fr-FR').format(val);
+}
+
 function submit() {
     form.post(`/produits/${props.produit.id}/ajuster-stock`, {
         preserveScroll: true,
@@ -94,7 +98,7 @@ function submit() {
             </div>
             <div class="ml-auto shrink-0 text-right">
                 <p class="text-xs text-muted-foreground">Stock actuel</p>
-                <p class="text-xl font-bold tabular-nums">{{ stockActuel }}</p>
+                <p class="text-2xl font-bold tabular-nums">{{ formatNum(stockActuel) }}</p>
             </div>
         </div>
 
@@ -114,7 +118,7 @@ function submit() {
                         v-model="form.augmenter"
                         input-id="ajuster-augmenter"
                         :min="1"
-                        :use-grouping="false"
+                        :use-grouping="true"
                         class="w-full"
                         :input-class="
                             form.errors.augmenter
@@ -144,7 +148,7 @@ function submit() {
                         v-model="form.diminuer"
                         input-id="ajuster-diminuer"
                         :min="1"
-                        :use-grouping="false"
+                        :use-grouping="true"
                         class="w-full"
                         :input-class="
                             form.errors.diminuer ? 'p-invalid w-full' : 'w-full'
@@ -188,8 +192,8 @@ function submit() {
                 "
             >
                 <span>Stock après ajustement</span>
-                <span class="text-base font-bold tabular-nums">{{
-                    stockPreview
+                <span class="text-lg font-bold tabular-nums">{{
+                    formatNum(stockPreview)
                 }}</span>
             </div>
         </div>

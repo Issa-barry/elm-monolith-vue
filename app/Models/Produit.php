@@ -10,10 +10,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class Produit extends Model
 {
     use HasFactory, HasUlids, SoftDeletes;
+
+    public ?bool $is_used_loaded = null;
 
     protected $fillable = [
         'organization_id',
@@ -125,6 +128,16 @@ class Produit extends Model
     public function getIsArchivedAttribute(): bool
     {
         return $this->statut === ProduitStatut::ARCHIVE;
+    }
+
+    public function getIsUsedAttribute(): bool
+    {
+        if ($this->is_used_loaded !== null) {
+            return $this->is_used_loaded;
+        }
+
+        return DB::table('commande_vente_lignes')->where('produit_id', $this->id)->exists()
+            || DB::table('commande_achat_lignes')->where('produit_id', $this->id)->whereNotNull('produit_id')->exists();
     }
 
     public function getInStockAttribute(): bool

@@ -93,6 +93,11 @@ function formatPrice(val: number | null): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
 
+function formatQte(val: number | null | undefined): string {
+    if (val === null || val === undefined) return '—';
+    return new Intl.NumberFormat('fr-FR').format(val);
+}
+
 function formatDate(iso: string | null): string {
     if (!iso) return '—';
     return new Intl.DateTimeFormat('fr-FR', {
@@ -154,7 +159,7 @@ function stockColorClass(produit: Produit): string {
             </div>
         </div>
 
-        <div class="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
+        <div class="mx-auto w-full max-w-[60rem] space-y-6 p-4 sm:p-6">
             <!-- ─── Header desktop ─── -->
             <div class="hidden items-start justify-between sm:flex">
                 <div class="flex items-center gap-3">
@@ -306,7 +311,7 @@ function stockColorClass(produit: Produit): string {
                             class="text-3xl font-bold tabular-nums"
                             :class="stockColorClass(produit)"
                         >
-                            {{ produit.qte_stock ?? 0 }}
+                            {{ new Intl.NumberFormat('fr-FR').format(produit.qte_stock ?? 0) }}
                         </p>
                         <div
                             v-if="
@@ -331,7 +336,7 @@ function stockColorClass(produit: Produit): string {
                         <p
                             class="text-3xl font-bold text-foreground tabular-nums"
                         >
-                            {{ produit.seuil_alerte_stock ?? '—' }}
+                            {{ produit.seuil_alerte_stock != null ? new Intl.NumberFormat('fr-FR').format(produit.seuil_alerte_stock) : '—' }}
                         </p>
                     </div>
                 </div>
@@ -484,20 +489,20 @@ function stockColorClass(produit: Produit): string {
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="border-b text-xs text-muted-foreground">
-                                <th class="pb-2 text-left font-medium">
+                                <th class="w-36 pb-2 text-left font-medium">
                                     Date &amp; heure
                                 </th>
-                                <th class="pb-2 text-left font-medium">Par</th>
-                                <th class="pb-2 text-center font-medium">
+                                <th class="w-40 pb-2 text-left font-medium">Par</th>
+                                <th class="w-28 pb-2 text-center font-medium">
                                     Action
                                 </th>
-                                <th class="pb-2 text-right font-medium">
+                                <th class="w-28 pb-2 text-right font-medium">
                                     Avant
                                 </th>
-                                <th class="pb-2 text-right font-medium">
+                                <th class="w-28 pb-2 text-right font-medium">
                                     Après
                                 </th>
-                                <th class="pb-2 text-left font-medium">
+                                <th class="pb-2 pl-6 text-left font-medium">
                                     Motif
                                 </th>
                             </tr>
@@ -509,14 +514,14 @@ function stockColorClass(produit: Produit): string {
                                 class="group"
                             >
                                 <td
-                                    class="py-2.5 pr-4 font-mono text-xs text-muted-foreground"
+                                    class="w-36 py-2.5 pr-4 font-mono text-xs text-muted-foreground"
                                 >
                                     {{ formatDateShort(m.created_at) }}
                                 </td>
-                                <td class="py-2.5 pr-4">
+                                <td class="w-40 py-2.5 pr-4">
                                     {{ m.createur_nom || '—' }}
                                 </td>
-                                <td class="py-2.5 pr-4 text-center">
+                                <td class="w-28 py-2.5 pr-4 text-center">
                                     <span
                                         v-if="m.is_initial"
                                         class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-400"
@@ -539,17 +544,17 @@ function stockColorClass(produit: Produit): string {
                                     </span>
                                 </td>
                                 <td
-                                    class="py-2.5 pr-4 text-right text-muted-foreground tabular-nums"
+                                    class="w-28 py-2.5 pr-4 text-right text-muted-foreground tabular-nums"
                                 >
-                                    {{ m.stock_avant ?? '—' }}
+                                    {{ formatQte(m.stock_avant) }}
                                 </td>
                                 <td
-                                    class="py-2.5 pr-4 text-right font-semibold tabular-nums"
+                                    class="w-28 py-2.5 pr-4 text-right font-semibold tabular-nums"
                                 >
-                                    {{ m.stock_apres ?? '—' }}
+                                    {{ formatQte(m.stock_apres) }}
                                 </td>
                                 <td
-                                    class="py-2.5 text-xs text-muted-foreground"
+                                    class="py-2.5 pl-6 text-xs text-muted-foreground"
                                 >
                                     {{ m.notes || '—' }}
                                 </td>

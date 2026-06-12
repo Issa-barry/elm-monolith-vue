@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Produits;
 
 use App\Enums\AuditEvent;
+use App\Enums\ProduitStatut;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Produits\AjusterStockRequest;
 use App\Http\Requests\Api\Produits\StoreProduitRequest;
@@ -28,6 +29,16 @@ class ProduitController extends Controller
         $produits = Produit::where('organization_id', $r->user()->organization_id)
             ->orderBy('nom')
             ->get();
+
+        $produitIds = $produits->pluck('id')->all();
+        $usedIds = collect()
+            ->merge(DB::table('commande_vente_lignes')->whereIn('produit_id', $produitIds)->pluck('produit_id'))
+            ->merge(DB::table('commande_achat_lignes')->whereIn('produit_id', $produitIds)->whereNotNull('produit_id')->pluck('produit_id'))
+            ->unique()
+            ->flip()
+            ->all();
+
+        $produits->each(fn (Produit $p) => $p->is_used_loaded = isset($usedIds[$p->id]));
 
         return ProduitResource::collection($produits);
     }
@@ -97,6 +108,23 @@ class ProduitController extends Controller
         }
 
         return response()->json(new ProduitResource($produit));
+    }
+
+    public function archiver(Request $r, Produit $produit): JsonResponse
+    {
+        $this->authorize('update', $produit);
+
+        $this->auditService->record(
+            $produit,
+            AuditEvent::UPDATED,
+            $r->user(),
+            ['statut' => $produit->statut?->value],
+            ['statut' => ProduitStatut::ARCHIVE->value],
+        );
+
+        $produit->update(['statut' => ProduitStatut::ARCHIVE]);
+
+        return response()->json(new ProduitResource($produit->fresh()));
     }
 
     public function destroy(Request $r, Produit $produit): JsonResponse

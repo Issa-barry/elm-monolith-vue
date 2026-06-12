@@ -14,6 +14,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
+    Archive,
     Download,
     Eye,
     History,
@@ -88,6 +89,7 @@ interface Produit {
     in_stock: boolean;
     is_low_stock: boolean;
     has_stock: boolean;
+    is_used: boolean;
 }
 
 const props = defineProps<{ produits: Produit[] }>();
@@ -332,6 +334,29 @@ function confirmDelete(produit: Produit) {
         },
     });
 }
+
+function confirmArchive(produit: Produit) {
+    confirm.require({
+        message: `Archiver "${produit.nom}" ? Le produit ne sera plus actif mais ses données seront conservées.`,
+        header: 'Confirmer l\'archivage',
+        icon: 'pi pi-inbox',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Archiver',
+        acceptClass: 'p-button-warning',
+        accept: () => {
+            router.patch(`/produits/${produit.id}/archiver`, {}, {
+                onSuccess: () => {
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Archivé',
+                        detail: `${produit.nom} a été archivé.`,
+                        life: 3000,
+                    });
+                },
+            });
+        },
+    });
+}
 </script>
 
 <template>
@@ -554,7 +579,7 @@ function confirmDelete(produit: Produit) {
                                                 ? 'text-amber-600'
                                                 : 'text-foreground'
                                         "
-                                        >{{ data.qte_stock ?? 0 }}</span
+                                        >{{ new Intl.NumberFormat('fr-FR').format(data.qte_stock ?? 0) }}</span
                                     >
                                     <AlertTriangle
                                         v-if="data.is_low_stock"
@@ -653,16 +678,24 @@ function confirmDelete(produit: Produit) {
                                         <DropdownMenuSeparator
                                             v-if="
                                                 can('produits.update') &&
-                                                can('produits.delete')
+                                                (can('produits.delete') || can('produits.update'))
                                             "
                                         />
                                         <DropdownMenuItem
-                                            v-if="can('produits.delete')"
+                                            v-if="can('produits.delete') && !data.is_used"
                                             class="cursor-pointer text-destructive focus:text-destructive"
                                             @click="confirmDelete(data)"
                                         >
                                             <Trash2 class="h-4 w-4" />
                                             Supprimer
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            v-if="can('produits.update') && data.is_used && data.statut !== 'archive'"
+                                            class="cursor-pointer text-amber-600 focus:text-amber-600 dark:text-amber-400"
+                                            @click="confirmArchive(data)"
+                                        >
+                                            <Archive class="h-4 w-4" />
+                                            Archiver
                                         </DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
@@ -722,6 +755,7 @@ function confirmDelete(produit: Produit) {
             <ProduitsMobile
                 :produits="props.produits"
                 :on-delete="confirmDelete"
+                :on-archive="confirmArchive"
             />
         </div>
         <!-- Modal ajustement stock -->
@@ -735,6 +769,7 @@ function confirmDelete(produit: Produit) {
         <HistoriqueModal
             v-model:visible="showHistoriqueModal"
             :historiques="historiques"
+            :loading="historiqueLoading"
             :title="`Historique — ${historiqueProduitNom}`"
         />
 

@@ -10,6 +10,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import { Link } from '@inertiajs/vue3';
 import {
     AlertTriangle,
+    Archive,
     ArrowLeft,
     Eye,
     MoreVertical,
@@ -33,11 +34,13 @@ interface Produit {
     in_stock: boolean;
     is_low_stock: boolean;
     has_stock: boolean;
+    is_used: boolean;
 }
 
 const props = defineProps<{
     produits: Produit[];
     onDelete: (produit: Produit) => void;
+    onArchive: (produit: Produit) => void;
 }>();
 
 const { can } = usePermissions();
@@ -190,16 +193,25 @@ const filteredProduits = computed(() => {
                         </DropdownMenuItem>
                         <DropdownMenuSeparator
                             v-if="
-                                can('produits.update') && can('produits.delete')
+                                can('produits.update') &&
+                                (can('produits.delete') || can('produits.update'))
                             "
                         />
                         <DropdownMenuItem
-                            v-if="can('produits.delete')"
+                            v-if="can('produits.delete') && !data.is_used"
                             class="cursor-pointer text-destructive focus:text-destructive"
                             @click="onDelete(data)"
                         >
                             <Trash2 class="h-4 w-4" />
                             Supprimer
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            v-if="can('produits.update') && data.is_used && data.statut !== 'archive'"
+                            class="cursor-pointer text-amber-600 focus:text-amber-600"
+                            @click="onArchive(data)"
+                        >
+                            <Archive class="h-4 w-4" />
+                            Archiver
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

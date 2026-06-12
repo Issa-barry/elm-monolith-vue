@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Dialog from 'primevue/dialog';
 import { computed } from 'vue';
+import { Loader2 } from 'lucide-vue-next';
 
 interface AuditEntry {
     id: string;
@@ -15,6 +16,7 @@ interface AuditEntry {
 const props = defineProps<{
     visible: boolean;
     historiques: AuditEntry[];
+    loading?: boolean;
     title?: string;
 }>();
 
@@ -84,6 +86,8 @@ function formatVal(key: string, val: unknown): string {
         key === 'cout'
     )
         return new Intl.NumberFormat('fr-FR').format(Number(val)) + ' GNF';
+    if (key === 'qte_stock' || key === 'seuil_alerte_stock')
+        return new Intl.NumberFormat('fr-FR').format(Number(val));
     return String(val);
 }
 
@@ -116,13 +120,21 @@ function diffRows(
         :draggable="false"
     >
         <div
-            v-if="historiques.length === 0"
+            v-if="loading"
+            class="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground"
+        >
+            <Loader2 class="h-5 w-5 animate-spin" />
+            Chargement…
+        </div>
+
+        <div
+            v-else-if="historiques.length === 0"
             class="py-8 text-center text-sm text-muted-foreground"
         >
             Aucun historique disponible.
         </div>
 
-        <ol v-else class="relative border-l border-border pl-1">
+        <ol v-else-if="!loading" class="relative border-l border-border pl-1">
             <li
                 v-for="entry in historiques"
                 :key="entry.id"
