@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { Loader2 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import { computed } from 'vue';
-import { Loader2 } from 'lucide-vue-next';
 
 interface AuditEntry {
     id: string;

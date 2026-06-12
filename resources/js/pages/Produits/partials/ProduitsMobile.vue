@@ -194,7 +194,8 @@ const filteredProduits = computed(() => {
                         <DropdownMenuSeparator
                             v-if="
                                 can('produits.update') &&
-                                (can('produits.delete') || can('produits.update'))
+                                (can('produits.delete') ||
+                                    can('produits.update'))
                             "
                         />
                         <DropdownMenuItem
@@ -206,7 +207,11 @@ const filteredProduits = computed(() => {
                             Supprimer
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                            v-if="can('produits.update') && data.is_used && data.statut !== 'archive'"
+                            v-if="
+                                can('produits.update') &&
+                                data.is_used &&
+                                data.statut !== 'archive'
+                            "
                             class="cursor-pointer text-amber-600 focus:text-amber-600"
                             @click="onArchive(data)"
                         >

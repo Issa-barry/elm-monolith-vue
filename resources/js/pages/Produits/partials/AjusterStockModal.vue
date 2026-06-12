@@ -98,7 +98,9 @@ function submit() {
             </div>
             <div class="ml-auto shrink-0 text-right">
                 <p class="text-xs text-muted-foreground">Stock actuel</p>
-                <p class="text-2xl font-bold tabular-nums">{{ formatNum(stockActuel) }}</p>
+                <p class="text-2xl font-bold tabular-nums">
+                    {{ formatNum(stockActuel) }}
+                </p>
             </div>
         </div>
 

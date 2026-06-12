@@ -311,7 +311,11 @@ function stockColorClass(produit: Produit): string {
                             class="text-3xl font-bold tabular-nums"
                             :class="stockColorClass(produit)"
                         >
-                            {{ new Intl.NumberFormat('fr-FR').format(produit.qte_stock ?? 0) }}
+                            {{
+                                new Intl.NumberFormat('fr-FR').format(
+                                    produit.qte_stock ?? 0,
+                                )
+                            }}
                         </p>
                         <div
                             v-if="
@@ -336,7 +340,13 @@ function stockColorClass(produit: Produit): string {
                         <p
                             class="text-3xl font-bold text-foreground tabular-nums"
                         >
-                            {{ produit.seuil_alerte_stock != null ? new Intl.NumberFormat('fr-FR').format(produit.seuil_alerte_stock) : '—' }}
+                            {{
+                                produit.seuil_alerte_stock != null
+                                    ? new Intl.NumberFormat('fr-FR').format(
+                                          produit.seuil_alerte_stock,
+                                      )
+                                    : '—'
+                            }}
                         </p>
                     </div>
                 </div>
@@ -492,7 +502,9 @@ function stockColorClass(produit: Produit): string {
                                 <th class="w-36 pb-2 text-left font-medium">
                                     Date &amp; heure
                                 </th>
-                                <th class="w-40 pb-2 text-left font-medium">Par</th>
+                                <th class="w-40 pb-2 text-left font-medium">
+                                    Par
+                                </th>
                                 <th class="w-28 pb-2 text-center font-medium">
                                     Action
                                 </th>

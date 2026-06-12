@@ -338,22 +338,26 @@ function confirmDelete(produit: Produit) {
 function confirmArchive(produit: Produit) {
     confirm.require({
         message: `Archiver "${produit.nom}" ? Le produit ne sera plus actif mais ses données seront conservées.`,
-        header: 'Confirmer l\'archivage',
+        header: "Confirmer l'archivage",
         icon: 'pi pi-inbox',
         rejectLabel: 'Annuler',
         acceptLabel: 'Archiver',
         acceptClass: 'p-button-warning',
         accept: () => {
-            router.patch(`/produits/${produit.id}/archiver`, {}, {
-                onSuccess: () => {
-                    toast.add({
-                        severity: 'success',
-                        summary: 'Archivé',
-                        detail: `${produit.nom} a été archivé.`,
-                        life: 3000,
-                    });
+            router.patch(
+                `/produits/${produit.id}/archiver`,
+                {},
+                {
+                    onSuccess: () => {
+                        toast.add({
+                            severity: 'success',
+                            summary: 'Archivé',
+                            detail: `${produit.nom} a été archivé.`,
+                            life: 3000,
+                        });
+                    },
                 },
-            });
+            );
         },
     });
 }
@@ -579,7 +583,11 @@ function confirmArchive(produit: Produit) {
                                                 ? 'text-amber-600'
                                                 : 'text-foreground'
                                         "
-                                        >{{ new Intl.NumberFormat('fr-FR').format(data.qte_stock ?? 0) }}</span
+                                        >{{
+                                            new Intl.NumberFormat(
+                                                'fr-FR',
+                                            ).format(data.qte_stock ?? 0)
+                                        }}</span
                                     >
                                     <AlertTriangle
                                         v-if="data.is_low_stock"
@@ -678,11 +686,15 @@ function confirmArchive(produit: Produit) {
                                         <DropdownMenuSeparator
                                             v-if="
                                                 can('produits.update') &&
-                                                (can('produits.delete') || can('produits.update'))
+                                                (can('produits.delete') ||
+                                                    can('produits.update'))
                                             "
                                         />
                                         <DropdownMenuItem
-                                            v-if="can('produits.delete') && !data.is_used"
+                                            v-if="
+                                                can('produits.delete') &&
+                                                !data.is_used
+                                            "
                                             class="cursor-pointer text-destructive focus:text-destructive"
                                             @click="confirmDelete(data)"
                                         >
@@ -690,7 +702,11 @@ function confirmArchive(produit: Produit) {
                                             Supprimer
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            v-if="can('produits.update') && data.is_used && data.statut !== 'archive'"
+                                            v-if="
+                                                can('produits.update') &&
+                                                data.is_used &&
+                                                data.statut !== 'archive'
+                                            "
                                             class="cursor-pointer text-amber-600 focus:text-amber-600 dark:text-amber-400"
                                             @click="confirmArchive(data)"
                                         >
