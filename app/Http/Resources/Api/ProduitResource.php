@@ -30,6 +30,7 @@ class ProduitResource extends JsonResource
             'is_alerte' => $this->is_alerte,
             'in_stock' => $this->in_stock,
             'is_low_stock' => $this->is_low_stock,
+            'is_used' => $this->is_used,
             'archived_at' => $this->archived_at?->toISOString(),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
