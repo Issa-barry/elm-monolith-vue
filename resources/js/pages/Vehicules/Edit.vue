@@ -21,7 +21,7 @@ interface VehiculeData {
     id: number;
     nom_vehicule: string;
     immatriculation: string;
-    type_vehicule: string | null;
+    type_vehicule_id: string | null;
     categorie: string | null;
     capacite_packs: number | null;
     proprietaire_id: number | null;
@@ -52,7 +52,7 @@ const form = useForm({
     _method: 'PUT',
     nom_vehicule: props.vehicule.nom_vehicule,
     immatriculation: props.vehicule.immatriculation,
-    type_vehicule: props.vehicule.type_vehicule,
+    type_vehicule_id: props.vehicule.type_vehicule_id,
     categorie: props.vehicule.categorie,
     capacite_packs: props.vehicule.capacite_packs,
     proprietaire_id: props.vehicule.proprietaire_id,
@@ -68,7 +68,7 @@ const canSubmit = computed(() => {
         (form.categorie === 'interne' || !!form.proprietaire_id) &&
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
-        !!form.type_vehicule &&
+        !!form.type_vehicule_id &&
         form.pris_en_charge_par_usine !== null
     );
 });

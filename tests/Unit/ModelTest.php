@@ -6,7 +6,7 @@ use App\Enums\PackingStatut;
 use App\Enums\ProduitStatut;
 use App\Enums\StatutCommandeAchat;
 use App\Enums\StatutCommandeVente;
-use App\Enums\TypeVehicule;
+use App\Models\TypeVehicule;
 use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
 use App\Models\CommandeVente;
@@ -835,13 +835,15 @@ class ModelTest extends TestCase
     public function test_vehicule_type_label(): void
     {
         $org = $this->makeOrg();
+        $type = TypeVehicule::factory()->create(['organization_id' => $org->id, 'nom' => 'Camion']);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
-            'type_vehicule' => TypeVehicule::CAMION,
+            'type_vehicule_id' => $type->id,
         ]);
 
+        $vehicule->load('typeVehicule');
         $this->assertSame('Camion', $vehicule->type_label);
     }
 

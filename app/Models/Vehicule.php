@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\TypeVehicule;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -23,6 +22,7 @@ class Vehicule extends Model
         'modele',
         'immatriculation',
         'type_vehicule',
+        'type_vehicule_id',
         'categorie',
         'capacite_packs',
         'proprietaire_id',
@@ -36,7 +36,6 @@ class Vehicule extends Model
         return [
             'is_active' => 'boolean',
             'pris_en_charge_par_usine' => 'boolean',
-            'type_vehicule' => TypeVehicule::class,
             'capacite_packs' => 'integer',
         ];
     }
@@ -50,8 +49,8 @@ class Vehicule extends Model
 
     public function getTypeLabelAttribute(): string
     {
-        return $this->type_vehicule instanceof TypeVehicule
-            ? $this->type_vehicule->label()
+        return $this->relationLoaded('typeVehicule') && $this->typeVehicule
+            ? $this->typeVehicule->nom
             : '';
     }
 
@@ -60,6 +59,11 @@ class Vehicule extends Model
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    public function typeVehicule(): BelongsTo
+    {
+        return $this->belongsTo(TypeVehicule::class, 'type_vehicule_id');
     }
 
     public function site(): BelongsTo

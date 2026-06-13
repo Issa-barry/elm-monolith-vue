@@ -38,7 +38,7 @@ const lockedCategorie = !!(
 const form = useForm({
     nom_vehicule: '',
     immatriculation: '',
-    type_vehicule: null as string | null,
+    type_vehicule_id: null as string | null,
     categorie: props.initial_site_id
         ? 'interne'
         : props.initial_proprietaire_id
@@ -61,7 +61,7 @@ const canSubmit = computed(() => {
         (form.categorie === 'interne' || !!form.proprietaire_id) &&
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
-        !!form.type_vehicule &&
+        !!form.type_vehicule_id &&
         form.pris_en_charge_par_usine !== null
     );
 });

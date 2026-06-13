@@ -40,6 +40,7 @@ use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserInvitationController;
+use App\Http\Controllers\TypeVehiculeController;
 use App\Http\Controllers\VehiculeController;
 use App\Http\Controllers\VersementCommissionController;
 use App\Http\Controllers\VersementCommissionLogistiqueController;
@@ -173,6 +174,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
             Route::post('/{propositionVehicule}/valider', [PropositionVehiculeController::class, 'valider'])->name('valider');
         });
 
+        Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
         Route::resource('vehicules', VehiculeController::class);
         Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
         Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
