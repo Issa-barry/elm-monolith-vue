@@ -20,7 +20,7 @@ async function selectFirstVehicule(page: Parameters<typeof login>[0]) {
     return vehiculeNom;
 }
 
-test('commande -> validation -> encaissement facture -> visible dans /factures', async ({
+test('commande -> confirmation -> chargement -> encaissement facture -> visible dans /factures', async ({
     page,
 }) => {
     await login(page);
@@ -37,17 +37,24 @@ test('commande -> validation -> encaissement facture -> visible dans /factures',
 
     await expect(page).toHaveURL(/\/ventes\/[a-z0-9]+$/, { timeout: 30_000 });
 
-    // ── 2. Valider la commande ─────────────────────────────────────────────────
-    const validerBtn = page.getByRole('button', { name: /valider la commande/i }).first();
-    await expect(validerBtn).toBeVisible({ timeout: 20_000 });
-    await validerBtn.click();
+    // ── 2. Confirmer la commande (BROUILLON → A_CHARGER) ──────────────────────
+    const confirmerBtn = page.getByRole('button', { name: /^confirmer$/i }).first();
+    await expect(confirmerBtn).toBeVisible({ timeout: 20_000 });
+    await confirmerBtn.click();
 
-    // Attendre le toast de confirmation de validation
-    await expect(page.locator('body')).toContainText(/facture créée|validée/i, {
+    // ── 3. Démarrer le chargement (A_CHARGER → CHARGEMENT_EN_COURS) ───────────
+    // "Démarrer le chargement" appears only after A_CHARGER state is set —
+    // waiting for it serves as both the post-confirm state assertion and the button.
+    const demarrerBtn = page.getByRole('button', { name: /démarrer le chargement/i }).first();
+    await expect(demarrerBtn).toBeVisible({ timeout: 20_000 });
+    await demarrerBtn.click();
+
+    // Attendre que la facture soit créée (toast PrimeVue visible dans le body)
+    await expect(page.locator('body')).toContainText(/facture.*créée|chargement démarré/i, {
         timeout: 30_000,
     });
 
-    // ── 3. Aller sur /factures et encaisser ────────────────────────────────────
+    // ── 4. Aller sur /factures et encaisser ────────────────────────────────────
     await page.goto('/factures');
     await expect(page).toHaveURL(/\/factures/, { timeout: 20_000 });
     await expect(page.locator('body')).toContainText(/factures de vente/i, {
@@ -68,7 +75,7 @@ test('commande -> validation -> encaissement facture -> visible dans /factures',
     await expect(encaisserItem).toBeVisible({ timeout: 5_000 });
     await encaisserItem.click();
 
-    // ── 4. Remplir le dialog encaissement ─────────────────────────────────────
+    // ── 5. Remplir le dialog encaissement ─────────────────────────────────────
     const dialog = page.locator('[role="dialog"]').filter({ hasText: /encaisser/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
@@ -85,6 +92,6 @@ test('commande -> validation -> encaissement facture -> visible dans /factures',
     await expect(validerEncaissement).toBeEnabled({ timeout: 5_000 });
     await validerEncaissement.click();
 
-    // ── 5. Vérifier le statut mis à jour ──────────────────────────────────────
+    // ── 6. Vérifier le statut mis à jour ──────────────────────────────────────
     await expect(row).toContainText(/partiel|pay/i, { timeout: 20_000 });
 });

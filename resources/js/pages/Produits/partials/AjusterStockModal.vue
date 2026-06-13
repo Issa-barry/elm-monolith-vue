@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
+import {
+    MOTIFS_AUGMENTATION,
+    MOTIFS_DIMINUTION,
+} from '@/shared/motifs-ajustement-stock';
 import { useForm } from '@inertiajs/vue3';
 import { ArrowDown, ArrowUp, Package } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed } from 'vue';
@@ -31,8 +36,23 @@ const localVisible = computed({
 const form = useForm({
     augmenter: null as number | null,
     diminuer: null as number | null,
-    motif: '',
+    motif_type: null as string | null,
+    motif_detail: '',
 });
+
+const direction = computed<'augmenter' | 'diminuer' | ''>(() => {
+    if (form.augmenter) return 'augmenter';
+    if (form.diminuer) return 'diminuer';
+    return '';
+});
+
+const motifOptions = computed(() => {
+    if (direction.value === 'augmenter') return MOTIFS_AUGMENTATION;
+    if (direction.value === 'diminuer') return MOTIFS_DIMINUTION;
+    return [];
+});
+
+const isAutre = computed(() => form.motif_type === 'autre');
 
 const stockActuel = computed(() => props.produit.qte_stock ?? 0);
 
@@ -44,12 +64,31 @@ const stockPreview = computed(() => {
     return null;
 });
 
+function resetMotifIfInvalid() {
+    if (!form.motif_type) return;
+    const valid = motifOptions.value.some((o) => o.value === form.motif_type);
+    if (!valid) {
+        form.motif_type = null;
+        form.motif_detail = '';
+    }
+}
+
 function onAugmenterChange() {
-    if (form.augmenter) form.diminuer = null;
+    if (form.augmenter) {
+        form.diminuer = null;
+        resetMotifIfInvalid();
+    }
 }
 
 function onDiminuerChange() {
-    if (form.diminuer) form.augmenter = null;
+    if (form.diminuer) {
+        form.augmenter = null;
+        resetMotifIfInvalid();
+    }
+}
+
+function onMotifTypeChange() {
+    if (form.motif_type !== 'autre') form.motif_detail = '';
 }
 
 function close() {
@@ -123,9 +162,11 @@ function submit() {
                         :use-grouping="true"
                         class="w-full"
                         :input-class="
-                            form.errors.augmenter
-                                ? 'p-invalid w-full'
-                                : 'w-full'
+                            [
+                                'w-full',
+                                form.errors.augmenter ? 'p-invalid' : '',
+                                form.diminuer ? 'opacity-40' : '',
+                            ].join(' ')
                         "
                         @update:model-value="onAugmenterChange"
                     />
@@ -153,7 +194,11 @@ function submit() {
                         :use-grouping="true"
                         class="w-full"
                         :input-class="
-                            form.errors.diminuer ? 'p-invalid w-full' : 'w-full'
+                            [
+                                'w-full',
+                                form.errors.diminuer ? 'p-invalid' : '',
+                                form.augmenter ? 'opacity-40' : '',
+                            ].join(' ')
                         "
                         @update:model-value="onDiminuerChange"
                     />
@@ -166,21 +211,53 @@ function submit() {
                 </div>
             </div>
 
-            <!-- Motif -->
+            <!-- Motif filtré selon la direction -->
             <div class="space-y-1.5">
-                <label
-                    for="ajuster-motif"
-                    class="text-sm font-medium text-muted-foreground"
+                <label for="ajuster-motif" class="text-sm font-medium">
+                    Motif <span class="text-destructive">*</span>
+                </label>
+                <Dropdown
+                    v-model="form.motif_type"
+                    :options="motifOptions"
+                    option-label="label"
+                    option-value="value"
+                    :placeholder="
+                        direction
+                            ? 'Sélectionner un motif'
+                            : 'Saisissez d\'abord une quantité…'
+                    "
+                    :disabled="!direction"
+                    class="w-full"
+                    :class="form.errors.motif_type ? 'p-invalid' : ''"
+                    @change="onMotifTypeChange"
+                />
+                <p
+                    v-if="form.errors.motif_type"
+                    class="text-xs text-destructive"
                 >
-                    Motif <span class="font-normal">(optionnel)</span>
+                    {{ form.errors.motif_type }}
+                </p>
+            </div>
+
+            <!-- Détail motif (affiché uniquement pour "Autre") -->
+            <div v-if="isAutre" class="space-y-1.5">
+                <label for="ajuster-motif-detail" class="text-sm font-medium">
+                    Préciser <span class="text-destructive">*</span>
                 </label>
                 <InputText
-                    id="ajuster-motif"
-                    v-model="form.motif"
-                    placeholder="Ex : inventaire, correction, retour..."
+                    id="ajuster-motif-detail"
+                    v-model="form.motif_detail"
+                    placeholder="Décrire le motif…"
                     class="w-full"
+                    :class="form.errors.motif_detail ? 'p-invalid' : ''"
                     maxlength="500"
                 />
+                <p
+                    v-if="form.errors.motif_detail"
+                    class="text-xs text-destructive"
+                >
+                    {{ form.errors.motif_detail }}
+                </p>
             </div>
 
             <!-- Aperçu stock après -->

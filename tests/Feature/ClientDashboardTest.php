@@ -151,7 +151,7 @@ class ClientDashboardTest extends TestCase
             'organization_id' => $org->id,
             'vehicule_id' => $vehicule->id,
             'total_commande' => 100000,
-            'statut' => StatutCommandeVente::EN_COURS->value,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS->value,
             'validated_at' => now(),
         ]);
 

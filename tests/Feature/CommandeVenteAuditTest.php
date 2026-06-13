@@ -162,8 +162,8 @@ class CommandeVenteAuditTest extends TestCase
 
         $commande = CommandeVente::where('organization_id', $this->org->id)->latest('id')->first();
 
-        // valider to move to en_cours
-        $commande->update(['statut' => StatutCommandeVente::EN_COURS]);
+        // avancer to a_charger (still annulable)
+        $commande->update(['statut' => StatutCommandeVente::A_CHARGER]);
 
         $this->actingAs($this->user)->patch(route('ventes.annuler', $commande), [
             'motif_annulation_code' => 'erreur_saisie',

@@ -569,13 +569,13 @@ class ModelTest extends TestCase
         $this->assertTrue($c->isAnnulee());
     }
 
-    public function test_commande_vente_is_annulee_returns_false_when_en_cours(): void
+    public function test_commande_vente_is_annulee_returns_false_when_livraison_en_cours(): void
     {
         $org = $this->makeOrg();
         $c = CommandeVente::create([
             'organization_id' => $org->id,
             'total_commande' => 1000,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
         ]);
 
         $this->assertFalse($c->isAnnulee());
@@ -587,7 +587,7 @@ class ModelTest extends TestCase
         $c = CommandeVente::create([
             'organization_id' => $org->id,
             'total_commande' => 50000,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
         ]);
 
         $this->assertStringContainsString('GNF', $c->getMontantLabel());
@@ -599,10 +599,10 @@ class ModelTest extends TestCase
         $c = CommandeVente::create([
             'organization_id' => $org->id,
             'total_commande' => 1000,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
         ]);
 
-        $this->assertSame('En cours', $c->statut_label);
+        $this->assertSame('Livraison en cours', $c->statut_label);
     }
 
     public function test_commande_vente_cloturer_si_complete_returns_false_when_annulee(): void
@@ -624,7 +624,7 @@ class ModelTest extends TestCase
         $c = CommandeVente::create([
             'organization_id' => $org->id,
             'total_commande' => 1000,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
         ]);
 
         $result = $c->cloturerSiComplete();
@@ -639,7 +639,7 @@ class ModelTest extends TestCase
         $commande = CommandeVente::create([
             'organization_id' => $org->id,
             'total_commande' => 2000,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
         ]);
         $produit = Produit::create([
             'organization_id' => $org->id,
@@ -650,7 +650,7 @@ class ModelTest extends TestCase
         $ligne = CommandeVenteLigne::create([
             'commande_vente_id' => $commande->id,
             'produit_id' => $produit->id,
-            'qte' => 2,
+            'quantite_demandee' => 2,
             'prix_usine_snapshot' => 500,
             'prix_vente_snapshot' => 1000,
             'total_ligne' => 2000,
@@ -919,7 +919,7 @@ class ModelTest extends TestCase
         $this->actingAs($user);
 
         $site = Site::create(['organization_id' => $org->id, 'nom' => 'S', 'type' => 'depot', 'localisation' => 'X']);
-        $commande = CommandeVente::create(['organization_id' => $org->id, 'site_id' => $site->id, 'total_commande' => 2000, 'statut' => StatutCommandeVente::EN_COURS]);
+        $commande = CommandeVente::create(['organization_id' => $org->id, 'site_id' => $site->id, 'total_commande' => 2000, 'statut' => StatutCommandeVente::LIVRAISON_EN_COURS]);
 
         $facture = \App\Models\FactureVente::create([
             'organization_id' => $org->id,

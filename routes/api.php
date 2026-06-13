@@ -88,8 +88,12 @@ Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice
 // ── Logistique backoffice ─────────────────────────────────────────────────────
 Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice.')->group(function () {
     Route::prefix('logistique')->name('logistique.')->group(function () {
+        Route::get('ressources', \App\Http\Controllers\Api\Backoffice\Logistique\RessourcesController::class)
+            ->name('ressources');
         Route::get('transferts', [\App\Http\Controllers\Api\Backoffice\Logistique\TransfertsController::class, 'index'])
             ->name('transferts.index');
+        Route::post('transferts', [\App\Http\Controllers\Api\Backoffice\Logistique\TransfertsController::class, 'store'])
+            ->name('transferts.store');
         Route::get('transferts/{transfert}', [\App\Http\Controllers\Api\Backoffice\Logistique\TransfertsController::class, 'show'])
             ->name('transferts.show');
         Route::put('transferts/{transfert}/reception', \App\Http\Controllers\Api\Backoffice\Logistique\SaisirReceptionController::class)
