@@ -61,14 +61,18 @@ interface LigneForm {
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
-const props = defineProps<{
-    site_source: SiteOption | null;
-    sites: SiteOption[];
-    vehicules: VehiculeOption[];
-    equipes: EquipeOption[];
-    produits: ProduitOption[];
-    transfert?: TransfertData;
-}>();
+const props = withDefaults(
+    defineProps<{
+        site_source: SiteOption | null;
+        is_admin?: boolean;
+        sites: SiteOption[];
+        vehicules: VehiculeOption[];
+        equipes: EquipeOption[];
+        produits: ProduitOption[];
+        transfert?: TransfertData;
+    }>(),
+    { is_admin: false },
+);
 
 const isEditing = computed(() => !!props.transfert);
 
@@ -218,7 +222,7 @@ const capaciteVehiculeConforme = computed(() => {
 
 const canSubmit = computed(
     () =>
-        props.site_source !== null &&
+        (props.is_admin ? form.site_source_id !== null : props.site_source !== null) &&
         form.site_destination_id !== null &&
         form.site_source_id !== form.site_destination_id &&
         form.vehicule_id !== null &&
@@ -265,7 +269,8 @@ function submit() {
             </div>
         </div>
 
-        <div class="mx-auto max-w-5xl p-4 sm:p-6">
+        <div class="flex w-full flex-1 flex-col items-center">
+        <div class="w-full max-w-5xl p-4 sm:p-6">
             <!-- En-tête desktop -->
             <div class="mb-6 hidden sm:block">
                 <h1 class="text-2xl font-semibold tracking-tight">
@@ -308,10 +313,33 @@ function submit() {
                     <!-- Sites source / destination -->
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div>
-                            <Label class="mb-1.5 block text-sm"
-                                >Site source</Label
-                            >
+                            <Label class="mb-1.5 block text-sm">
+                                Site source
+                                <span v-if="is_admin" class="text-destructive">*</span>
+                            </Label>
+
+                            <!-- Admin : sélecteur libre -->
+                            <Dropdown
+                                v-if="is_admin"
+                                v-model="form.site_source_id"
+                                :options="
+                                    sites.filter(
+                                        (s) => s.id !== form.site_destination_id,
+                                    )
+                                "
+                                option-label="nom"
+                                option-value="id"
+                                placeholder="Sélectionner un site"
+                                class="w-full"
+                                :class="{
+                                    'p-invalid': form.errors.site_source_id,
+                                }"
+                                filter
+                            />
+
+                            <!-- Non-admin : affichage verrouillé -->
                             <div
+                                v-else
                                 class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 text-sm"
                                 :class="
                                     site_source
@@ -326,8 +354,9 @@ function submit() {
                                     class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
                                 />
                             </div>
+
                             <p
-                                v-if="!site_source"
+                                v-if="!is_admin && !site_source"
                                 class="mt-1 text-xs text-destructive"
                             >
                                 Vous n'êtes affecté à aucun site. Contactez un
@@ -349,7 +378,11 @@ function submit() {
                                 v-model="form.site_destination_id"
                                 :options="
                                     sites.filter(
-                                        (s) => s.id !== site_source?.id,
+                                        (s) =>
+                                            s.id !==
+                                            (is_admin
+                                                ? form.site_source_id
+                                                : site_source?.id),
                                     )
                                 "
                                 option-label="nom"
@@ -685,6 +718,7 @@ function submit() {
                     </Button>
                 </div>
             </form>
+        </div>
         </div>
 
         <!-- Mobile sticky footer -->
