@@ -985,6 +985,66 @@ class CommandeVenteTest extends TestCase
         $this->assertEquals(StatutCommandeVente::CLOTUREE, $commande->fresh()->statut);
     }
 
+    // ── référence CMD-JJMMAAAA-XXX ────────────────────────────────────────────
+
+    public function test_store_genere_reference_au_format_cmd(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertRedirect();
+
+        $commande = CommandeVente::where('organization_id', $this->org->id)->latest()->first();
+
+        $this->assertNotNull($commande);
+        $this->assertMatchesRegularExpression('/^CMD-\d{8}-\d{3}$/', $commande->reference);
+    }
+
+    public function test_references_incrementales_dans_le_mois(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+
+        $payload = [
+            'vehicule_id' => $vehicule->id,
+            'lignes' => [['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 2000]],
+        ];
+
+        $this->actingAs($this->user)->post(route('ventes.store'), $payload);
+        $this->actingAs($this->user)->post(route('ventes.store'), $payload);
+
+        $commandes = CommandeVente::where('organization_id', $this->org->id)
+            ->orderBy('numero')
+            ->get();
+
+        $this->assertStringEndsWith('-001', $commandes->first()->reference);
+        $this->assertStringEndsWith('-002', $commandes->last()->reference);
+    }
+
+    public function test_valider_cree_facture_avec_meme_reference_que_commande(): void
+    {
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'statut' => \App\Enums\StatutCommandeVente::BROUILLON,
+            'total_commande' => 5000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('ventes.valider', $commande))
+            ->assertRedirect();
+
+        $facture = $commande->fresh()->facture;
+
+        $this->assertNotNull($facture);
+        $this->assertEquals($commande->reference, $facture->reference);
+    }
+
     // ── destroy ───────────────────────────────────────────────────────────────
 
     public function test_destroy_deletes_annulee_commande_and_redirects(): void

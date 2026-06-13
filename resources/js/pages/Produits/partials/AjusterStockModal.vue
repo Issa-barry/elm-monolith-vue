@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { useForm } from '@inertiajs/vue3';
 import { ArrowDown, ArrowUp, Package } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed } from 'vue';
@@ -28,11 +29,23 @@ const localVisible = computed({
     set: (val) => emit('update:visible', val),
 });
 
+const MOTIF_OPTIONS = [
+    { label: 'Après production', value: 'apres_production' },
+    { label: 'Correction de stock', value: 'correction_stock' },
+    { label: 'Perte', value: 'perte' },
+    { label: 'Retour', value: 'retour' },
+    { label: 'Don', value: 'don' },
+    { label: 'Autre', value: 'autre' },
+];
+
 const form = useForm({
     augmenter: null as number | null,
     diminuer: null as number | null,
-    motif: '',
+    motif_type: null as string | null,
+    motif_detail: '',
 });
+
+const isAutre = computed(() => form.motif_type === 'autre');
 
 const stockActuel = computed(() => props.produit.qte_stock ?? 0);
 
@@ -50,6 +63,10 @@ function onAugmenterChange() {
 
 function onDiminuerChange() {
     if (form.diminuer) form.augmenter = null;
+}
+
+function onMotifTypeChange() {
+    if (form.motif_type !== 'autre') form.motif_detail = '';
 }
 
 function close() {
@@ -166,21 +183,54 @@ function submit() {
                 </div>
             </div>
 
-            <!-- Motif -->
+            <!-- Motif (obligatoire) -->
             <div class="space-y-1.5">
                 <label
                     for="ajuster-motif"
-                    class="text-sm font-medium text-muted-foreground"
+                    class="text-sm font-medium"
                 >
-                    Motif <span class="font-normal">(optionnel)</span>
+                    Motif <span class="text-destructive">*</span>
+                </label>
+                <Dropdown
+                    v-model="form.motif_type"
+                    :options="MOTIF_OPTIONS"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Sélectionner un motif"
+                    class="w-full"
+                    :class="form.errors.motif_type ? 'p-invalid' : ''"
+                    @change="onMotifTypeChange"
+                />
+                <p
+                    v-if="form.errors.motif_type"
+                    class="text-xs text-destructive"
+                >
+                    {{ form.errors.motif_type }}
+                </p>
+            </div>
+
+            <!-- Détail motif (affiché uniquement pour "Autre") -->
+            <div v-if="isAutre" class="space-y-1.5">
+                <label
+                    for="ajuster-motif-detail"
+                    class="text-sm font-medium"
+                >
+                    Préciser <span class="text-destructive">*</span>
                 </label>
                 <InputText
-                    id="ajuster-motif"
-                    v-model="form.motif"
-                    placeholder="Ex : inventaire, correction, retour..."
+                    id="ajuster-motif-detail"
+                    v-model="form.motif_detail"
+                    placeholder="Décrire le motif…"
                     class="w-full"
+                    :class="form.errors.motif_detail ? 'p-invalid' : ''"
                     maxlength="500"
                 />
+                <p
+                    v-if="form.errors.motif_detail"
+                    class="text-xs text-destructive"
+                >
+                    {{ form.errors.motif_detail }}
+                </p>
             </div>
 
             <!-- Aperçu stock après -->

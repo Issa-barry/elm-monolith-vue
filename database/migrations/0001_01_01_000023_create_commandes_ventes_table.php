@@ -16,7 +16,6 @@ return new class extends Migration
             $table->foreignUlid('vehicule_id')->nullable()->constrained('vehicules')->nullOnDelete();
             $table->foreignUlid('client_id')->nullable()->constrained('clients')->nullOnDelete();
             $table->string('reference', 20)->unique();
-            $table->char('code_confirmation', 3)->nullable();
             $table->decimal('total_commande', 12, 2)->default(0);
             $table->string('statut', 30)->default('brouillon');
             $table->text('motif_annulation')->nullable();

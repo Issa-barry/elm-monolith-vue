@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\StatutCommandeVente;
+use App\Services\CommandeNumeroService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,7 +12,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 
 class CommandeVente extends Model
 {
@@ -19,17 +19,12 @@ class CommandeVente extends Model
 
     protected $table = 'commandes_ventes';
 
-    private const TEMP_PREFIX = 'TMP-VT-';
-
-    private const CODE_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-
     protected $fillable = [
         'organization_id',
         'site_id',
         'vehicule_id',
         'client_id',
         'reference',
-        'code_confirmation',
         'total_commande',
         'statut',
         'motif_annulation',
@@ -55,23 +50,11 @@ class CommandeVente extends Model
         ];
     }
 
-    private static function generateConfirmationCode(): string
-    {
-        $charset = self::CODE_CHARSET;
-        $len = strlen($charset);
-
-        return $charset[random_int(0, $len - 1)]
-            .$charset[random_int(0, $len - 1)]
-            .$charset[random_int(0, $len - 1)];
-    }
-
     protected static function booted(): void
     {
         static::creating(function (CommandeVente $c) {
             if (empty($c->reference)) {
-                $c->numero = (DB::table('commandes_ventes')->max('numero') ?? 0) + 1;
-                $c->code_confirmation = self::generateConfirmationCode();
-                $c->reference = self::TEMP_PREFIX.bin2hex(random_bytes(6));
+                [$c->reference, $c->numero] = app(CommandeNumeroService::class)->generer();
             }
             if (empty($c->statut)) {
                 $c->statut = StatutCommandeVente::BROUILLON;
@@ -80,17 +63,6 @@ class CommandeVente extends Model
                 $c->created_by = Auth::id();
                 $c->updated_by = Auth::id();
             }
-        });
-
-        static::created(function (CommandeVente $c) {
-            if (! str_starts_with((string) $c->reference, self::TEMP_PREFIX)) {
-                return;
-            }
-            $code = $c->code_confirmation ?? self::generateConfirmationCode();
-            $ref = 'VT-'.str_pad((string) $c->numero, 5, '0', STR_PAD_LEFT).'-'.$code;
-            $c->newQueryWithoutScopes()->whereKey($c->id)->update(['reference' => $ref, 'code_confirmation' => $code]);
-            $c->reference = $ref;
-            $c->syncOriginalAttribute('reference');
         });
 
         static::updating(function (CommandeVente $c) {
@@ -202,16 +174,10 @@ class CommandeVente extends Model
         }
 
         $facture = $this->facture ?? $this->load('facture')->facture;
-        if (! $facture || ! $facture->isPayee()) {
-            return false;
-        }
+        $commissionsVersees = $this->commissions()->get()->every(fn ($c) => $c->isVersee());
 
-        // Vérifie que toutes les commissions sont versées (ou absentes)
-        $commissions = $this->commissions()->get();
-        foreach ($commissions as $commission) {
-            if (! $commission->isVersee()) {
-                return false;
-            }
+        if (! $facture?->isPayee() || ! $commissionsVersees) {
+            return false;
         }
 
         $this->statut = StatutCommandeVente::CLOTUREE;

@@ -4,7 +4,6 @@ namespace Database\Factories;
 
 use App\Models\Organization;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Support\Str;
 
 class CommandeVenteFactory extends Factory
 {
@@ -15,7 +14,6 @@ class CommandeVenteFactory extends Factory
             'vehicule_id' => null,
             'site_id' => null,
             'client_id' => null,
-            'reference' => 'VNT-TEST-'.strtoupper(Str::random(8)),
             'total_commande' => fake()->numberBetween(5000, 100000),
             'statut' => 'brouillon',
         ];

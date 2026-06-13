@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Produits;
 
 use App\Enums\AuditEvent;
+use App\Enums\MotifAjustementStock;
 use App\Enums\ProduitStatut;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Produits\AjusterStockRequest;
@@ -179,6 +180,8 @@ class ProduitController extends Controller
         $site = $user->sites()->wherePivot('is_default', true)->first() ?? $user->sites()->first();
         abort_if(! $site, 422, 'Aucun site associé à votre compte.');
 
+        $notes = MotifAjustementStock::from($data['motif_type'])->toNotesString($data['motif_detail'] ?? '');
+
         if ($hasAugmenter) {
             $stockApres = $stockAvant + (int) $data['augmenter'];
             $type = 'entree';
@@ -189,7 +192,7 @@ class ProduitController extends Controller
             $quantite = (int) $data['diminuer'];
         }
 
-        DB::transaction(function () use ($produit, $type, $quantite, $stockAvant, $stockApres, $data, $site, $user) {
+        DB::transaction(function () use ($produit, $type, $quantite, $stockAvant, $stockApres, $notes, $site, $user) {
             $produit->update(['qte_stock' => $stockApres]);
 
             MouvementStock::create([
@@ -200,7 +203,7 @@ class ProduitController extends Controller
                 'quantite' => $quantite,
                 'stock_avant' => $stockAvant,
                 'stock_apres' => $stockApres,
-                'notes' => $data['motif'] ?? null,
+                'notes' => $notes,
                 'created_by' => $user->id,
             ]);
 
@@ -209,10 +212,7 @@ class ProduitController extends Controller
                 AuditEvent::STOCK_ADJUSTED,
                 $user,
                 ['qte_stock' => $stockAvant],
-                array_filter([
-                    'qte_stock' => $stockApres,
-                    'motif' => $data['motif'] ?? null,
-                ], fn ($v) => $v !== null),
+                ['qte_stock' => $stockApres, 'motif' => $notes],
             );
         });
 

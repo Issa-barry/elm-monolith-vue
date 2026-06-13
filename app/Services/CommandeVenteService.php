@@ -37,6 +37,7 @@ class CommandeVenteService
                     'site_id' => $commande->site_id,
                     'vehicule_id' => $commande->vehicule_id,
                     'commande_vente_id' => $commande->id,
+                    'reference' => $commande->reference,
                     'montant_brut' => $commande->total_commande,
                     'montant_net' => $commande->total_commande,
                 ]);

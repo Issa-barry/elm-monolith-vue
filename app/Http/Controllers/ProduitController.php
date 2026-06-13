@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AuditEvent;
+use App\Enums\MotifAjustementStock;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Models\AuditLog;
@@ -15,6 +16,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -341,18 +343,24 @@ class ProduitController extends Controller
         abort_unless((bool) $produit->type?->hasStock(), 422, 'Ce produit ne gère pas de stock.');
 
         $data = $request->validate([
-            'augmenter' => 'nullable|integer|min:1',
-            'diminuer' => 'nullable|integer|min:1',
-            'motif' => 'nullable|string|max:500',
+            'augmenter'    => ['nullable', 'integer', 'min:1'],
+            'diminuer'     => ['nullable', 'integer', 'min:1'],
+            'motif_type'   => ['required', Rule::in(MotifAjustementStock::validValues())],
+            'motif_detail' => ['nullable', 'required_if:motif_type,autre', 'string', 'max:500'],
         ], [
-            'augmenter.integer' => 'La quantité doit être un nombre entier.',
-            'augmenter.min' => 'La quantité doit être supérieure à 0.',
-            'diminuer.integer' => 'La quantité doit être un nombre entier.',
-            'diminuer.min' => 'La quantité doit être supérieure à 0.',
+            'augmenter.integer'        => 'La quantité doit être un nombre entier.',
+            'augmenter.min'            => 'La quantité doit être supérieure à 0.',
+            'diminuer.integer'         => 'La quantité doit être un nombre entier.',
+            'diminuer.min'             => 'La quantité doit être supérieure à 0.',
+            'motif_type.required'      => 'Le motif est obligatoire.',
+            'motif_type.in'            => 'Le motif sélectionné est invalide.',
+            'motif_detail.required_if' => 'Veuillez préciser le motif.',
+            'motif_detail.max'         => 'Le détail du motif ne peut pas dépasser 500 caractères.',
         ]);
 
         $hasAugmenter = ! empty($data['augmenter']);
         $hasDiminuer = ! empty($data['diminuer']);
+        $notes = MotifAjustementStock::from($data['motif_type'])->toNotesString($data['motif_detail'] ?? '');
 
         if ($hasAugmenter && $hasDiminuer) {
             throw ValidationException::withMessages([
@@ -388,7 +396,7 @@ class ProduitController extends Controller
             $quantite = (int) $data['diminuer'];
         }
 
-        DB::transaction(function () use ($produit, $type, $quantite, $stockAvant, $stockApres, $data, $site, $user) {
+        DB::transaction(function () use ($produit, $type, $quantite, $stockAvant, $stockApres, $notes, $site, $user) {
             $produit->update(['qte_stock' => $stockApres]);
 
             MouvementStock::create([
@@ -399,7 +407,7 @@ class ProduitController extends Controller
                 'quantite' => $quantite,
                 'stock_avant' => $stockAvant,
                 'stock_apres' => $stockApres,
-                'notes' => $data['motif'] ?? null,
+                'notes' => $notes,
                 'created_by' => $user->id,
             ]);
 
@@ -408,10 +416,7 @@ class ProduitController extends Controller
                 AuditEvent::STOCK_ADJUSTED,
                 $user,
                 ['qte_stock' => $stockAvant],
-                array_filter([
-                    'qte_stock' => $stockApres,
-                    'motif' => $data['motif'] ?? null,
-                ], fn ($v) => $v !== null),
+                ['qte_stock' => $stockApres, 'motif' => $notes],
             );
         });
 

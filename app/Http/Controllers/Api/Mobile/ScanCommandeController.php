@@ -13,7 +13,7 @@ class ScanCommandeController extends Controller
     {
         $ref = strtoupper(trim($reference));
 
-        if (str_starts_with($ref, 'VT-')) {
+        if (str_starts_with($ref, 'CMD-')) {
             return $this->scanCommande($ref);
         }
 
