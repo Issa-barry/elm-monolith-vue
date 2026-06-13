@@ -66,7 +66,7 @@ class AuditLogService
             ->map(fn ($l) => [
                 'produit_id' => (int) ($l['produit_id'] ?? 0),
                 'produit_nom' => (string) ($l['produit_nom'] ?? ''),
-                'qte' => (int) ($l['qte'] ?? 0),
+                'quantite_demandee' => (int) ($l['quantite_demandee'] ?? 0),
                 'prix_vente_snapshot' => (float) ($l['prix_vente_snapshot'] ?? 0),
             ])
             ->values()

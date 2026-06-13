@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\DB;
 
 class FactureVente extends Model
 {
@@ -17,21 +16,15 @@ class FactureVente extends Model
 
     protected $table = 'factures_ventes';
 
-    private const TEMP_PREFIX = 'TMP-FA-';
-
-    private const CODE_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-
     protected $fillable = [
         'organization_id',
         'site_id',
         'vehicule_id',
         'commande_vente_id',
         'reference',
-        'code_confirmation',
         'montant_brut',
         'montant_net',
         'statut_facture',
-        'numero',
     ];
 
     protected $appends = ['statut_label', 'montant_encaisse', 'montant_restant'];
@@ -45,38 +38,15 @@ class FactureVente extends Model
         ];
     }
 
-    private static function generateConfirmationCode(): string
-    {
-        $charset = self::CODE_CHARSET;
-        $len = strlen($charset);
-
-        return $charset[random_int(0, $len - 1)]
-            .$charset[random_int(0, $len - 1)]
-            .$charset[random_int(0, $len - 1)];
-    }
-
     protected static function booted(): void
     {
         static::creating(function (FactureVente $f) {
-            if (empty($f->reference)) {
-                $f->numero = (DB::table('factures_ventes')->max('numero') ?? 0) + 1;
-                $f->code_confirmation = self::generateConfirmationCode();
-                $f->reference = self::TEMP_PREFIX.bin2hex(random_bytes(6));
+            if (empty($f->reference) && $f->commande_vente_id) {
+                $f->reference = CommandeVente::find($f->commande_vente_id)?->reference;
             }
             if (empty($f->statut_facture)) {
                 $f->statut_facture = StatutFactureVente::IMPAYEE;
             }
-        });
-
-        static::created(function (FactureVente $f) {
-            if (! str_starts_with((string) $f->reference, self::TEMP_PREFIX)) {
-                return;
-            }
-            $code = $f->code_confirmation ?? self::generateConfirmationCode();
-            $ref = 'FA-'.str_pad((string) $f->numero, 5, '0', STR_PAD_LEFT).'-'.$code;
-            $f->newQueryWithoutScopes()->whereKey($f->id)->update(['reference' => $ref, 'code_confirmation' => $code]);
-            $f->reference = $ref;
-            $f->syncOriginalAttribute('reference');
         });
     }
 
@@ -140,18 +110,14 @@ class FactureVente extends Model
             return false;
         }
 
-        $etaitPayee = $this->isPayee();
-
         $encaisse = (float) $this->encaissements()->sum('montant');
         $net = (float) $this->montant_net;
 
-        if ($encaisse <= 0) {
-            $this->statut_facture = StatutFactureVente::IMPAYEE;
-        } elseif ($encaisse >= $net) {
-            $this->statut_facture = StatutFactureVente::PAYEE;
-        } else {
-            $this->statut_facture = StatutFactureVente::PARTIEL;
-        }
+        $this->statut_facture = match (true) {
+            $encaisse <= 0 => StatutFactureVente::IMPAYEE,
+            $encaisse >= $net => StatutFactureVente::PAYEE,
+            default => StatutFactureVente::PARTIEL,
+        };
 
         return $this->saveQuietly();
     }

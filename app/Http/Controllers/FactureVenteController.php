@@ -56,9 +56,7 @@ class FactureVenteController extends Controller
             'commande.site',
             'encaissements.creator',
         ])
-            ->where('organization_id', $orgId)
-            ->whereNotNull('reference')
-            ->where('reference', 'not like', 'TMP-%');
+            ->where('organization_id', $orgId);
 
         match ($periode) {
             'today' => $query->whereDate('created_at', Carbon::today()),

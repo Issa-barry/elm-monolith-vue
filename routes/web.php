@@ -9,6 +9,7 @@ use App\Http\Controllers\Client\ClientDashboardController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
+use App\Http\Controllers\CommandeVenteStatutController;
 use App\Http\Controllers\CommissionLogistiqueController;
 use App\Http\Controllers\CommissionPaymentController;
 use App\Http\Controllers\CommissionVehiculeController;
@@ -114,6 +115,8 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::post('pdv/checkout', [PdvController::class, 'checkout'])->name('pdv.checkout');
         Route::patch('ventes/{commande_vente}/valider', [CommandeVenteController::class, 'valider'])->name('ventes.valider');
         Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
+        Route::post('ventes/{commande_vente}/statut/avancer', [CommandeVenteStatutController::class, 'avancer'])->name('ventes.statut.avancer');
+        Route::post('ventes/{commande_vente}/statut/annuler', [CommandeVenteStatutController::class, 'annuler'])->name('ventes.statut.annuler');
         Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
 
         // Commissions

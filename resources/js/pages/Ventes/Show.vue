@@ -16,9 +16,9 @@ import {
     CheckCircle,
     HandCoins,
     History,
-    Lock,
     MoreVertical,
     Pencil,
+    Truck,
     XCircle,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
@@ -27,6 +27,7 @@ import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
+import ChargementDialog from './partials/ChargementDialog.vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AuditEntry {
@@ -37,6 +38,15 @@ interface AuditEntry {
     old_values: Record<string, unknown> | null;
     new_values: Record<string, unknown> | null;
     created_at: string;
+}
+
+interface ActiviteEntry {
+    id: string;
+    action: string;
+    action_label: string;
+    user_name: string;
+    created_at: string;
+    details: Record<string, unknown> | null;
 }
 
 interface Encaissement {
@@ -62,33 +72,49 @@ interface FactureData {
 }
 
 interface LigneCommande {
-    id: number;
-    produit_id: number;
+    id: string;
+    produit_id: string;
     produit_nom: string | null;
-    qte: number;
+    quantite_demandee: number;
+    quantite_chargee: number | null;
+    quantite_livree: number | null;
+    type_ecart: string | null;
+    type_ecart_label: string | null;
+    commentaire_ecart: string | null;
+    ecart_chargement: number | null;
     prix_usine_snapshot: number;
     prix_vente_snapshot: number;
     total_ligne: number;
 }
 
 interface CommandeData {
-    id: number;
+    id: string;
     reference: string;
     statut: string;
     statut_label: string;
+    statut_color: string;
     total_commande: number;
     vehicule_nom: string | null;
     client_nom: string | null;
     site_nom: string | null;
     motif_annulation: string | null;
     annulee_at: string | null;
-    validated_at: string | null;
+    a_charger_at: string | null;
+    chargement_demarre_at: string | null;
+    chargement_valide_at: string | null;
+    livree_at: string | null;
+    closed_at: string | null;
     is_brouillon: boolean;
-    is_en_cours: boolean;
+    is_a_charger: boolean;
+    is_chargement_en_cours: boolean;
+    is_livraison_en_cours: boolean;
+    is_livree: boolean;
     is_cloturee: boolean;
     is_annulee: boolean;
     can_modifier: boolean;
-    can_valider: boolean;
+    can_confirmer: boolean;
+    can_demarrer_chargement: boolean;
+    can_valider_chargement: boolean;
     can_annuler: boolean;
     can_encaisser: boolean;
     created_at: string;
@@ -101,6 +127,7 @@ const props = defineProps<{
     commande: CommandeData;
     facture: FactureData | null;
     historiques: AuditEntry[];
+    activites: ActiviteEntry[];
 }>();
 
 const toast = useToast();
@@ -115,18 +142,37 @@ const breadcrumbs: BreadcrumbItem[] = [
 // ── Statut couleurs ───────────────────────────────────────────────────────────
 const statutCommandeColor: Record<string, string> = {
     brouillon: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-    en_cours: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+    a_charger:
+        'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+    chargement_en_cours:
+        'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300',
+    livraison_en_cours:
+        'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+    livree: 'bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300',
     cloturee:
         'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
     annulee: 'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400',
 };
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
-function formatGNF(val: number): string {
-    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
+function formatGNF(val: number | string | null | undefined): string {
+    const n = Math.round(Number(val ?? 0));
+    const s = n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return s + ' GNF';
 }
 
-// ── Audit helpers ────────────────────────────────────────────────────────────
+function ecartClass(ecart: number | null): string {
+    if (ecart === null || ecart === 0) return 'text-muted-foreground';
+    return ecart < 0 ? 'text-red-600' : 'text-amber-600';
+}
+
+function ecartLabel(ecart: number | null): string {
+    if (ecart === null) return '—';
+    if (ecart === 0) return '0';
+    return (ecart > 0 ? '+' : '') + ecart;
+}
+
+// ── Audit helpers ─────────────────────────────────────────────────────────────
 const auditEventTextColor: Record<string, string> = {
     created: 'text-blue-600 dark:text-blue-400',
     updated: 'text-amber-600 dark:text-amber-400',
@@ -140,7 +186,7 @@ const auditEventTextColor: Record<string, string> = {
 const auditEventVerb: Record<string, string> = {
     created: 'Créée par',
     updated: 'Modifiée par',
-    validated: 'Validée par',
+    validated: 'Confirmée par',
     cancelled: 'Annulée par',
     encaissement_added: 'Encaissement ajouté par',
     encaissement_deleted: 'Encaissement supprimé par',
@@ -165,7 +211,7 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
 
 interface AuditLigne {
     produit_nom?: string;
-    qte?: number;
+    quantite_demandee?: number;
     prix_vente_snapshot?: number;
     total_ligne?: number;
 }
@@ -175,8 +221,10 @@ function formatLignes(val: unknown): string {
     return (val as AuditLigne[])
         .map((l) => {
             const nom = l.produit_nom ?? '?';
-            const qte = l.qte ?? 0;
-            const montant = l.total_ligne ?? qte * (l.prix_vente_snapshot ?? 0);
+            const qte = l.quantite_demandee ?? 0;
+            const montant = Number(
+                l.total_ligne ?? qte * Number(l.prix_vente_snapshot ?? 0),
+            );
             return `${nom} × ${qte} — ${formatGNF(montant)}`;
         })
         .join('\n');
@@ -210,10 +258,19 @@ function auditDiffRows(
     return rows;
 }
 
+// ── Types écart (statiques, miroir de TypeEcartLogistique) ────────────────────
+const TYPES_ECART = [
+    { value: 'conforme', label: 'Conforme' },
+    { value: 'casse', label: 'Casse' },
+    { value: 'perte', label: 'Perte' },
+    { value: 'surplus', label: 'Surplus' },
+    { value: 'manquant', label: 'Manquant' },
+];
+
 // ── Actions de transition ─────────────────────────────────────────────────────
 const actionProcessing = ref(false);
 
-function valider() {
+function confirmer() {
     if (actionProcessing.value) return;
     actionProcessing.value = true;
     router.patch(
@@ -223,14 +280,36 @@ function valider() {
             onSuccess: () =>
                 toast.add({
                     severity: 'success',
-                    summary: 'Validée',
-                    detail: 'Commande validée, facture créée.',
+                    summary: 'Confirmée',
+                    detail: 'Commande confirmée. En attente de chargement.',
                     life: 3000,
                 }),
             onFinish: () => (actionProcessing.value = false),
         },
     );
 }
+
+function demarrerChargement() {
+    if (actionProcessing.value) return;
+    actionProcessing.value = true;
+    router.post(
+        `/ventes/${props.commande.id}/statut/avancer`,
+        {},
+        {
+            onSuccess: () =>
+                toast.add({
+                    severity: 'success',
+                    summary: 'Chargement démarré',
+                    detail: 'La facture a été créée. Le chargement peut commencer.',
+                    life: 3000,
+                }),
+            onFinish: () => (actionProcessing.value = false),
+        },
+    );
+}
+
+// ── Chargement dialog ─────────────────────────────────────────────────────────
+const chargementDialogVisible = ref(false);
 
 // ── Annulation commande ───────────────────────────────────────────────────────
 const MOTIFS_ANNULATION = [
@@ -268,7 +347,7 @@ const annulerDisabled = computed(
             !annulerForm.motif_annulation_detail.trim()),
 );
 
-// ── Historique dialog ────────────────────────────────────────────────────────
+// ── Historique dialog ─────────────────────────────────────────────────────────
 const historiquesDialogVisible = ref(false);
 
 // ── Encaissement ──────────────────────────────────────────────────────────────
@@ -308,6 +387,11 @@ function submitEncaisser() {
         },
     });
 }
+
+// ── Colonnes lignes conditionnelles ───────────────────────────────────────────
+const showChargeeCol = computed(
+    () => !props.commande.is_brouillon && !props.commande.is_a_charger,
+);
 </script>
 
 <template>
@@ -337,7 +421,9 @@ function submitEncaisser() {
                 <div
                     v-if="
                         commande.can_modifier ||
-                        commande.can_valider ||
+                        commande.can_confirmer ||
+                        commande.can_demarrer_chargement ||
+                        commande.can_valider_chargement ||
                         commande.can_annuler ||
                         commande.can_encaisser
                     "
@@ -349,7 +435,7 @@ function submitEncaisser() {
                                 <MoreVertical class="h-5 w-5" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-48">
+                        <DropdownMenuContent align="end" class="w-52">
                             <DropdownMenuItem
                                 v-if="commande.can_modifier"
                                 as-child
@@ -363,19 +449,38 @@ function submitEncaisser() {
                                 </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                                v-if="commande.can_valider"
+                                v-if="commande.can_confirmer"
                                 class="cursor-pointer text-blue-600 focus:text-blue-600"
                                 :disabled="actionProcessing"
-                                @click="valider"
+                                @click="confirmer"
                             >
                                 <CheckCircle class="h-4 w-4" />
-                                Valider la commande
+                                Confirmer la commande
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                v-if="commande.can_demarrer_chargement"
+                                class="cursor-pointer text-orange-600 focus:text-orange-600"
+                                :disabled="actionProcessing"
+                                @click="demarrerChargement"
+                            >
+                                <Truck class="h-4 w-4" />
+                                Démarrer le chargement
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                v-if="commande.can_valider_chargement"
+                                class="cursor-pointer text-blue-600 focus:text-blue-600"
+                                @click="chargementDialogVisible = true"
+                            >
+                                <CheckCircle class="h-4 w-4" />
+                                Valider le chargement
                             </DropdownMenuItem>
                             <DropdownMenuSeparator
                                 v-if="
                                     commande.can_annuler &&
                                     (commande.can_modifier ||
-                                        commande.can_valider ||
+                                        commande.can_confirmer ||
+                                        commande.can_demarrer_chargement ||
+                                        commande.can_valider_chargement ||
                                         commande.can_encaisser)
                                 "
                             />
@@ -394,7 +499,7 @@ function submitEncaisser() {
         </div>
 
         <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
-            <!-- En-tête commande ──────────────────────────────────────────────── -->
+            <!-- En-tête commande ─────────────────────────────────────────────── -->
             <div class="hidden items-start justify-between gap-4 sm:flex">
                 <div class="flex items-start gap-4">
                     <Link href="/ventes">
@@ -451,36 +556,60 @@ function submitEncaisser() {
                         </Button>
                     </Link>
 
-                    <!-- Valider (brouillon) -->
+                    <!-- Confirmer (brouillon) -->
                     <Button
-                        v-if="commande.can_valider"
+                        v-if="commande.can_confirmer"
                         size="sm"
                         :disabled="actionProcessing"
-                        @click="valider"
+                        @click="confirmer"
                     >
                         <CheckCircle class="mr-2 h-4 w-4" />
-                        Valider la commande
+                        Confirmer
                     </Button>
 
-                    <!-- Annuler (validée, admin uniquement) -->
+                    <!-- Démarrer le chargement (a_charger) -->
+                    <Button
+                        v-if="commande.can_demarrer_chargement"
+                        size="sm"
+                        class="bg-orange-600 text-white hover:bg-orange-700"
+                        :disabled="actionProcessing"
+                        @click="demarrerChargement"
+                    >
+                        <Truck class="mr-2 h-4 w-4" />
+                        Démarrer le chargement
+                    </Button>
+
+                    <!-- Valider le chargement (chargement_en_cours) -->
+                    <Button
+                        v-if="commande.can_valider_chargement"
+                        size="sm"
+                        @click="chargementDialogVisible = true"
+                    >
+                        <CheckCircle class="mr-2 h-4 w-4" />
+                        Valider le chargement
+                    </Button>
+
+                    <!-- Encaisser -->
+                    <Button
+                        v-if="commande.can_encaisser"
+                        variant="outline"
+                        size="sm"
+                        @click="openEncaisserDialog"
+                    >
+                        <HandCoins class="mr-2 h-4 w-4" />
+                        Encaisser
+                    </Button>
+
+                    <!-- Annuler (brouillon ou a_charger, admin) -->
                     <template v-if="commande.can_annuler">
-                        <span
-                            v-if="facture && facture.montant_encaisse > 0"
-                            class="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
-                            title="Des encaissements ont déjà été enregistrés sur cette commande."
-                        >
-                            <Lock class="h-3.5 w-3.5" />
-                            Annulation impossible (encaissée)
-                        </span>
                         <Button
-                            v-else
                             variant="outline"
                             size="sm"
                             class="border-amber-300 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
                             @click="annulerDialogVisible = true"
                         >
                             <XCircle class="mr-2 h-4 w-4" />
-                            Annuler la commande
+                            Annuler
                         </Button>
                     </template>
                 </div>
@@ -522,18 +651,31 @@ function submitEncaisser() {
                     </div>
                 </div>
 
-                <!-- Dates de transition -->
+                <!-- Timeline statuts -->
                 <div
-                    v-if="commande.validated_at"
                     class="mt-4 flex flex-wrap gap-4 border-t pt-4 text-xs text-muted-foreground"
                 >
-                    <span
-                        >Validée le
-                        <strong>{{ commande.validated_at }}</strong></span
-                    >
-                    <span v-if="commande.created_by"
-                        >par <strong>{{ commande.created_by }}</strong></span
-                    >
+                    <span v-if="commande.a_charger_at">
+                        Confirmée le
+                        <strong>{{ commande.a_charger_at }}</strong>
+                    </span>
+                    <span v-if="commande.chargement_demarre_at">
+                        Chargement démarré le
+                        <strong>{{ commande.chargement_demarre_at }}</strong>
+                    </span>
+                    <span v-if="commande.chargement_valide_at">
+                        Chargement validé le
+                        <strong>{{ commande.chargement_valide_at }}</strong>
+                    </span>
+                    <span v-if="commande.livree_at">
+                        Livrée le <strong>{{ commande.livree_at }}</strong>
+                    </span>
+                    <span v-if="commande.closed_at">
+                        Clôturée le <strong>{{ commande.closed_at }}</strong>
+                    </span>
+                    <span v-if="commande.created_by">
+                        par <strong>{{ commande.created_by }}</strong>
+                    </span>
                 </div>
 
                 <!-- Motif annulation -->
@@ -570,7 +712,21 @@ function submitEncaisser() {
                                     class="px-4 py-2.5 text-center font-medium text-muted-foreground"
                                     style="width: 80px"
                                 >
-                                    Qté
+                                    Demandée
+                                </th>
+                                <th
+                                    v-if="showChargeeCol"
+                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                    style="width: 80px"
+                                >
+                                    Chargée
+                                </th>
+                                <th
+                                    v-if="showChargeeCol"
+                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                    style="width: 70px"
+                                >
+                                    Écart
                                 </th>
                                 <th
                                     class="px-4 py-2.5 text-right font-medium text-muted-foreground"
@@ -596,7 +752,20 @@ function submitEncaisser() {
                                     {{ ligne.produit_nom ?? '—' }}
                                 </td>
                                 <td class="px-4 py-3 text-center tabular-nums">
-                                    {{ ligne.qte }}
+                                    {{ ligne.quantite_demandee }}
+                                </td>
+                                <td
+                                    v-if="showChargeeCol"
+                                    class="px-4 py-3 text-center tabular-nums"
+                                >
+                                    {{ ligne.quantite_chargee ?? '—' }}
+                                </td>
+                                <td
+                                    v-if="showChargeeCol"
+                                    class="px-4 py-3 text-center font-semibold tabular-nums"
+                                    :class="ecartClass(ligne.ecart_chargement)"
+                                >
+                                    {{ ecartLabel(ligne.ecart_chargement) }}
                                 </td>
                                 <td
                                     class="px-4 py-3 text-right text-muted-foreground tabular-nums"
@@ -613,7 +782,7 @@ function submitEncaisser() {
                         <tfoot>
                             <tr class="border-t bg-muted/20">
                                 <td
-                                    colspan="3"
+                                    :colspan="showChargeeCol ? 5 : 3"
                                     class="px-4 py-3 text-right text-sm font-semibold text-muted-foreground"
                                 >
                                     Total
@@ -767,9 +936,51 @@ function submitEncaisser() {
                     Aucun encaissement enregistré.
                 </p>
             </div>
+
+            <!-- Journal d'activité -->
+            <div
+                v-if="activites.length > 0"
+                class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
+            >
+                <h3
+                    class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                >
+                    Journal d'activité
+                </h3>
+                <ol class="relative border-l border-border">
+                    <li
+                        v-for="act in activites"
+                        :key="act.id"
+                        class="mb-5 ml-4 last:mb-0"
+                    >
+                        <span
+                            class="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border border-background bg-primary"
+                        />
+                        <div
+                            class="flex flex-wrap items-baseline gap-1 text-xs"
+                        >
+                            <strong class="text-foreground">{{
+                                act.user_name
+                            }}</strong>
+                            <span class="text-muted-foreground">{{
+                                act.action_label
+                            }}</span>
+                            <span class="text-muted-foreground"
+                                >— {{ act.created_at }}</span
+                            >
+                        </div>
+                        <p
+                            v-if="act.details?.motif"
+                            class="mt-1 text-xs text-muted-foreground"
+                        >
+                            Motif : {{ act.details.motif }}
+                        </p>
+                    </li>
+                </ol>
+            </div>
         </div>
 
-        <!-- Dialog Historique -->
+        <!-- Dialog Historique audit -->
         <Dialog
             v-model:visible="historiquesDialogVisible"
             modal
@@ -792,7 +1003,6 @@ function submitEncaisser() {
                     <span
                         class="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border border-background bg-border"
                     />
-
                     <div class="flex flex-wrap items-baseline gap-1 text-xs">
                         <span
                             class="font-semibold"
@@ -882,15 +1092,12 @@ function submitEncaisser() {
             :style="{ width: '440px' }"
         >
             <div class="space-y-4">
-                <!-- Solde restant -->
                 <div v-if="facture" class="rounded-lg bg-primary/10 px-4 py-3">
                     <p class="text-xs text-primary">Restant dû</p>
                     <p class="text-xl font-bold text-primary tabular-nums">
                         {{ formatGNF(facture.montant_restant) }}
                     </p>
                 </div>
-
-                <!-- Montant -->
                 <div>
                     <Label for="enc-montant" class="mb-1.5 block text-sm">
                         Montant <span class="text-destructive">*</span>
@@ -914,8 +1121,6 @@ function submitEncaisser() {
                         {{ encaisserForm.errors.montant }}
                     </p>
                 </div>
-
-                <!-- Mode de paiement -->
                 <div>
                     <Label for="enc-mode" class="mb-1.5 block text-sm">
                         Mode de paiement <span class="text-destructive">*</span>
@@ -980,11 +1185,8 @@ function submitEncaisser() {
                     <span class="font-mono font-semibold">{{
                         commande.reference
                     }}</span
-                    >. Cette action est irréversible et annulera également la
-                    facture associée.
+                    >. Cette action est irréversible.
                 </p>
-
-                <!-- Motif -->
                 <div>
                     <Label
                         for="annulation-motif-code"
@@ -1013,8 +1215,6 @@ function submitEncaisser() {
                         {{ annulerForm.errors.motif_annulation_code }}
                     </p>
                 </div>
-
-                <!-- Précision (Autre seulement) -->
                 <div v-if="annulerForm.motif_annulation_code === 'autre'">
                     <Label
                         for="annulation-motif-detail"
@@ -1063,5 +1263,13 @@ function submitEncaisser() {
                 </div>
             </template>
         </Dialog>
+
+        <!-- Dialog Chargement -->
+        <ChargementDialog
+            v-model:visible="chargementDialogVisible"
+            :commande-id="commande.id"
+            :lignes="commande.lignes"
+            :types-ecart="TYPES_ECART"
+        />
     </AppLayout>
 </template>

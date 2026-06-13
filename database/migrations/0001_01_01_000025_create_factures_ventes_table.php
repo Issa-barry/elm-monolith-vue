@@ -10,13 +10,11 @@ return new class extends Migration
     {
         Schema::create('factures_ventes', function (Blueprint $table) {
             $table->ulid('id')->primary();
-            $table->unsignedBigInteger('numero')->nullable()->index();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignUlid('site_id')->nullable()->constrained('sites')->nullOnDelete();
             $table->foreignUlid('vehicule_id')->nullable()->constrained('vehicules')->nullOnDelete();
             $table->foreignUlid('commande_vente_id')->constrained('commandes_ventes')->cascadeOnDelete();
             $table->string('reference', 20)->unique();
-            $table->char('code_confirmation', 3)->nullable();
             $table->decimal('montant_brut', 12, 2);
             $table->decimal('montant_net', 12, 2);
             $table->string('statut_facture', 30)->default('impayee');

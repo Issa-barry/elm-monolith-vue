@@ -155,7 +155,10 @@ class EnumsTest extends TestCase
     public function test_statut_commande_vente_labels(): void
     {
         $this->assertSame('Brouillon', StatutCommandeVente::BROUILLON->label());
-        $this->assertSame('En cours', StatutCommandeVente::EN_COURS->label());
+        $this->assertSame('À charger', StatutCommandeVente::A_CHARGER->label());
+        $this->assertSame('Chargement en cours', StatutCommandeVente::CHARGEMENT_EN_COURS->label());
+        $this->assertSame('Livraison en cours', StatutCommandeVente::LIVRAISON_EN_COURS->label());
+        $this->assertSame('Livrée', StatutCommandeVente::LIVREE->label());
         $this->assertSame('Clôturée', StatutCommandeVente::CLOTUREE->label());
         $this->assertSame('Annulée', StatutCommandeVente::ANNULEE->label());
     }
@@ -163,7 +166,7 @@ class EnumsTest extends TestCase
     public function test_statut_commande_vente_options(): void
     {
         $options = StatutCommandeVente::options();
-        $this->assertCount(4, $options);
+        $this->assertCount(7, $options);
         foreach ($options as $option) {
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);
