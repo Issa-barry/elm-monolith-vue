@@ -650,7 +650,7 @@ class ModelTest extends TestCase
         $ligne = CommandeVenteLigne::create([
             'commande_vente_id' => $commande->id,
             'produit_id' => $produit->id,
-            'qte' => 2,
+            'quantite_demandee' => 2,
             'prix_usine_snapshot' => 500,
             'prix_vente_snapshot' => 1000,
             'total_ligne' => 2000,
