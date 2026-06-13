@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\SiteType;
 use App\Models\Site;
 use App\Models\UserInvitation;
+use App\Models\Vehicule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -64,6 +65,7 @@ class SiteController extends Controller
             'enfants',
             'users.roles',
             'invitations' => fn ($q) => $q->orderByDesc('created_at'),
+            'vehicules' => fn ($q) => $q->orderBy('nom_vehicule'),
         ]);
 
         $canInvite = auth()->user()->can('invite', $site);
@@ -109,6 +111,16 @@ class SiteController extends Controller
             ->map(fn ($r) => ['value' => $r->name, 'label' => $this->roleLabel($r->name)])
             ->values();
 
+        $vehicules = $site->vehicules->map(fn (Vehicule $v) => [
+            'id' => $v->id,
+            'nom_vehicule' => $v->nom_vehicule,
+            'immatriculation' => $v->immatriculation,
+            'type_label' => $v->type_label,
+            'is_active' => $v->is_active,
+        ])->values()->all();
+
+        $canCreateVehicule = auth()->user()->can('create', Vehicule::class);
+
         return Inertia::render('Sites/Show', [
             'site' => [
                 ...$this->siteData($site),
@@ -124,6 +136,8 @@ class SiteController extends Controller
             'membres' => $membres,
             'roles_disponibles' => $rolesDisponibles,
             'can_invite' => $canInvite,
+            'vehicules' => $vehicules,
+            'can_create_vehicule' => $canCreateVehicule,
         ]);
     }
 

@@ -19,7 +19,6 @@ import {
     Eye,
     MoreVertical,
     Pencil,
-    Plus,
     Search,
     Trash2,
     X,
@@ -200,13 +199,7 @@ function confirmDelete(v: Vehicule) {
                 <span class="flex-1 text-center text-sm font-semibold"
                     >Véhicules</span
                 >
-                <Link v-if="can('vehicules.create')" href="/vehicules/create">
-                    <Button size="sm" class="h-8 px-3 text-xs">
-                        <Plus class="mr-1 h-3.5 w-3.5" />
-                        Nouveau
-                    </Button>
-                </Link>
-                <div v-else class="h-8 w-[72px]" />
+                <div class="h-8 w-[72px]" />
             </div>
 
             <!-- Search + filtres mobile -->
@@ -372,12 +365,6 @@ function confirmDelete(v: Vehicule) {
             >
                 <Car class="h-12 w-12 opacity-30" />
                 <p class="text-sm">Aucun véhicule trouvé.</p>
-                <Link v-if="can('vehicules.create')" href="/vehicules/create">
-                    <Button variant="outline" size="sm">
-                        <Plus class="mr-2 h-4 w-4" />
-                        Ajouter le premier véhicule
-                    </Button>
-                </Link>
             </div>
         </div>
 
@@ -395,12 +382,6 @@ function confirmDelete(v: Vehicule) {
                         }}
                     </p>
                 </div>
-                <Link v-if="can('vehicules.create')" href="/vehicules/create">
-                    <Button>
-                        <Plus class="mr-2 h-4 w-4" />
-                        Nouveau véhicule
-                    </Button>
-                </Link>
             </div>
 
             <!-- Tableau -->
@@ -715,15 +696,6 @@ function confirmDelete(v: Vehicule) {
                         >
                             <Car class="h-12 w-12 opacity-30" />
                             <p class="text-sm">Aucun véhicule trouvé.</p>
-                            <Link
-                                v-if="can('vehicules.create')"
-                                href="/vehicules/create"
-                            >
-                                <Button variant="outline" size="sm">
-                                    <Plus class="mr-2 h-4 w-4" />
-                                    Ajouter le premier véhicule
-                                </Button>
-                            </Link>
                         </div>
                     </template>
                 </DataTable>

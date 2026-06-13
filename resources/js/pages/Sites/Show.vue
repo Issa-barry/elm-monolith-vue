@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay, phoneToTelHref } from '@/lib/utils';
@@ -19,12 +18,14 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     Building2,
+    Car,
     ChevronRight,
     Info,
     MailOpen,
     MoreVertical,
     Navigation,
     Pencil,
+    Plus,
     RefreshCw,
     Shield,
     UserPlus,
@@ -102,6 +103,14 @@ interface RoleOption {
     label: string;
 }
 
+interface VehiculeRow {
+    id: string;
+    nom_vehicule: string;
+    immatriculation: string;
+    type_label: string;
+    is_active: boolean;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 const props = defineProps<{
@@ -109,6 +118,8 @@ const props = defineProps<{
     membres: Membre[];
     roles_disponibles: RoleOption[];
     can_invite: boolean;
+    vehicules: VehiculeRow[];
+    can_create_vehicule: boolean;
 }>();
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -117,7 +128,7 @@ const { can } = usePermissions();
 const toast = useToast();
 const page = usePage();
 
-const activeTab = ref<'infos' | 'membres'>('infos');
+const activeTab = ref<'infos' | 'membres' | 'vehicules'>('infos');
 
 const flashSuccess = computed(
     () => (page.props as any).flash?.success as string | undefined,
@@ -323,85 +334,123 @@ function revokeInvitation(invitationId: number) {
     <Head :title="site.nom" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-        <!-- Mobile sticky header -->
-        <div
-            class="sticky top-0 z-10 flex items-center gap-3 border-b bg-background px-4 py-3 sm:hidden"
-        >
-            <Link href="/sites">
-                <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
-                    <ArrowLeft class="h-4 w-4" />
-                </Button>
-            </Link>
-            <p class="flex-1 truncate text-center text-sm font-semibold">
-                {{ site.nom }}
-            </p>
-            <Link v-if="can('sites.update')" :href="`/sites/${site.id}/edit`">
-                <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
-                    <Pencil class="h-4 w-4" />
-                </Button>
-            </Link>
-            <div v-else class="w-8 shrink-0" />
-        </div>
-
         <!-- Page content -->
-        <div class="w-full p-4 sm:p-6">
-            <!-- Desktop heading -->
-            <div class="mb-8 hidden space-y-0.5 sm:block">
-                <h2 class="text-xl font-semibold tracking-tight">
-                    {{ site.nom }}
-                </h2>
-                <p class="text-sm text-muted-foreground">
-                    Code&nbsp;:&nbsp;<span class="font-mono">{{
-                        site.code
-                    }}</span>
-                    &nbsp;·&nbsp;{{ site.type_label }}
-                </p>
+        <div class="w-full space-y-6 p-4 sm:p-6">
+            <!-- Hero header -->
+            <div
+                class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+            >
+                <div class="flex items-start gap-4">
+                    <div
+                        class="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                    >
+                        <Building2 class="h-6 w-6" />
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-2xl font-semibold tracking-tight">
+                                {{ site.nom }}
+                            </h1>
+                            <StatusDot
+                                :label="site.statut_label"
+                                :dot-class="
+                                    site.statut === 'active'
+                                        ? 'bg-emerald-500'
+                                        : 'bg-zinc-400 dark:bg-zinc-500'
+                                "
+                                class="text-sm text-muted-foreground"
+                            />
+                        </div>
+                        <p class="mt-1 font-mono text-sm text-muted-foreground">
+                            {{ site.code }}&nbsp;·&nbsp;{{ site.type_label }}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <Link href="/sites">
+                        <Button variant="outline" size="sm">
+                            <ArrowLeft class="mr-1.5 h-4 w-4" />
+                            Retour
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
-            <!-- Tab layout (Settings-style) -->
-            <div
-                class="grid grid-cols-1 gap-6 lg:grid-cols-[12rem_minmax(0,1fr)] lg:gap-12"
-            >
+            <!-- Tab layout -->
+            <div class="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
                 <!-- ── Left sidebar nav ──────────────────────────────────── -->
-                <aside class="w-full lg:w-48 lg:shrink-0">
-                    <nav
-                        class="flex gap-1 overflow-x-auto pb-2 sm:flex-col sm:space-y-1 sm:overflow-x-visible sm:pb-0"
+                <aside class="h-fit rounded-xl border bg-card p-2">
+                    <button
+                        type="button"
+                        class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'infos'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        @click="activeTab = 'infos'"
                     >
-                        <Button
-                            variant="ghost"
-                            :class="[
-                                'shrink-0 justify-start sm:w-full',
-                                activeTab === 'infos' ? 'bg-muted' : '',
-                            ]"
-                            @click="activeTab = 'infos'"
-                        >
-                            <Info class="mr-2 h-4 w-4 shrink-0" />
+                        <span class="inline-flex items-center gap-2">
+                            <Info class="h-4 w-4" />
                             Informations
-                        </Button>
-
-                        <Button
-                            variant="ghost"
-                            :class="[
-                                'shrink-0 justify-start sm:w-full',
-                                activeTab === 'membres' ? 'bg-muted' : '',
-                            ]"
-                            @click="activeTab = 'membres'"
-                        >
-                            <Users class="mr-2 h-4 w-4 shrink-0" />
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'membres'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        @click="activeTab = 'membres'"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <Users class="h-4 w-4" />
                             Membres
-                            <span
-                                class="ml-auto rounded-full bg-muted px-1.5 py-0.5 font-mono text-xs leading-none"
-                            >
-                                {{ membres.length }}
-                            </span>
-                        </Button>
-                    </nav>
+                        </span>
+                        <span
+                            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px]"
+                            :class="
+                                activeTab === 'membres'
+                                    ? 'bg-white/20 text-primary-foreground'
+                                    : 'bg-muted text-muted-foreground'
+                            "
+                        >
+                            {{ membres.length }}
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        data-testid="site-vehicles-tab"
+                        class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'vehicules'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        @click="activeTab = 'vehicules'"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <Car class="h-4 w-4" />
+                            Véhicules
+                        </span>
+                        <span
+                            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px]"
+                            :class="
+                                activeTab === 'vehicules'
+                                    ? 'bg-white/20 text-primary-foreground'
+                                    : 'bg-muted text-muted-foreground'
+                            "
+                        >
+                            {{ vehicules.length }}
+                        </span>
+                    </button>
                 </aside>
 
-                <Separator class="my-4 lg:hidden" />
-
                 <!-- ── Tab content ──────────────────────────────────────── -->
-                <div class="w-full min-w-0">
+                <div class="min-w-0">
                     <!-- ── Tab : Informations ──────────────────────────── -->
                     <div v-if="activeTab === 'infos'" class="space-y-6">
                         <!-- Carte principale -->
@@ -680,6 +729,99 @@ function revokeInvitation(invitationId: number) {
                                     />
                                 </Link>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Tab : Véhicules ────────────────────────────── -->
+                    <div
+                        v-if="activeTab === 'vehicules'"
+                        class="overflow-hidden rounded-xl border bg-card"
+                    >
+                        <div
+                            class="flex items-center justify-between gap-4 border-b px-5 py-4"
+                        >
+                            <h3
+                                class="flex items-center gap-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                <Car class="h-4 w-4" />
+                                Véhicules du site
+                                <span
+                                    class="rounded-full bg-muted px-2 py-0.5 text-xs font-normal"
+                                    >{{ vehicules.length }}</span
+                                >
+                            </h3>
+                            <Link
+                                v-if="can_create_vehicule"
+                                :href="`/vehicules/create?site_id=${site.id}`"
+                                data-testid="add-site-vehicle-btn"
+                            >
+                                <Button size="sm">
+                                    <Plus class="mr-2 h-4 w-4" />
+                                    Ajouter un véhicule
+                                </Button>
+                            </Link>
+                        </div>
+
+                        <div v-if="vehicules.length > 0" class="divide-y">
+                            <Link
+                                v-for="v in vehicules"
+                                :key="v.id"
+                                :href="`/vehicules/${v.id}`"
+                                class="flex items-center gap-3 px-5 py-3 text-sm transition-colors hover:bg-muted/40"
+                            >
+                                <div
+                                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-muted/50"
+                                >
+                                    <Car
+                                        class="h-4 w-4 text-muted-foreground"
+                                    />
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="font-medium">
+                                        {{ v.nom_vehicule }}
+                                    </div>
+                                    <div
+                                        class="font-mono text-xs text-muted-foreground"
+                                    >
+                                        {{ v.immatriculation }}
+                                    </div>
+                                </div>
+                                <span
+                                    class="hidden rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium sm:inline"
+                                    >{{ v.type_label }}</span
+                                >
+                                <StatusDot
+                                    :label="v.is_active ? 'Actif' : 'Inactif'"
+                                    :dot-class="
+                                        v.is_active
+                                            ? 'bg-emerald-500'
+                                            : 'bg-zinc-400 dark:bg-zinc-500'
+                                    "
+                                    class="shrink-0 text-xs text-muted-foreground"
+                                />
+                                <ChevronRight
+                                    class="h-4 w-4 shrink-0 text-muted-foreground"
+                                />
+                            </Link>
+                        </div>
+
+                        <div
+                            v-else
+                            class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+                        >
+                            <Car class="h-12 w-12 opacity-30" />
+                            <p class="text-sm">
+                                Aucun véhicule rattaché à ce site.
+                            </p>
+                            <Link
+                                v-if="can_create_vehicule"
+                                :href="`/vehicules/create?site_id=${site.id}`"
+                            >
+                                <Button variant="outline" size="sm">
+                                    <Plus class="mr-2 h-4 w-4" />
+                                    Ajouter le premier véhicule
+                                </Button>
+                            </Link>
                         </div>
                     </div>
 

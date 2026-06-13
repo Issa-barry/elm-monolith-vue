@@ -90,6 +90,7 @@ class TransfertLogistiqueStoreTest extends TestCase
         $user = $this->makeUser($org, $siteA);
 
         $response = $this->actingAs($user)->post('/logistique', [
+            'site_source_id' => $siteA->id,
             'site_destination_id' => $siteB->id,
             'vehicule_id' => $vehicule->id,
             'notes' => 'Test store',
@@ -114,6 +115,70 @@ class TransfertLogistiqueStoreTest extends TestCase
             'transfert_logistique_id' => $transfert->id,
             'produit_id' => $produit->id,
             'quantite_demandee' => 10,
+        ]);
+    }
+
+    public function test_admin_peut_choisir_site_source_librement(): void
+    {
+        $org = $this->makeOrg();
+        $siteA = $this->makeSite($org, 'Site A');
+        $siteB = $this->makeSite($org, 'Site B');
+        $siteC = $this->makeSite($org, 'Site C');
+        $vehicule = $this->makeVehicule($org);
+        $produit = $this->makeProduit($org);
+        // Admin affecté à siteA mais crée le transfert depuis siteC
+        $user = $this->makeUser($org, $siteA);
+
+        $this->actingAs($user)->post('/logistique', [
+            'site_source_id' => $siteC->id,
+            'site_destination_id' => $siteB->id,
+            'vehicule_id' => $vehicule->id,
+            'lignes' => [
+                ['produit_id' => $produit->id, 'quantite_demandee' => 5, 'notes' => ''],
+            ],
+        ]);
+
+        $this->assertDatabaseHas('transferts_logistiques', [
+            'organization_id' => $org->id,
+            'site_source_id' => $siteC->id,
+            'site_destination_id' => $siteB->id,
+        ]);
+    }
+
+    public function test_non_admin_site_source_ignore_depuis_requete(): void
+    {
+        $org = $this->makeOrg();
+        $siteA = $this->makeSite($org, 'Site A');
+        $siteB = $this->makeSite($org, 'Site B');
+        $siteC = $this->makeSite($org, 'Site C');
+        $vehicule = $this->makeVehicule($org);
+        $produit = $this->makeProduit($org);
+
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'logistique.create', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'logistique.read',   'guard_name' => 'web']);
+        // Utilisateur avec rôle non-admin (manager), affecté à siteA
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('manager');
+        $user->givePermissionTo(['logistique.create', 'logistique.read']);
+        $user->sites()->attach($siteA->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($user)->post('/logistique', [
+            'site_source_id' => $siteC->id, // tentative de forcer un autre site
+            'site_destination_id' => $siteB->id,
+            'vehicule_id' => $vehicule->id,
+            'lignes' => [
+                ['produit_id' => $produit->id, 'quantite_demandee' => 5, 'notes' => ''],
+            ],
+        ]);
+
+        // site_source_id doit être siteA (site par défaut), pas siteC
+        $this->assertDatabaseHas('transferts_logistiques', [
+            'organization_id' => $org->id,
+            'site_source_id' => $siteA->id,
+        ]);
+        $this->assertDatabaseMissing('transferts_logistiques', [
+            'site_source_id' => $siteC->id,
         ]);
     }
 
