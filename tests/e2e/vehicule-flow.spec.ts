@@ -82,7 +82,8 @@ test('login + create vehicule interne via site + verify in site tab + verify glo
         .locator('#vehicule-form button[type="submit"]:visible')
         .first()
         .click();
-    await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 15_000 });
+    // Le contrôleur redirige vers /edit après mise à jour (vehicules.edit, pas vehicules.show)
+    await page.waitForURL(/\/vehicules\/[a-z0-9]+(\/edit)?$/, { timeout: 15_000 });
 
     // Step 8: Verify the modification is visible in the global list
     await page.goto('/vehicules');
