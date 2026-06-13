@@ -7,7 +7,6 @@ enum MotifAjustementStock: string
     // Augmentation uniquement
     case APRES_PRODUCTION = 'apres_production';
     case RETOUR = 'retour';
-    case ENTREE_EXCEPTIONNELLE = 'entree_exceptionnelle';
 
     // Diminution uniquement
     case PERTE = 'perte';
@@ -24,7 +23,6 @@ enum MotifAjustementStock: string
         return match ($this) {
             self::APRES_PRODUCTION => 'Après production',
             self::RETOUR => 'Retour',
-            self::ENTREE_EXCEPTIONNELLE => 'Entrée exceptionnelle',
             self::PERTE => 'Perte',
             self::CASSE => 'Casse',
             self::DON => 'Don',
@@ -39,8 +37,7 @@ enum MotifAjustementStock: string
     {
         return match ($this) {
             self::APRES_PRODUCTION,
-            self::RETOUR,
-            self::ENTREE_EXCEPTIONNELLE => 'entree',
+            self::RETOUR => 'entree',
 
             self::PERTE,
             self::CASSE,
