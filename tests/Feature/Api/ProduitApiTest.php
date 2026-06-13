@@ -199,6 +199,7 @@ class ProduitApiTest extends TestCase
 
         $this->postJson(route('api.backoffice.produits.ajuster-stock', $produit), [
             'augmenter' => 20,
+            'motif_type' => 'apres_production',
         ])
             ->assertOk()
             ->assertJsonFragment(['qte_stock' => 70]);
@@ -225,6 +226,7 @@ class ProduitApiTest extends TestCase
 
         $this->postJson(route('api.backoffice.produits.ajuster-stock', $produit), [
             'diminuer' => 15,
+            'motif_type' => 'perte',
         ])
             ->assertOk()
             ->assertJsonFragment(['qte_stock' => 35]);
@@ -282,5 +284,48 @@ class ProduitApiTest extends TestCase
             'augmenter' => 5,
         ])
             ->assertStatus(422);
+    }
+
+    public function test_ajuster_stock_rejects_missing_motif(): void
+    {
+        Sanctum::actingAs($this->user, ['*']);
+
+        $produit = $this->makeProduit($this->org, ['qte_stock' => 10]);
+
+        $this->postJson(route('api.backoffice.produits.ajuster-stock', $produit), [
+            'augmenter' => 5,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('motif_type');
+    }
+
+    public function test_ajuster_stock_rejects_motif_incompatible_avec_augmentation(): void
+    {
+        Sanctum::actingAs($this->user, ['*']);
+
+        $produit = $this->makeProduit($this->org, ['qte_stock' => 10]);
+
+        // 'perte' is a sortie-only motif — incompatible with augmenter
+        $this->postJson(route('api.backoffice.produits.ajuster-stock', $produit), [
+            'augmenter' => 5,
+            'motif_type' => 'perte',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('motif_type');
+    }
+
+    public function test_ajuster_stock_rejects_motif_incompatible_avec_diminution(): void
+    {
+        Sanctum::actingAs($this->user, ['*']);
+
+        $produit = $this->makeProduit($this->org, ['qte_stock' => 10]);
+
+        // 'apres_production' is an entree-only motif — incompatible with diminuer
+        $this->postJson(route('api.backoffice.produits.ajuster-stock', $produit), [
+            'diminuer' => 5,
+            'motif_type' => 'apres_production',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('motif_type');
     }
 }
