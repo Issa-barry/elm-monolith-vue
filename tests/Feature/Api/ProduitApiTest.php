@@ -247,6 +247,7 @@ class ProduitApiTest extends TestCase
         $this->postJson(route('api.backoffice.produits.ajuster-stock', $produit), [
             'augmenter' => 10,
             'diminuer' => 5,
+            'motif_type' => 'correction_stock',
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('augmenter');
@@ -260,6 +261,7 @@ class ProduitApiTest extends TestCase
 
         $this->postJson(route('api.backoffice.produits.ajuster-stock', $produit), [
             'diminuer' => 100,
+            'motif_type' => 'perte',
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('diminuer');

@@ -48,6 +48,10 @@ test('ajuster stock depuis la liste — augmenter', async ({ page }) => {
     // Preview should show stockAvant + 5
     await expect(dialog.locator('text=Stock après ajustement')).toBeVisible();
 
+    // Select motif
+    await dialog.locator('[data-pc-name="dropdown"]').click();
+    await page.getByRole('option', { name: 'Après production' }).click();
+
     await dialog.locator('button', { hasText: /valider/i }).click();
     await expect(dialog).toBeHidden({ timeout: 10_000 });
 
@@ -83,6 +87,11 @@ test('ajuster stock depuis la liste — diminuer', async ({ page }) => {
 
     await dialog.locator('#ajuster-diminuer').fill('3');
     await expect(dialog.locator('text=Stock après ajustement')).toBeVisible();
+
+    // Select motif
+    await dialog.locator('[data-pc-name="dropdown"]').click();
+    await page.getByRole('option', { name: 'Perte' }).click();
+
     await dialog.locator('button', { hasText: /valider/i }).click();
     await expect(dialog).toBeHidden({ timeout: 10_000 });
 });
@@ -114,6 +123,11 @@ test('ajuster stock depuis la fiche produit', async ({ page }) => {
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
     await dialog.locator('#ajuster-augmenter').fill('2');
+
+    // Select motif
+    await dialog.locator('[data-pc-name="dropdown"]').click();
+    await page.getByRole('option', { name: 'Après production' }).click();
+
     await dialog.locator('button', { hasText: /valider/i }).click();
     await expect(dialog).toBeHidden({ timeout: 10_000 });
 });
