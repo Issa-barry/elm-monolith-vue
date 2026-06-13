@@ -154,10 +154,12 @@ class TransfertLogistiqueStoreTest extends TestCase
         $vehicule = $this->makeVehicule($org);
         $produit = $this->makeProduit($org);
 
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
         Permission::firstOrCreate(['name' => 'logistique.create', 'guard_name' => 'web']);
         Permission::firstOrCreate(['name' => 'logistique.read',   'guard_name' => 'web']);
-        // Utilisateur sans rôle admin, affecté à siteA
+        // Utilisateur avec rôle non-admin (manager), affecté à siteA
         $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('manager');
         $user->givePermissionTo(['logistique.create', 'logistique.read']);
         $user->sites()->attach($siteA->id, ['role' => 'employe', 'is_default' => true]);
 

@@ -33,7 +33,8 @@ interface FormData {
     type_vehicule: string | null;
     categorie: string | null;
     capacite_packs: number | null;
-    proprietaire_id: number | null;
+    site_id?: string | null;
+    proprietaire_id: number | string | null;
     pris_en_charge_par_usine: boolean | null;
     photo: File | null;
     is_active: boolean;
@@ -48,6 +49,7 @@ const props = defineProps<{
     photoUrl?: string | null;
     currentSiteName: string;
     showStatusField?: boolean;
+    lockedCategorie?: boolean;
 }>();
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
@@ -130,7 +132,7 @@ function searchProprietaire(event: { query: string }) {
 function onProprietaireSelect(p: Option | null) {
     emit('update:form', {
         ...props.form,
-        proprietaire_id: p ? (p.value as number) : null,
+        proprietaire_id: p ? p.value : null,
     });
 }
 
@@ -176,23 +178,39 @@ function handleSubmit() {
                         Catégorie
                         <span class="text-destructive">*</span>
                     </Label>
-                    <Dropdown
-                        input-id="categorie"
-                        :model-value="form.categorie"
-                        @update:model-value="onCategorieChange($event)"
-                        :options="CATEGORIES"
-                        option-label="label"
-                        option-value="value"
-                        placeholder="Sélectionner…"
-                        class="w-full"
-                        :class="{ 'p-invalid': errors.categorie }"
-                    />
-                    <p
-                        v-if="errors.categorie"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ errors.categorie }}
-                    </p>
+                    <template v-if="lockedCategorie">
+                        <div
+                            class="flex h-10 items-center rounded-md border border-input bg-muted/60 px-3 text-sm text-muted-foreground"
+                        >
+                            {{
+                                form.categorie === 'interne'
+                                    ? 'Interne (appartient au site)'
+                                    : 'Externe (propriétaire privé)'
+                            }}
+                        </div>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Défini par le contexte de création.
+                        </p>
+                    </template>
+                    <template v-else>
+                        <Dropdown
+                            input-id="categorie"
+                            :model-value="form.categorie"
+                            @update:model-value="onCategorieChange($event)"
+                            :options="CATEGORIES"
+                            option-label="label"
+                            option-value="value"
+                            placeholder="Sélectionner…"
+                            class="w-full"
+                            :class="{ 'p-invalid': errors.categorie }"
+                        />
+                        <p
+                            v-if="errors.categorie"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ errors.categorie }}
+                        </p>
+                    </template>
                 </div>
 
                 <!-- Propriétaire : externe = sélecteur, interne = texte readonly -->

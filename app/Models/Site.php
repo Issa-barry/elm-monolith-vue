@@ -116,6 +116,11 @@ class Site extends Model
         return $this->hasMany(UserInvitation::class);
     }
 
+    public function vehicules(): HasMany
+    {
+        return $this->hasMany(Vehicule::class);
+    }
+
     // ── Scopes ────────────────────────────────────────────────────────────────
 
     public function scopeActives($query)

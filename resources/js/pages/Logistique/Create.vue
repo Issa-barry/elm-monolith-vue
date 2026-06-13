@@ -214,7 +214,7 @@ const quantiteTotale = computed(() =>
 
 const capaciteVehiculeConforme = computed(() => {
     if (form.vehicule_id === null) return true;
-    if (capaciteVehiculeSelectionne.value === null) return false;
+    if (capaciteVehiculeSelectionne.value === null) return true;
     return quantiteTotale.value === capaciteVehiculeSelectionne.value;
 });
 
@@ -222,7 +222,9 @@ const capaciteVehiculeConforme = computed(() => {
 
 const canSubmit = computed(
     () =>
-        (props.is_admin ? form.site_source_id !== null : props.site_source !== null) &&
+        (props.is_admin
+            ? form.site_source_id !== null
+            : props.site_source !== null) &&
         form.site_destination_id !== null &&
         form.site_source_id !== form.site_destination_id &&
         form.vehicule_id !== null &&
@@ -270,337 +272,418 @@ function submit() {
         </div>
 
         <div class="flex w-full flex-1 flex-col items-center">
-        <div class="w-full max-w-5xl p-4 sm:p-6">
-            <!-- En-tête desktop -->
-            <div class="mb-6 hidden sm:block">
-                <h1 class="text-2xl font-semibold tracking-tight">
-                    {{
-                        isEditing
-                            ? 'Modifier le transfert'
-                            : 'Nouveau transfert logistique'
-                    }}
-                </h1>
-                <p class="mt-1 text-sm text-muted-foreground">
-                    {{
-                        isEditing
-                            ? 'Modifiez les informations du transfert inter-sites.'
-                            : 'Planifiez un transfert de produits entre deux sites.'
-                    }}
-                </p>
-            </div>
-
-            <!-- Bandeau erreur global (ex: permission refusée) -->
-            <div
-                v-if="Object.keys(form.errors).length && !form.processing"
-                class="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-            >
-                Veuillez corriger les erreurs ci-dessous avant de soumettre.
-            </div>
-
-            <form
-                id="logistique-form"
-                class="space-y-6"
-                @submit.prevent="submit"
-            >
-                <!-- ── Section : Informations ── -->
-                <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-                    <h2
-                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                    >
-                        Informations du transfert
-                    </h2>
-
-                    <!-- Sites source / destination -->
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <Label class="mb-1.5 block text-sm">
-                                Site source
-                                <span v-if="is_admin" class="text-destructive">*</span>
-                            </Label>
-
-                            <!-- Admin : sélecteur libre -->
-                            <Dropdown
-                                v-if="is_admin"
-                                v-model="form.site_source_id"
-                                :options="
-                                    sites.filter(
-                                        (s) => s.id !== form.site_destination_id,
-                                    )
-                                "
-                                option-label="nom"
-                                option-value="id"
-                                placeholder="Sélectionner un site"
-                                class="w-full"
-                                :class="{
-                                    'p-invalid': form.errors.site_source_id,
-                                }"
-                                filter
-                            />
-
-                            <!-- Non-admin : affichage verrouillé -->
-                            <div
-                                v-else
-                                class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 text-sm"
-                                :class="
-                                    site_source
-                                        ? 'text-foreground'
-                                        : 'text-muted-foreground'
-                                "
-                            >
-                                <span>{{
-                                    site_source?.nom ?? 'Aucun site affecté'
-                                }}</span>
-                                <Lock
-                                    class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
-                                />
-                            </div>
-
-                            <p
-                                v-if="!is_admin && !site_source"
-                                class="mt-1 text-xs text-destructive"
-                            >
-                                Vous n'êtes affecté à aucun site. Contactez un
-                                administrateur.
-                            </p>
-                            <p
-                                v-if="form.errors.site_source_id"
-                                class="mt-1 text-xs text-destructive"
-                            >
-                                {{ form.errors.site_source_id }}
-                            </p>
-                        </div>
-                        <div>
-                            <Label class="mb-1.5 block text-sm">
-                                Site destination
-                                <span class="text-destructive">*</span>
-                            </Label>
-                            <Dropdown
-                                v-model="form.site_destination_id"
-                                :options="
-                                    sites.filter(
-                                        (s) =>
-                                            s.id !==
-                                            (is_admin
-                                                ? form.site_source_id
-                                                : site_source?.id),
-                                    )
-                                "
-                                option-label="nom"
-                                option-value="id"
-                                placeholder="Sélectionner un site"
-                                class="w-full"
-                                :class="{
-                                    'p-invalid':
-                                        form.errors.site_destination_id,
-                                }"
-                                filter
-                            />
-                            <p
-                                v-if="form.errors.site_destination_id"
-                                class="mt-1 text-xs text-destructive"
-                            >
-                                {{ form.errors.site_destination_id }}
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Véhicule -->
-                    <div class="mt-4">
-                        <div>
-                            <Label class="mb-1.5 block text-sm"
-                                >Véhicule
-                                <span class="text-destructive">*</span></Label
-                            >
-                            <AutoComplete
-                                v-model="vehiculeSelected"
-                                :suggestions="vehiculeSuggests"
-                                :option-label="vehiculeLabel"
-                                placeholder="Nom, immatriculation…"
-                                class="w-full"
-                                input-class="w-full"
-                                dropdown
-                                force-selection
-                                @complete="searchVehicule"
-                                @item-select="(e) => onVehiculeSelect(e.value)"
-                                @clear="onVehiculeClear"
-                            >
-                                <template #option="{ option }">
-                                    <div class="py-0.5">
-                                        <div class="leading-tight font-medium">
-                                            {{ option.nom_vehicule }}
-                                        </div>
-                                        <div
-                                            class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground"
-                                        >
-                                            <span class="font-mono">{{
-                                                option.immatriculation
-                                            }}</span>
-                                            <span
-                                                v-if="
-                                                    option.capacite_packs !==
-                                                    null
-                                                "
-                                                class="before:mr-2 before:content-['·']"
-                                            >
-                                                {{ option.capacite_packs }}
-                                                packs
-                                            </span>
-                                            <span
-                                                v-if="option.equipe_nom"
-                                                class="before:mr-2 before:content-['·']"
-                                            >
-                                                {{ option.equipe_nom }}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </template>
-                                <template #empty>
-                                    <span class="text-sm text-muted-foreground"
-                                        >Aucun véhicule trouvé.</span
-                                    >
-                                </template>
-                            </AutoComplete>
-                        </div>
-                        <p
-                            v-if="form.errors.vehicule_id"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ form.errors.vehicule_id }}
-                        </p>
-                        <!-- Équipe masquée — alimentée automatiquement par le véhicule -->
-                    </div>
-
-                    <!-- Dates — masquées temporairement (valeur = date du jour par défaut) -->
+            <div class="w-full max-w-4xl p-4 sm:p-6">
+                <!-- En-tête desktop -->
+                <div class="mb-6 hidden sm:block">
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        {{
+                            isEditing
+                                ? 'Modifier le transfert'
+                                : 'Nouveau transfert logistique'
+                        }}
+                    </h1>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        {{
+                            isEditing
+                                ? 'Modifiez les informations du transfert inter-sites.'
+                                : 'Planifiez un transfert de produits entre deux sites.'
+                        }}
+                    </p>
                 </div>
 
-                <!-- ── Section : Lignes produits ── -->
-                <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-                    <h2
-                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                    >
-                        Lignes produits
-                    </h2>
+                <!-- Bandeau erreur global (ex: permission refusée) -->
+                <div
+                    v-if="Object.keys(form.errors).length && !form.processing"
+                    class="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                >
+                    Veuillez corriger les erreurs ci-dessous avant de soumettre.
+                </div>
 
-                    <p
-                        v-if="form.errors.lignes"
-                        class="mb-3 text-xs text-destructive"
-                    >
-                        {{ form.errors.lignes }}
-                    </p>
+                <form
+                    id="logistique-form"
+                    class="space-y-6"
+                    @submit.prevent="submit"
+                >
+                    <!-- ── Section : Informations ── -->
+                    <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+                        <h2
+                            class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
+                            Informations du transfert
+                        </h2>
 
-                    <p
-                        v-if="form.vehicule_id !== null"
-                        class="mb-3 text-xs"
-                        :class="
-                            capaciteVehiculeConforme
-                                ? 'text-emerald-600 dark:text-emerald-400'
-                                : 'text-amber-600 dark:text-amber-400'
-                        "
-                    >
-                        Capacité véhicule:
-                        {{
-                            capaciteVehiculeSelectionne === null
-                                ? 'non définie'
-                                : `${capaciteVehiculeSelectionne} packs`
-                        }}
-                        · Quantité saisie: {{ quantiteTotale }} packs
-                        <template v-if="capaciteVehiculeSelectionne !== null">
-                            <span v-if="capaciteVehiculeConforme">
-                                — capacité atteinte ✓</span
-                            >
-                            <span
-                                v-else-if="
-                                    quantiteTotale < capaciteVehiculeSelectionne
-                                "
-                            >
-                                —
-                                {{
-                                    capaciteVehiculeSelectionne - quantiteTotale
-                                }}
-                                pack(s) manquant(s)</span
-                            >
-                            <span v-else>
-                                —
-                                {{
-                                    quantiteTotale - capaciteVehiculeSelectionne
-                                }}
-                                pack(s) en trop</span
-                            >
-                        </template>
-                    </p>
-
-                    <!-- Table desktop -->
-                    <div
-                        class="hidden overflow-hidden rounded-lg border sm:block"
-                    >
-                        <table class="w-full text-sm">
-                            <thead>
-                                <tr class="border-b bg-muted/40">
-                                    <th
-                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                        <!-- Sites source / destination -->
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <div data-testid="site-source-field">
+                                <Label class="mb-1.5 block text-sm">
+                                    Site source
+                                    <span
+                                        v-if="is_admin"
+                                        class="text-destructive"
+                                        >*</span
                                     >
-                                        Produit
-                                    </th>
-                                    <th
-                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                                        style="width: 120px"
-                                    >
-                                        Quantité
-                                    </th>
-                                    <th
-                                        class="px-4 py-2.5"
-                                        style="width: 48px"
-                                    ></th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y">
-                                <tr
-                                    v-for="(ligne, index) in form.lignes"
-                                    :key="index"
-                                    class="hover:bg-muted/10"
+                                </Label>
+
+                                <!-- Admin : sélecteur libre -->
+                                <Dropdown
+                                    v-if="is_admin"
+                                    v-model="form.site_source_id"
+                                    :options="
+                                        sites.filter(
+                                            (s) =>
+                                                s.id !==
+                                                form.site_destination_id,
+                                        )
+                                    "
+                                    option-label="nom"
+                                    option-value="id"
+                                    placeholder="Sélectionner un site"
+                                    class="w-full"
+                                    :class="{
+                                        'p-invalid': form.errors.site_source_id,
+                                    }"
+                                    filter
+                                />
+
+                                <!-- Non-admin : affichage verrouillé -->
+                                <div
+                                    v-else
+                                    class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 text-sm"
+                                    :class="
+                                        site_source
+                                            ? 'text-foreground'
+                                            : 'text-muted-foreground'
+                                    "
                                 >
-                                    <td class="px-4 py-3">
-                                        <AutoComplete
-                                            v-model="produitSelected[index]"
-                                            :suggestions="produitSuggests"
-                                            option-label="nom"
-                                            placeholder="Rechercher un produit…"
-                                            class="w-full"
-                                            input-class="w-full"
-                                            dropdown
-                                            force-selection
-                                            @complete="searchProduit"
-                                            @item-select="
-                                                (e) =>
-                                                    onProduitSelect(
-                                                        index,
-                                                        e.value,
-                                                    )
-                                            "
-                                            @clear="
-                                                () => {
-                                                    ligne.produit_id = null;
-                                                    produitSelected[index] =
-                                                        null;
-                                                }
-                                            "
-                                        />
-                                        <p
-                                            v-if="
-                                                (form.errors as any)[
-                                                    `lignes.${index}.produit_id`
-                                                ]
-                                            "
-                                            class="mt-1 text-xs text-destructive"
+                                    <span>{{
+                                        site_source?.nom ?? 'Aucun site affecté'
+                                    }}</span>
+                                    <Lock
+                                        class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                                    />
+                                </div>
+
+                                <p
+                                    v-if="!is_admin && !site_source"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    Vous n'êtes affecté à aucun site. Contactez
+                                    un administrateur.
+                                </p>
+                                <p
+                                    v-if="form.errors.site_source_id"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    {{ form.errors.site_source_id }}
+                                </p>
+                            </div>
+                            <div data-testid="site-destination-field">
+                                <Label class="mb-1.5 block text-sm">
+                                    Site destination
+                                    <span class="text-destructive">*</span>
+                                </Label>
+                                <Dropdown
+                                    v-model="form.site_destination_id"
+                                    :options="
+                                        sites.filter(
+                                            (s) =>
+                                                s.id !==
+                                                (is_admin
+                                                    ? form.site_source_id
+                                                    : site_source?.id),
+                                        )
+                                    "
+                                    option-label="nom"
+                                    option-value="id"
+                                    placeholder="Sélectionner un site"
+                                    class="w-full"
+                                    :class="{
+                                        'p-invalid':
+                                            form.errors.site_destination_id,
+                                    }"
+                                    filter
+                                />
+                                <p
+                                    v-if="form.errors.site_destination_id"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    {{ form.errors.site_destination_id }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Véhicule -->
+                        <div class="mt-4">
+                            <div data-testid="vehicule-field">
+                                <Label class="mb-1.5 block text-sm"
+                                    >Véhicule
+                                    <span class="text-destructive"
+                                        >*</span
+                                    ></Label
+                                >
+                                <AutoComplete
+                                    v-model="vehiculeSelected"
+                                    :suggestions="vehiculeSuggests"
+                                    :option-label="vehiculeLabel"
+                                    placeholder="Nom, immatriculation…"
+                                    class="w-full"
+                                    input-class="w-full"
+                                    dropdown
+                                    force-selection
+                                    @complete="searchVehicule"
+                                    @item-select="
+                                        (e) => onVehiculeSelect(e.value)
+                                    "
+                                    @clear="onVehiculeClear"
+                                >
+                                    <template #option="{ option }">
+                                        <div class="py-0.5">
+                                            <div
+                                                class="leading-tight font-medium"
+                                            >
+                                                {{ option.nom_vehicule }}
+                                            </div>
+                                            <div
+                                                class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground"
+                                            >
+                                                <span class="font-mono">{{
+                                                    option.immatriculation
+                                                }}</span>
+                                                <span
+                                                    v-if="
+                                                        option.capacite_packs !==
+                                                        null
+                                                    "
+                                                    class="before:mr-2 before:content-['·']"
+                                                >
+                                                    {{ option.capacite_packs }}
+                                                    packs
+                                                </span>
+                                                <span
+                                                    v-if="option.equipe_nom"
+                                                    class="before:mr-2 before:content-['·']"
+                                                >
+                                                    {{ option.equipe_nom }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template #empty>
+                                        <span
+                                            class="text-sm text-muted-foreground"
+                                            >Aucun véhicule trouvé.</span
                                         >
-                                            {{
-                                                (form.errors as any)[
-                                                    `lignes.${index}.produit_id`
-                                                ]
-                                            }}
+                                    </template>
+                                </AutoComplete>
+                            </div>
+                            <p
+                                v-if="form.errors.vehicule_id"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.vehicule_id }}
+                            </p>
+                            <!-- Équipe masquée — alimentée automatiquement par le véhicule -->
+                        </div>
+
+                        <!-- Dates — masquées temporairement (valeur = date du jour par défaut) -->
+                    </div>
+
+                    <!-- ── Section : Lignes produits ── -->
+                    <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+                        <h2
+                            class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
+                            Lignes produits
+                        </h2>
+
+                        <p
+                            v-if="form.errors.lignes"
+                            class="mb-3 text-xs text-destructive"
+                        >
+                            {{ form.errors.lignes }}
+                        </p>
+
+                        <p
+                            v-if="form.vehicule_id !== null"
+                            class="mb-3 text-xs"
+                            :class="
+                                capaciteVehiculeConforme
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-amber-600 dark:text-amber-400'
+                            "
+                        >
+                            Capacité véhicule:
+                            {{
+                                capaciteVehiculeSelectionne === null
+                                    ? 'non définie'
+                                    : `${capaciteVehiculeSelectionne} packs`
+                            }}
+                            · Quantité saisie: {{ quantiteTotale }} packs
+                            <template
+                                v-if="capaciteVehiculeSelectionne !== null"
+                            >
+                                <span v-if="capaciteVehiculeConforme">
+                                    — capacité atteinte ✓</span
+                                >
+                                <span
+                                    v-else-if="
+                                        quantiteTotale <
+                                        capaciteVehiculeSelectionne
+                                    "
+                                >
+                                    —
+                                    {{
+                                        capaciteVehiculeSelectionne -
+                                        quantiteTotale
+                                    }}
+                                    pack(s) manquant(s)</span
+                                >
+                                <span v-else>
+                                    —
+                                    {{
+                                        quantiteTotale -
+                                        capaciteVehiculeSelectionne
+                                    }}
+                                    pack(s) en trop</span
+                                >
+                            </template>
+                        </p>
+
+                        <!-- Table desktop -->
+                        <div
+                            class="hidden overflow-hidden rounded-lg border sm:block"
+                        >
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b bg-muted/40">
+                                        <th
+                                            class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                        >
+                                            Produit
+                                        </th>
+                                        <th
+                                            class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                            style="width: 120px"
+                                        >
+                                            Quantité
+                                        </th>
+                                        <th
+                                            class="px-4 py-2.5"
+                                            style="width: 48px"
+                                        ></th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y">
+                                    <tr
+                                        v-for="(ligne, index) in form.lignes"
+                                        :key="index"
+                                        class="hover:bg-muted/10"
+                                    >
+                                        <td class="px-4 py-3">
+                                            <AutoComplete
+                                                v-model="produitSelected[index]"
+                                                :suggestions="produitSuggests"
+                                                option-label="nom"
+                                                placeholder="Rechercher un produit…"
+                                                class="w-full"
+                                                input-class="w-full"
+                                                dropdown
+                                                force-selection
+                                                @complete="searchProduit"
+                                                @item-select="
+                                                    (e) =>
+                                                        onProduitSelect(
+                                                            index,
+                                                            e.value,
+                                                        )
+                                                "
+                                                @clear="
+                                                    () => {
+                                                        ligne.produit_id = null;
+                                                        produitSelected[index] =
+                                                            null;
+                                                    }
+                                                "
+                                            />
+                                            <p
+                                                v-if="
+                                                    (form.errors as any)[
+                                                        `lignes.${index}.produit_id`
+                                                    ]
+                                                "
+                                                class="mt-1 text-xs text-destructive"
+                                            >
+                                                {{
+                                                    (form.errors as any)[
+                                                        `lignes.${index}.produit_id`
+                                                    ]
+                                                }}
+                                            </p>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <InputNumber
+                                                v-model="
+                                                    ligne.quantite_demandee
+                                                "
+                                                :min="1"
+                                                :use-grouping="false"
+                                                class="w-full"
+                                                input-class="w-full text-center"
+                                            />
+                                        </td>
+                                        <td class="px-4 py-3 text-center">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                class="h-7 w-7 text-destructive hover:text-destructive"
+                                                :disabled="
+                                                    form.lignes.length <= 1
+                                                "
+                                                @click="supprimerLigne(index)"
+                                            >
+                                                <Trash2 class="h-4 w-4" />
+                                            </Button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Cards mobile -->
+                        <div class="space-y-3 sm:hidden">
+                            <div
+                                v-for="(ligne, index) in form.lignes"
+                                :key="index"
+                                class="rounded-xl border bg-muted/20 p-3"
+                            >
+                                <AutoComplete
+                                    v-model="produitSelected[index]"
+                                    :suggestions="produitSuggests"
+                                    option-label="nom"
+                                    placeholder="Rechercher un produit…"
+                                    class="w-full"
+                                    input-class="w-full"
+                                    dropdown
+                                    force-selection
+                                    @complete="searchProduit"
+                                    @item-select="
+                                        (e) => onProduitSelect(index, e.value)
+                                    "
+                                    @clear="
+                                        () => {
+                                            ligne.produit_id = null;
+                                            produitSelected[index] = null;
+                                        }
+                                    "
+                                />
+                                <div class="mt-2.5 grid grid-cols-2 gap-2.5">
+                                    <div>
+                                        <p
+                                            class="mb-1 text-[11px] font-medium text-muted-foreground"
+                                        >
+                                            Quantité
                                         </p>
-                                    </td>
-                                    <td class="px-4 py-3">
                                         <InputNumber
                                             v-model="ligne.quantite_demandee"
                                             :min="1"
@@ -608,117 +691,60 @@ function submit() {
                                             class="w-full"
                                             input-class="w-full text-center"
                                         />
-                                    </td>
-                                    <td class="px-4 py-3 text-center">
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            class="h-7 w-7 text-destructive hover:text-destructive"
-                                            :disabled="form.lignes.length <= 1"
-                                            @click="supprimerLigne(index)"
-                                        >
-                                            <Trash2 class="h-4 w-4" />
-                                        </Button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Cards mobile -->
-                    <div class="space-y-3 sm:hidden">
-                        <div
-                            v-for="(ligne, index) in form.lignes"
-                            :key="index"
-                            class="rounded-xl border bg-muted/20 p-3"
-                        >
-                            <AutoComplete
-                                v-model="produitSelected[index]"
-                                :suggestions="produitSuggests"
-                                option-label="nom"
-                                placeholder="Rechercher un produit…"
-                                class="w-full"
-                                input-class="w-full"
-                                dropdown
-                                force-selection
-                                @complete="searchProduit"
-                                @item-select="
-                                    (e) => onProduitSelect(index, e.value)
-                                "
-                                @clear="
-                                    () => {
-                                        ligne.produit_id = null;
-                                        produitSelected[index] = null;
-                                    }
-                                "
-                            />
-                            <div class="mt-2.5 grid grid-cols-2 gap-2.5">
-                                <div>
-                                    <p
-                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
+                                    </div>
+                                </div>
+                                <div class="mt-2.5 flex justify-end">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        class="h-8 w-8 text-destructive hover:text-destructive"
+                                        :disabled="form.lignes.length <= 1"
+                                        @click="supprimerLigne(index)"
                                     >
-                                        Quantité
-                                    </p>
-                                    <InputNumber
-                                        v-model="ligne.quantite_demandee"
-                                        :min="1"
-                                        :use-grouping="false"
-                                        class="w-full"
-                                        input-class="w-full text-center"
-                                    />
+                                        <Trash2 class="h-4 w-4" />
+                                    </Button>
                                 </div>
                             </div>
-                            <div class="mt-2.5 flex justify-end">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    class="h-8 w-8 text-destructive hover:text-destructive"
-                                    :disabled="form.lignes.length <= 1"
-                                    @click="supprimerLigne(index)"
-                                >
-                                    <Trash2 class="h-4 w-4" />
-                                </Button>
-                            </div>
+                        </div>
+
+                        <!-- Ajouter une ligne -->
+                        <div class="mt-4">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                @click="ajouterLigne"
+                            >
+                                <Plus class="mr-2 h-4 w-4" />
+                                Ajouter une ligne
+                            </Button>
                         </div>
                     </div>
 
-                    <!-- Ajouter une ligne -->
-                    <div class="mt-4">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            @click="ajouterLigne"
-                        >
-                            <Plus class="mr-2 h-4 w-4" />
-                            Ajouter une ligne
+                    <!-- Spacer mobile pour sticky footer -->
+                    <div class="h-20 sm:hidden" />
+
+                    <!-- Footer desktop -->
+                    <div class="hidden items-center justify-between sm:flex">
+                        <Link href="/logistique">
+                            <Button type="button" variant="outline"
+                                >Retour</Button
+                            >
+                        </Link>
+                        <Button type="submit" :disabled="!canSubmit">
+                            <Save class="mr-2 h-4 w-4" />
+                            {{
+                                form.processing
+                                    ? 'Enregistrement…'
+                                    : isEditing
+                                      ? 'Mettre à jour'
+                                      : 'Créer le transfert'
+                            }}
                         </Button>
                     </div>
-                </div>
-
-                <!-- Spacer mobile pour sticky footer -->
-                <div class="h-20 sm:hidden" />
-
-                <!-- Footer desktop -->
-                <div class="hidden items-center justify-between sm:flex">
-                    <Link href="/logistique">
-                        <Button type="button" variant="outline">Retour</Button>
-                    </Link>
-                    <Button type="submit" :disabled="!canSubmit">
-                        <Save class="mr-2 h-4 w-4" />
-                        {{
-                            form.processing
-                                ? 'Enregistrement…'
-                                : isEditing
-                                  ? 'Mettre à jour'
-                                  : 'Créer le transfert'
-                        }}
-                    </Button>
-                </div>
-            </form>
-        </div>
+                </form>
+            </div>
         </div>
 
         <!-- Mobile sticky footer -->

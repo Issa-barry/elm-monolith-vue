@@ -17,6 +17,7 @@ class Vehicule extends Model
 
     protected $fillable = [
         'organization_id',
+        'site_id',
         'nom_vehicule',
         'marque',
         'modele',
@@ -59,6 +60,11 @@ class Vehicule extends Model
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
     }
 
     public function proprietaire(): BelongsTo
