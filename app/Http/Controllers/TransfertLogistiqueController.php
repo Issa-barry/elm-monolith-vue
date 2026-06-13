@@ -189,15 +189,21 @@ class TransfertLogistiqueController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
+        $isAdmin = $user->isAdmin();
 
-        // Site source = site par défaut de l'utilisateur (ou premier site affecté)
-        $siteSourceModel = $user->sites()->where('is_default', true)->select('sites.id', 'sites.nom')->first()
-            ?? $user->sites()->select('sites.id', 'sites.nom')->first();
-
-        $siteSource = $siteSourceModel ? ['id' => $siteSourceModel->id, 'nom' => $siteSourceModel->nom] : null;
+        // Admins : site source libre (null ici, sélectionné dans le formulaire)
+        // Non-admins : site par défaut de l'utilisateur (ou premier site affecté)
+        if ($isAdmin) {
+            $siteSource = null;
+        } else {
+            $siteSourceModel = $user->sites()->where('is_default', true)->select('sites.id', 'sites.nom')->first()
+                ?? $user->sites()->select('sites.id', 'sites.nom')->first();
+            $siteSource = $siteSourceModel ? ['id' => $siteSourceModel->id, 'nom' => $siteSourceModel->nom] : null;
+        }
 
         return Inertia::render('Logistique/Create', [
             'site_source' => $siteSource,
+            'is_admin' => $isAdmin,
             'sites' => Site::where('organization_id', $orgId)
                 ->select('id', 'nom')
                 ->orderBy('nom')
@@ -236,16 +242,9 @@ class TransfertLogistiqueController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
+        $isAdmin = $user->isAdmin();
 
-        // Site source forcé depuis le site par défaut de l'utilisateur
-        $siteSource = $user->sites()->where('is_default', true)->first()
-            ?? $user->sites()->first();
-
-        if (! $siteSource) {
-            return back()->withErrors(['site_source_id' => 'Vous n\'êtes affecté à aucun site.']);
-        }
-
-        $data = $request->validate([
+        $rules = [
             'site_destination_id' => ['required', 'string', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
             'vehicule_id' => ['required', 'string', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->where('categorie', 'interne')],
             'equipe_livraison_id' => ['nullable', 'string', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
@@ -256,7 +255,16 @@ class TransfertLogistiqueController extends Controller
             'lignes.*.produit_id' => ['required', 'string', Rule::exists('produits', 'id')->where('organization_id', $orgId)],
             'lignes.*.quantite_demandee' => ['required', 'integer', 'min:1'],
             'lignes.*.notes' => ['nullable', 'string', 'max:250'],
-        ], [
+        ];
+
+        // Admins : site source soumis librement depuis le formulaire
+        if ($isAdmin) {
+            $rules['site_source_id'] = ['required', 'string', Rule::exists('sites', 'id')->where('organization_id', $orgId)];
+        }
+
+        $data = $request->validate($rules, [
+            'site_source_id.required' => 'Le site source est obligatoire.',
+            'site_source_id.exists' => 'Le site source sélectionné n\'appartient pas à votre organisation.',
             'vehicule_id.required' => 'Le véhicule est obligatoire.',
             'vehicule_id.exists' => 'Seuls les véhicules internes sont autorisés pour un transfert.',
             'date_arrivee_prevue.after_or_equal' => 'La date d\'arrivée doit être postérieure ou égale à la date de départ.',
@@ -265,10 +273,25 @@ class TransfertLogistiqueController extends Controller
             'lignes.*.quantite_demandee.min' => 'La quantité doit être supérieure à 0.',
         ]);
 
-        // Forcer le site source et vérifier que destination ≠ source
-        $data['site_source_id'] = $siteSource->id;
-        if ($data['site_destination_id'] === $siteSource->id) {
-            return back()->withErrors(['site_destination_id' => 'Le site destination doit être différent du site source.']);
+        if ($isAdmin) {
+            // Admins : site source validé depuis le formulaire
+            if ($data['site_source_id'] === $data['site_destination_id']) {
+                return back()->withErrors(['site_destination_id' => 'Le site destination doit être différent du site source.']);
+            }
+        } else {
+            // Non-admins : site source forcé depuis le site par défaut de l'utilisateur
+            $siteSource = $user->sites()->where('is_default', true)->first()
+                ?? $user->sites()->first();
+
+            if (! $siteSource) {
+                return back()->withErrors(['site_source_id' => 'Vous n\'êtes affecté à aucun site.']);
+            }
+
+            $data['site_source_id'] = $siteSource->id;
+
+            if ($data['site_destination_id'] === $siteSource->id) {
+                return back()->withErrors(['site_destination_id' => 'Le site destination doit être différent du site source.']);
+            }
         }
 
         $transfert = DB::transaction(function () use ($data, $orgId) {
@@ -389,6 +412,7 @@ class TransfertLogistiqueController extends Controller
         return Inertia::render('Logistique/Create', [
             'transfert' => $this->mapTransfertDetail($transfert_logistique),
             'site_source' => $siteSourceModel ? ['id' => $siteSourceModel->id, 'nom' => $siteSourceModel->nom] : null,
+            'is_admin' => false,
             'sites' => Site::where('organization_id', $orgId)->select('id', 'nom')->orderBy('nom')->get(),
             'vehicules' => Vehicule::where('organization_id', $orgId)->where('is_active', true)
                 ->where('categorie', 'interne')

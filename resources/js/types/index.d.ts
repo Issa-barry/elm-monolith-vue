@@ -14,6 +14,7 @@ export type Resource =
     | 'packings'
     | 'ventes'
     | 'achats'
+    | 'depenses'
     | 'users'
     | 'parametres'
     | 'logistique';

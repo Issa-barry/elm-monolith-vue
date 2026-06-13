@@ -174,6 +174,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                     </button>
                     <button
                         type="button"
+                        data-testid="owner-vehicles-tab"
                         class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
                         :class="
                             activeTab === 'vehicules'
@@ -287,6 +288,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                         <Link
                             v-if="can_create_vehicule"
                             :href="`/vehicules/create?proprietaire_id=${proprietaire.id}`"
+                            data-testid="add-owner-vehicle-btn"
                         >
                             <Button size="sm">
                                 <Plus class="mr-1.5 h-4 w-4" />

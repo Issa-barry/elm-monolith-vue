@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\TypeVehicule;
 use App\Models\Depense;
 use App\Models\Proprietaire;
+use App\Models\Site;
 use App\Models\Vehicule;
 use App\Models\VehiculeFrais;
 use App\Services\ImageService;
@@ -36,6 +37,8 @@ class VehiculeController extends Controller
             'type_label' => $v->type_label,
             'categorie' => $v->categorie,
             'capacite_packs' => $v->capacite_packs,
+            'site_id' => $v->site_id,
+            'site_nom' => $v->relationLoaded('site') ? $v->site?->nom : null,
             'proprietaire_id' => $v->proprietaire_id,
             'proprietaire_nom' => $v->proprietaire ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom) : null,
             'proprietaire_telephone' => $v->proprietaire?->telephone,
@@ -72,7 +75,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('viewAny', Vehicule::class);
 
-        $vehicules = Vehicule::with(['proprietaire.user.sites', 'equipe.membres.livreur'])
+        $vehicules = Vehicule::with(['site', 'proprietaire.user.sites', 'equipe.membres.livreur'])
             ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom_vehicule')
             ->get()
@@ -89,6 +92,8 @@ class VehiculeController extends Controller
 
         $user = auth()->user();
         $initialProprietaireId = null;
+        $initialSiteId = null;
+        $currentSiteName = '';
 
         if ($request->filled('proprietaire_id')) {
             $initialProprietaireId = Proprietaire::query()
@@ -98,14 +103,30 @@ class VehiculeController extends Controller
                 ->value('id');
         }
 
+        if ($request->filled('site_id')) {
+            $contextSite = Site::query()
+                ->where('organization_id', $user->organization_id)
+                ->whereKey($request->string('site_id')->toString())
+                ->first();
+            if ($contextSite) {
+                $initialSiteId = $contextSite->id;
+                $currentSiteName = $contextSite->nom;
+            }
+        }
+
+        if (! $currentSiteName) {
+            $currentSiteName = ($user->sites()->wherePivot('is_default', true)->first()
+                ?? $user->sites()->first())?->nom
+                ?? $user->organization?->nom
+                ?? '';
+        }
+
         return Inertia::render('Vehicules/Create', [
             'proprietaires' => $this->proprietairesOptions(),
             'types' => TypeVehicule::options(),
             'initial_proprietaire_id' => $initialProprietaireId,
-            'currentSiteName' => ($user->sites()->wherePivot('is_default', true)->first()
-                ?? $user->sites()->first())?->nom
-                ?? $user->organization?->nom
-                ?? '',
+            'initial_site_id' => $initialSiteId,
+            'currentSiteName' => $currentSiteName,
         ]);
     }
 
@@ -125,6 +146,12 @@ class VehiculeController extends Controller
             'type_vehicule' => ['required', Rule::in(TypeVehicule::allowedValues())],
             'categorie' => ['required', 'in:interne,externe'],
             'capacite_packs' => 'nullable|integer|min:1|max:99999',
+            'site_id' => [
+                Rule::requiredIf(fn () => $request->input('categorie') === 'interne'),
+                'nullable',
+                'string',
+                Rule::exists('sites', 'id')->where('organization_id', $orgId),
+            ],
             'proprietaire_id' => [
                 Rule::requiredIf(fn () => $request->input('categorie') === 'externe'),
                 'nullable',
@@ -144,6 +171,11 @@ class VehiculeController extends Controller
             $data['pris_en_charge_par_usine'] = true;
         }
 
+        // Externe : pas de site
+        if ($data['categorie'] === 'externe') {
+            $data['site_id'] = null;
+        }
+
         if ($request->hasFile('photo')) {
             $data['photo_path'] = (new ImageService)->storeAsWebp($request->file('photo'), 'vehicules');
         }
@@ -160,7 +192,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('view', $vehicule);
 
-        $vehicule->load(['proprietaire', 'equipe.membres.livreur']);
+        $vehicule->load(['site', 'proprietaire', 'equipe.membres.livreur']);
 
         $depenses = Depense::where('vehicule_id', $vehicule->id)
             ->where('organization_id', $vehicule->organization_id)
@@ -278,7 +310,7 @@ class VehiculeController extends Controller
         $this->authorize('update', $vehicule);
 
         $user = auth()->user();
-        $vehicule->load(['proprietaire', 'equipe.membres.livreur']);
+        $vehicule->load(['site', 'proprietaire', 'equipe.membres.livreur']);
 
         return Inertia::render('Vehicules/Edit', [
             'vehicule' => $this->vehiculeData($vehicule),
@@ -401,6 +433,8 @@ class VehiculeController extends Controller
             'type_vehicule.in' => 'Type de véhicule invalide.',
             'categorie.required' => 'La catégorie est obligatoire.',
             'categorie.in' => 'Catégorie invalide (interne ou externe).',
+            'site_id.required' => 'Le site est obligatoire pour un véhicule interne.',
+            'site_id.exists' => 'Le site sélectionné est introuvable.',
             'proprietaire_id.required' => 'Le propriétaire est obligatoire pour un véhicule externe.',
             'proprietaire_id.exists' => 'Le propriétaire sélectionné est introuvable.',
             'photo.image' => 'Le fichier doit être une image.',

@@ -4,6 +4,7 @@ import {
     ensureModuleEnabled,
     escapeRegExp,
     login,
+    navigateToFirstSiteVehiclesTab,
     openRowActions,
     randomDigits,
     selectOptionFromCombobox,
@@ -31,14 +32,19 @@ test.beforeAll(async ({ browser }) => {
         await ensureModuleEnabled(page, 'module.vehicules');
         const unique = randomDigits(6);
 
-        await page.goto('/vehicules/create');
+        // Create an interne vehicle via the site detail Véhicules tab
+        await navigateToFirstSiteVehiclesTab(page);
+        await page.getByTestId('add-site-vehicle-btn').click();
+        await page.waitForURL(/\/vehicules\/create\?site_id=/, {
+            timeout: 15_000,
+        });
         await page.locator('#nom_vehicule').fill(`E2EEQ-${unique}`);
         await page
             .locator('#immatriculation')
             .fill(`${SETUP_VH_PREFIX}${unique}`);
+        // Only the type_vehicule combobox is active (categorie is locked to interne)
         const vhCombos = page.locator('#vehicule-form').getByRole('combobox');
-        await selectOptionFromCombobox(page, vhCombos.nth(0), /interne/i);
-        await selectOptionFromCombobox(page, vhCombos.nth(1));
+        await selectOptionFromCombobox(page, vhCombos.first());
         await page
             .locator('#vehicule-form button[type="submit"]:visible')
             .first()

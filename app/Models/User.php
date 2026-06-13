@@ -95,6 +95,11 @@ class User extends Authenticatable
         return $this->hasRole('super_admin');
     }
 
+    public function isAdmin(): bool
+    {
+        return $this->hasAnyRole(['super_admin', 'admin_entreprise']);
+    }
+
     /**
      * Map de toutes les permissions CRUD pour Inertia/Vue.
      * Ex: ['clients.read' => true, 'clients.create' => false, ...]

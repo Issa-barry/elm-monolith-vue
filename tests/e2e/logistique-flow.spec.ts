@@ -15,6 +15,38 @@ test.beforeEach(async ({ page }) => {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 /**
+ * Remplit le formulaire de création de transfert.
+ * - Pour un admin : sélectionne site source, site destination, véhicule.
+ * - Le produit est pré-sélectionné par défaut dans le formulaire.
+ */
+async function fillLogistiqueForm(page: Page): Promise<void> {
+    const form = page.locator('#logistique-form');
+
+    // Site source — visible uniquement pour les admins (Dropdown libre)
+    const siteSourceField = form.locator('[data-testid="site-source-field"]');
+    const siteSourceCombobox = siteSourceField.getByRole('combobox');
+    if ((await siteSourceCombobox.count()) > 0) {
+        await selectOptionFromCombobox(
+            page,
+            siteSourceCombobox,
+            /lansanaya|lambagny|dabompa/i,
+        );
+    }
+
+    // Site destination
+    const siteDestCombobox = form
+        .locator('[data-testid="site-destination-field"]')
+        .getByRole('combobox');
+    await selectOptionFromCombobox(page, siteDestCombobox);
+
+    // Véhicule — obligatoire pour activer le bouton submit
+    const vehiculeCombobox = form
+        .locator('[data-testid="vehicule-field"]')
+        .getByRole('combobox');
+    await selectOptionFromCombobox(page, vehiculeCombobox);
+}
+
+/**
  * Navigue vers la page détail d'un transfert à partir de son référence.
  * Le lien est présent dans la colonne "Référence" du tableau.
  */
@@ -80,16 +112,7 @@ test('create transfert -> annuler depuis la page détail', async ({ page }) => {
         timeout: 20_000,
     });
 
-    const formComboboxes = page
-        .locator('#logistique-form')
-        .getByRole('combobox');
-
-    await selectOptionFromCombobox(
-        page,
-        formComboboxes.nth(0),
-        /lansanaya|lambagny|dabompa/i,
-    );
-    await selectOptionFromCombobox(page, formComboboxes.nth(1));
+    await fillLogistiqueForm(page);
 
     const submit = page
         .locator('#logistique-form button[type="submit"]:visible')
@@ -120,20 +143,13 @@ test('stepper — 6 étapes dont "Commission" grise dès la création', async ({
         timeout: 20_000,
     });
 
-    const formComboboxes = page
-        .locator('#logistique-form')
-        .getByRole('combobox');
-    await selectOptionFromCombobox(
-        page,
-        formComboboxes.nth(0),
-        /lansanaya|lambagny|dabompa/i,
-    );
-    await selectOptionFromCombobox(page, formComboboxes.nth(1));
+    await fillLogistiqueForm(page);
 
-    await page
+    const submit = page
         .locator('#logistique-form button[type="submit"]:visible')
-        .first()
-        .click();
+        .first();
+    await expect(submit).toBeEnabled({ timeout: 15_000 });
+    await submit.click();
     await expect(page).toHaveURL(/\/logistique\/[a-z0-9]+$/, {
         timeout: 30_000,
     });

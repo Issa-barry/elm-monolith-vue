@@ -71,8 +71,8 @@ class TransfertLogistiquePolicy
 
     /**
      * Valider la réception (TRANSIT → RECEPTION).
-     * Réservé aux utilisateurs du site d'arrivée, y compris admin_entreprise.
-     * Seul super_admin est exempté (autorité supra-organisation).
+     * Les admins (super_admin, admin_entreprise) ont autorité sur toute l'organisation.
+     * Les autres utilisateurs doivent être affectés au site destination.
      */
     public function validerReception(User $user, TransfertLogistique $transfert): bool
     {
@@ -83,12 +83,12 @@ class TransfertLogistiquePolicy
             return false;
         }
 
-        // super_admin uniquement : autorité globale
-        if ($user->hasRole('super_admin')) {
+        // Admins : autorité globale sur l'organisation
+        if ($user->isAdmin()) {
             return true;
         }
 
-        // Tous les autres (y compris admin_entreprise) : doit être affecté au site destination
+        // Tous les autres : doit être affecté au site destination
         return $transfert->site_destination_id !== null
             && $user->isAssignedToSite($transfert->site_destination_id);
     }
@@ -112,8 +112,8 @@ class TransfertLogistiquePolicy
             return false;
         }
 
-        // super_admin : autorité globale
-        if ($user->hasRole('super_admin')) {
+        // Admins : autorité globale sur l'organisation
+        if ($user->isAdmin()) {
             return true;
         }
 
@@ -131,10 +131,21 @@ class TransfertLogistiquePolicy
 
     public function genererCommission(User $user, TransfertLogistique $transfert): bool
     {
-        return $user->can('logistique.commission.verser')
-            && $this->sameOrganization($user, $transfert)
-            && ($transfert->isReception() || $transfert->isCloture())
-            && $user->sites()->where('type', SiteType::SIEGE->value)->exists();
+        if (! $user->can('logistique.commission.verser')) {
+            return false;
+        }
+        if (! $this->sameOrganization($user, $transfert)) {
+            return false;
+        }
+        if (! ($transfert->isReception() || $transfert->isCloture())) {
+            return false;
+        }
+        // Admins : pas de restriction au site siège
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        return $user->sites()->where('type', SiteType::SIEGE->value)->exists();
     }
 
     public function voirCommission(User $user, TransfertLogistique $transfert): bool

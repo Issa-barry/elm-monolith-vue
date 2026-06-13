@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Organization;
 use App\Models\Proprietaire;
+use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -97,12 +98,15 @@ class VehiculeTest extends TestCase
 
     public function test_store_creates_vehicule_interne(): void
     {
+        $site = $this->user->sites()->first();
+
         $response = $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Tricycle 01',
                 'immatriculation' => 'TC-TEST-GN',
                 'type_vehicule' => 'tricycle',
                 'categorie' => 'interne',
+                'site_id' => $site->id,
                 'capacite_packs' => 50,
                 'is_active' => true,
                 'pris_en_charge_par_usine' => false,
@@ -118,8 +122,43 @@ class VehiculeTest extends TestCase
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,
             'categorie' => 'interne',
+            'site_id' => $site->id,
             'proprietaire_id' => null,
         ]);
+    }
+
+    public function test_store_fails_interne_sans_site_id(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Tricycle Sans Site',
+                'immatriculation' => 'TC-NOSITE-GN',
+                'type_vehicule' => 'tricycle',
+                'categorie' => 'interne',
+                'pris_en_charge_par_usine' => true,
+            ])
+            ->assertSessionHasErrors('site_id');
+    }
+
+    public function test_store_fails_interne_avec_site_autre_org(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $otherSite = Site::create([
+            'organization_id' => $otherOrg->id,
+            'nom' => 'Site Autre Org',
+            'type' => 'depot',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Tricycle Autre Org',
+                'immatriculation' => 'TC-AUTREORG-GN',
+                'type_vehicule' => 'tricycle',
+                'categorie' => 'interne',
+                'site_id' => $otherSite->id,
+                'pris_en_charge_par_usine' => true,
+            ])
+            ->assertSessionHasErrors('site_id');
     }
 
     public function test_store_fails_with_empty_data(): void
@@ -188,12 +227,15 @@ class VehiculeTest extends TestCase
 
     public function test_store_vehicule_interne_force_pris_en_charge_a_true(): void
     {
+        $site = $this->user->sites()->first();
+
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Interne Charge',
                 'immatriculation' => 'TC-053-GN',
                 'type_vehicule' => 'tricycle',
                 'categorie' => 'interne',
+                'site_id' => $site->id,
                 'pris_en_charge_par_usine' => false, // ignoré par le backend
             ])
             ->assertSessionHasNoErrors();
@@ -245,6 +287,30 @@ class VehiculeTest extends TestCase
                 'categorie' => 'externe',
             ])
             ->assertSessionHasErrors('proprietaire_id');
+    }
+
+    public function test_store_externe_force_site_id_null(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Externe',
+                'immatriculation' => 'RC-EXT-GN',
+                'type_vehicule' => 'camion',
+                'categorie' => 'externe',
+                'proprietaire_id' => $proprietaire->id,
+                'site_id' => $site->id,
+                'pris_en_charge_par_usine' => false,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('vehicules', [
+            'immatriculation' => 'RC-EXT-GN',
+            'categorie' => 'externe',
+            'site_id' => null,
+        ]);
     }
 
     // ── edit ──────────────────────────────────────────────────────────────────

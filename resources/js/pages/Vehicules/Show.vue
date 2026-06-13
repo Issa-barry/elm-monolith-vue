@@ -38,7 +38,10 @@ interface VehiculeData {
     immatriculation: string;
     type_label: string;
     type_vehicule: string | null;
+    categorie: string | null;
     capacite_packs: number | null;
+    site_id: string | null;
+    site_nom: string | null;
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     equipe_id: string | null;
@@ -344,15 +347,25 @@ function formatGNF(val: number): string {
                             <p class="text-xs text-muted-foreground">
                                 Propriétaire
                             </p>
-                            <p class="mt-1 text-sm font-medium">
-                                {{ vehicule.proprietaire_nom ?? '—' }}
-                            </p>
-                            <p
-                                v-if="vehicule.proprietaire_telephone"
-                                class="font-mono text-xs text-muted-foreground"
-                            >
-                                {{ vehicule.proprietaire_telephone }}
-                            </p>
+                            <template v-if="vehicule.categorie === 'interne'">
+                                <p class="mt-1 text-sm font-medium">
+                                    {{ vehicule.site_nom ?? '—' }}
+                                </p>
+                                <p class="mt-0.5 text-xs text-muted-foreground">
+                                    Site (véhicule interne)
+                                </p>
+                            </template>
+                            <template v-else>
+                                <p class="mt-1 text-sm font-medium">
+                                    {{ vehicule.proprietaire_nom ?? '—' }}
+                                </p>
+                                <p
+                                    v-if="vehicule.proprietaire_telephone"
+                                    class="font-mono text-xs text-muted-foreground"
+                                >
+                                    {{ vehicule.proprietaire_telephone }}
+                                </p>
+                            </template>
                         </div>
                         <div class="rounded-lg border bg-background p-4">
                             <p class="text-xs text-muted-foreground">

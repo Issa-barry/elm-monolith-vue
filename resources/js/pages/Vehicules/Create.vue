@@ -20,7 +20,8 @@ interface TypeOption {
 const props = defineProps<{
     proprietaires: Option[];
     types: TypeOption[];
-    initial_proprietaire_id: number | null;
+    initial_proprietaire_id: string | null;
+    initial_site_id: string | null;
     currentSiteName: string;
 }>();
 
@@ -30,16 +31,25 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Nouveau véhicule', href: '#' },
 ];
 
+const lockedCategorie = !!(
+    props.initial_proprietaire_id || props.initial_site_id
+);
+
 const form = useForm({
     nom_vehicule: '',
     immatriculation: '',
     type_vehicule: null as string | null,
-    categorie: props.initial_proprietaire_id
-        ? 'externe'
-        : (null as string | null),
+    categorie: props.initial_site_id
+        ? 'interne'
+        : props.initial_proprietaire_id
+          ? 'externe'
+          : (null as string | null),
     capacite_packs: null as number | null,
+    site_id: props.initial_site_id,
     proprietaire_id: props.initial_proprietaire_id,
-    pris_en_charge_par_usine: null as boolean | null,
+    pris_en_charge_par_usine: props.initial_site_id
+        ? true
+        : (null as boolean | null),
     photo: null as File | null,
     is_active: true,
 });
@@ -103,6 +113,7 @@ function submit() {
                 :proprietaires="proprietaires"
                 :types="types"
                 :current-site-name="currentSiteName"
+                :locked-categorie="lockedCategorie"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />
