@@ -423,6 +423,7 @@ function revokeInvitation(invitationId: number) {
                     </button>
                     <button
                         type="button"
+                        data-testid="site-vehicles-tab"
                         class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
                         :class="
                             activeTab === 'vehicules'
@@ -752,6 +753,7 @@ function revokeInvitation(invitationId: number) {
                             <Link
                                 v-if="can_create_vehicule"
                                 :href="`/vehicules/create?site_id=${site.id}`"
+                                data-testid="add-site-vehicle-btn"
                             >
                                 <Button size="sm">
                                     <Plus class="mr-2 h-4 w-4" />

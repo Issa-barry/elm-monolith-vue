@@ -351,6 +351,39 @@ export async function selectOptionFromCombobox(
         .catch(() => undefined);
 }
 
+/**
+ * Navigates to the first site in the list, opens its Véhicules tab,
+ * and returns the site URL so the caller can return to it later.
+ * Requires data-testid="site-vehicles-tab" and data-testid="add-site-vehicle-btn".
+ */
+export async function navigateToFirstSiteVehiclesTab(
+    page: Page,
+): Promise<string> {
+    await page.goto('/sites');
+    await page.waitForLoadState('networkidle');
+
+    const firstRow = page
+        .locator('tbody tr:not(.p-datatable-emptymessage)')
+        .first();
+    await expect(firstRow).toBeVisible({ timeout: 10_000 });
+    await openRowActions(firstRow);
+
+    await page
+        .getByRole('menuitem', { name: /^voir$/i })
+        .first()
+        .click();
+    await page.waitForURL(/\/sites\/[a-z0-9]+$/, { timeout: 15_000 });
+
+    const siteUrl = page.url();
+
+    await page.getByTestId('site-vehicles-tab').click();
+    await expect(page.getByTestId('add-site-vehicle-btn')).toBeVisible({
+        timeout: 5_000,
+    });
+
+    return siteUrl;
+}
+
 export async function ensureModuleEnabled(
     page: Page,
     moduleKey: string,
