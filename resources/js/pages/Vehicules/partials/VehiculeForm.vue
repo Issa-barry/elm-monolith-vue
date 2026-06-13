@@ -616,7 +616,11 @@ function handleSubmit() {
             <a href="/vehicules">
                 <Button type="button" variant="outline">Retour</Button>
             </a>
-            <Button type="submit" data-testid="vehicle-form-submit" :disabled="!canSubmit">
+            <Button
+                type="submit"
+                data-testid="vehicle-form-submit"
+                :disabled="!canSubmit"
+            >
                 <Save class="mr-2 h-4 w-4" />
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
