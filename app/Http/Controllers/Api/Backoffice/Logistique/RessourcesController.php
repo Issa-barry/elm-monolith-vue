@@ -32,14 +32,14 @@ class RessourcesController extends Controller
 
         return response()->json([
             'user_site' => $userSite ? [
-                'id'   => $userSite->id,
-                'nom'  => $userSite->nom,
+                'id' => $userSite->id,
+                'nom' => $userSite->nom,
                 'code' => $userSite->code ?? '',
                 'type' => $userSite->type?->value ?? '',
             ] : null,
-            'sites'     => $sites->map(fn ($s) => [
-                'id'   => $s->id,
-                'nom'  => $s->nom,
+            'sites' => $sites->map(fn ($s) => [
+                'id' => $s->id,
+                'nom' => $s->nom,
                 'code' => $s->code ?? '',
                 'type' => $s->type?->value ?? '',
             ])->values(),

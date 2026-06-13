@@ -38,9 +38,9 @@ class CommandeVenteStatutTest extends TestCase
 
         $this->defaultSite = Site::create([
             'organization_id' => $this->org->id,
-            'nom'             => 'Site Test',
-            'type'            => 'depot',
-            'localisation'    => 'Conakry',
+            'nom' => 'Site Test',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
         ]);
         $this->user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
     }
@@ -55,34 +55,34 @@ class CommandeVenteStatutTest extends TestCase
     {
         $produit = Produit::create([
             'organization_id' => $this->org->id,
-            'nom'             => 'Produit Test',
-            'type'            => 'materiel',
-            'statut'          => 'actif',
-            'prix_vente'      => 2000,
-            'prix_usine'      => 1500,
+            'nom' => 'Produit Test',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_vente' => 2000,
+            'prix_usine' => 1500,
         ]);
 
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'capacite_packs'  => 10,
+            'capacite_packs' => 10,
         ]);
 
         $commande = CommandeVente::factory()->create(array_merge([
             'organization_id' => $this->org->id,
-            'site_id'         => $this->defaultSite->id,
-            'vehicule_id'     => $vehicule->id,
-            'statut'          => StatutCommandeVente::BROUILLON,
-            'total_commande'  => 4000,
+            'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => 4000,
         ], $attrs));
 
         $ligne = $commande->lignes()->create([
-            'produit_id'          => $produit->id,
-            'quantite_demandee'   => 2,
+            'produit_id' => $produit->id,
+            'quantite_demandee' => 2,
             'prix_usine_snapshot' => 1500.0,
             'prix_vente_snapshot' => 2000.0,
-            'total_ligne'         => 4000.0,
+            'total_ligne' => 4000.0,
         ]);
 
         return compact('commande', 'ligne', 'produit', 'vehicule');
@@ -105,9 +105,9 @@ class CommandeVenteStatutTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'site_id'         => $this->defaultSite->id,
-            'vehicule_id'     => null,
-            'statut'          => StatutCommandeVente::BROUILLON,
+            'site_id' => $this->defaultSite->id,
+            'vehicule_id' => null,
+            'statut' => StatutCommandeVente::BROUILLON,
         ]);
 
         $produit = Produit::create([
@@ -131,9 +131,9 @@ class CommandeVenteStatutTest extends TestCase
 
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'site_id'         => $this->defaultSite->id,
-            'vehicule_id'     => $vehicule->id,
-            'statut'          => StatutCommandeVente::BROUILLON,
+            'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutCommandeVente::BROUILLON,
         ]);
 
         $this->actingAs($this->user)
@@ -159,7 +159,7 @@ class CommandeVenteStatutTest extends TestCase
     public function test_demarrer_chargement_cree_la_facture(): void
     {
         ['commande' => $commande] = $this->makeCommandeWithLigne([
-            'statut'         => StatutCommandeVente::A_CHARGER,
+            'statut' => StatutCommandeVente::A_CHARGER,
             'total_commande' => 4000,
         ]);
 
@@ -169,7 +169,7 @@ class CommandeVenteStatutTest extends TestCase
 
         $this->assertDatabaseHas('factures_ventes', [
             'commande_vente_id' => $commande->id,
-            'montant_brut'      => 4000,
+            'montant_brut' => 4000,
         ]);
     }
 
@@ -183,7 +183,7 @@ class CommandeVenteStatutTest extends TestCase
             ->post(route('ventes.statut.avancer', $commande))
             ->assertRedirect();
 
-        $fresh   = $commande->fresh();
+        $fresh = $commande->fresh();
         $facture = $fresh->facture;
 
         $this->assertNotNull($facture);
@@ -201,9 +201,9 @@ class CommandeVenteStatutTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('ventes.statut.avancer', $commande), [
                 'lignes' => [[
-                    'id'               => $ligne->id,
+                    'id' => $ligne->id,
                     'quantite_chargee' => 2,
-                    'type_ecart'       => 'conforme',
+                    'type_ecart' => 'conforme',
                     'commentaire_ecart' => null,
                 ]],
             ])
@@ -222,9 +222,9 @@ class CommandeVenteStatutTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('ventes.statut.avancer', $commande), [
                 'lignes' => [[
-                    'id'                => $ligne->id,
-                    'quantite_chargee'  => 1,
-                    'type_ecart'        => 'manquant',
+                    'id' => $ligne->id,
+                    'quantite_chargee' => 1,
+                    'type_ecart' => 'manquant',
                     'commentaire_ecart' => 'Un pack endommagé',
                 ]],
             ])
@@ -267,23 +267,23 @@ class CommandeVenteStatutTest extends TestCase
     public function test_encaissement_auto_passe_livraison_en_cours_a_livree(): void
     {
         ['commande' => $commande] = $this->makeCommandeWithLigne([
-            'statut'         => StatutCommandeVente::LIVRAISON_EN_COURS,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
             'total_commande' => 4000,
         ]);
 
         $facture = FactureVente::create([
-            'organization_id'   => $this->org->id,
-            'site_id'           => $this->defaultSite->id,
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
             'commande_vente_id' => $commande->id,
-            'montant_brut'      => 4000,
-            'montant_net'       => 4000,
+            'montant_brut' => 4000,
+            'montant_net' => 4000,
         ]);
 
         $this->actingAs($this->user)
             ->post(route('encaissements.store', $facture), [
-                'montant'           => 2000,
+                'montant' => 2000,
                 'date_encaissement' => now()->toDateString(),
-                'mode_paiement'     => 'especes',
+                'mode_paiement' => 'especes',
             ])
             ->assertRedirect();
 
@@ -293,24 +293,24 @@ class CommandeVenteStatutTest extends TestCase
     public function test_encaissement_partiel_ne_cloture_pas(): void
     {
         ['commande' => $commande] = $this->makeCommandeWithLigne([
-            'statut'         => StatutCommandeVente::LIVRAISON_EN_COURS,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
             'total_commande' => 4000,
         ]);
 
         $facture = FactureVente::create([
-            'organization_id'   => $this->org->id,
-            'site_id'           => $this->defaultSite->id,
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
             'commande_vente_id' => $commande->id,
-            'montant_brut'      => 4000,
-            'montant_net'       => 4000,
+            'montant_brut' => 4000,
+            'montant_net' => 4000,
         ]);
 
         // Encaissement partiel
         $this->actingAs($this->user)
             ->post(route('encaissements.store', $facture), [
-                'montant'           => 2000,
+                'montant' => 2000,
                 'date_encaissement' => now()->toDateString(),
-                'mode_paiement'     => 'especes',
+                'mode_paiement' => 'especes',
             ])
             ->assertRedirect();
 
@@ -322,23 +322,23 @@ class CommandeVenteStatutTest extends TestCase
     public function test_encaissement_complet_depuis_livraison_cloture_la_commande(): void
     {
         ['commande' => $commande] = $this->makeCommandeWithLigne([
-            'statut'         => StatutCommandeVente::LIVRAISON_EN_COURS,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
             'total_commande' => 4000,
         ]);
 
         $facture = FactureVente::create([
-            'organization_id'   => $this->org->id,
-            'site_id'           => $this->defaultSite->id,
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
             'commande_vente_id' => $commande->id,
-            'montant_brut'      => 4000,
-            'montant_net'       => 4000,
+            'montant_brut' => 4000,
+            'montant_net' => 4000,
         ]);
 
         $this->actingAs($this->user)
             ->post(route('encaissements.store', $facture), [
-                'montant'           => 4000,
+                'montant' => 4000,
                 'date_encaissement' => now()->toDateString(),
-                'mode_paiement'     => 'especes',
+                'mode_paiement' => 'especes',
             ])
             ->assertRedirect();
 
@@ -414,13 +414,13 @@ class CommandeVenteStatutTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('ventes.statut.annuler', $commande), [
-                'motif_annulation_code'   => 'autre',
+                'motif_annulation_code' => 'autre',
                 'motif_annulation_detail' => 'Stock manquant en entrepôt',
             ])
             ->assertRedirect();
 
         $this->assertDatabaseHas('commandes_ventes', [
-            'id'               => $commande->id,
+            'id' => $commande->id,
             'motif_annulation' => 'autre : Stock manquant en entrepôt',
         ]);
     }

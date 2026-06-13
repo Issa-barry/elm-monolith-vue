@@ -38,17 +38,17 @@ class CommandeVenteActivite extends Model
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static array $labels = [
-        'creation'              => 'a créé la commande',
-        'confirmee'             => 'a confirmé la commande',
-        'chargement_demarre'    => 'a démarré le chargement',
-        'chargement_valide'     => 'a validé le chargement',
-        'livraison_demarree'    => 'a démarré la livraison',
-        'livree'                => 'a marqué la commande comme livrée',
-        'cloturee'              => 'a clôturé la commande',
-        'annulee'               => 'a annulé la commande',
-        'encaissement_recu'     => 'a enregistré un encaissement',
-        'commission_generee'    => 'a généré la commission',
-        'versement_effectue'    => 'a effectué un versement',
+        'creation' => 'a créé la commande',
+        'confirmee' => 'a confirmé la commande',
+        'chargement_demarre' => 'a démarré le chargement',
+        'chargement_valide' => 'a validé le chargement',
+        'livraison_demarree' => 'a démarré la livraison',
+        'livree' => 'a marqué la commande comme livrée',
+        'cloturee' => 'a clôturé la commande',
+        'annulee' => 'a annulé la commande',
+        'encaissement_recu' => 'a enregistré un encaissement',
+        'commission_generee' => 'a généré la commission',
+        'versement_effectue' => 'a effectué un versement',
     ];
 
     public function getActionLabelAttribute(): string

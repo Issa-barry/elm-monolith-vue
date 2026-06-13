@@ -5,59 +5,56 @@ namespace App\Enums;
 enum MotifAjustementStock: string
 {
     // Augmentation uniquement
-    case APRES_PRODUCTION = 'apres_production';
-    case RETOUR           = 'retour';
+    case APRES_PRODUCTION      = 'apres_production';
+    case RETOUR                = 'retour';
+    case ENTREE_EXCEPTIONNELLE = 'entree_exceptionnelle';
 
     // Diminution uniquement
-    case PERTE = 'perte';
-    case CASSE = 'casse';
-    case DON   = 'don';
+    case PERTE                 = 'perte';
+    case CASSE                 = 'casse';
+    case DON                   = 'don';
+    case SORTIE_EXCEPTIONNELLE = 'sortie_exceptionnelle';
 
     // Les deux directions
     case CORRECTION_STOCK = 'correction_stock';
-    case AUTRE            = 'autre';
 
     public function label(): string
     {
         return match ($this) {
-            self::APRES_PRODUCTION => 'Après production',
-            self::RETOUR           => 'Retour',
-            self::PERTE            => 'Perte',
+            self::APRES_PRODUCTION      => 'Après production',
+            self::RETOUR                => 'Retour',
+            self::ENTREE_EXCEPTIONNELLE => 'Entrée exceptionnelle',
+            self::PERTE                 => 'Perte',
             self::CASSE                 => 'Casse',
             self::DON                   => 'Don',
+            self::SORTIE_EXCEPTIONNELLE => 'Sortie exceptionnelle',
             self::CORRECTION_STOCK      => 'Correction de stock',
-            self::AUTRE                 => 'Autre',
         };
     }
 
-    /**
-     * Direction du motif : 'entree', 'sortie', ou 'both'.
-     */
+    /** Direction du motif : 'entree', 'sortie', ou 'both'. */
     public function direction(): string
     {
         return match ($this) {
             self::APRES_PRODUCTION,
-            self::RETOUR => 'entree',
+            self::RETOUR,
+            self::ENTREE_EXCEPTIONNELLE => 'entree',
 
             self::PERTE,
             self::CASSE,
-            self::DON => 'sortie',
+            self::DON,
+            self::SORTIE_EXCEPTIONNELLE => 'sortie',
 
-            self::CORRECTION_STOCK,
-            self::AUTRE => 'both',
+            self::CORRECTION_STOCK => 'both',
         };
     }
 
-    public function toNotesString(string $detail = ''): string
+    public function toNotesString(): string
     {
-        if ($this === self::AUTRE) {
-            return 'Autre : '.$detail;
-        }
-
         return $this->label();
     }
 
-    /** Toutes les valeurs (pour une validation générique si besoin). */
+    /** Toutes les valeurs valides. */
     public static function validValues(): array
     {
         return array_column(self::cases(), 'value');
@@ -75,7 +72,7 @@ enum MotifAjustementStock: string
         ));
     }
 
-    /** Cases disponibles pour le front, indexés par direction. */
+    /** Listes prêtes pour le front, indexées par direction. */
     public static function forFront(): array
     {
         $build = fn (string $dir) => array_map(

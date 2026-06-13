@@ -27,11 +27,11 @@ class CommandeVenteStatutController extends Controller
         $this->authorize('avancerStatut', $commande_vente);
 
         $request->validate([
-            'lignes'                      => ['sometimes', 'array'],
-            'lignes.*.id'                 => ['required_with:lignes', 'string'],
-            'lignes.*.quantite_chargee'   => ['sometimes', 'nullable', 'integer', 'min:0'],
-            'lignes.*.type_ecart'         => ['sometimes', 'nullable', 'string'],
-            'lignes.*.commentaire_ecart'  => ['sometimes', 'nullable', 'string', 'max:500'],
+            'lignes' => ['sometimes', 'array'],
+            'lignes.*.id' => ['required_with:lignes', 'string'],
+            'lignes.*.quantite_chargee' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'lignes.*.type_ecart' => ['sometimes', 'nullable', 'string'],
+            'lignes.*.commentaire_ecart' => ['sometimes', 'nullable', 'string', 'max:500'],
         ]);
 
         $ancienStatut = $commande_vente->statut;
@@ -43,10 +43,10 @@ class CommandeVenteStatutController extends Controller
         }
 
         $action = match ($ancienStatut) {
-            StatutCommandeVente::BROUILLON           => 'confirmee',
-            StatutCommandeVente::A_CHARGER           => 'chargement_demarre',
+            StatutCommandeVente::BROUILLON => 'confirmee',
+            StatutCommandeVente::A_CHARGER => 'chargement_demarre',
             StatutCommandeVente::CHARGEMENT_EN_COURS => 'chargement_valide',
-            default                                   => 'statut_change',
+            default => 'statut_change',
         };
 
         CommandeVenteActiviteService::log($commande_vente, $action);
@@ -63,11 +63,11 @@ class CommandeVenteStatutController extends Controller
         $this->authorize('annuler', $commande_vente);
 
         $data = $request->validate([
-            'motif_annulation_code'   => ['required', 'string'],
+            'motif_annulation_code' => ['required', 'string'],
             'motif_annulation_detail' => ['nullable', 'string', 'max:2000', 'required_if:motif_annulation_code,autre'],
         ], [
-            'motif_annulation_code.required'       => "Le motif d'annulation est obligatoire.",
-            'motif_annulation_detail.required_if'  => "Veuillez préciser la raison de l'annulation.",
+            'motif_annulation_code.required' => "Le motif d'annulation est obligatoire.",
+            'motif_annulation_detail.required_if' => "Veuillez préciser la raison de l'annulation.",
         ]);
 
         $motif = $data['motif_annulation_code'];

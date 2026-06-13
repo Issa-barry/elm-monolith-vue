@@ -45,14 +45,14 @@ class CommandeVente extends Model
     protected function casts(): array
     {
         return [
-            'total_commande'        => 'decimal:2',
-            'statut'                => StatutCommandeVente::class,
-            'annulee_at'            => 'datetime',
-            'a_charger_at'          => 'datetime',
+            'total_commande' => 'decimal:2',
+            'statut' => StatutCommandeVente::class,
+            'annulee_at' => 'datetime',
+            'a_charger_at' => 'datetime',
             'chargement_demarre_at' => 'datetime',
-            'chargement_valide_at'  => 'datetime',
-            'livree_at'             => 'datetime',
-            'closed_at'             => 'datetime',
+            'chargement_valide_at' => 'datetime',
+            'livree_at' => 'datetime',
+            'closed_at' => 'datetime',
         ];
     }
 
@@ -205,7 +205,7 @@ class CommandeVente extends Model
             return false;
         }
 
-        $this->statut   = StatutCommandeVente::CLOTUREE;
+        $this->statut = StatutCommandeVente::CLOTUREE;
         $this->closed_at = now();
 
         return $this->saveQuietly();

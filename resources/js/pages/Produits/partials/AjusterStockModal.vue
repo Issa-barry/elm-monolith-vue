@@ -163,7 +163,6 @@ function submit() {
                             form.errors.augmenter ? 'p-invalid' : '',
                             form.diminuer ? 'opacity-40' : '',
                         ].join(' ')"
-                        :disabled="!!form.diminuer"
                         @update:model-value="onAugmenterChange"
                     />
                     <p
@@ -194,7 +193,6 @@ function submit() {
                             form.errors.diminuer ? 'p-invalid' : '',
                             form.augmenter ? 'opacity-40' : '',
                         ].join(' ')"
-                        :disabled="!!form.augmenter"
                         @update:model-value="onDiminuerChange"
                     />
                     <p

@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Enums\StatutCommandeVente;
-use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\FactureVente;
 use App\Models\Parametre;
@@ -22,8 +21,8 @@ class CommandeVenteService
     public static function avancerStatut(CommandeVente $commande, array $lignesData = []): CommandeVente
     {
         match ($commande->statut) {
-            StatutCommandeVente::BROUILLON           => self::confirmer($commande),
-            StatutCommandeVente::A_CHARGER           => self::demarrerChargement($commande),
+            StatutCommandeVente::BROUILLON => self::confirmer($commande),
+            StatutCommandeVente::A_CHARGER => self::demarrerChargement($commande),
             StatutCommandeVente::CHARGEMENT_EN_COURS => self::validerChargement($commande, $lignesData),
             default => abort(422, 'Impossible d\'avancer depuis ce statut.'),
         };
@@ -44,7 +43,7 @@ class CommandeVenteService
         self::validerPreconditions($commande, StatutCommandeVente::A_CHARGER);
 
         $commande->update([
-            'statut'       => StatutCommandeVente::A_CHARGER,
+            'statut' => StatutCommandeVente::A_CHARGER,
             'a_charger_at' => now(),
         ]);
     }
@@ -64,18 +63,18 @@ class CommandeVenteService
 
             if (! $commande->facture) {
                 FactureVente::create([
-                    'organization_id'   => $commande->organization_id,
-                    'site_id'           => $commande->site_id,
-                    'vehicule_id'       => $commande->vehicule_id,
+                    'organization_id' => $commande->organization_id,
+                    'site_id' => $commande->site_id,
+                    'vehicule_id' => $commande->vehicule_id,
                     'commande_vente_id' => $commande->id,
-                    'reference'         => $commande->reference,
-                    'montant_brut'      => $commande->total_commande,
-                    'montant_net'       => $commande->total_commande,
+                    'reference' => $commande->reference,
+                    'montant_brut' => $commande->total_commande,
+                    'montant_net' => $commande->total_commande,
                 ]);
             }
 
             $commande->update([
-                'statut'                => StatutCommandeVente::CHARGEMENT_EN_COURS,
+                'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
                 'chargement_demarre_at' => now(),
             ]);
         });
@@ -112,7 +111,7 @@ class CommandeVenteService
             self::validerPreconditions($commande->fresh(), StatutCommandeVente::LIVRAISON_EN_COURS);
 
             $commande->update([
-                'statut'               => StatutCommandeVente::LIVRAISON_EN_COURS,
+                'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
                 'chargement_valide_at' => now(),
             ]);
         });
@@ -153,7 +152,7 @@ class CommandeVenteService
         abort_if(! $commande->isLivraisonEnCours(), 422, 'La commande doit être en livraison.');
 
         $commande->update([
-            'statut'    => StatutCommandeVente::LIVREE,
+            'statut' => StatutCommandeVente::LIVREE,
             'livree_at' => now(),
         ]);
     }
@@ -172,10 +171,10 @@ class CommandeVenteService
         );
 
         $commande->update([
-            'statut'           => StatutCommandeVente::ANNULEE,
+            'statut' => StatutCommandeVente::ANNULEE,
             'motif_annulation' => $motif,
-            'annulee_at'       => now(),
-            'annulee_par'      => Auth::id(),
+            'annulee_at' => now(),
+            'annulee_par' => Auth::id(),
         ]);
     }
 
@@ -186,8 +185,8 @@ class CommandeVenteService
         $errors = [];
 
         match ($cible) {
-            StatutCommandeVente::A_CHARGER           => self::checkConfirmer($commande, $errors),
-            StatutCommandeVente::LIVRAISON_EN_COURS  => self::checkValiderChargement($commande, $errors),
+            StatutCommandeVente::A_CHARGER => self::checkConfirmer($commande, $errors),
+            StatutCommandeVente::LIVRAISON_EN_COURS => self::checkValiderChargement($commande, $errors),
             default => null,
         };
 

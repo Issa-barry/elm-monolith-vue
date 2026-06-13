@@ -30,13 +30,13 @@ class CommandeVenteLigne extends Model
     protected function casts(): array
     {
         return [
-            'quantite_demandee'  => 'integer',
-            'quantite_chargee'   => 'integer',
-            'quantite_livree'    => 'integer',
-            'type_ecart'         => TypeEcartLogistique::class,
+            'quantite_demandee' => 'integer',
+            'quantite_chargee' => 'integer',
+            'quantite_livree' => 'integer',
+            'type_ecart' => TypeEcartLogistique::class,
             'prix_usine_snapshot' => 'decimal:2',
             'prix_vente_snapshot' => 'decimal:2',
-            'total_ligne'         => 'decimal:2',
+            'total_ligne' => 'decimal:2',
         ];
     }
 

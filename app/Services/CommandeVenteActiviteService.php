@@ -15,9 +15,9 @@ class CommandeVenteActiviteService
     ): void {
         CommandeVenteActivite::create([
             'commande_vente_id' => $commande->id,
-            'user_id'           => $userId ?? auth()->id(),
-            'action'            => $action,
-            'details'           => $details ?: null,
+            'user_id' => $userId ?? auth()->id(),
+            'action' => $action,
+            'details' => $details ?: null,
         ]);
     }
 }

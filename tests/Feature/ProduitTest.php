@@ -196,7 +196,8 @@ class ProduitTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
-                'augmenter' => 20,
+                'augmenter'  => 20,
+                'motif_type' => 'apres_production',
             ])
             ->assertRedirect();
 
@@ -220,7 +221,8 @@ class ProduitTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
-                'diminuer' => 15,
+                'diminuer'   => 15,
+                'motif_type' => 'perte',
             ])
             ->assertRedirect();
 
@@ -244,14 +246,14 @@ class ProduitTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
-                'augmenter' => 10,
-                'motif' => 'Correction inventaire',
+                'augmenter'   => 10,
+                'motif_type'  => 'correction_stock',
             ])
             ->assertRedirect();
 
         $this->assertDatabaseHas('mouvements_stock', [
             'produit_id' => $produit->id,
-            'notes' => 'Correction inventaire',
+            'notes' => 'Correction de stock',
         ]);
     }
 
@@ -261,8 +263,9 @@ class ProduitTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
-                'augmenter' => 10,
-                'diminuer' => 5,
+                'augmenter'  => 10,
+                'diminuer'   => 5,
+                'motif_type' => 'correction_stock',
             ])
             ->assertSessionHasErrors('augmenter');
     }
@@ -272,7 +275,9 @@ class ProduitTest extends TestCase
         $produit = $this->makeProduit($this->org);
 
         $this->actingAs($this->user)
-            ->post(route('produits.ajuster-stock', $produit), [])
+            ->post(route('produits.ajuster-stock', $produit), [
+                'motif_type' => 'correction_stock',
+            ])
             ->assertSessionHasErrors('augmenter');
     }
 
@@ -299,7 +304,8 @@ class ProduitTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
-                'diminuer' => 100,
+                'diminuer'   => 100,
+                'motif_type' => 'correction_stock',
             ])
             ->assertSessionHasErrors('diminuer');
 
@@ -329,7 +335,8 @@ class ProduitTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
-                'diminuer' => 9999,
+                'diminuer'   => 9999,
+                'motif_type' => 'correction_stock',
             ])
             ->assertSessionHasErrors('diminuer');
 

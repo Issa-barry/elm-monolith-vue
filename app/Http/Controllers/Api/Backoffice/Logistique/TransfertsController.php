@@ -9,7 +9,6 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class TransfertsController extends Controller
 {
@@ -52,30 +51,30 @@ class TransfertsController extends Controller
         $user = $request->user();
 
         $data = $request->validate([
-            'site_source_id'      => ['required', 'string', 'exists:sites,id'],
+            'site_source_id' => ['required', 'string', 'exists:sites,id'],
             'site_destination_id' => ['required', 'string', 'exists:sites,id', 'different:site_source_id'],
-            'vehicule_id'         => ['nullable', 'string', 'exists:vehicules,id'],
-            'date_depart_prevue'  => ['nullable', 'date'],
+            'vehicule_id' => ['nullable', 'string', 'exists:vehicules,id'],
+            'date_depart_prevue' => ['nullable', 'date'],
             'date_arrivee_prevue' => ['nullable', 'date'],
-            'notes'               => ['nullable', 'string', 'max:2000'],
-            'lignes'              => ['required', 'array', 'min:1'],
-            'lignes.*.produit_id'        => ['required', 'string', 'exists:produits,id'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+            'lignes' => ['required', 'array', 'min:1'],
+            'lignes.*.produit_id' => ['required', 'string', 'exists:produits,id'],
             'lignes.*.quantite_demandee' => ['required', 'integer', 'min:1'],
         ]);
 
         $transfert = TransfertLogistique::create([
-            'organization_id'     => $user->organization_id,
-            'site_source_id'      => $data['site_source_id'],
+            'organization_id' => $user->organization_id,
+            'site_source_id' => $data['site_source_id'],
             'site_destination_id' => $data['site_destination_id'],
-            'vehicule_id'         => $data['vehicule_id'] ?? null,
-            'date_depart_prevue'  => $data['date_depart_prevue'] ?? null,
+            'vehicule_id' => $data['vehicule_id'] ?? null,
+            'date_depart_prevue' => $data['date_depart_prevue'] ?? null,
             'date_arrivee_prevue' => $data['date_arrivee_prevue'] ?? null,
-            'notes'               => $data['notes'] ?? null,
+            'notes' => $data['notes'] ?? null,
         ]);
 
         foreach ($data['lignes'] as $ligne) {
             $transfert->lignes()->create([
-                'produit_id'        => $ligne['produit_id'],
+                'produit_id' => $ligne['produit_id'],
                 'quantite_demandee' => $ligne['quantite_demandee'],
             ]);
         }
