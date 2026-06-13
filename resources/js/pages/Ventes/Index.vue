@@ -162,13 +162,13 @@ const mobileFiltered = computed(() => {
 
 // ── Couleurs statut ───────────────────────────────────────────────────────────
 const statutCommandeColor: Record<string, string> = {
-    brouillon:            'bg-zinc-400 dark:bg-zinc-500',
-    a_charger:            'bg-amber-400',
-    chargement_en_cours:  'bg-orange-500',
-    livraison_en_cours:   'bg-blue-500',
-    livree:               'bg-teal-500',
-    cloturee:             'bg-emerald-500',
-    annulee:              'bg-red-400',
+    brouillon: 'bg-zinc-400 dark:bg-zinc-500',
+    a_charger: 'bg-amber-400',
+    chargement_en_cours: 'bg-orange-500',
+    livraison_en_cours: 'bg-blue-500',
+    livree: 'bg-teal-500',
+    cloturee: 'bg-emerald-500',
+    annulee: 'bg-red-400',
 };
 
 const statutFactureColor: Record<string, string> = {
@@ -1066,11 +1066,16 @@ function confirmDelete(c: Commande) {
             <div class="space-y-4">
                 <p class="text-sm text-muted-foreground">
                     Vous êtes sur le point d'annuler la commande
-                    <span class="font-mono font-semibold">{{ selectedCommande?.reference }}</span>.
-                    Cette action est irréversible.
+                    <span class="font-mono font-semibold">{{
+                        selectedCommande?.reference
+                    }}</span
+                    >. Cette action est irréversible.
                 </p>
                 <div>
-                    <Label for="idx-annulation-motif-code" class="mb-1.5 block text-sm">
+                    <Label
+                        for="idx-annulation-motif-code"
+                        class="mb-1.5 block text-sm"
+                    >
                         Motif <span class="text-destructive">*</span>
                     </Label>
                     <Select
@@ -1082,14 +1087,23 @@ function confirmDelete(c: Commande) {
                         placeholder="Sélectionner un motif"
                         class="w-full"
                         fluid
-                        :class="{ 'p-invalid': annulerForm.errors.motif_annulation_code }"
+                        :class="{
+                            'p-invalid':
+                                annulerForm.errors.motif_annulation_code,
+                        }"
                     />
-                    <p v-if="annulerForm.errors.motif_annulation_code" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="annulerForm.errors.motif_annulation_code"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ annulerForm.errors.motif_annulation_code }}
                     </p>
                 </div>
                 <div v-if="annulerForm.motif_annulation_code === 'autre'">
-                    <Label for="idx-annulation-motif-detail" class="mb-1.5 block text-sm">
+                    <Label
+                        for="idx-annulation-motif-detail"
+                        class="mb-1.5 block text-sm"
+                    >
                         Précision <span class="text-destructive">*</span>
                     </Label>
                     <Textarea
@@ -1098,23 +1112,37 @@ function confirmDelete(c: Commande) {
                         rows="3"
                         class="w-full"
                         placeholder="Indiquez la raison..."
-                        :class="{ 'p-invalid': annulerForm.errors.motif_annulation_detail }"
+                        :class="{
+                            'p-invalid':
+                                annulerForm.errors.motif_annulation_detail,
+                        }"
                     />
-                    <p v-if="annulerForm.errors.motif_annulation_detail" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="annulerForm.errors.motif_annulation_detail"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ annulerForm.errors.motif_annulation_detail }}
                     </p>
                 </div>
             </div>
             <template #footer>
                 <div class="flex justify-end gap-2">
-                    <Button variant="outline" @click="annulerDialogVisible = false">Retour</Button>
+                    <Button
+                        variant="outline"
+                        @click="annulerDialogVisible = false"
+                        >Retour</Button
+                    >
                     <Button
                         variant="destructive"
                         :disabled="annulerDisabled"
                         @click="submitAnnuler"
                     >
                         <XCircle class="mr-2 h-4 w-4" />
-                        {{ annulerForm.processing ? 'Annulation…' : "Confirmer l'annulation" }}
+                        {{
+                            annulerForm.processing
+                                ? 'Annulation…'
+                                : "Confirmer l'annulation"
+                        }}
                     </Button>
                 </div>
             </template>

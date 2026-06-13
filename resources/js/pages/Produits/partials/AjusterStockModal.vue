@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
-import { MOTIFS_AUGMENTATION, MOTIFS_DIMINUTION } from '@/shared/motifs-ajustement-stock';
+import {
+    MOTIFS_AUGMENTATION,
+    MOTIFS_DIMINUTION,
+} from '@/shared/motifs-ajustement-stock';
 import { useForm } from '@inertiajs/vue3';
 import { ArrowDown, ArrowUp, Package } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
@@ -158,11 +161,13 @@ function submit() {
                         :min="1"
                         :use-grouping="true"
                         class="w-full"
-                        :input-class="[
-                            'w-full',
-                            form.errors.augmenter ? 'p-invalid' : '',
-                            form.diminuer ? 'opacity-40' : '',
-                        ].join(' ')"
+                        :input-class="
+                            [
+                                'w-full',
+                                form.errors.augmenter ? 'p-invalid' : '',
+                                form.diminuer ? 'opacity-40' : '',
+                            ].join(' ')
+                        "
                         @update:model-value="onAugmenterChange"
                     />
                     <p
@@ -188,11 +193,13 @@ function submit() {
                         :min="1"
                         :use-grouping="true"
                         class="w-full"
-                        :input-class="[
-                            'w-full',
-                            form.errors.diminuer ? 'p-invalid' : '',
-                            form.augmenter ? 'opacity-40' : '',
-                        ].join(' ')"
+                        :input-class="
+                            [
+                                'w-full',
+                                form.errors.diminuer ? 'p-invalid' : '',
+                                form.augmenter ? 'opacity-40' : '',
+                            ].join(' ')
+                        "
                         @update:model-value="onDiminuerChange"
                     />
                     <p
@@ -234,10 +241,7 @@ function submit() {
 
             <!-- Détail motif (affiché uniquement pour "Autre") -->
             <div v-if="isAutre" class="space-y-1.5">
-                <label
-                    for="ajuster-motif-detail"
-                    class="text-sm font-medium"
-                >
+                <label for="ajuster-motif-detail" class="text-sm font-medium">
                     Préciser <span class="text-destructive">*</span>
                 </label>
                 <InputText

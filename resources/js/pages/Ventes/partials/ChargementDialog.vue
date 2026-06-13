@@ -180,7 +180,9 @@ function submit(): void {
                     <td class="py-3 pr-4 font-medium">
                         {{ l.produit_nom }}
                     </td>
-                    <td class="py-3 text-center text-muted-foreground tabular-nums">
+                    <td
+                        class="py-3 text-center text-muted-foreground tabular-nums"
+                    >
                         {{ l.quantite_demandee }}
                     </td>
                     <td class="px-2 py-3">
@@ -203,7 +205,8 @@ function submit(): void {
                                   : 'text-amber-600'
                         "
                     >
-                        {{ ecartChargement(idx) > 0 ? '+' : '' }}{{ ecartChargement(idx) }}
+                        {{ ecartChargement(idx) > 0 ? '+' : ''
+                        }}{{ ecartChargement(idx) }}
                     </td>
                     <td class="px-2 py-3">
                         <Dropdown

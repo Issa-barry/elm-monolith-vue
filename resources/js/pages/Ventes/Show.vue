@@ -16,7 +16,6 @@ import {
     CheckCircle,
     HandCoins,
     History,
-    Lock,
     MoreVertical,
     Pencil,
     Truck,
@@ -142,20 +141,17 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Statut couleurs ───────────────────────────────────────────────────────────
 const statutCommandeColor: Record<string, string> = {
-    brouillon:
-        'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
+    brouillon: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
     a_charger:
         'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
     chargement_en_cours:
         'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300',
     livraison_en_cours:
         'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    livree:
-        'bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300',
+    livree: 'bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300',
     cloturee:
         'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    annulee:
-        'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400',
+    annulee: 'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400',
 };
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
@@ -226,7 +222,9 @@ function formatLignes(val: unknown): string {
         .map((l) => {
             const nom = l.produit_nom ?? '?';
             const qte = l.quantite_demandee ?? 0;
-            const montant = Number(l.total_ligne ?? qte * Number(l.prix_vente_snapshot ?? 0));
+            const montant = Number(
+                l.total_ligne ?? qte * Number(l.prix_vente_snapshot ?? 0),
+            );
             return `${nom} × ${qte} — ${formatGNF(montant)}`;
         })
         .join('\n');
@@ -392,8 +390,7 @@ function submitEncaisser() {
 
 // ── Colonnes lignes conditionnelles ───────────────────────────────────────────
 const showChargeeCol = computed(
-    () =>
-        !props.commande.is_brouillon && !props.commande.is_a_charger,
+    () => !props.commande.is_brouillon && !props.commande.is_a_charger,
 );
 </script>
 
@@ -439,7 +436,10 @@ const showChargeeCol = computed(
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" class="w-52">
-                            <DropdownMenuItem v-if="commande.can_modifier" as-child>
+                            <DropdownMenuItem
+                                v-if="commande.can_modifier"
+                                as-child
+                            >
                                 <Link
                                     :href="`/ventes/${commande.id}/edit`"
                                     class="flex w-full cursor-pointer items-center gap-2"
@@ -503,7 +503,11 @@ const showChargeeCol = computed(
             <div class="hidden items-start justify-between gap-4 sm:flex">
                 <div class="flex items-start gap-4">
                     <Link href="/ventes">
-                        <Button variant="ghost" size="icon" class="mt-1 h-8 w-8">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            class="mt-1 h-8 w-8"
+                        >
                             <ArrowLeft class="h-4 w-4" />
                         </Button>
                     </Link>
@@ -567,7 +571,7 @@ const showChargeeCol = computed(
                     <Button
                         v-if="commande.can_demarrer_chargement"
                         size="sm"
-                        class="bg-orange-600 hover:bg-orange-700 text-white"
+                        class="bg-orange-600 text-white hover:bg-orange-700"
                         :disabled="actionProcessing"
                         @click="demarrerChargement"
                     >
@@ -638,7 +642,9 @@ const showChargeeCol = computed(
                         </p>
                     </div>
                     <div>
-                        <p class="text-xs text-muted-foreground">Total commande</p>
+                        <p class="text-xs text-muted-foreground">
+                            Total commande
+                        </p>
                         <p class="mt-0.5 text-xl font-bold tabular-nums">
                             {{ formatGNF(commande.total_commande) }}
                         </p>
@@ -650,7 +656,8 @@ const showChargeeCol = computed(
                     class="mt-4 flex flex-wrap gap-4 border-t pt-4 text-xs text-muted-foreground"
                 >
                     <span v-if="commande.a_charger_at">
-                        Confirmée le <strong>{{ commande.a_charger_at }}</strong>
+                        Confirmée le
+                        <strong>{{ commande.a_charger_at }}</strong>
                     </span>
                     <span v-if="commande.chargement_demarre_at">
                         Chargement démarré le
@@ -832,13 +839,17 @@ const showChargeeCol = computed(
                 <!-- KPIs -->
                 <div class="mb-6 grid grid-cols-3 gap-3">
                     <div class="rounded-lg border bg-muted/30 px-4 py-3">
-                        <p class="text-xs text-muted-foreground">Total facturé</p>
+                        <p class="text-xs text-muted-foreground">
+                            Total facturé
+                        </p>
                         <p class="mt-0.5 text-lg font-bold tabular-nums">
                             {{ formatGNF(facture.montant_net) }}
                         </p>
                     </div>
                     <div class="rounded-lg border bg-muted/30 px-4 py-3">
-                        <p class="text-xs text-muted-foreground">Déjà encaissé</p>
+                        <p class="text-xs text-muted-foreground">
+                            Déjà encaissé
+                        </p>
                         <p class="mt-0.5 text-lg font-bold tabular-nums">
                             {{ formatGNF(facture.montant_encaisse) }}
                         </p>
@@ -862,11 +873,31 @@ const showChargeeCol = computed(
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b bg-muted/40">
-                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Date</th>
-                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Heure</th>
-                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Mode</th>
-                                    <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Montant</th>
-                                    <th class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground sm:table-cell">Par</th>
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Date
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Heure
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Mode
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                    >
+                                        Montant
+                                    </th>
+                                    <th
+                                        class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground sm:table-cell"
+                                    >
+                                        Par
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
@@ -875,11 +906,27 @@ const showChargeeCol = computed(
                                     :key="enc.id"
                                     class="hover:bg-muted/10"
                                 >
-                                    <td class="px-4 py-3 tabular-nums">{{ enc.date_encaissement }}</td>
-                                    <td class="px-4 py-3 text-muted-foreground tabular-nums">{{ enc.heure ?? '—' }}</td>
-                                    <td class="px-4 py-3 text-muted-foreground">{{ enc.mode_paiement_label }}</td>
-                                    <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatGNF(enc.montant) }}</td>
-                                    <td class="hidden px-4 py-3 text-muted-foreground sm:table-cell">{{ enc.created_by ?? '—' }}</td>
+                                    <td class="px-4 py-3 tabular-nums">
+                                        {{ enc.date_encaissement }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-muted-foreground tabular-nums"
+                                    >
+                                        {{ enc.heure ?? '—' }}
+                                    </td>
+                                    <td class="px-4 py-3 text-muted-foreground">
+                                        {{ enc.mode_paiement_label }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-right font-semibold tabular-nums"
+                                    >
+                                        {{ formatGNF(enc.montant) }}
+                                    </td>
+                                    <td
+                                        class="hidden px-4 py-3 text-muted-foreground sm:table-cell"
+                                    >
+                                        {{ enc.created_by ?? '—' }}
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -909,10 +956,18 @@ const showChargeeCol = computed(
                         <span
                             class="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border border-background bg-primary"
                         />
-                        <div class="flex flex-wrap items-baseline gap-1 text-xs">
-                            <strong class="text-foreground">{{ act.user_name }}</strong>
-                            <span class="text-muted-foreground">{{ act.action_label }}</span>
-                            <span class="text-muted-foreground">— {{ act.created_at }}</span>
+                        <div
+                            class="flex flex-wrap items-baseline gap-1 text-xs"
+                        >
+                            <strong class="text-foreground">{{
+                                act.user_name
+                            }}</strong>
+                            <span class="text-muted-foreground">{{
+                                act.action_label
+                            }}</span>
+                            <span class="text-muted-foreground"
+                                >— {{ act.created_at }}</span
+                            >
                         </div>
                         <p
                             v-if="act.details?.motif"
@@ -956,25 +1011,46 @@ const showChargeeCol = computed(
                                 'text-muted-foreground'
                             "
                         >
-                            {{ auditEventVerb[entry.event_code] ?? entry.event_label }}
+                            {{
+                                auditEventVerb[entry.event_code] ??
+                                entry.event_label
+                            }}
                         </span>
                         <strong>{{ entry.actor_name }}</strong>
-                        <span class="text-muted-foreground">— {{ entry.created_at }}</span>
+                        <span class="text-muted-foreground"
+                            >— {{ entry.created_at }}</span
+                        >
                     </div>
 
                     <div
                         v-if="
-                            (entry.old_values && Object.keys(entry.old_values).length > 0) ||
-                            (entry.new_values && Object.keys(entry.new_values).length > 0)
+                            (entry.old_values &&
+                                Object.keys(entry.old_values).length > 0) ||
+                            (entry.new_values &&
+                                Object.keys(entry.new_values).length > 0)
                         "
                         class="mt-2 overflow-hidden rounded-lg border text-xs"
                     >
                         <table class="w-full">
                             <thead>
                                 <tr class="border-b bg-muted/40">
-                                    <th class="px-3 py-1.5 text-left font-medium text-muted-foreground">Champ</th>
-                                    <th v-if="entry.old_values" class="px-3 py-1.5 text-left font-medium text-muted-foreground">Avant</th>
-                                    <th v-if="entry.new_values" class="px-3 py-1.5 text-left font-medium text-muted-foreground">Après</th>
+                                    <th
+                                        class="px-3 py-1.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Champ
+                                    </th>
+                                    <th
+                                        v-if="entry.old_values"
+                                        class="px-3 py-1.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Avant
+                                    </th>
+                                    <th
+                                        v-if="entry.new_values"
+                                        class="px-3 py-1.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Après
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
@@ -983,9 +1059,23 @@ const showChargeeCol = computed(
                                     :key="row.field"
                                     class="hover:bg-muted/10"
                                 >
-                                    <td class="px-3 py-1.5 font-medium text-muted-foreground">{{ row.label }}</td>
-                                    <td v-if="entry.old_values" class="px-3 py-1.5 whitespace-pre-line">{{ row.old }}</td>
-                                    <td v-if="entry.new_values" class="px-3 py-1.5 whitespace-pre-line">{{ row.new }}</td>
+                                    <td
+                                        class="px-3 py-1.5 font-medium text-muted-foreground"
+                                    >
+                                        {{ row.label }}
+                                    </td>
+                                    <td
+                                        v-if="entry.old_values"
+                                        class="px-3 py-1.5 whitespace-pre-line"
+                                    >
+                                        {{ row.old }}
+                                    </td>
+                                    <td
+                                        v-if="entry.new_values"
+                                        class="px-3 py-1.5 whitespace-pre-line"
+                                    >
+                                        {{ row.new }}
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1024,7 +1114,10 @@ const showChargeeCol = computed(
                         fluid
                         :class="{ 'p-invalid': encaisserForm.errors.montant }"
                     />
-                    <p v-if="encaisserForm.errors.montant" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="encaisserForm.errors.montant"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ encaisserForm.errors.montant }}
                     </p>
                 </div>
@@ -1041,16 +1134,25 @@ const showChargeeCol = computed(
                         placeholder="Sélectionner"
                         class="w-full"
                         fluid
-                        :class="{ 'p-invalid': encaisserForm.errors.mode_paiement }"
+                        :class="{
+                            'p-invalid': encaisserForm.errors.mode_paiement,
+                        }"
                     />
-                    <p v-if="encaisserForm.errors.mode_paiement" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="encaisserForm.errors.mode_paiement"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ encaisserForm.errors.mode_paiement }}
                     </p>
                 </div>
             </div>
             <template #footer>
                 <div class="flex justify-end gap-2">
-                    <Button variant="outline" @click="encaisserDialogVisible = false">Annuler</Button>
+                    <Button
+                        variant="outline"
+                        @click="encaisserDialogVisible = false"
+                        >Annuler</Button
+                    >
                     <Button
                         :disabled="
                             encaisserForm.processing ||
@@ -1060,7 +1162,11 @@ const showChargeeCol = computed(
                         @click="submitEncaisser"
                     >
                         <HandCoins class="mr-2 h-4 w-4" />
-                        {{ encaisserForm.processing ? 'Enregistrement…' : 'Confirmer' }}
+                        {{
+                            encaisserForm.processing
+                                ? 'Enregistrement…'
+                                : 'Confirmer'
+                        }}
                     </Button>
                 </div>
             </template>
@@ -1076,11 +1182,16 @@ const showChargeeCol = computed(
             <div class="space-y-4">
                 <p class="text-sm text-muted-foreground">
                     Vous êtes sur le point d'annuler la commande
-                    <span class="font-mono font-semibold">{{ commande.reference }}</span>.
-                    Cette action est irréversible.
+                    <span class="font-mono font-semibold">{{
+                        commande.reference
+                    }}</span
+                    >. Cette action est irréversible.
                 </p>
                 <div>
-                    <Label for="annulation-motif-code" class="mb-1.5 block text-sm">
+                    <Label
+                        for="annulation-motif-code"
+                        class="mb-1.5 block text-sm"
+                    >
                         Motif <span class="text-destructive">*</span>
                     </Label>
                     <Select
@@ -1092,14 +1203,23 @@ const showChargeeCol = computed(
                         placeholder="Sélectionner un motif"
                         class="w-full"
                         fluid
-                        :class="{ 'p-invalid': annulerForm.errors.motif_annulation_code }"
+                        :class="{
+                            'p-invalid':
+                                annulerForm.errors.motif_annulation_code,
+                        }"
                     />
-                    <p v-if="annulerForm.errors.motif_annulation_code" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="annulerForm.errors.motif_annulation_code"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ annulerForm.errors.motif_annulation_code }}
                     </p>
                 </div>
                 <div v-if="annulerForm.motif_annulation_code === 'autre'">
-                    <Label for="annulation-motif-detail" class="mb-1.5 block text-sm">
+                    <Label
+                        for="annulation-motif-detail"
+                        class="mb-1.5 block text-sm"
+                    >
                         Précision <span class="text-destructive">*</span>
                     </Label>
                     <Textarea
@@ -1108,23 +1228,37 @@ const showChargeeCol = computed(
                         rows="3"
                         class="w-full"
                         placeholder="Indiquez la raison de l'annulation..."
-                        :class="{ 'p-invalid': annulerForm.errors.motif_annulation_detail }"
+                        :class="{
+                            'p-invalid':
+                                annulerForm.errors.motif_annulation_detail,
+                        }"
                     />
-                    <p v-if="annulerForm.errors.motif_annulation_detail" class="mt-1 text-xs text-destructive">
+                    <p
+                        v-if="annulerForm.errors.motif_annulation_detail"
+                        class="mt-1 text-xs text-destructive"
+                    >
                         {{ annulerForm.errors.motif_annulation_detail }}
                     </p>
                 </div>
             </div>
             <template #footer>
                 <div class="flex justify-end gap-2">
-                    <Button variant="outline" @click="annulerDialogVisible = false">Retour</Button>
+                    <Button
+                        variant="outline"
+                        @click="annulerDialogVisible = false"
+                        >Retour</Button
+                    >
                     <Button
                         variant="destructive"
                         :disabled="annulerDisabled"
                         @click="submitAnnuler"
                     >
                         <XCircle class="mr-2 h-4 w-4" />
-                        {{ annulerForm.processing ? 'Annulation…' : "Confirmer l'annulation" }}
+                        {{
+                            annulerForm.processing
+                                ? 'Annulation…'
+                                : "Confirmer l'annulation"
+                        }}
                     </Button>
                 </div>
             </template>
