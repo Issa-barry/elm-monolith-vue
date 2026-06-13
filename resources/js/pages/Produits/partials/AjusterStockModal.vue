@@ -43,13 +43,13 @@ const direction = computed<'augmenter' | 'diminuer' | ''>(() => {
     return '';
 });
 
+const isAutre = computed(() => form.motif_type === 'autre');
+
 const motifOptions = computed(() => {
     if (direction.value === 'augmenter') return MOTIFS_AUGMENTATION;
     if (direction.value === 'diminuer') return MOTIFS_DIMINUTION;
     return [];
 });
-
-const isAutre = computed(() => form.motif_type === 'autre');
 
 const stockActuel = computed(() => props.produit.qte_stock ?? 0);
 
@@ -70,6 +70,10 @@ function resetMotifIfInvalid() {
     }
 }
 
+function onMotifTypeChange() {
+    if (form.motif_type !== 'autre') form.motif_detail = '';
+}
+
 function onAugmenterChange() {
     if (form.augmenter) {
         form.diminuer = null;
@@ -84,9 +88,6 @@ function onDiminuerChange() {
     }
 }
 
-function onMotifTypeChange() {
-    if (form.motif_type !== 'autre') form.motif_detail = '';
-}
 
 function close() {
     localVisible.value = false;
@@ -234,10 +235,7 @@ function submit() {
 
             <!-- Détail motif (affiché uniquement pour "Autre") -->
             <div v-if="isAutre" class="space-y-1.5">
-                <label
-                    for="ajuster-motif-detail"
-                    class="text-sm font-medium"
-                >
+                <label for="ajuster-motif-detail" class="text-sm font-medium">
                     Préciser <span class="text-destructive">*</span>
                 </label>
                 <InputText

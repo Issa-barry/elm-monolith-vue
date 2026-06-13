@@ -85,7 +85,7 @@ class PdvCheckoutTest extends TestCase
 
         $commande = CommandeVente::first();
         $this->assertNotNull($commande);
-        $this->assertEquals(StatutCommandeVente::EN_COURS, $commande->statut);
+        $this->assertEquals(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->statut);
         $this->assertEquals(10000, $commande->total_commande);
         $this->assertNull($commande->vehicule_id);
         $this->assertNull($commande->client_id);

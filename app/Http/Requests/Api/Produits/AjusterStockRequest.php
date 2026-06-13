@@ -19,7 +19,7 @@ class AjusterStockRequest extends FormRequest
             'augmenter' => ['nullable', 'integer', 'min:1'],
             'diminuer' => ['nullable', 'integer', 'min:1'],
             'motif_type' => ['required', Rule::in(MotifAjustementStock::validValues())],
-            'motif_detail' => ['nullable', 'required_if:motif_type,autre', 'string', 'max:500'],
+            'motif_detail' => ['required_if:motif_type,autre', 'nullable', 'string', 'max:500'],
         ];
     }
 

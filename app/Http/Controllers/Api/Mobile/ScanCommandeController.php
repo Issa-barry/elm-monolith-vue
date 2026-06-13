@@ -31,7 +31,7 @@ class ScanCommandeController extends Controller
             'vehicule:id,nom_vehicule,immatriculation',
             'vehicule.equipe:id,nom',
             'client:id,nom,prenom,telephone,adresse,quartier,ville',
-            'lignes:id,commande_vente_id,qte',
+            'lignes:id,commande_vente_id,quantite_demandee',
         ])->where('reference', $reference)->first();
 
         if (! $commande) {
@@ -62,7 +62,7 @@ class ScanCommandeController extends Controller
             ] : null,
             'equipe_nom' => $commande->vehicule?->equipe?->nom ?? '—',
             'date_commande' => $commande->validated_at?->toDateString(),
-            'nb_packs' => (int) $commande->lignes->sum('qte'),
+            'nb_packs' => (int) $commande->lignes->sum('quantite_demandee'),
             'total' => (float) $commande->total_commande,
         ]);
     }

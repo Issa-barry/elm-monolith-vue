@@ -35,7 +35,7 @@ class PdvCheckoutService
                 'vehicule_id' => $data['vehicule_id'] ?? null,
                 'client_id' => $data['client_id'] ?? null,
                 'total_commande' => $total,
-                'statut' => StatutCommandeVente::EN_COURS,
+                'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
                 'validated_at' => now(),
                 'created_by' => $user->id,
             ]);
@@ -134,7 +134,7 @@ class PdvCheckoutService
 
             $lignesData[] = [
                 'produit_id' => $produit->id,
-                'qte' => $qte,
+                'quantite_demandee' => $qte,
                 'prix_usine_snapshot' => (int) $produit->prix_usine,
                 'prix_vente_snapshot' => $prixVente,
                 'total_ligne' => $totalLigne,

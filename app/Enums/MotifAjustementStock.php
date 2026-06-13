@@ -5,30 +5,32 @@ namespace App\Enums;
 enum MotifAjustementStock: string
 {
     // Augmentation uniquement
-    case APRES_PRODUCTION      = 'apres_production';
-    case RETOUR                = 'retour';
+    case APRES_PRODUCTION = 'apres_production';
+    case RETOUR = 'retour';
     case ENTREE_EXCEPTIONNELLE = 'entree_exceptionnelle';
 
     // Diminution uniquement
-    case PERTE                 = 'perte';
-    case CASSE                 = 'casse';
-    case DON                   = 'don';
+    case PERTE = 'perte';
+    case CASSE = 'casse';
+    case DON = 'don';
     case SORTIE_EXCEPTIONNELLE = 'sortie_exceptionnelle';
 
     // Les deux directions
     case CORRECTION_STOCK = 'correction_stock';
+    case AUTRE = 'autre';
 
     public function label(): string
     {
         return match ($this) {
-            self::APRES_PRODUCTION      => 'Après production',
-            self::RETOUR                => 'Retour',
+            self::APRES_PRODUCTION => 'Après production',
+            self::RETOUR => 'Retour',
             self::ENTREE_EXCEPTIONNELLE => 'Entrée exceptionnelle',
-            self::PERTE                 => 'Perte',
-            self::CASSE                 => 'Casse',
-            self::DON                   => 'Don',
+            self::PERTE => 'Perte',
+            self::CASSE => 'Casse',
+            self::DON => 'Don',
             self::SORTIE_EXCEPTIONNELLE => 'Sortie exceptionnelle',
-            self::CORRECTION_STOCK      => 'Correction de stock',
+            self::CORRECTION_STOCK => 'Correction de stock',
+            self::AUTRE => 'Autre',
         };
     }
 
@@ -45,12 +47,17 @@ enum MotifAjustementStock: string
             self::DON,
             self::SORTIE_EXCEPTIONNELLE => 'sortie',
 
-            self::CORRECTION_STOCK => 'both',
+            self::CORRECTION_STOCK,
+            self::AUTRE => 'both',
         };
     }
 
-    public function toNotesString(): string
+    public function toNotesString(string $detail = ''): string
     {
+        if ($this === self::AUTRE) {
+            return 'Autre'.($detail !== '' ? ' : '.$detail : '');
+        }
+
         return $this->label();
     }
 
@@ -85,7 +92,7 @@ enum MotifAjustementStock: string
 
         return [
             'augmentation' => $build('entree'),
-            'diminution'   => $build('sortie'),
+            'diminution' => $build('sortie'),
         ];
     }
 }

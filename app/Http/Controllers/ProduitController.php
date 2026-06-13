@@ -346,7 +346,7 @@ class ProduitController extends Controller
             'augmenter' => ['nullable', 'integer', 'min:1'],
             'diminuer' => ['nullable', 'integer', 'min:1'],
             'motif_type' => ['required', Rule::in(MotifAjustementStock::validValues())],
-            'motif_detail' => ['nullable', 'required_if:motif_type,autre', 'string', 'max:500'],
+            'motif_detail' => ['required_if:motif_type,autre', 'nullable', 'string', 'max:500'],
         ], [
             'augmenter.integer' => 'La quantité doit être un nombre entier.',
             'augmenter.min' => 'La quantité doit être supérieure à 0.',
