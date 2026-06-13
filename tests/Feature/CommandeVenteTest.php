@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Enums\StatutCommandeVente;
 use App\Models\Client;
 use App\Models\CommandeVente;
-use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\Organization;
 use App\Models\Parametre;
@@ -628,7 +627,7 @@ class CommandeVenteTest extends TestCase
 
         $commande->lignes()->create([
             'produit_id' => $produit->id,
-            'qte' => 2,
+            'quantite_demandee' => 2,
             'prix_usine_snapshot' => (float) $produit->prix_usine,
             'prix_vente_snapshot' => (float) $produit->prix_vente,
             'total_ligne' => 2 * (float) $produit->prix_vente,
@@ -700,7 +699,7 @@ class CommandeVenteTest extends TestCase
 
         $commande->lignes()->create([
             'produit_id' => $produit->id,
-            'qte' => 1,
+            'quantite_demandee' => 1,
             'prix_usine_snapshot' => (float) $produit->prix_usine,
             'prix_vente_snapshot' => (float) $produit->prix_vente,
             'total_ligne' => (float) $produit->prix_vente,
@@ -731,7 +730,7 @@ class CommandeVenteTest extends TestCase
 
         $commande->lignes()->create([
             'produit_id' => $produit->id,
-            'qte' => 1,
+            'quantite_demandee' => 1,
             'prix_usine_snapshot' => (float) $produit->prix_usine,
             'prix_vente_snapshot' => (float) $customPrice,
             'total_ligne' => (float) $customPrice,
@@ -766,50 +765,69 @@ class CommandeVenteTest extends TestCase
             ->assertStatus(403);
     }
 
-    // ── valider : BROUILLON → EN_COURS ───────────────────────────────────────
+    // ── valider : BROUILLON → A_CHARGER ──────────────────────────────────────
 
-    public function test_valider_transitions_brouillon_to_en_cours(): void
+    public function test_valider_transitions_brouillon_to_a_charger(): void
     {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
             'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
             'statut' => StatutCommandeVente::BROUILLON,
             'total_commande' => 5000,
         ]);
+        $commande->lignes()->create([
+            'produit_id' => $produit->id,
+            'quantite_demandee' => 2,
+            'prix_usine_snapshot' => (float) $produit->prix_usine,
+            'prix_vente_snapshot' => (float) $produit->prix_vente,
+            'total_ligne' => 2 * (float) $produit->prix_vente,
+        ]);
 
         $this->actingAs($this->user)
             ->patch(route('ventes.valider', $commande))
             ->assertRedirect();
 
-        $this->assertEquals(StatutCommandeVente::EN_COURS, $commande->fresh()->statut);
+        $this->assertEquals(StatutCommandeVente::A_CHARGER, $commande->fresh()->statut);
     }
 
-    public function test_valider_creates_facture_on_validation(): void
+    public function test_valider_does_not_create_facture(): void
     {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
             'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
             'statut' => StatutCommandeVente::BROUILLON,
-            'total_commande' => 8000,
+            'total_commande' => 4000,
+        ]);
+        $commande->lignes()->create([
+            'produit_id' => $produit->id,
+            'quantite_demandee' => 2,
+            'prix_usine_snapshot' => (float) $produit->prix_usine,
+            'prix_vente_snapshot' => (float) $produit->prix_vente,
+            'total_ligne' => 2 * (float) $produit->prix_vente,
         ]);
 
         $this->actingAs($this->user)
             ->patch(route('ventes.valider', $commande))
             ->assertRedirect();
 
-        $this->assertDatabaseHas('factures_ventes', [
+        $this->assertDatabaseMissing('factures_ventes', [
             'commande_vente_id' => $commande->id,
-            'montant_brut' => 8000,
         ]);
     }
 
-    // ── annuler : EN_COURS → ANNULEE ─────────────────────────────────────────
+    // ── annuler : BROUILLON|A_CHARGER → ANNULEE ──────────────────────────────
 
     public function test_annuler_sets_statut_annulee(): void
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::BROUILLON,
         ]);
 
         $this->actingAs($this->user)
@@ -825,7 +843,7 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::BROUILLON,
         ]);
 
         $this->actingAs($this->user)
@@ -837,7 +855,7 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::BROUILLON,
         ]);
 
         $this->actingAs($this->user)
@@ -851,7 +869,7 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::BROUILLON,
         ]);
 
         $this->actingAs($this->user)
@@ -865,7 +883,7 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::BROUILLON,
         ]);
 
         $this->actingAs($this->user)
@@ -886,7 +904,7 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::BROUILLON,
         ]);
 
         $this->actingAs($this->user)
@@ -910,7 +928,7 @@ class CommandeVenteTest extends TestCase
         ];
     }
 
-    public function test_annuler_returns_422_if_already_annulee(): void
+    public function test_annuler_returns_403_if_already_annulee(): void
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
@@ -921,46 +939,31 @@ class CommandeVenteTest extends TestCase
             ->patch(route('ventes.annuler', $commande), [
                 'motif_annulation_code' => 'doublon',
             ])
-            ->assertStatus(422);
+            ->assertStatus(403);
     }
 
-    public function test_annuler_returns_422_if_encaissement_exists(): void
+    public function test_annuler_returns_403_from_chargement_en_cours(): void
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'site_id' => $this->defaultSite->id,
-            'statut' => StatutCommandeVente::EN_COURS,
-        ]);
-
-        $facture = FactureVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $commande->id,
-            'montant_brut' => 5000,
-            'montant_net' => 5000,
-        ]);
-
-        EncaissementVente::create([
-            'facture_vente_id' => $facture->id,
-            'montant' => 5000,
-            'date_encaissement' => now()->toDateString(),
-            'mode_paiement' => 'especes',
+            'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
         ]);
 
         $this->actingAs($this->user)
             ->patch(route('ventes.annuler', $commande), [
                 'motif_annulation_code' => 'erreur_saisie',
             ])
-            ->assertStatus(422);
+            ->assertStatus(403);
     }
 
-    // ── auto-clôture : EN_COURS → CLOTUREE ───────────────────────────────────
+    // ── auto-clôture : LIVRAISON_EN_COURS → LIVREE → CLOTUREE ────────────────
 
     public function test_auto_cloture_when_facture_fully_paid_and_no_commissions(): void
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
             'site_id' => $this->defaultSite->id,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
             'total_commande' => 5000,
         ]);
 
@@ -1026,23 +1029,30 @@ class CommandeVenteTest extends TestCase
         $this->assertStringEndsWith('-002', $commandes->last()->reference);
     }
 
-    public function test_valider_cree_facture_avec_meme_reference_que_commande(): void
+    public function test_valider_sets_a_charger_at_timestamp(): void
     {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
             'site_id' => $this->defaultSite->id,
-            'statut' => \App\Enums\StatutCommandeVente::BROUILLON,
-            'total_commande' => 5000,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'total_commande' => 4000,
+        ]);
+        $commande->lignes()->create([
+            'produit_id' => $produit->id,
+            'quantite_demandee' => 2,
+            'prix_usine_snapshot' => (float) $produit->prix_usine,
+            'prix_vente_snapshot' => (float) $produit->prix_vente,
+            'total_ligne' => 2 * (float) $produit->prix_vente,
         ]);
 
         $this->actingAs($this->user)
             ->patch(route('ventes.valider', $commande))
             ->assertRedirect();
 
-        $facture = $commande->fresh()->facture;
-
-        $this->assertNotNull($facture);
-        $this->assertEquals($commande->reference, $facture->reference);
+        $this->assertNotNull($commande->fresh()->a_charger_at);
     }
 
     // ── destroy ───────────────────────────────────────────────────────────────
@@ -1065,7 +1075,7 @@ class CommandeVenteTest extends TestCase
     {
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
-            'statut' => StatutCommandeVente::EN_COURS,
+            'statut' => StatutCommandeVente::A_CHARGER,
         ]);
 
         $this->actingAs($this->user)

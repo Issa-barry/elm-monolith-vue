@@ -23,6 +23,34 @@ class AjusterStockRequest extends FormRequest
         ];
     }
 
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            if ($validator->errors()->has('motif_type')) {
+                return;
+            }
+
+            $motifType    = $this->input('motif_type');
+            $hasAugmenter = filled($this->input('augmenter'));
+            $hasDiminuer  = filled($this->input('diminuer'));
+
+            // Direction indéterminée : les autres règles géreront l'absence
+            if (! $hasAugmenter && ! $hasDiminuer) {
+                return;
+            }
+
+            $direction    = $hasAugmenter ? 'entree' : 'sortie';
+            $validMotifs  = MotifAjustementStock::validValuesForDirection($direction);
+
+            if (! in_array($motifType, $validMotifs, true)) {
+                $validator->errors()->add(
+                    'motif_type',
+                    'Ce motif n\'est pas valide pour ce type d\'ajustement.'
+                );
+            }
+        });
+    }
+
     public function messages(): array
     {
         return [

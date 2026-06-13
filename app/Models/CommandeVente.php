@@ -30,7 +30,10 @@ class CommandeVente extends Model
         'motif_annulation',
         'annulee_at',
         'annulee_par',
-        'validated_at',
+        'a_charger_at',
+        'chargement_demarre_at',
+        'chargement_valide_at',
+        'livree_at',
         'closed_at',
         'created_by',
         'updated_by',
@@ -42,11 +45,14 @@ class CommandeVente extends Model
     protected function casts(): array
     {
         return [
-            'total_commande' => 'decimal:2',
-            'statut' => StatutCommandeVente::class,
-            'annulee_at' => 'datetime',
-            'validated_at' => 'datetime',
-            'closed_at' => 'datetime',
+            'total_commande'        => 'decimal:2',
+            'statut'                => StatutCommandeVente::class,
+            'annulee_at'            => 'datetime',
+            'a_charger_at'          => 'datetime',
+            'chargement_demarre_at' => 'datetime',
+            'chargement_valide_at'  => 'datetime',
+            'livree_at'             => 'datetime',
+            'closed_at'             => 'datetime',
         ];
     }
 
@@ -109,6 +115,11 @@ class CommandeVente extends Model
         return $this->hasMany(CommissionVente::class, 'commande_vente_id');
     }
 
+    public function activites(): HasMany
+    {
+        return $this->hasMany(CommandeVenteActivite::class)->latest();
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -138,9 +149,24 @@ class CommandeVente extends Model
         return $this->statut === StatutCommandeVente::BROUILLON;
     }
 
-    public function isEnCours(): bool
+    public function isACharger(): bool
     {
-        return $this->statut === StatutCommandeVente::EN_COURS;
+        return $this->statut === StatutCommandeVente::A_CHARGER;
+    }
+
+    public function isChargementEnCours(): bool
+    {
+        return $this->statut === StatutCommandeVente::CHARGEMENT_EN_COURS;
+    }
+
+    public function isLivraisonEnCours(): bool
+    {
+        return $this->statut === StatutCommandeVente::LIVRAISON_EN_COURS;
+    }
+
+    public function isLivree(): bool
+    {
+        return $this->statut === StatutCommandeVente::LIVREE;
     }
 
     public function isCloturee(): bool
@@ -162,14 +188,13 @@ class CommandeVente extends Model
 
     /**
      * Clôture automatiquement la commande si :
-     *  - la facture est entièrement payée (isPayee)
-     *  - ET toutes les commissions associées sont entièrement versées (ou il n'y en a pas)
-     *
-     * N'agit que sur les commandes en statut EN_COURS.
+     *  - statut LIVREE
+     *  - la facture est entièrement payée
+     *  - toutes les commissions sont versées (ou absentes)
      */
     public function cloturerSiComplete(): bool
     {
-        if (! $this->isEnCours()) {
+        if (! $this->isLivree()) {
             return false;
         }
 
@@ -180,7 +205,7 @@ class CommandeVente extends Model
             return false;
         }
 
-        $this->statut = StatutCommandeVente::CLOTUREE;
+        $this->statut   = StatutCommandeVente::CLOTUREE;
         $this->closed_at = now();
 
         return $this->saveQuietly();

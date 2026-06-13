@@ -360,7 +360,6 @@ class ProduitController extends Controller
 
         $hasAugmenter = ! empty($data['augmenter']);
         $hasDiminuer = ! empty($data['diminuer']);
-        $notes = MotifAjustementStock::from($data['motif_type'])->toNotesString($data['motif_detail'] ?? '');
 
         if ($hasAugmenter && $hasDiminuer) {
             throw ValidationException::withMessages([
@@ -373,6 +372,15 @@ class ProduitController extends Controller
                 'augmenter' => 'Veuillez renseigner la quantité à augmenter ou à diminuer.',
             ]);
         }
+
+        $direction = $hasAugmenter ? 'entree' : 'sortie';
+        if (! in_array($data['motif_type'], MotifAjustementStock::validValuesForDirection($direction), true)) {
+            throw ValidationException::withMessages([
+                'motif_type' => 'Ce motif n\'est pas valide pour ce type d\'ajustement.',
+            ]);
+        }
+
+        $notes = MotifAjustementStock::from($data['motif_type'])->toNotesString($data['motif_detail'] ?? '');
 
         $stockAvant = (int) ($produit->qte_stock ?? 0);
 

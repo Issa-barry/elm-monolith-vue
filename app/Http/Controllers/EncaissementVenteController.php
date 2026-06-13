@@ -11,6 +11,8 @@ use App\Models\Organization;
 use App\Models\Parametre;
 use App\Services\AuditLogService;
 use App\Services\CashbackService;
+use App\Services\CommandeVenteActiviteService;
+use App\Services\CommandeVenteService;
 use App\Services\CommissionGenerator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -75,8 +77,14 @@ class EncaissementVenteController extends Controller
         $facture_vente->recalculStatut();
         $estPayeeMaintenant = $facture_vente->isPayee();
 
-        // Auto cloture si facture payee et commissions soldees.
-        $facture_vente->commande?->cloturerSiComplete();
+        // Auto-transition LIVRAISON_EN_COURS → LIVREE au premier encaissement.
+        if ($commande?->isLivraisonEnCours()) {
+            CommandeVenteService::passerEnLivree($commande);
+            CommandeVenteActiviteService::log($commande, 'livree');
+        }
+
+        // Auto-clôture si LIVREE + facture payée + commissions versées.
+        $commande?->cloturerSiComplete();
 
         // Hooks de transition vers facture payee.
         if (! $etaitPayee && $estPayeeMaintenant) {

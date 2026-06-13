@@ -35,14 +35,52 @@ class CommandeVentePolicy
             && $this->sameOrganization($user, $commande);
     }
 
+    /** Confirmer (BROUILLON → A_CHARGER) */
+    public function confirmer(User $user, CommandeVente $commande): bool
+    {
+        return $user->can('ventes.update')
+            && $this->sameOrganization($user, $commande)
+            && $commande->isBrouillon();
+    }
+
+    /** Démarrer le chargement (A_CHARGER → CHARGEMENT_EN_COURS) */
+    public function demarrerChargement(User $user, CommandeVente $commande): bool
+    {
+        return $user->can('ventes.update')
+            && $this->sameOrganization($user, $commande)
+            && $commande->isACharger();
+    }
+
+    /** Valider le chargement (CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS) */
+    public function validerChargement(User $user, CommandeVente $commande): bool
+    {
+        return $user->can('ventes.update')
+            && $this->sameOrganization($user, $commande)
+            && $commande->isChargementEnCours();
+    }
+
+    /** Avancer d'une étape — agrège les trois transitions ci-dessus */
+    public function avancerStatut(User $user, CommandeVente $commande): bool
+    {
+        if (! $this->sameOrganization($user, $commande)) {
+            return false;
+        }
+
+        return match ($commande->statut) {
+            default => $this->confirmer($user, $commande)
+                       || $this->demarrerChargement($user, $commande)
+                       || $this->validerChargement($user, $commande),
+        };
+    }
+
     /**
-     * Seuls les administrateurs (super_admin ou admin_entreprise)
-     * peuvent annuler une commande.
+     * Annulation — admins uniquement, depuis BROUILLON ou A_CHARGER.
      */
     public function annuler(User $user, CommandeVente $commande): bool
     {
         return $user->hasAnyRole(['super_admin', 'admin_entreprise'])
-            && $this->sameOrganization($user, $commande);
+            && $this->sameOrganization($user, $commande)
+            && $commande->statut->isAnnulable();
     }
 
     private function sameOrganization(User $user, CommandeVente $commande): bool

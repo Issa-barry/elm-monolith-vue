@@ -66,9 +66,8 @@ interface Commande {
     created_at: string;
     is_annulee: boolean;
     is_brouillon: boolean;
-    is_en_cours: boolean;
     can_modifier: boolean;
-    can_valider: boolean;
+    can_confirmer: boolean;
     can_annuler: boolean;
 }
 
@@ -116,7 +115,10 @@ function setPeriode(p: string) {
 const filtresStatut = [
     { value: 'tous', label: 'Toutes' },
     { value: 'brouillon', label: 'Brouillons' },
-    { value: 'en_cours', label: 'En cours' },
+    { value: 'a_charger', label: 'À charger' },
+    { value: 'chargement_en_cours', label: 'Chargement' },
+    { value: 'livraison_en_cours', label: 'En livraison' },
+    { value: 'livree', label: 'Livrées' },
     { value: 'cloturee', label: 'Clôturées' },
     { value: 'annulee', label: 'Annulées' },
 ];
@@ -160,10 +162,13 @@ const mobileFiltered = computed(() => {
 
 // ── Couleurs statut ───────────────────────────────────────────────────────────
 const statutCommandeColor: Record<string, string> = {
-    brouillon: 'bg-zinc-400 dark:bg-zinc-500',
-    en_cours: 'bg-blue-500',
-    cloturee: 'bg-emerald-500',
-    annulee: 'bg-red-400',
+    brouillon:            'bg-zinc-400 dark:bg-zinc-500',
+    a_charger:            'bg-amber-400',
+    chargement_en_cours:  'bg-orange-500',
+    livraison_en_cours:   'bg-blue-500',
+    livree:               'bg-teal-500',
+    cloturee:             'bg-emerald-500',
+    annulee:              'bg-red-400',
 };
 
 const statutFactureColor: Record<string, string> = {
@@ -178,12 +183,12 @@ function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
 
-// ── Validation ────────────────────────────────────────────────────────────────
-const validationProcessing = ref(false);
+// ── Confirmation commande (BROUILLON → A_CHARGER) ────────────────────────────
+const confirmationProcessing = ref(false);
 
-function valider(commande: Commande) {
-    if (validationProcessing.value) return;
-    validationProcessing.value = true;
+function confirmer(commande: Commande) {
+    if (confirmationProcessing.value) return;
+    confirmationProcessing.value = true;
     router.patch(
         `/ventes/${commande.id}/valider`,
         {},
@@ -191,11 +196,11 @@ function valider(commande: Commande) {
             onSuccess: () =>
                 toast.add({
                     severity: 'success',
-                    summary: 'Validée',
-                    detail: 'Commande validée, facture créée.',
+                    summary: 'Confirmée',
+                    detail: 'Commande confirmée. En attente de chargement.',
                     life: 3000,
                 }),
-            onFinish: () => (validationProcessing.value = false),
+            onFinish: () => (confirmationProcessing.value = false),
         },
     );
 }
@@ -204,7 +209,17 @@ function valider(commande: Commande) {
 const annulerDialogVisible = ref(false);
 const selectedCommande = ref<Commande | null>(null);
 
-const annulerForm = useForm({ motif_annulation: '' });
+const MOTIFS_ANNULATION = [
+    { value: 'erreur_saisie', label: 'Erreur de saisie' },
+    { value: 'doublon', label: 'Doublon' },
+    { value: 'rupture_stock', label: 'Rupture de stock' },
+    { value: 'autre', label: 'Autre' },
+] as const;
+
+const annulerForm = useForm({
+    motif_annulation_code: '' as string,
+    motif_annulation_detail: '',
+});
 
 function openAnnulerDialog(commande: Commande) {
     selectedCommande.value = commande;
@@ -226,6 +241,14 @@ function submitAnnuler() {
         },
     });
 }
+
+const annulerDisabled = computed(
+    () =>
+        annulerForm.processing ||
+        !annulerForm.motif_annulation_code ||
+        (annulerForm.motif_annulation_code === 'autre' &&
+            !annulerForm.motif_annulation_detail.trim()),
+);
 
 // ── Encaissement ──────────────────────────────────────────────────────────────
 const modesPaiement = [
@@ -732,13 +755,13 @@ function confirmDelete(c: Commande) {
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            v-if="data.can_valider"
+                                            v-if="data.can_confirmer"
                                             class="cursor-pointer text-blue-600 focus:text-blue-600"
-                                            :disabled="validationProcessing"
-                                            @click="valider(data)"
+                                            :disabled="confirmationProcessing"
+                                            @click="confirmer(data)"
                                         >
                                             <CheckCircle class="h-4 w-4" />
-                                            Valider
+                                            Confirmer
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                             v-if="
@@ -1043,54 +1066,55 @@ function confirmDelete(c: Commande) {
             <div class="space-y-4">
                 <p class="text-sm text-muted-foreground">
                     Vous êtes sur le point d'annuler la commande
-                    <span class="font-mono font-semibold">{{
-                        selectedCommande?.reference
-                    }}</span
-                    >. Cette action est irréversible.
+                    <span class="font-mono font-semibold">{{ selectedCommande?.reference }}</span>.
+                    Cette action est irréversible.
                 </p>
                 <div>
-                    <Label class="mb-1.5 block text-sm">
-                        Motif d'annulation
-                        <span class="text-destructive">*</span>
+                    <Label for="idx-annulation-motif-code" class="mb-1.5 block text-sm">
+                        Motif <span class="text-destructive">*</span>
+                    </Label>
+                    <Select
+                        input-id="idx-annulation-motif-code"
+                        v-model="annulerForm.motif_annulation_code"
+                        :options="MOTIFS_ANNULATION"
+                        option-label="label"
+                        option-value="value"
+                        placeholder="Sélectionner un motif"
+                        class="w-full"
+                        fluid
+                        :class="{ 'p-invalid': annulerForm.errors.motif_annulation_code }"
+                    />
+                    <p v-if="annulerForm.errors.motif_annulation_code" class="mt-1 text-xs text-destructive">
+                        {{ annulerForm.errors.motif_annulation_code }}
+                    </p>
+                </div>
+                <div v-if="annulerForm.motif_annulation_code === 'autre'">
+                    <Label for="idx-annulation-motif-detail" class="mb-1.5 block text-sm">
+                        Précision <span class="text-destructive">*</span>
                     </Label>
                     <Textarea
-                        v-model="annulerForm.motif_annulation"
-                        rows="4"
+                        id="idx-annulation-motif-detail"
+                        v-model="annulerForm.motif_annulation_detail"
+                        rows="3"
                         class="w-full"
-                        placeholder="Indiquez la raison de l'annulation..."
-                        :class="{
-                            'p-invalid': annulerForm.errors.motif_annulation,
-                        }"
+                        placeholder="Indiquez la raison..."
+                        :class="{ 'p-invalid': annulerForm.errors.motif_annulation_detail }"
                     />
-                    <p
-                        v-if="annulerForm.errors.motif_annulation"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ annulerForm.errors.motif_annulation }}
+                    <p v-if="annulerForm.errors.motif_annulation_detail" class="mt-1 text-xs text-destructive">
+                        {{ annulerForm.errors.motif_annulation_detail }}
                     </p>
                 </div>
             </div>
             <template #footer>
                 <div class="flex justify-end gap-2">
-                    <Button
-                        variant="outline"
-                        @click="annulerDialogVisible = false"
-                        >Retour</Button
-                    >
+                    <Button variant="outline" @click="annulerDialogVisible = false">Retour</Button>
                     <Button
                         variant="destructive"
-                        :disabled="
-                            annulerForm.processing ||
-                            !annulerForm.motif_annulation.trim()
-                        "
+                        :disabled="annulerDisabled"
                         @click="submitAnnuler"
                     >
                         <XCircle class="mr-2 h-4 w-4" />
-                        {{
-                            annulerForm.processing
-                                ? 'Annulation…'
-                                : "Confirmer l'annulation"
-                        }}
+                        {{ annulerForm.processing ? 'Annulation…' : "Confirmer l'annulation" }}
                     </Button>
                 </div>
             </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
+import { MOTIFS_AUGMENTATION, MOTIFS_DIMINUTION } from '@/shared/motifs-ajustement-stock';
 import { useForm } from '@inertiajs/vue3';
 import { ArrowDown, ArrowUp, Package } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
@@ -29,20 +30,23 @@ const localVisible = computed({
     set: (val) => emit('update:visible', val),
 });
 
-const MOTIF_OPTIONS = [
-    { label: 'Après production', value: 'apres_production' },
-    { label: 'Correction de stock', value: 'correction_stock' },
-    { label: 'Perte', value: 'perte' },
-    { label: 'Retour', value: 'retour' },
-    { label: 'Don', value: 'don' },
-    { label: 'Autre', value: 'autre' },
-];
-
 const form = useForm({
     augmenter: null as number | null,
     diminuer: null as number | null,
     motif_type: null as string | null,
     motif_detail: '',
+});
+
+const direction = computed<'augmenter' | 'diminuer' | ''>(() => {
+    if (form.augmenter) return 'augmenter';
+    if (form.diminuer) return 'diminuer';
+    return '';
+});
+
+const motifOptions = computed(() => {
+    if (direction.value === 'augmenter') return MOTIFS_AUGMENTATION;
+    if (direction.value === 'diminuer') return MOTIFS_DIMINUTION;
+    return [];
 });
 
 const isAutre = computed(() => form.motif_type === 'autre');
@@ -57,12 +61,27 @@ const stockPreview = computed(() => {
     return null;
 });
 
+function resetMotifIfInvalid() {
+    if (!form.motif_type) return;
+    const valid = motifOptions.value.some((o) => o.value === form.motif_type);
+    if (!valid) {
+        form.motif_type = null;
+        form.motif_detail = '';
+    }
+}
+
 function onAugmenterChange() {
-    if (form.augmenter) form.diminuer = null;
+    if (form.augmenter) {
+        form.diminuer = null;
+        resetMotifIfInvalid();
+    }
 }
 
 function onDiminuerChange() {
-    if (form.diminuer) form.augmenter = null;
+    if (form.diminuer) {
+        form.augmenter = null;
+        resetMotifIfInvalid();
+    }
 }
 
 function onMotifTypeChange() {
@@ -139,11 +158,12 @@ function submit() {
                         :min="1"
                         :use-grouping="true"
                         class="w-full"
-                        :input-class="
-                            form.errors.augmenter
-                                ? 'p-invalid w-full'
-                                : 'w-full'
-                        "
+                        :input-class="[
+                            'w-full',
+                            form.errors.augmenter ? 'p-invalid' : '',
+                            form.diminuer ? 'opacity-40' : '',
+                        ].join(' ')"
+                        :disabled="!!form.diminuer"
                         @update:model-value="onAugmenterChange"
                     />
                     <p
@@ -169,9 +189,12 @@ function submit() {
                         :min="1"
                         :use-grouping="true"
                         class="w-full"
-                        :input-class="
-                            form.errors.diminuer ? 'p-invalid w-full' : 'w-full'
-                        "
+                        :input-class="[
+                            'w-full',
+                            form.errors.diminuer ? 'p-invalid' : '',
+                            form.augmenter ? 'opacity-40' : '',
+                        ].join(' ')"
+                        :disabled="!!form.augmenter"
                         @update:model-value="onDiminuerChange"
                     />
                     <p
@@ -183,20 +206,22 @@ function submit() {
                 </div>
             </div>
 
-            <!-- Motif (obligatoire) -->
+            <!-- Motif filtré selon la direction -->
             <div class="space-y-1.5">
-                <label
-                    for="ajuster-motif"
-                    class="text-sm font-medium"
-                >
+                <label for="ajuster-motif" class="text-sm font-medium">
                     Motif <span class="text-destructive">*</span>
                 </label>
                 <Dropdown
                     v-model="form.motif_type"
-                    :options="MOTIF_OPTIONS"
+                    :options="motifOptions"
                     option-label="label"
                     option-value="value"
-                    placeholder="Sélectionner un motif"
+                    :placeholder="
+                        direction
+                            ? 'Sélectionner un motif'
+                            : 'Saisissez d\'abord une quantité…'
+                    "
+                    :disabled="!direction"
                     class="w-full"
                     :class="form.errors.motif_type ? 'p-invalid' : ''"
                     @change="onMotifTypeChange"

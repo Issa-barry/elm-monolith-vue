@@ -15,6 +15,7 @@ use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\Vehicule;
 use App\Services\AuditLogService;
+use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,10 +32,7 @@ class CommandeVenteController extends Controller
 
     private const UNIT_PRICE_UPDATE_PERMISSION = 'ventes.prix.update';
 
-    public function __construct(
-        private readonly CommandeVenteService $service,
-        private readonly AuditLogService $auditService,
-    ) {}
+    public function __construct(private readonly AuditLogService $auditService) {}
 
     // ── Index ─────────────────────────────────────────────────────────────────
 
@@ -42,10 +40,10 @@ class CommandeVenteController extends Controller
     {
         $this->authorize('viewAny', CommandeVente::class);
 
-        $orgId = auth()->user()->organization_id;
-        $user = auth()->user();
+        $orgId  = auth()->user()->organization_id;
+        $user   = auth()->user();
         $periode = $request->input('periode', 'today');
-        $statut = $request->input('statut', 'tous');
+        $statut  = $request->input('statut', 'tous');
 
         $query = CommandeVente::with(['vehicule', 'client', 'site', 'facture.encaissements.creator'])
             ->where('organization_id', $orgId)
@@ -53,7 +51,7 @@ class CommandeVenteController extends Controller
 
         match ($periode) {
             'today' => $query->whereDate('created_at', Carbon::today()),
-            'week' => $query->whereBetween('created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
+            'week'  => $query->whereBetween('created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
             'month' => $query->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month),
             default => null,
         };
@@ -62,60 +60,31 @@ class CommandeVenteController extends Controller
             $query->where('statut', $statut);
         }
 
-        $commandes = $query->get();
-
+        $commandes   = $query->get();
         $nonAnnulees = $commandes->filter(fn ($c) => ! $c->isAnnulee());
-        $cloturees = $commandes->filter(fn ($c) => $c->isCloturee());
+        $cloturees   = $commandes->filter(fn ($c) => $c->isCloturee());
 
         $totaux = [
-            'total_montant' => (float) $nonAnnulees->sum('total_commande'),
-            'nb_total' => $nonAnnulees->count(),
+            'total_montant'    => (float) $nonAnnulees->sum('total_commande'),
+            'nb_total'         => $nonAnnulees->count(),
             'total_a_encaisser' => (float) $commandes
                 ->filter(fn ($c) => $c->facture && ! $c->facture->isAnnulee())
                 ->sum(fn ($c) => (float) $c->facture->montant_restant),
-            'deja_paye' => (float) $commandes
+            'deja_paye'        => (float) $commandes
                 ->filter(fn ($c) => $c->facture && ! $c->facture->isAnnulee())
                 ->sum(fn ($c) => (float) $c->facture->montant_encaisse),
-            'nb_cloturees' => $cloturees->count(),
+            'nb_cloturees'     => $cloturees->count(),
             'montant_cloturees' => (float) $cloturees->sum('total_commande'),
         ];
 
-        $mapped = $commandes->map(fn (CommandeVente $c) => [
-            'id' => $c->id,
-            'reference' => $c->reference,
-            'statut' => $c->statut?->value,
-            'statut_label' => $c->statut_label,
-            'total_commande' => (float) $c->total_commande,
-            'vehicule_nom' => $c->vehicule?->nom_vehicule,
-            'client_nom' => $c->client ? trim($c->client->prenom.' '.$c->client->nom) : null,
-            'site_nom' => $c->site?->nom,
-            'facture_id' => $c->facture?->id,
-            'facture_statut' => $c->facture?->statut_facture?->value,
-            'facture_statut_label' => $c->facture?->statut_facture?->label(),
-            'facture_montant_encaisse' => $c->facture ? (float) $c->facture->montant_encaisse : null,
-            'facture_montant_restant' => $c->facture ? (float) $c->facture->montant_restant : null,
-            'encaissements' => $c->facture ? $c->facture->encaissements->map(fn ($e) => [
-                'id' => $e->id,
-                'montant' => (float) $e->montant,
-                'date_encaissement' => $e->date_encaissement?->format(self::DATE_DISPLAY_FORMAT),
-                'heure' => $e->created_at?->format('H:i'),
-                'mode_paiement_label' => $e->mode_paiement?->label(),
-                'created_by' => $e->creator?->name,
-            ])->values() : [],
-            'created_at' => $c->created_at?->format(self::DATE_DISPLAY_FORMAT),
-            'is_annulee' => $c->isAnnulee(),
-            'is_brouillon' => $c->isBrouillon(),
-            'is_en_cours' => $c->isEnCours(),
-            'can_modifier' => $c->isBrouillon() && $user->can('update', $c),
-            'can_valider' => $c->isBrouillon() && $user->can('update', $c),
-            'can_annuler' => $c->isEnCours() && $user->can('annuler', $c),
-        ]);
+        $mapped = $commandes->map(fn (CommandeVente $c) => $this->mapCommandeForIndex($c, $user));
 
         return Inertia::render('Ventes/Index', [
             'commandes' => $mapped->values(),
-            'totaux' => $totaux,
-            'periode' => $periode,
-            'statut' => $statut,
+            'totaux'    => $totaux,
+            'periode'   => $periode,
+            'statut'    => $statut,
+            'statuts'   => StatutCommandeVente::options(),
         ]);
     }
 
@@ -127,98 +96,28 @@ class CommandeVenteController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $produits = Produit::where('organization_id', $orgId)
-            ->where('statut', ProduitStatut::ACTIF)
-            ->whereIn('type', ProduitType::vendableValues())
-            ->orderBy('nom')
-            ->get()
-            ->map(fn (Produit $p) => [
-                'id' => $p->id,
-                'nom' => $p->nom,
-                'prix_vente' => (int) $p->prix_vente,
-                'prix_usine' => (int) $p->prix_usine,
-            ]);
-
-        $vehicules = Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur')])
-            ->where('organization_id', $orgId)
-            ->where('is_active', true)
-            ->where('categorie', 'externe')
-            ->orderBy('nom_vehicule')
-            ->get()
-            ->map(fn (Vehicule $v) => [
-                'id' => $v->id,
-                'nom_vehicule' => $v->nom_vehicule,
-                'immatriculation' => $v->immatriculation,
-                'capacite_packs' => $v->capacite_packs !== null ? (int) $v->capacite_packs : null,
-                'livreur_nom' => ($l = $v->equipe?->livreurs->first())
-                    ? trim($l->prenom.' '.$l->nom)
-                    : null,
-            ]);
-
-        $clients = Client::where('organization_id', $orgId)
-            ->where('is_active', true)
-            ->orderBy('nom')
-            ->get()
-            ->map(fn (Client $c) => [
-                'id' => $c->id,
-                'nom' => $c->nom,
-                'prenom' => $c->prenom,
-                'telephone' => $c->telephone,
-            ]);
-
-        // Site de l'utilisateur (rattachement obligatoire via user_sites)
-        $userSite = auth()->user()
-            ->sites()
-            ->wherePivot('is_default', true)
-            ->first(['sites.id', 'sites.nom', 'sites.type'])
-            ?? auth()->user()->sites()->first(['sites.id', 'sites.nom', 'sites.type']);
-
-        abort_if(
-            ! $userSite,
-            403,
-            "Votre compte n'est rattaché à aucun site. Contactez votre administrateur."
-        );
-
         return Inertia::render('Ventes/Create', [
-            'produits' => $produits,
-            'vehicules' => $vehicules,
-            'clients' => $clients,
-            'user_site' => [
-                'id' => $userSite->id,
-                'nom' => $userSite->nom,
-                'label' => ($userSite->type?->label() ?? '').' de '.$userSite->nom,
-            ],
+            'produits'   => $this->produitsActifs($orgId),
+            'vehicules'  => $this->vehiculesActifs($orgId),
+            'clients'    => $this->clientsActifs($orgId),
+            'user_site'  => $this->getUserSite(),
             'can_modifier_qte' => auth()->user()->can('ventes.qte.update'),
             'autoriser_saisie_dessous_qte_max' => Parametre::isVentesAutorisationSaisieDessousQteMax($orgId),
         ]);
     }
 
-    // ── Store : crée une commande en BROUILLON (sans facture) ─────────────────
+    // ── Store ─────────────────────────────────────────────────────────────────
 
     public function store(Request $request): RedirectResponse
     {
         $this->authorize('create', CommandeVente::class);
 
-        $orgId = auth()->user()->organization_id;
+        $orgId   = auth()->user()->organization_id;
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
-        // Site récupéré depuis le profil de l'utilisateur (non modifiable par le client)
-        $userSite = auth()->user()
-            ->sites()
-            ->wherePivot('is_default', true)
-            ->first(['sites.id'])
-            ?? auth()->user()->sites()->first(['sites.id']);
+        $userSite = $this->getUserSiteModel();
 
-        abort_if(
-            ! $userSite,
-            403,
-            "Votre compte n'est rattaché à aucun site."
-        );
-
-        $data = $request->validate(
-            $this->commandeValidationRules(),
-            $this->commandeValidationMessages(),
-        );
+        $data = $request->validate($this->commandeValidationRules(), $this->commandeValidationMessages());
 
         $this->ensureVehiculeOrClientSelected($data);
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
@@ -226,14 +125,13 @@ class CommandeVenteController extends Controller
 
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
-        // Création en BROUILLON — aucune facture, aucune commission
         $commande = CommandeVente::create([
             'organization_id' => $orgId,
-            'site_id' => $userSite->id,
-            'vehicule_id' => $data['vehicule_id'] ?? null,
-            'client_id' => $data['client_id'] ?? null,
-            'total_commande' => $totalCommande,
-            'created_by' => auth()->id(),
+            'site_id'         => $userSite->id,
+            'vehicule_id'     => $data['vehicule_id'] ?? null,
+            'client_id'       => $data['client_id'] ?? null,
+            'total_commande'  => $totalCommande,
+            'created_by'      => auth()->id(),
         ]);
 
         foreach ($lignesData as $ligneDatum) {
@@ -241,16 +139,10 @@ class CommandeVenteController extends Controller
         }
 
         $commande->load(['lignes.produit', 'vehicule', 'client']);
-        $this->auditService->record(
-            $commande,
-            AuditEvent::CREATED,
-            auth()->user(),
-            null,
-            $this->commandeSnapshot($commande),
-        );
+        $this->auditService->record($commande, AuditEvent::CREATED, auth()->user(), null, $this->commandeSnapshot($commande));
+        CommandeVenteActiviteService::log($commande, 'creation');
 
-        return redirect()->route('ventes.show', $commande)
-            ->with('success', 'Commande créée en brouillon.');
+        return redirect()->route('ventes.show', $commande)->with('success', 'Commande créée en brouillon.');
     }
 
     // ── Show ──────────────────────────────────────────────────────────────────
@@ -259,87 +151,114 @@ class CommandeVenteController extends Controller
     {
         $this->authorize('view', $vente);
 
-        $commande_vente = $vente;
-        $commande_vente->load(['vehicule', 'client', 'site', 'lignes.produit', 'createdBy', 'facture.encaissements.creator']);
+        $commande = $vente;
+        $commande->load(['vehicule', 'client', 'site', 'lignes.produit', 'createdBy', 'facture.encaissements.creator', 'activites.user']);
 
-        $user = auth()->user();
+        $user   = auth()->user();
+        $facture = $commande->facture;
 
-        $lignes = $commande_vente->lignes->map(fn ($l) => [
-            'id' => $l->id,
-            'produit_id' => $l->produit_id,
-            'produit_nom' => $l->produit?->nom,
-            'qte' => $l->qte,
+        $lignes = $commande->lignes->map(fn ($l) => [
+            'id'                  => $l->id,
+            'produit_id'          => $l->produit_id,
+            'produit_nom'         => $l->produit?->nom,
+            'quantite_demandee'   => $l->quantite_demandee,
+            'quantite_chargee'    => $l->quantite_chargee,
+            'quantite_livree'     => $l->quantite_livree,
+            'type_ecart'          => $l->type_ecart?->value,
+            'type_ecart_label'    => $l->type_ecart?->label(),
+            'commentaire_ecart'   => $l->commentaire_ecart,
+            'ecart_chargement'    => $l->ecart_chargement,
             'prix_usine_snapshot' => (float) $l->prix_usine_snapshot,
             'prix_vente_snapshot' => (float) $l->prix_vente_snapshot,
-            'total_ligne' => (float) $l->total_ligne,
+            'total_ligne'         => (float) $l->total_ligne,
         ]);
 
-        $facture = $commande_vente->facture;
-
-        $historiques = AuditLog::where('organization_id', $commande_vente->organization_id)
+        $historiques = AuditLog::where('organization_id', $commande->organization_id)
             ->where('auditable_type', CommandeVente::class)
-            ->where('auditable_id', $commande_vente->id)
+            ->where('auditable_id', $commande->id)
             ->orderByDesc('created_at')
             ->get()
             ->map(fn (AuditLog $log) => [
-                'id' => $log->id,
-                'event_code' => $log->event_code,
+                'id'          => $log->id,
+                'event_code'  => $log->event_code,
                 'event_label' => $log->event_label,
-                'actor_name' => $log->actor_name_snapshot ?? 'Système',
-                'old_values' => $log->old_values,
-                'new_values' => $log->new_values,
-                'created_at' => $log->created_at->format('d/m/Y H:i'),
+                'actor_name'  => $log->actor_name_snapshot ?? 'Système',
+                'old_values'  => $log->old_values,
+                'new_values'  => $log->new_values,
+                'created_at'  => $log->created_at->format('d/m/Y H:i'),
             ]);
+
+        $activites = $commande->activites->map(fn ($a) => [
+            'id'           => $a->id,
+            'action'       => $a->action,
+            'action_label' => $a->action_label,
+            'user_name'    => $a->user?->name ?? 'Système',
+            'created_at'   => $a->created_at->format('d/m/Y H:i'),
+            'details'      => $a->details,
+        ]);
 
         return Inertia::render('Ventes/Show', [
             'historiques' => $historiques,
-            'commande' => [
-                'id' => $commande_vente->id,
-                'reference' => $commande_vente->reference,
-                'statut' => $commande_vente->statut?->value,
-                'statut_label' => $commande_vente->statut_label,
-                'total_commande' => (float) $commande_vente->total_commande,
-                'vehicule_nom' => $commande_vente->vehicule?->nom_vehicule,
-                'client_nom' => $commande_vente->client ? trim($commande_vente->client->prenom.' '.$commande_vente->client->nom) : null,
-                'site_nom' => $commande_vente->site?->nom,
-                'motif_annulation' => $commande_vente->motif_annulation,
-                'annulee_at' => $commande_vente->annulee_at?->toISOString(),
-                'validated_at' => $commande_vente->validated_at?->format(self::DATE_DISPLAY_FORMAT),
-                'is_brouillon' => $commande_vente->isBrouillon(),
-                'is_en_cours' => $commande_vente->isEnCours(),
-                'is_cloturee' => $commande_vente->isCloturee(),
-                'is_annulee' => $commande_vente->isAnnulee(),
-                'can_modifier' => $commande_vente->isBrouillon() && $user->can('update', $commande_vente),
-                'can_valider' => $commande_vente->isBrouillon() && $user->can('update', $commande_vente),
-                'can_annuler' => $commande_vente->isEnCours() && $user->can('annuler', $commande_vente),
-                'can_encaisser' => $facture && ! $facture->isAnnulee() && (float) $facture->montant_restant > 0 && $user->can('update', $commande_vente),
-                'created_at' => $commande_vente->created_at?->format(self::DATE_DISPLAY_FORMAT),
-                'created_by' => $commande_vente->createdBy?->name,
-                'lignes' => $lignes,
+            'activites'   => $activites,
+            'commande'    => [
+                'id'                    => $commande->id,
+                'reference'             => $commande->reference,
+                'statut'                => $commande->statut?->value,
+                'statut_label'          => $commande->statut_label,
+                'statut_color'          => $commande->statut?->color(),
+                'total_commande'        => (float) $commande->total_commande,
+                'vehicule_nom'          => $commande->vehicule?->nom_vehicule,
+                'client_nom'            => $commande->client ? trim($commande->client->prenom.' '.$commande->client->nom) : null,
+                'site_nom'              => $commande->site?->nom,
+                'motif_annulation'      => $commande->motif_annulation,
+                'annulee_at'            => $commande->annulee_at?->toISOString(),
+                'a_charger_at'          => $commande->a_charger_at?->format(self::DATE_DISPLAY_FORMAT),
+                'chargement_demarre_at' => $commande->chargement_demarre_at?->format(self::DATE_DISPLAY_FORMAT),
+                'chargement_valide_at'  => $commande->chargement_valide_at?->format(self::DATE_DISPLAY_FORMAT),
+                'livree_at'             => $commande->livree_at?->format(self::DATE_DISPLAY_FORMAT),
+                'closed_at'             => $commande->closed_at?->format(self::DATE_DISPLAY_FORMAT),
+                'is_brouillon'          => $commande->isBrouillon(),
+                'is_a_charger'          => $commande->isACharger(),
+                'is_chargement_en_cours' => $commande->isChargementEnCours(),
+                'is_livraison_en_cours' => $commande->isLivraisonEnCours(),
+                'is_livree'             => $commande->isLivree(),
+                'is_cloturee'           => $commande->isCloturee(),
+                'is_annulee'            => $commande->isAnnulee(),
+                'can_modifier'          => $commande->isBrouillon() && $user->can('update', $commande),
+                'can_confirmer'         => $commande->isBrouillon() && $user->can('confirmer', $commande),
+                'can_demarrer_chargement' => $commande->isACharger() && $user->can('demarrerChargement', $commande),
+                'can_valider_chargement'  => $commande->isChargementEnCours() && $user->can('validerChargement', $commande),
+                'can_annuler'           => $commande->statut->isAnnulable() && $user->can('annuler', $commande),
+                'can_encaisser'         => $facture && ! $facture->isAnnulee()
+                    && (float) $facture->montant_restant > 0
+                    && $user->can('update', $commande),
+                'created_at'  => $commande->created_at?->format(self::DATE_DISPLAY_FORMAT),
+                'created_by'  => $commande->createdBy?->name,
+                'lignes'      => $lignes,
             ],
             'facture' => $facture ? [
-                'id' => $facture->id,
-                'reference' => $facture->reference,
-                'montant_net' => (float) $facture->montant_net,
-                'montant_encaisse' => (float) $facture->montant_encaisse,
-                'montant_restant' => (float) $facture->montant_restant,
-                'statut' => $facture->statut_facture?->value,
-                'statut_label' => $facture->statut_label,
-                'encaissements' => $facture->encaissements->map(fn ($e) => [
-                    'id' => $e->id,
-                    'montant' => (float) $e->montant,
-                    'date_encaissement' => $e->date_encaissement?->format(self::DATE_DISPLAY_FORMAT),
-                    'heure' => $e->created_at?->format('H:i'),
-                    'mode_paiement' => $e->mode_paiement?->value,
+                'id'                => $facture->id,
+                'reference'         => $facture->reference,
+                'montant_net'       => (float) $facture->montant_net,
+                'montant_encaisse'  => (float) $facture->montant_encaisse,
+                'montant_restant'   => (float) $facture->montant_restant,
+                'statut'            => $facture->statut_facture?->value,
+                'statut_label'      => $facture->statut_label,
+                'encaissements'     => $facture->encaissements->map(fn ($e) => [
+                    'id'                  => $e->id,
+                    'montant'             => (float) $e->montant,
+                    'date_encaissement'   => $e->date_encaissement?->format(self::DATE_DISPLAY_FORMAT),
+                    'heure'               => $e->created_at?->format('H:i'),
+                    'mode_paiement'       => $e->mode_paiement?->value,
                     'mode_paiement_label' => $e->mode_paiement?->label(),
-                    'note' => $e->note,
-                    'created_by' => $e->creator?->name,
+                    'note'                => $e->note,
+                    'created_by'          => $e->creator?->name,
                 ])->values(),
             ] : null,
         ]);
     }
 
-    // ── Edit ─────────────────────────────────────────────────────────────────────
+    // ── Edit ─────────────────────────────────────────────────────────────────
 
     public function edit(CommandeVente $vente): Response
     {
@@ -349,89 +268,35 @@ class CommandeVenteController extends Controller
         $orgId = auth()->user()->organization_id;
         $vente->load(['lignes']);
 
-        $produits = Produit::where('organization_id', $orgId)
-            ->where('statut', ProduitStatut::ACTIF)
-            ->whereIn('type', ProduitType::vendableValues())
-            ->orderBy('nom')
-            ->get()
-            ->map(fn (Produit $p) => [
-                'id' => $p->id,
-                'nom' => $p->nom,
-                'prix_vente' => (int) $p->prix_vente,
-                'prix_usine' => (int) $p->prix_usine,
-            ]);
-
-        $vehicules = Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur')])
-            ->where('organization_id', $orgId)
-            ->where('is_active', true)
-            ->where('categorie', 'externe')
-            ->orderBy('nom_vehicule')
-            ->get()
-            ->map(fn (Vehicule $v) => [
-                'id' => $v->id,
-                'nom_vehicule' => $v->nom_vehicule,
-                'immatriculation' => $v->immatriculation,
-                'capacite_packs' => $v->capacite_packs !== null ? (int) $v->capacite_packs : null,
-                'livreur_nom' => ($l = $v->equipe?->livreurs->first())
-                    ? trim($l->prenom.' '.$l->nom)
-                    : null,
-            ]);
-
-        $clients = Client::where('organization_id', $orgId)
-            ->where('is_active', true)
-            ->orderBy('nom')
-            ->get()
-            ->map(fn (Client $c) => [
-                'id' => $c->id,
-                'nom' => $c->nom,
-                'prenom' => $c->prenom,
-                'telephone' => $c->telephone,
-            ]);
-
-        $userSite = auth()->user()
-            ->sites()
-            ->wherePivot('is_default', true)
-            ->first(['sites.id', 'sites.nom', 'sites.type'])
-            ?? auth()->user()->sites()->first(['sites.id', 'sites.nom', 'sites.type']);
-
-        abort_if(! $userSite, 403, "Votre compte n'est rattaché à aucun site.");
-
         return Inertia::render('Ventes/Edit', [
             'commande' => [
-                'id' => $vente->id,
-                'reference' => $vente->reference,
+                'id'         => $vente->id,
+                'reference'  => $vente->reference,
                 'vehicule_id' => $vente->vehicule_id,
-                'client_id' => $vente->client_id,
-                'lignes' => $vente->lignes->map(fn ($l) => [
+                'client_id'  => $vente->client_id,
+                'lignes'     => $vente->lignes->map(fn ($l) => [
                     'produit_id' => $l->produit_id,
-                    'qte' => (int) $l->qte,
+                    'qte'        => (int) $l->quantite_demandee,
                     'prix_vente' => (float) $l->prix_vente_snapshot,
                 ]),
             ],
-            'produits' => $produits,
-            'vehicules' => $vehicules,
-            'clients' => $clients,
-            'user_site' => [
-                'id' => $userSite->id,
-                'nom' => $userSite->nom,
-                'label' => ($userSite->type?->label() ?? '').' de '.$userSite->nom,
-            ],
+            'produits'   => $this->produitsActifs($orgId),
+            'vehicules'  => $this->vehiculesActifs($orgId),
+            'clients'    => $this->clientsActifs($orgId),
+            'user_site'  => $this->getUserSite(),
             'can_modifier_qte' => auth()->user()->can('ventes.qte.update'),
-            'autoriser_saisie_dessous_qte_max' => Parametre::isVentesAutorisationSaisieDessousQteMax(auth()->user()->organization_id),
+            'autoriser_saisie_dessous_qte_max' => Parametre::isVentesAutorisationSaisieDessousQteMax($orgId),
         ]);
     }
 
-    // ── Update : modification d'un BROUILLON ──────────────────────────────────
+    // ── Update ────────────────────────────────────────────────────────────────
 
     public function update(Request $request, CommandeVente $vente): RedirectResponse
     {
         $this->authorize('update', $vente);
         abort_if(! $vente->isBrouillon(), 403, 'Seule une commande en brouillon peut être modifiée.');
 
-        $data = $request->validate(
-            $this->commandeValidationRules(),
-            $this->commandeValidationMessages(),
-        );
+        $data = $request->validate($this->commandeValidationRules(), $this->commandeValidationMessages());
 
         $this->ensureVehiculeOrClientSelected($data);
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
@@ -443,8 +308,8 @@ class CommandeVenteController extends Controller
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
 
         $vente->update([
-            'vehicule_id' => $data['vehicule_id'] ?? null,
-            'client_id' => $data['client_id'] ?? null,
+            'vehicule_id'    => $data['vehicule_id'] ?? null,
+            'client_id'      => $data['client_id'] ?? null,
             'total_commande' => $totalCommande,
         ]);
 
@@ -461,35 +326,41 @@ class CommandeVenteController extends Controller
             $this->auditService->record($vente, AuditEvent::UPDATED, auth()->user(), $oldDiff, $newDiff);
         }
 
-        return redirect()->route('ventes.show', $vente)
-            ->with('success', 'Commande mise à jour.');
+        return redirect()->route('ventes.show', $vente)->with('success', 'Commande mise à jour.');
     }
 
-    // ── Valider : BROUILLON → EN_COURS ───────────────────────────────────────
+    // ── Valider : BROUILLON → A_CHARGER ──────────────────────────────────────
 
     public function valider(CommandeVente $commande_vente): RedirectResponse
     {
-        $this->authorize('update', $commande_vente);
+        $this->authorize('confirmer', $commande_vente);
 
         $oldStatut = $commande_vente->statut->value;
-        $this->service->valider($commande_vente);
+
+        try {
+            CommandeVenteService::confirmer($commande_vente);
+        } catch (ValidationException $e) {
+            return back()->withErrors($e->errors());
+        }
 
         $this->auditService->record(
             $commande_vente,
             AuditEvent::VALIDATED,
             auth()->user(),
             ['statut' => $oldStatut],
-            ['statut' => StatutCommandeVente::EN_COURS->value],
+            ['statut' => StatutCommandeVente::A_CHARGER->value],
         );
+
+        CommandeVenteActiviteService::log($commande_vente, 'confirmee');
 
         if ($commande_vente->vehicule_id) {
             NotifierLivreursCommandeVenteJob::dispatch($commande_vente->id, $commande_vente->reference);
         }
 
-        return back()->with('success', 'Commande validée. Facture créée.');
+        return back()->with('success', 'Commande confirmée. En attente de chargement.');
     }
 
-    // ── Annuler : VALIDEE → ANNULEE (admin uniquement) ────────────────────────
+    // ── Annuler ───────────────────────────────────────────────────────────────
 
     public function annuler(Request $request, CommandeVente $commande_vente): RedirectResponse
     {
@@ -498,20 +369,20 @@ class CommandeVenteController extends Controller
         $validCodes = implode(',', MotifAnnulation::validValues());
 
         $data = $request->validate([
-            'motif_annulation_code' => ['required', 'string', "in:{$validCodes}"],
+            'motif_annulation_code'   => ['required', 'string', "in:{$validCodes}"],
             'motif_annulation_detail' => ['nullable', 'string', 'max:2000', 'required_if:motif_annulation_code,autre'],
         ], [
-            'motif_annulation_code.required' => "Le motif d'annulation est obligatoire.",
-            'motif_annulation_code.in' => 'Le motif sélectionné est invalide.',
+            'motif_annulation_code.required'      => "Le motif d'annulation est obligatoire.",
+            'motif_annulation_code.in'            => 'Le motif sélectionné est invalide.',
             'motif_annulation_detail.required_if' => "Veuillez préciser la raison de l'annulation.",
-            'motif_annulation_detail.max' => 'La précision ne peut pas dépasser 2000 caractères.',
+            'motif_annulation_detail.max'         => 'La précision ne peut pas dépasser 2000 caractères.',
         ]);
 
         $motif = MotifAnnulation::from($data['motif_annulation_code'])
             ->toMotifString($data['motif_annulation_detail'] ?? '');
 
         $oldStatut = $commande_vente->statut->value;
-        $this->service->annuler($commande_vente, $motif);
+        CommandeVenteService::annuler($commande_vente, $motif);
 
         $this->auditService->record(
             $commande_vente,
@@ -521,7 +392,9 @@ class CommandeVenteController extends Controller
             ['statut' => StatutCommandeVente::ANNULEE->value, 'motif_annulation' => $motif],
         );
 
-        return back()->with('success', 'Commande et facture annulées.');
+        CommandeVenteActiviteService::log($commande_vente, 'annulee', ['motif' => $motif]);
+
+        return back()->with('success', 'Commande annulée.');
     }
 
     // ── Destroy ───────────────────────────────────────────────────────────────
@@ -541,33 +414,68 @@ class CommandeVenteController extends Controller
 
         $vente->delete();
 
-        return redirect()->route('ventes.index')
-            ->with('success', 'Commande supprimée.');
+        return redirect()->route('ventes.index')->with('success', 'Commande supprimée.');
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    private function mapCommandeForIndex(CommandeVente $c, mixed $user): array
+    {
+        return [
+            'id'                     => $c->id,
+            'reference'              => $c->reference,
+            'statut'                 => $c->statut?->value,
+            'statut_label'           => $c->statut_label,
+            'statut_color'           => $c->statut?->color(),
+            'total_commande'         => (float) $c->total_commande,
+            'vehicule_nom'           => $c->vehicule?->nom_vehicule,
+            'client_nom'             => $c->client ? trim($c->client->prenom.' '.$c->client->nom) : null,
+            'site_nom'               => $c->site?->nom,
+            'facture_id'             => $c->facture?->id,
+            'facture_statut'         => $c->facture?->statut_facture?->value,
+            'facture_statut_label'   => $c->facture?->statut_facture?->label(),
+            'facture_montant_encaisse' => $c->facture ? (float) $c->facture->montant_encaisse : null,
+            'facture_montant_restant'  => $c->facture ? (float) $c->facture->montant_restant : null,
+            'encaissements'          => $c->facture ? $c->facture->encaissements->map(fn ($e) => [
+                'id'                => $e->id,
+                'montant'           => (float) $e->montant,
+                'date_encaissement' => $e->date_encaissement?->format(self::DATE_DISPLAY_FORMAT),
+                'heure'             => $e->created_at?->format('H:i'),
+                'mode_paiement_label' => $e->mode_paiement?->label(),
+                'created_by'        => $e->creator?->name,
+            ])->values() : [],
+            'created_at'  => $c->created_at?->format(self::DATE_DISPLAY_FORMAT),
+            'is_annulee'  => $c->isAnnulee(),
+            'is_brouillon' => $c->isBrouillon(),
+            'can_modifier' => $c->isBrouillon() && $user->can('update', $c),
+            'can_confirmer' => $c->isBrouillon() && $user->can('confirmer', $c),
+            'can_annuler'  => $c->statut->isAnnulable() && $user->can('annuler', $c),
+        ];
     }
 
     private function commandeValidationRules(): array
     {
         return [
-            'vehicule_id' => 'nullable|exists:vehicules,id',
-            'client_id' => 'nullable|exists:clients,id',
-            'lignes' => 'required|array|min:1',
-            'lignes.*.produit_id' => 'required|exists:produits,id',
-            'lignes.*.qte' => 'required|integer|min:1',
-            'lignes.*.prix_vente' => 'required|numeric|min:0',
+            'vehicule_id'           => 'nullable|exists:vehicules,id',
+            'client_id'             => 'nullable|exists:clients,id',
+            'lignes'                => 'required|array|min:1',
+            'lignes.*.produit_id'   => 'required|exists:produits,id',
+            'lignes.*.qte'          => 'required|integer|min:1',
+            'lignes.*.prix_vente'   => 'required|numeric|min:0',
         ];
     }
 
     private function commandeValidationMessages(): array
     {
         return [
-            'lignes.required' => self::LIGNES_REQUIRED_MESSAGE,
-            'lignes.min' => self::LIGNES_REQUIRED_MESSAGE,
+            'lignes.required'              => self::LIGNES_REQUIRED_MESSAGE,
+            'lignes.min'                   => self::LIGNES_REQUIRED_MESSAGE,
             'lignes.*.produit_id.required' => 'Le produit est obligatoire pour chaque ligne.',
-            'lignes.*.produit_id.exists' => 'Le produit sélectionné est introuvable.',
-            'lignes.*.qte.required' => 'La quantité est obligatoire pour chaque ligne.',
-            'lignes.*.qte.min' => 'La quantité doit être supérieure à 0.',
+            'lignes.*.produit_id.exists'   => 'Le produit sélectionné est introuvable.',
+            'lignes.*.qte.required'        => 'La quantité est obligatoire pour chaque ligne.',
+            'lignes.*.qte.min'             => 'La quantité doit être supérieure à 0.',
             'lignes.*.prix_vente.required' => 'Le prix de vente est obligatoire pour chaque ligne.',
-            'lignes.*.prix_vente.min' => 'Le prix de vente ne peut pas être négatif.',
+            'lignes.*.prix_vente.min'      => 'Le prix de vente ne peut pas être négatif.',
         ];
     }
 
@@ -579,7 +487,7 @@ class CommandeVenteController extends Controller
 
         throw ValidationException::withMessages([
             'vehicule_id' => 'Veuillez sélectionner un véhicule ou un client.',
-            'client_id' => 'Veuillez sélectionner un véhicule ou un client.',
+            'client_id'   => 'Veuillez sélectionner un véhicule ou un client.',
         ]);
     }
 
@@ -589,10 +497,7 @@ class CommandeVenteController extends Controller
             return;
         }
 
-        $vehicule = Vehicule::query()
-            ->select(['id', 'capacite_packs'])
-            ->find($data['vehicule_id']);
-
+        $vehicule = Vehicule::query()->select(['id', 'capacite_packs'])->find($data['vehicule_id']);
         if (! $vehicule) {
             return;
         }
@@ -603,19 +508,15 @@ class CommandeVenteController extends Controller
             ]);
         }
 
-        $qteTotale = collect($data['lignes'] ?? [])->sum(
-            fn (array $ligne): int => (int) ($ligne['qte'] ?? 0),
-        );
-        $capacite = (int) $vehicule->capacite_packs;
+        $qteTotale = collect($data['lignes'] ?? [])->sum(fn (array $ligne): int => (int) ($ligne['qte'] ?? 0));
+        $capacite  = (int) $vehicule->capacite_packs;
 
-        // Dépassement : seul l'admin avec ventes.qte.update peut dépasser
         if ($qteTotale > $capacite && ! auth()->user()->can('ventes.qte.update')) {
             throw ValidationException::withMessages([
                 'lignes' => "La quantité totale ({$qteTotale} packs) dépasse la capacité du véhicule ({$capacite} packs maximum).",
             ]);
         }
 
-        // Chargement complet : paramètre organisationnel, s'applique à tous
         $orgId = auth()->user()->organization_id;
         if (! Parametre::isVentesAutorisationSaisieDessousQteMax($orgId) && $qteTotale < $capacite) {
             throw ValidationException::withMessages([
@@ -635,13 +536,7 @@ class CommandeVenteController extends Controller
             return;
         }
 
-        $produitIds = $lignes
-            ->pluck('produit_id')
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-
+        $produitIds = $lignes->pluck('produit_id')->filter()->unique()->values()->all();
         $prixParProduit = Produit::query()
             ->whereIn('id', $produitIds)
             ->pluck('prix_vente', 'id')
@@ -656,13 +551,12 @@ class CommandeVenteController extends Controller
                 continue;
             }
 
-            $prixRecu = (float) ($ligne['prix_vente'] ?? 0);
-            $prixAttendu = $existingPrixParProduit[$produitId]
-                ?? ($prixParProduit[$produitId] ?? $prixRecu);
+            $prixRecu    = (float) ($ligne['prix_vente'] ?? 0);
+            $prixAttendu = $existingPrixParProduit[$produitId] ?? ($prixParProduit[$produitId] ?? $prixRecu);
 
             if (abs($prixRecu - $prixAttendu) > 0.00001) {
                 throw ValidationException::withMessages([
-                    "lignes.{$index}.prix_vente" => 'Vous n etes pas autorise a modifier le prix unitaire.',
+                    "lignes.{$index}.prix_vente" => 'Vous n\'etes pas autorisé à modifier le prix unitaire.',
                 ]);
             }
         }
@@ -684,21 +578,21 @@ class CommandeVenteController extends Controller
 
     private function buildLignesDataAndTotal(array $lignes): array
     {
-        $lignesData = [];
+        $lignesData    = [];
         $totalCommande = 0;
 
         foreach ($lignes as $ligne) {
-            $produit = Produit::findOrFail($ligne['produit_id']);
-            $qte = (int) $ligne['qte'];
+            $produit   = Produit::findOrFail($ligne['produit_id']);
+            $qte       = (int) $ligne['qte'];
             $prixVente = (float) $ligne['prix_vente'];
             $totalLigne = $qte * $prixVente;
 
             $lignesData[] = [
-                'produit_id' => $produit->id,
-                'qte' => $qte,
+                'produit_id'          => $produit->id,
+                'quantite_demandee'   => $qte,
                 'prix_usine_snapshot' => (float) $produit->prix_usine,
                 'prix_vente_snapshot' => $prixVente,
-                'total_ligne' => $totalLigne,
+                'total_ligne'         => $totalLigne,
             ];
 
             $totalCommande += $totalLigne;
@@ -710,21 +604,91 @@ class CommandeVenteController extends Controller
     private function commandeSnapshot(CommandeVente $commande): array
     {
         return [
-            'vehicule_id' => $commande->vehicule_id,
-            'vehicule_nom' => $commande->vehicule?->nom_vehicule,
-            'client_id' => $commande->client_id,
-            'client_nom' => $commande->client
-                ? trim($commande->client->prenom.' '.$commande->client->nom)
-                : null,
+            'vehicule_id'    => $commande->vehicule_id,
+            'vehicule_nom'   => $commande->vehicule?->nom_vehicule,
+            'client_id'      => $commande->client_id,
+            'client_nom'     => $commande->client ? trim($commande->client->prenom.' '.$commande->client->nom) : null,
             'total_commande' => (float) $commande->total_commande,
-            'statut' => $commande->statut?->value,
-            'lignes' => $commande->lignes->map(fn ($l) => [
-                'produit_id' => $l->produit_id,
-                'produit_nom' => $l->produit?->nom,
-                'qte' => (int) $l->qte,
+            'statut'         => $commande->statut?->value,
+            'lignes'         => $commande->lignes->map(fn ($l) => [
+                'produit_id'          => $l->produit_id,
+                'produit_nom'         => $l->produit?->nom,
+                'quantite_demandee'   => (int) $l->quantite_demandee,
                 'prix_vente_snapshot' => (float) $l->prix_vente_snapshot,
-                'total_ligne' => (float) $l->total_ligne,
+                'total_ligne'         => (float) $l->total_ligne,
             ])->values()->all(),
         ];
+    }
+
+    private function getUserSite(): array
+    {
+        $site = $this->getUserSiteModel();
+
+        return [
+            'id'    => $site->id,
+            'nom'   => $site->nom,
+            'label' => ($site->type?->label() ?? '').' de '.$site->nom,
+        ];
+    }
+
+    private function getUserSiteModel(): mixed
+    {
+        $site = auth()->user()
+            ->sites()
+            ->wherePivot('is_default', true)
+            ->first(['sites.id', 'sites.nom', 'sites.type'])
+            ?? auth()->user()->sites()->first(['sites.id', 'sites.nom', 'sites.type']);
+
+        abort_if(! $site, 403, "Votre compte n'est rattaché à aucun site. Contactez votre administrateur.");
+
+        return $site;
+    }
+
+    private function produitsActifs(string $orgId): \Illuminate\Support\Collection
+    {
+        return Produit::where('organization_id', $orgId)
+            ->where('statut', ProduitStatut::ACTIF)
+            ->whereIn('type', ProduitType::vendableValues())
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (Produit $p) => [
+                'id'         => $p->id,
+                'nom'        => $p->nom,
+                'prix_vente' => (int) $p->prix_vente,
+                'prix_usine' => (int) $p->prix_usine,
+            ]);
+    }
+
+    private function vehiculesActifs(string $orgId): \Illuminate\Support\Collection
+    {
+        return Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur')])
+            ->where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->where('categorie', 'externe')
+            ->orderBy('nom_vehicule')
+            ->get()
+            ->map(fn (Vehicule $v) => [
+                'id'             => $v->id,
+                'nom_vehicule'   => $v->nom_vehicule,
+                'immatriculation' => $v->immatriculation,
+                'capacite_packs' => $v->capacite_packs !== null ? (int) $v->capacite_packs : null,
+                'livreur_nom'    => ($l = $v->equipe?->livreurs->first())
+                    ? trim($l->prenom.' '.$l->nom)
+                    : null,
+            ]);
+    }
+
+    private function clientsActifs(string $orgId): \Illuminate\Support\Collection
+    {
+        return Client::where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (Client $c) => [
+                'id'        => $c->id,
+                'nom'       => $c->nom,
+                'prenom'    => $c->prenom,
+                'telephone' => $c->telephone,
+            ]);
     }
 }
