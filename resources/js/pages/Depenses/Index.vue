@@ -565,6 +565,13 @@ const hasActiveFilters = ref(
                                 >
                                     {{ d.type.categorie_label }}
                                 </span>
+                                <div
+                                    v-if="d.commentaire"
+                                    class="mt-0.5 truncate text-xs text-muted-foreground"
+                                    style="max-width: 200px"
+                                >
+                                    {{ d.commentaire }}
+                                </div>
                             </td>
 
                             <!-- Concerné -->
