@@ -15,7 +15,7 @@ interface TypeVehiculeRow {
     vehicules_count: number;
 }
 
-const props = defineProps<{ types: TypeVehiculeRow[] }>();
+defineProps<{ types: TypeVehiculeRow[] }>();
 
 const page = usePage();
 const flash = computed(
