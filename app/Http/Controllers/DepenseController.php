@@ -11,11 +11,15 @@ use App\Models\DepenseImputation;
 use App\Models\DepenseType;
 use App\Models\Employe;
 use App\Models\Livreur;
+use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\DepenseImputationService;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -29,37 +33,14 @@ class DepenseController extends Controller
         $this->authorize('viewAny', Depense::class);
 
         $orgId = auth()->user()->organization_id;
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
 
-        $query = Depense::with(['depenseType', 'site', 'user'])
-            ->forOrg($orgId)
-            ->orderByDesc('date_depense')
-            ->orderByDesc('created_at');
+        $paginator = $this->buildQuery($filters, $orgId)
+            ->with(['depenseType', 'site', 'user'])
+            ->paginate(30)
+            ->withQueryString();
 
-        if ($request->filled('type')) {
-            $query->where('depense_type_id', $request->type);
-        }
-        if ($request->filled('statut')) {
-            $query->where('statut', $request->statut);
-        }
-        if ($request->filled('categorie')) {
-            $query->whereHas('depenseType', fn ($q) => $q->where('categorie', $request->categorie));
-        }
-        if ($request->filled('beneficiaire_type')) {
-            $query->where('beneficiaire_type', $request->beneficiaire_type);
-        }
-        if ($request->filled('site')) {
-            $query->where('site_id', $request->site);
-        }
-        if ($request->filled('date_debut')) {
-            $query->where('date_depense', '>=', $request->date_debut);
-        }
-        if ($request->filled('date_fin')) {
-            $query->where('date_depense', '<=', $request->date_fin);
-        }
-
-        $paginator = $query->paginate(30)->withQueryString();
-
-        $beneficiaireCache = $this->preloadBeneficiaires($paginator->items());
+        [$beneficiaireCache, $vehiculeInfoCache] = $this->preloadBeneficiaires($paginator->items());
 
         $types = DepenseType::where('organization_id', $orgId)
             ->ordered()
@@ -70,13 +51,92 @@ class DepenseController extends Controller
             ->get(['id', 'nom']);
 
         return Inertia::render('Depenses/Index', [
-            'depenses' => $paginator->through(fn (Depense $d) => $this->transformDepense($d, $beneficiaireCache)),
+            'depenses' => $paginator->through(fn (Depense $d) => $this->transformDepense($d, $beneficiaireCache, $vehiculeInfoCache)),
             'types' => $types->map(fn ($t) => ['id' => $t->id, 'libelle' => $t->libelle, 'categorie' => $t->categorie->value]),
             'sites' => $sites,
             'categories' => CategorieDepense::options(),
             'statuts' => StatutDepense::options(),
-            'filters' => $request->only(['type', 'statut', 'categorie', 'beneficiaire_type', 'site', 'date_debut', 'date_fin']),
+            'filters' => $filters,
         ]);
+    }
+
+    public function exportCsv(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $this->authorize('viewAny', Depense::class);
+
+        $orgId = auth()->user()->organization_id;
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
+
+        $depenses = $this->buildQuery($filters, $orgId)
+            ->with(['depenseType', 'site', 'user', 'validateur'])
+            ->get();
+
+        [$labelCache, $vehiculeInfoCache] = $this->preloadBeneficiaires($depenses->all());
+
+        $filename = 'depenses-'.now()->format('Y-m-d').'.csv';
+
+        return response()->streamDownload(function () use ($depenses, $labelCache, $vehiculeInfoCache) {
+            $handle = fopen('php://output', 'w');
+            fwrite($handle, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel
+
+            fputcsv($handle, [
+                'Date', 'Type', 'Catégorie', 'Concerné', 'Véhicule',
+                'Montant (GNF)', 'Statut', 'Site', 'Saisi par', 'Validé par', 'Commentaire',
+            ], ';');
+
+            foreach ($depenses as $d) {
+                $row = $this->transformDepense($d, $labelCache, $vehiculeInfoCache);
+                fputcsv($handle, [
+                    $row['date_depense'],
+                    $row['type']['libelle'] ?? '',
+                    $row['type']['categorie_label'] ?? '',
+                    $row['beneficiaire_label'] ?? '',
+                    $row['vehicule_nom'] ?? '',
+                    number_format((float) $row['montant'], 0, ',', ' '),
+                    $d->statut->label(),
+                    $row['site']['nom'] ?? '',
+                    $row['user']['name'] ?? '',
+                    $d->validateur?->name ?? '',
+                    $row['commentaire'] ?? '',
+                ], ';');
+            }
+
+            fclose($handle);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    public function exportPdf(Request $request): \Illuminate\Http\Response
+    {
+        $this->authorize('viewAny', Depense::class);
+
+        $orgId = auth()->user()->organization_id;
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
+
+        $depenses = $this->buildQuery($filters, $orgId)
+            ->with(['depenseType', 'site', 'user', 'validateur'])
+            ->get();
+
+        [$labelCache, $vehiculeInfoCache] = $this->preloadBeneficiaires($depenses->all());
+
+        $rows = $depenses->map(fn (Depense $d) => array_merge(
+            $this->transformDepense($d, $labelCache, $vehiculeInfoCache),
+            ['validateur_nom' => $d->validateur?->name]
+        ));
+
+        $total = $depenses->sum(fn ($d) => (float) $d->montant);
+        $org = Organization::find($orgId);
+        $siteNom = ! empty($filters['site']) ? Site::find($filters['site'])?->nom : null;
+
+        $pdf = Pdf::loadView('pdf.depenses', [
+            'rows' => $rows,
+            'total' => $total,
+            'filters' => $filters,
+            'org' => $org,
+            'site_nom' => $siteNom,
+            'generated_at' => now(),
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download('depenses-'.now()->format('Y-m-d').'.pdf');
     }
 
     public function show(Depense $depense): Response
@@ -86,12 +146,19 @@ class DepenseController extends Controller
         $depense->load(['depenseType', 'site', 'user', 'validateur', 'imputations']);
 
         $categorie = $depense->depenseType?->categorie;
-        $beneficiaireLabel = $this->resoudreBeneficiaireLabel(
-            $depense->beneficiaire_type,
-            $depense->beneficiaire_id
-        );
-
         $user = auth()->user();
+
+        $vehiculeInfo = ($depense->beneficiaire_type === 'vehicule' && $depense->beneficiaire_id)
+            ? $this->resolveVehiculeInfo($depense->beneficiaire_id)
+            : null;
+
+        $concerneReelLabel = $vehiculeInfo
+            ? $vehiculeInfo['concerne_reel_label']
+            : $this->resoudreBeneficiaireLabel($depense->beneficiaire_type, $depense->beneficiaire_id);
+
+        $impactMessage = $vehiculeInfo
+            ? $vehiculeInfo['impact_message']
+            : ($categorie?->impactMessage() ?? '');
 
         return Inertia::render('Depenses/Show', [
             'depense' => [
@@ -107,11 +174,11 @@ class DepenseController extends Controller
                 'date_validation' => $depense->date_validation?->toDateTimeString(),
                 'created_at' => $depense->created_at->toDateTimeString(),
                 'type_libelle' => $depense->depenseType?->libelle ?? '—',
-                'type_code' => $depense->depenseType?->code ?? '—',
                 'categorie' => $categorie?->value ?? '',
                 'categorie_label' => $categorie?->label() ?? '',
-                'impact_message' => $categorie?->impactMessage() ?? '',
-                'beneficiaire_label' => $beneficiaireLabel,
+                'impact_message' => $impactMessage,
+                'vehicule_nom' => $vehiculeInfo['vehicule_nom'] ?? null,
+                'beneficiaire_label' => $concerneReelLabel,
                 'site_nom' => $depense->site?->nom,
                 'saisi_par' => $depense->user->name,
                 'validateur' => $depense->validateur?->name,
@@ -130,7 +197,6 @@ class DepenseController extends Controller
                 'can_submit' => $user->can('view', $depense) && $depense->statut->value === 'brouillon',
                 'can_validate' => $user->can('valider', $depense) && $depense->statut->value === 'soumis',
                 'can_reject' => $user->can('valider', $depense) && $depense->statut->value === 'soumis',
-                'can_impute' => $user->can('imputer', $depense) && $depense->statut->value === 'valide',
                 'can_delete' => $user->can('delete', $depense),
             ],
         ]);
@@ -244,14 +310,24 @@ class DepenseController extends Controller
             return back()->withErrors(['statut' => 'Seules les dépenses soumises peuvent être validées.']);
         }
 
-        $depense->update([
-            'statut' => StatutDepense::VALIDE,
-            'validateur_id' => auth()->id(),
-            'date_validation' => now(),
-            'motif_rejet' => null,
-        ]);
+        $depense->load('depenseType');
 
-        return back()->with('success', 'Dépense validée.');
+        try {
+            DB::transaction(function () use ($depense) {
+                $depense->update([
+                    'statut' => StatutDepense::VALIDE,
+                    'validateur_id' => auth()->id(),
+                    'date_validation' => now(),
+                    'motif_rejet' => null,
+                ]);
+
+                $this->imputationService->creer($depense);
+            });
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['imputation' => $e->getMessage()]);
+        }
+
+        return back()->with('success', 'Dépense validée et imputée.');
     }
 
     public function rejeter(Request $request, Depense $depense): RedirectResponse
@@ -269,34 +345,13 @@ class DepenseController extends Controller
         ]);
 
         $depense->update([
-            'statut' => StatutDepense::REJETE,
+            'statut' => StatutDepense::ANNULE,
             'validateur_id' => auth()->id(),
             'date_validation' => now(),
             'motif_rejet' => $validated['motif_rejet'],
         ]);
 
-        return back()->with('success', 'Dépense rejetée.');
-    }
-
-    public function imputer(Depense $depense): RedirectResponse
-    {
-        $this->authorize('imputer', $depense);
-
-        if ($depense->statut !== StatutDepense::VALIDE) {
-            return back()->withErrors(['statut' => 'Seules les dépenses validées peuvent être imputées.']);
-        }
-
-        $depense->load('depenseType');
-
-        try {
-            $this->imputationService->creer($depense);
-        } catch (\RuntimeException $e) {
-            return back()->withErrors(['imputation' => $e->getMessage()]);
-        }
-
-        $depense->update(['statut' => StatutDepense::IMPUTE]);
-
-        return back()->with('success', 'Dépense imputée avec succès.');
+        return back()->with('success', 'Dépense annulée.');
     }
 
     public function destroy(Depense $depense): RedirectResponse
@@ -310,10 +365,92 @@ class DepenseController extends Controller
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    private function transformDepense(Depense $d, array $beneficiaireCache): array
+    private function buildQuery(array $filters, string $orgId): Builder
+    {
+        $query = Depense::forOrg($orgId)
+            ->orderByDesc('date_depense')
+            ->orderByDesc('created_at');
+
+        if (! empty($filters['search'])) {
+            $like = '%'.$filters['search'].'%';
+            $query->where(function ($w) use ($like) {
+                $w->where('commentaire', 'LIKE', $like)
+                    ->orWhereHas('depenseType', fn ($q) => $q->where('libelle', 'LIKE', $like))
+                    ->orWhereHas('site', fn ($q) => $q->where('nom', 'LIKE', $like))
+                    ->orWhereHas('user', fn ($q) => $q->where('name', 'LIKE', $like))
+                    ->orWhere(fn ($w2) => $w2
+                        ->where('beneficiaire_type', 'vehicule')
+                        ->whereHas('vehiculeBeneficiaire', fn ($q) => $q
+                            ->where('nom_vehicule', 'LIKE', $like)
+                            ->orWhereHas('proprietaire', fn ($q) => $q
+                                ->where('nom', 'LIKE', $like)
+                                ->orWhere('prenom', 'LIKE', $like)
+                            )
+                        )
+                    )
+                    ->orWhere(fn ($w2) => $w2
+                        ->where('beneficiaire_type', 'employe')
+                        ->whereHas('employeBeneficiaire', fn ($q) => $q
+                            ->where('nom', 'LIKE', $like)
+                            ->orWhere('prenom', 'LIKE', $like)
+                        )
+                    )
+                    ->orWhere(fn ($w2) => $w2
+                        ->where('beneficiaire_type', 'livreur')
+                        ->whereHas('livreurBeneficiaire', fn ($q) => $q
+                            ->where('nom', 'LIKE', $like)
+                            ->orWhere('prenom', 'LIKE', $like)
+                        )
+                    )
+                    ->orWhere(fn ($w2) => $w2
+                        ->where('beneficiaire_type', 'proprietaire')
+                        ->whereHas('proprietaireBeneficiaire', fn ($q) => $q
+                            ->where('nom', 'LIKE', $like)
+                            ->orWhere('prenom', 'LIKE', $like)
+                        )
+                    );
+            });
+        }
+
+        if (! empty($filters['type'])) {
+            $query->where('depense_type_id', $filters['type']);
+        }
+        if (! empty($filters['statut'])) {
+            $query->where('statut', $filters['statut']);
+        }
+        if (! empty($filters['categorie'])) {
+            $query->whereHas('depenseType', fn ($q) => $q->where('categorie', $filters['categorie']));
+        }
+        if (! empty($filters['site'])) {
+            $query->where('site_id', $filters['site']);
+        }
+        if (! empty($filters['date_debut'])) {
+            $query->where('date_depense', '>=', $filters['date_debut']);
+        }
+        if (! empty($filters['date_fin'])) {
+            $query->where('date_depense', '<=', $filters['date_fin']);
+        }
+
+        return $query;
+    }
+
+    private function transformDepense(Depense $d, array $labelCache, array $vehiculeInfoCache): array
     {
         $categorie = $d->depenseType?->categorie;
         $cacheKey = "{$d->beneficiaire_type}:{$d->beneficiaire_id}";
+
+        $vehiculeNom = null;
+        $concerneReelLabel = $labelCache[$cacheKey] ?? null;
+        $impactMessage = $categorie?->impactMessage() ?? '';
+
+        if ($d->beneficiaire_type === 'vehicule' && $d->beneficiaire_id) {
+            $vehiculeNom = $labelCache[$cacheKey] ?? null;
+            $extra = $vehiculeInfoCache[$d->beneficiaire_id] ?? null;
+            if ($extra) {
+                $concerneReelLabel = $extra['concerne_reel_label'];
+                $impactMessage = $extra['impact_message'];
+            }
+        }
 
         return [
             'id' => $d->id,
@@ -327,13 +464,13 @@ class DepenseController extends Controller
                 'libelle' => $d->depenseType->libelle,
                 'categorie' => $categorie?->value,
                 'categorie_label' => $categorie?->label(),
-                'categorie_concerne' => $categorie?->labelConcerne(),
-                'impact_message' => $categorie?->impactMessage(),
+                'impact_message' => $impactMessage,
                 'commentaire_obligatoire' => $d->depenseType->commentaire_obligatoire,
                 'justificatif_obligatoire' => $d->depenseType->justificatif_obligatoire,
             ] : null,
             'beneficiaire_type' => $d->beneficiaire_type,
-            'beneficiaire_label' => $beneficiaireCache[$cacheKey] ?? null,
+            'beneficiaire_label' => $concerneReelLabel,
+            'vehicule_nom' => $vehiculeNom,
             'site' => $d->site ? ['id' => $d->site->id, 'nom' => $d->site->nom] : null,
             'user' => ['id' => $d->user->id, 'name' => $d->user->name],
         ];
@@ -341,7 +478,9 @@ class DepenseController extends Controller
 
     private function preloadBeneficiaires(array $depenses): array
     {
-        $cache = [];
+        $labelCache = [];
+        $vehiculeInfoCache = [];
+
         $byType = collect($depenses)
             ->filter(fn ($d) => $d->beneficiaire_type && $d->beneficiaire_id)
             ->groupBy('beneficiaire_type');
@@ -349,24 +488,69 @@ class DepenseController extends Controller
         foreach ($byType as $type => $items) {
             $ids = $items->pluck('beneficiaire_id')->unique()->values()->all();
 
-            $models = match ($type) {
-                'employe' => Employe::findMany($ids, ['id', 'nom', 'prenom']),
-                'livreur' => Livreur::findMany($ids, ['id', 'nom', 'prenom']),
-                'proprietaire' => Proprietaire::findMany($ids, ['id', 'nom', 'prenom']),
-                'vehicule' => Vehicule::findMany($ids, ['id', 'nom_vehicule']),
-                default => collect(),
-            };
+            if ($type === 'vehicule') {
+                $models = Vehicule::with('proprietaire:id,nom,prenom')
+                    ->findMany($ids, ['id', 'nom_vehicule', 'proprietaire_id']);
 
-            foreach ($models as $model) {
-                $label = $type === 'vehicule'
-                    ? $model->nom_vehicule
-                    : trim("{$model->prenom} {$model->nom}");
+                foreach ($models as $model) {
+                    $labelCache["vehicule:{$model->id}"] = $model->nom_vehicule;
 
-                $cache["{$type}:{$model->id}"] = $label;
+                    if ($model->proprietaire_id) {
+                        $propNom = trim("{$model->proprietaire->prenom} {$model->proprietaire->nom}");
+                        $vehiculeInfoCache[$model->id] = [
+                            'concerne_reel_label' => $propNom,
+                            'impact_message' => "Cette dépense sera déduite de la commission de {$propNom}.",
+                        ];
+                    } else {
+                        $vehiculeInfoCache[$model->id] = [
+                            'concerne_reel_label' => 'Agence ELM',
+                            'impact_message' => 'Ce véhicule est interne ELM. La dépense sera comptabilisée comme charge entreprise.',
+                        ];
+                    }
+                }
+            } else {
+                $models = match ($type) {
+                    'employe' => Employe::findMany($ids, ['id', 'nom', 'prenom']),
+                    'livreur' => Livreur::findMany($ids, ['id', 'nom', 'prenom']),
+                    'proprietaire' => Proprietaire::findMany($ids, ['id', 'nom', 'prenom']),
+                    default => collect(),
+                };
+
+                foreach ($models as $model) {
+                    $labelCache["{$type}:{$model->id}"] = trim("{$model->prenom} {$model->nom}");
+                }
             }
         }
 
-        return $cache;
+        return [$labelCache, $vehiculeInfoCache];
+    }
+
+    private function resolveVehiculeInfo(string $vehiculeId): array
+    {
+        $vehicule = Vehicule::with('proprietaire:id,nom,prenom')
+            ->find($vehiculeId, ['id', 'nom_vehicule', 'proprietaire_id']);
+
+        if (! $vehicule) {
+            return ['vehicule_nom' => null, 'concerne_reel_label' => null, 'impact_message' => ''];
+        }
+
+        $vehiculeNom = $vehicule->nom_vehicule;
+
+        if ($vehicule->proprietaire_id) {
+            $propNom = trim("{$vehicule->proprietaire->prenom} {$vehicule->proprietaire->nom}");
+
+            return [
+                'vehicule_nom' => $vehiculeNom,
+                'concerne_reel_label' => $propNom,
+                'impact_message' => "Cette dépense sera déduite de la commission de {$propNom}.",
+            ];
+        }
+
+        return [
+            'vehicule_nom' => $vehiculeNom,
+            'concerne_reel_label' => 'Agence ELM',
+            'impact_message' => 'Ce véhicule est interne ELM. La dépense sera comptabilisée comme charge entreprise.',
+        ];
     }
 
     private function resoudreBeneficiaireLabel(?string $type, ?string $id): ?string
@@ -406,12 +590,18 @@ class DepenseController extends Controller
     {
         return Vehicule::where('organization_id', $orgId)
             ->where('is_active', true)
+            ->with(['site:id,nom', 'proprietaire:id,nom,prenom'])
             ->orderBy('nom_vehicule')
-            ->get(['id', 'nom_vehicule', 'immatriculation', 'proprietaire_id'])
+            ->get(['id', 'nom_vehicule', 'immatriculation', 'categorie', 'site_id', 'proprietaire_id'])
             ->map(fn ($v) => [
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
+                'categorie' => $v->categorie,
+                'site_nom' => $v->site?->nom,
+                'proprietaire_nom' => $v->proprietaire
+                    ? trim("{$v->proprietaire->prenom} {$v->proprietaire->nom}")
+                    : null,
                 'has_proprietaire' => (bool) $v->proprietaire_id,
             ]);
     }

@@ -7,8 +7,7 @@ enum StatutDepense: string
     case BROUILLON = 'brouillon';
     case SOUMIS = 'soumis';
     case VALIDE = 'valide';
-    case REJETE = 'rejete';
-    case IMPUTE = 'impute';
+    case ANNULE = 'annule';
 
     public function label(): string
     {
@@ -16,8 +15,7 @@ enum StatutDepense: string
             self::BROUILLON => 'Brouillon',
             self::SOUMIS => 'Soumis',
             self::VALIDE => 'Validé',
-            self::REJETE => 'Rejeté',
-            self::IMPUTE => 'Imputé',
+            self::ANNULE => 'Annulé',
         };
     }
 

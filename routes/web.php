@@ -233,11 +233,12 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 
     // ── Module : Dépenses opérationnelles ────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::DEPENSES)->group(function () {
+        Route::get('depenses/export/excel', [DepenseController::class, 'exportCsv'])->name('depenses.export.excel');
+        Route::get('depenses/export/pdf', [DepenseController::class, 'exportPdf'])->name('depenses.export.pdf');
         Route::resource('depenses', DepenseController::class);
         Route::patch('depenses/{depense}/soumettre', [DepenseController::class, 'soumettre'])->name('depenses.soumettre');
         Route::patch('depenses/{depense}/valider', [DepenseController::class, 'valider'])->name('depenses.valider');
         Route::patch('depenses/{depense}/rejeter', [DepenseController::class, 'rejeter'])->name('depenses.rejeter');
-        Route::patch('depenses/{depense}/imputer', [DepenseController::class, 'imputer'])->name('depenses.imputer');
     });
 
     // ── Module : RH (Ressources humaines) ────────────────────────────────────

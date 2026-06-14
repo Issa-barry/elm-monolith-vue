@@ -301,7 +301,7 @@ class DepenseTest extends TestCase
             ->assertSessionHasErrors(['motif_rejet']);
     }
 
-    public function test_rejeter_transitions_soumis_to_rejete(): void
+    public function test_rejeter_transitions_soumis_to_annule(): void
     {
         $depense = Depense::factory()->soumis()->create([
             'organization_id' => $this->org->id,
@@ -315,9 +315,147 @@ class DepenseTest extends TestCase
 
         $this->assertDatabaseHas('depenses', [
             'id' => $depense->id,
-            'statut' => StatutDepense::REJETE->value,
+            'statut' => StatutDepense::ANNULE->value,
             'motif_rejet' => 'Justificatif insuffisant.',
         ]);
+    }
+
+    public function test_valider_auto_imputes_employe_depense(): void
+    {
+        $typeEmploye = DepenseType::factory()->employe()->create(['organization_id' => $this->org->id]);
+        $employe = Employe::factory()->create(['organization_id' => $this->org->id, 'statut' => 'actif']);
+
+        $depense = Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeEmploye->id,
+            'beneficiaire_type' => CategorieDepense::EMPLOYE->value,
+            'beneficiaire_id' => $employe->id,
+            'montant' => 50000,
+        ]);
+
+        $this->patch("/depenses/{$depense->id}/valider")->assertRedirect();
+
+        $this->assertDatabaseHas('depenses', [
+            'id' => $depense->id,
+            'statut' => StatutDepense::VALIDE->value,
+        ]);
+        $this->assertDatabaseHas('depense_imputations', [
+            'depense_id' => $depense->id,
+            'beneficiaire_id' => $employe->id,
+            'montant' => 50000,
+            'statut' => 'impute',
+        ]);
+    }
+
+    // ── Search ───────────────────────────────────────────────────────────────
+
+    public function test_search_finds_by_commentaire(): void
+    {
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'commentaire' => 'Achat gasoil pour groupe electrogene',
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'commentaire' => 'Frais de deplacement divers',
+        ]);
+
+        $this->get('/depenses?search=gasoil')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    public function test_search_finds_by_type_libelle(): void
+    {
+        $typeSpecial = DepenseType::factory()->interne()->create([
+            'organization_id' => $this->org->id,
+            'libelle' => 'Carburant groupe',
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeSpecial->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $this->get('/depenses?search=Carburant')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    public function test_search_does_not_leak_other_org(): void
+    {
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'commentaire' => 'Achat materiel',
+        ]);
+        Depense::factory()->create(['commentaire' => 'Achat materiel']); // autre org
+
+        $this->get('/depenses?search=materiel')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    // ── Exports ──────────────────────────────────────────────────────────────
+
+    public function test_export_excel_returns_csv_download(): void
+    {
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $response = $this->get('/depenses/export/excel');
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
+    }
+
+    public function test_export_excel_respects_statut_filter(): void
+    {
+        Depense::factory()->brouillon()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+        Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $response = $this->get('/depenses/export/excel?statut=brouillon');
+
+        $response->assertOk();
+        $content = $response->streamedContent();
+        $lines = array_filter(explode("\n", $content));
+        $this->assertCount(2, $lines); // header + 1 data row
+    }
+
+    public function test_export_pdf_returns_pdf_download(): void
+    {
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $response = $this->get('/depenses/export/pdf');
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
     }
 
     // ── Destroy ──────────────────────────────────────────────────────────────

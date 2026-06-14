@@ -21,7 +21,6 @@ interface Imputation {
 
 interface DepenseDetail {
     id: string;
-    reference?: string;
     date_depense: string;
     montant: number;
     montant_formatte: string;
@@ -33,10 +32,10 @@ interface DepenseDetail {
     date_validation: string | null;
     created_at: string;
     type_libelle: string;
-    type_code: string;
     categorie: string;
     categorie_label: string;
     impact_message: string;
+    vehicule_nom: string | null;
     beneficiaire_label: string | null;
     site_nom: string | null;
     saisi_par: string;
@@ -46,7 +45,6 @@ interface DepenseDetail {
     can_submit: boolean;
     can_validate: boolean;
     can_reject: boolean;
-    can_impute: boolean;
     can_delete: boolean;
 }
 
@@ -60,9 +58,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 const statutConfig: Record<string, { label: string; class: string; icon: unknown }> = {
     brouillon: { label: 'Brouillon', class: 'bg-slate-100 text-slate-700 border-slate-200', icon: Clock },
     soumis: { label: 'Soumis', class: 'bg-blue-100 text-blue-700 border-blue-200', icon: Send },
-    valide: { label: 'Validé', class: 'bg-green-100 text-green-700 border-green-200', icon: CheckCircle },
-    rejete: { label: 'Rejeté', class: 'bg-red-100 text-red-700 border-red-200', icon: XCircle },
-    impute: { label: 'Imputé', class: 'bg-purple-100 text-purple-700 border-purple-200', icon: CheckCircle },
+    valide: { label: 'Validée', class: 'bg-green-100 text-green-700 border-green-200', icon: CheckCircle },
+    annule: { label: 'Annulée', class: 'bg-red-100 text-red-700 border-red-200', icon: XCircle },
 };
 
 const categorieClass: Record<string, string> = {
@@ -105,13 +102,6 @@ function rejeter() {
     processing.value = true;
     router.patch(`/depenses/${props.depense.id}/rejeter`, { motif_rejet: motifRejet.value }, {
         onFinish: () => { processing.value = false; showRejectDialog.value = false; },
-    });
-}
-
-function imputer() {
-    processing.value = true;
-    router.patch(`/depenses/${props.depense.id}/imputer`, {}, {
-        onFinish: () => { processing.value = false; },
     });
 }
 
@@ -168,20 +158,17 @@ function formatDate(iso: string | null): string {
                             <XCircle class="mr-1 h-3.5 w-3.5" />
                             Rejeter
                         </Button>
-                        <Button v-if="depense.can_impute" size="sm" class="bg-purple-600 hover:bg-purple-700 text-white" :disabled="processing" @click="imputer">
-                            Imputer
-                        </Button>
                         <Button v-if="depense.can_delete" size="sm" variant="destructive" :disabled="processing" @click="supprimer">
                             <Trash2 class="h-3.5 w-3.5" />
                         </Button>
                     </div>
                 </div>
 
-                <!-- Motif rejet si rejeté -->
-                <div v-if="depense.statut === 'rejete' && depense.motif_rejet" class="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <!-- Motif rejet si annulé -->
+                <div v-if="depense.statut === 'annule' && depense.motif_rejet" class="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                     <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
                     <div>
-                        <p class="font-medium">Motif de rejet</p>
+                        <p class="font-medium">Motif du rejet</p>
                         <p class="mt-0.5">{{ depense.motif_rejet }}</p>
                     </div>
                 </div>
@@ -206,24 +193,21 @@ function formatDate(iso: string | null): string {
                             <dd class="col-span-2">{{ formatDate(depense.date_depense) }}</dd>
                         </div>
                         <div class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm">
-                            <dt class="text-muted-foreground">Catégorie</dt>
-                            <dd class="col-span-2">
+                            <dt class="text-muted-foreground">Concerné</dt>
+                            <dd class="col-span-2 flex flex-wrap items-center gap-2">
                                 <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium" :class="categorieClass[depense.categorie]">
                                     {{ depense.categorie_label }}
                                 </span>
+                                <span v-if="depense.beneficiaire_label" class="font-medium">{{ depense.beneficiaire_label }}</span>
                             </dd>
                         </div>
-                        <div v-if="depense.beneficiaire_label" class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm">
-                            <dt class="text-muted-foreground">Concerné</dt>
-                            <dd class="col-span-2 font-medium">{{ depense.beneficiaire_label }}</dd>
+                        <div v-if="depense.vehicule_nom" class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm">
+                            <dt class="text-muted-foreground">Véhicule</dt>
+                            <dd class="col-span-2">{{ depense.vehicule_nom }}</dd>
                         </div>
                         <div v-if="depense.site_nom" class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm">
                             <dt class="text-muted-foreground">Site</dt>
                             <dd class="col-span-2">{{ depense.site_nom }}</dd>
-                        </div>
-                        <div class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm">
-                            <dt class="text-muted-foreground">Code type</dt>
-                            <dd class="col-span-2 font-mono text-xs">{{ depense.type_code }}</dd>
                         </div>
                         <div v-if="depense.commentaire" class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm">
                             <dt class="text-muted-foreground">Commentaire</dt>

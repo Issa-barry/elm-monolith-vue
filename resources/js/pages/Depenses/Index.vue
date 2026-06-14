@@ -16,7 +16,9 @@ import {
     Check,
     ChevronLeft,
     ChevronRight,
+    Download,
     Eye,
+    FileText,
     MoreVertical,
     Pencil,
     Plus,
@@ -45,10 +47,10 @@ interface DepenseRow {
         libelle: string;
         categorie: string;
         categorie_label: string;
-        categorie_concerne: string;
     } | null;
     beneficiaire_type: string | null;
     beneficiaire_label: string | null;
+    vehicule_nom: string | null;
     site: { id: string; nom: string } | null;
     user: { id: string; name: string };
 }
@@ -74,10 +76,10 @@ const props = defineProps<{
     categories: Option[];
     statuts: Option[];
     filters: {
+        search?: string;
         type?: string;
         statut?: string;
         categorie?: string;
-        beneficiaire_type?: string;
         site?: string;
         date_debut?: string;
         date_fin?: string;
@@ -91,6 +93,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dépenses', href: '/depenses' },
 ];
 
+const filterSearch = ref(props.filters.search ?? '');
 const filterType = ref(props.filters.type ?? '');
 const filterStatut = ref(props.filters.statut ?? '');
 const filterCategorie = ref(props.filters.categorie ?? '');
@@ -98,22 +101,24 @@ const filterSite = ref(props.filters.site ?? '');
 const filterDebut = ref(props.filters.date_debut ?? '');
 const filterFin = ref(props.filters.date_fin ?? '');
 
+function currentParams() {
+    return {
+        search: filterSearch.value || undefined,
+        type: filterType.value || undefined,
+        statut: filterStatut.value || undefined,
+        categorie: filterCategorie.value || undefined,
+        site: filterSite.value || undefined,
+        date_debut: filterDebut.value || undefined,
+        date_fin: filterFin.value || undefined,
+    };
+}
+
 function applyFilters() {
-    router.get(
-        '/depenses',
-        {
-            type: filterType.value || undefined,
-            statut: filterStatut.value || undefined,
-            categorie: filterCategorie.value || undefined,
-            site: filterSite.value || undefined,
-            date_debut: filterDebut.value || undefined,
-            date_fin: filterFin.value || undefined,
-        },
-        { preserveScroll: true, replace: true },
-    );
+    router.get('/depenses', currentParams(), { preserveScroll: true, replace: true });
 }
 
 function resetFilters() {
+    filterSearch.value = '';
     filterType.value = '';
     filterStatut.value = '';
     filterCategorie.value = '';
@@ -121,6 +126,20 @@ function resetFilters() {
     filterDebut.value = '';
     filterFin.value = '';
     router.get('/depenses', {}, { preserveScroll: true, replace: true });
+}
+
+function exportExcel() {
+    const params = new URLSearchParams();
+    const p = currentParams();
+    Object.entries(p).forEach(([k, v]) => { if (v) params.set(k, v); });
+    window.location.href = `/depenses/export/excel?${params.toString()}`;
+}
+
+function exportPdf() {
+    const params = new URLSearchParams();
+    const p = currentParams();
+    Object.entries(p).forEach(([k, v]) => { if (v) params.set(k, v); });
+    window.location.href = `/depenses/export/pdf?${params.toString()}`;
 }
 
 function soumettre(id: string) {
@@ -135,11 +154,6 @@ function rejeter(id: string) {
     const motif = prompt('Motif de rejet (obligatoire) :');
     if (!motif?.trim()) return;
     router.patch(`/depenses/${id}/rejeter`, { motif_rejet: motif }, { preserveScroll: true });
-}
-
-function imputer(id: string) {
-    if (!confirm('Imputer cette dépense ? Cette action génère une retenue définitive.')) return;
-    router.patch(`/depenses/${id}/imputer`, {}, { preserveScroll: true });
 }
 
 function destroy(id: string) {
@@ -161,16 +175,14 @@ const statutVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'o
     brouillon: 'secondary',
     soumis: 'outline',
     valide: 'default',
-    rejete: 'destructive',
-    impute: 'secondary',
+    annule: 'destructive',
 };
 
 const statutColors: Record<string, string> = {
     brouillon: '',
     soumis: 'border-blue-400 text-blue-700',
     valide: 'bg-emerald-100 text-emerald-700 border-emerald-300',
-    rejete: '',
-    impute: 'bg-purple-100 text-purple-700 border-purple-300',
+    annule: '',
 };
 
 const categorieColors: Record<string, string> = {
@@ -182,7 +194,7 @@ const categorieColors: Record<string, string> = {
 };
 
 const hasActiveFilters = ref(
-    !!(props.filters.type || props.filters.statut || props.filters.categorie || props.filters.site || props.filters.date_debut || props.filters.date_fin),
+    !!(props.filters.search || props.filters.type || props.filters.statut || props.filters.categorie || props.filters.site || props.filters.date_debut || props.filters.date_fin),
 );
 </script>
 
@@ -199,12 +211,34 @@ const hasActiveFilters = ref(
                         {{ depenses.total }} dépense{{ depenses.total !== 1 ? 's' : '' }}
                     </p>
                 </div>
-                <Link v-if="can('depenses.create')" href="/depenses/create">
-                    <Button>
-                        <Plus class="mr-2 h-4 w-4" />
-                        Nouvelle dépense
+                <div class="flex items-center gap-2">
+                    <Button variant="outline" size="sm" @click="exportExcel">
+                        <Download class="mr-1.5 h-3.5 w-3.5" />
+                        Excel
                     </Button>
-                </Link>
+                    <Button variant="outline" size="sm" @click="exportPdf">
+                        <FileText class="mr-1.5 h-3.5 w-3.5" />
+                        PDF
+                    </Button>
+                    <Link v-if="can('depenses.create')" href="/depenses/create">
+                        <Button>
+                            <Plus class="mr-2 h-4 w-4" />
+                            Nouvelle dépense
+                        </Button>
+                    </Link>
+                </div>
+            </div>
+
+            <!-- Recherche -->
+            <div class="relative">
+                <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                    v-model="filterSearch"
+                    type="search"
+                    placeholder="Rechercher une dépense…"
+                    class="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    @keydown.enter="applyFilters"
+                />
             </div>
 
             <!-- Filtres -->
@@ -219,12 +253,12 @@ const hasActiveFilters = ref(
                         <option v-for="t in types" :key="t.id" :value="t.id">{{ t.libelle }}</option>
                     </select>
 
-                    <!-- Catégorie -->
+                    <!-- Concerné (catégorie) -->
                     <select
                         v-model="filterCategorie"
                         class="h-8 rounded-md border border-input bg-background px-2 text-sm"
                     >
-                        <option value="">Toutes les catégories</option>
+                        <option value="">Tous les concernés</option>
                         <option v-for="c in categories" :key="c.value" :value="c.value">{{ c.label }}</option>
                     </select>
 
@@ -276,9 +310,8 @@ const hasActiveFilters = ref(
                     <thead>
                         <tr class="border-b bg-muted/40">
                             <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Date</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Type / Catégorie</th>
+                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Type</th>
                             <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Concerné</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Bénéficiaire</th>
                             <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Montant</th>
                             <th class="px-4 py-2.5 text-center font-medium text-muted-foreground">Statut</th>
                             <th class="px-4 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Site</th>
@@ -297,7 +330,7 @@ const hasActiveFilters = ref(
                                 {{ d.date_depense }}
                             </td>
 
-                            <!-- Type / Catégorie -->
+                            <!-- Type -->
                             <td class="px-4 py-3">
                                 <div class="font-medium">{{ d.type?.libelle ?? '—' }}</div>
                                 <span
@@ -311,14 +344,10 @@ const hasActiveFilters = ref(
 
                             <!-- Concerné -->
                             <td class="px-4 py-3">
-                                <span class="text-xs text-muted-foreground">
-                                    {{ d.type?.categorie_concerne ?? '—' }}
-                                </span>
-                            </td>
-
-                            <!-- Bénéficiaire -->
-                            <td class="px-4 py-3">
-                                <span class="text-sm">{{ d.beneficiaire_label ?? '—' }}</span>
+                                <div class="text-sm font-medium">{{ d.beneficiaire_label ?? '—' }}</div>
+                                <div v-if="d.vehicule_nom" class="mt-0.5 text-xs text-muted-foreground">
+                                    {{ d.vehicule_nom }}
+                                </div>
                             </td>
 
                             <!-- Montant -->
@@ -364,9 +393,9 @@ const hasActiveFilters = ref(
                                                 </Link>
                                             </DropdownMenuItem>
 
-                                            <!-- Modifier (brouillon ou rejeté) -->
+                                            <!-- Modifier (brouillon ou annulé) -->
                                             <DropdownMenuItem
-                                                v-if="['brouillon', 'rejete'].includes(d.statut) && can('depenses.update')"
+                                                v-if="['brouillon', 'annule'].includes(d.statut) && can('depenses.update')"
                                                 as-child
                                             >
                                                 <Link :href="`/depenses/${d.id}/edit`" class="flex w-full items-center gap-2">
@@ -407,16 +436,6 @@ const hasActiveFilters = ref(
                                                 Rejeter
                                             </DropdownMenuItem>
 
-                                            <!-- Imputer (validé + permission) -->
-                                            <DropdownMenuItem
-                                                v-if="d.statut === 'valide' && can('depenses.update')"
-                                                class="cursor-pointer text-purple-700 focus:text-purple-700"
-                                                @click="imputer(d.id)"
-                                            >
-                                                <Check class="h-4 w-4" />
-                                                Imputer
-                                            </DropdownMenuItem>
-
                                             <DropdownMenuSeparator v-if="d.statut === 'brouillon' && can('depenses.delete')" />
 
                                             <!-- Supprimer (brouillon seulement) -->
@@ -435,7 +454,7 @@ const hasActiveFilters = ref(
                         </tr>
 
                         <tr v-if="depenses.data.length === 0">
-                            <td colspan="9" class="px-4 py-16 text-center text-sm text-muted-foreground">
+                            <td colspan="8" class="px-4 py-16 text-center text-sm text-muted-foreground">
                                 <div class="flex flex-col items-center gap-3">
                                     <Receipt class="h-12 w-12 opacity-20" />
                                     <p>Aucune dépense enregistrée.</p>

@@ -3,6 +3,10 @@
 namespace App\Models;
 
 use App\Enums\StatutDepense;
+use App\Models\Employe;
+use App\Models\Livreur;
+use App\Models\Proprietaire;
+use App\Models\Vehicule;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -71,6 +75,27 @@ class Depense extends Model
     public function imputations(): HasMany
     {
         return $this->hasMany(DepenseImputation::class);
+    }
+
+    // keyed on beneficiaire_id only — always pair with where('beneficiaire_type', X) in queries
+    public function vehiculeBeneficiaire(): BelongsTo
+    {
+        return $this->belongsTo(Vehicule::class, 'beneficiaire_id');
+    }
+
+    public function employeBeneficiaire(): BelongsTo
+    {
+        return $this->belongsTo(Employe::class, 'beneficiaire_id');
+    }
+
+    public function livreurBeneficiaire(): BelongsTo
+    {
+        return $this->belongsTo(Livreur::class, 'beneficiaire_id');
+    }
+
+    public function proprietaireBeneficiaire(): BelongsTo
+    {
+        return $this->belongsTo(Proprietaire::class, 'beneficiaire_id');
     }
 
     // ── Scopes ────────────────────────────────────────────────────────────────

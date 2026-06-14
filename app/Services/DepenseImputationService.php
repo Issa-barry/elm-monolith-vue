@@ -32,7 +32,7 @@ class DepenseImputationService
             'periode_type' => $periodeType,
             'periode_debut' => $periodeDebut,
             'periode_fin' => $periodeFin,
-            'statut' => 'en_attente',
+            'statut' => 'impute',
         ]);
     }
 

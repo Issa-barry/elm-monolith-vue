@@ -5,8 +5,9 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import { AlertCircle, Info } from 'lucide-vue-next';
+import { AlertCircle, CheckCircle, Info } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
+import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
 interface TypeOption {
@@ -23,6 +24,9 @@ interface Vehicule {
     id: string;
     nom_vehicule: string;
     immatriculation: string;
+    categorie: string;
+    site_nom: string | null;
+    proprietaire_nom: string | null;
     has_proprietaire: boolean;
 }
 interface PersonneOption {
@@ -131,16 +135,33 @@ const impactClass = computed(() => {
     return map[categorie.value] ?? '';
 });
 
-const selectedVehiculeNoProprietaire = computed(() =>
-    vehiculeSelected.value ? !vehiculeSelected.value.has_proprietaire : false,
-);
+type VehiculeContext = 'interne' | 'externe_avec_proprietaire' | 'externe_sans_proprietaire' | null;
+
+const vehiculeContext = computed<VehiculeContext>(() => {
+    const v = vehiculeSelected.value;
+    if (!v) return null;
+    if (v.categorie === 'interne') return 'interne';
+    return v.has_proprietaire ? 'externe_avec_proprietaire' : 'externe_sans_proprietaire';
+});
 
 const concerneLabel = computed(
     () => props.categories.find((c) => c.value === concerneSelectionne.value)?.label ?? '',
 );
 
-function submit() {
-    form.post('/depenses', { forceFormData: false });
+const toast = useToast();
+
+function submitAs(statut: 'brouillon' | 'soumis') {
+    form.statut = statut;
+    form.post('/depenses', {
+        forceFormData: false,
+        onSuccess: () => {
+            toast.add({
+                severity: 'success',
+                summary: statut === 'brouillon' ? 'Dépense enregistrée en brouillon' : 'Dépense soumise pour validation',
+                life: 4000,
+            });
+        },
+    });
 }
 </script>
 
@@ -155,7 +176,7 @@ function submit() {
                     <p class="mt-1 text-sm text-muted-foreground">Sélectionnez d'abord le concerné.</p>
                 </div>
 
-                <form class="space-y-5" @submit.prevent="submit">
+                <form class="space-y-5" @submit.prevent>
 
                     <!-- ── Étape 1 : Concerné ─────────────────────────────── -->
                     <div class="rounded-xl border bg-card p-4 space-y-3">
@@ -259,11 +280,15 @@ function submit() {
                                 <template #option="{ option }">
                                     <div class="py-0.5">
                                         <div class="font-medium leading-tight">{{ option.nom_vehicule }}</div>
-                                        <div class="mt-0.5 font-mono text-xs text-muted-foreground">
-                                            {{ option.immatriculation }}
+                                        <div class="mt-0.5 font-mono text-xs text-muted-foreground">{{ option.immatriculation }}</div>
+                                        <div v-if="option.categorie === 'interne'" class="mt-0.5 text-xs text-blue-600">
+                                            ELM — {{ option.site_nom ?? 'interne' }}
                                         </div>
-                                        <div v-if="!option.has_proprietaire" class="mt-0.5 text-xs text-destructive">
-                                            ⚠ Pas de propriétaire — imputation impossible
+                                        <div v-else-if="option.has_proprietaire" class="mt-0.5 text-xs text-green-600">
+                                            ✓ {{ option.proprietaire_nom }}
+                                        </div>
+                                        <div v-else class="mt-0.5 text-xs text-amber-600">
+                                            ⚠ Aucun propriétaire rattaché
                                         </div>
                                     </div>
                                 </template>
@@ -274,12 +299,62 @@ function submit() {
                             <p v-if="form.errors.beneficiaire_id" class="mt-1 text-xs text-destructive">
                                 {{ form.errors.beneficiaire_id }}
                             </p>
+
+                            <!-- CAS 1 : Véhicule interne ELM -->
                             <div
-                                v-if="selectedVehiculeNoProprietaire"
-                                class="mt-2 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700"
+                                v-if="vehiculeContext === 'interne'"
+                                class="mt-2 flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs text-blue-700"
                             >
-                                <AlertCircle class="h-3.5 w-3.5 shrink-0" />
-                                Ce véhicule n'a pas de propriétaire. La dépense ne pourra pas être imputée.
+                                <Info class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <div>
+                                    <p class="font-medium">Véhicule interne ELM rattaché au site {{ vehiculeSelected?.site_nom ?? '—' }}.</p>
+                                    <p class="mt-0.5">Les dépenses de ce véhicule seront comptabilisées comme des charges de l'entreprise et ne seront imputées à aucun propriétaire.</p>
+                                </div>
+                            </div>
+
+                            <!-- CAS 2 : Véhicule externe avec propriétaire -->
+                            <div
+                                v-else-if="vehiculeContext === 'externe_avec_proprietaire'"
+                                class="mt-2 flex items-start gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2.5 text-xs text-green-700"
+                            >
+                                <CheckCircle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <div>
+                                    <p class="font-medium">Véhicule appartenant à {{ vehiculeSelected?.proprietaire_nom }}.</p>
+                                    <p class="mt-0.5">Cette dépense sera déduite de sa prochaine commission.</p>
+                                </div>
+                            </div>
+
+                            <!-- CAS 3 : Véhicule externe sans propriétaire -->
+                            <div
+                                v-else-if="vehiculeContext === 'externe_sans_proprietaire'"
+                                class="mt-2 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-700"
+                            >
+                                <AlertCircle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <div>
+                                    <p class="font-medium">Ce véhicule externe n'est rattaché à aucun propriétaire.</p>
+                                    <p class="mt-0.5">Veuillez corriger la fiche véhicule avant de continuer.</p>
+                                </div>
+                            </div>
+
+                            <!-- Résumé métier -->
+                            <div
+                                v-if="vehiculeSelected"
+                                class="mt-3 rounded-lg border bg-muted/30 px-3 py-2.5 text-xs"
+                            >
+                                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                                    <div><span class="font-medium">Véhicule</span> : {{ vehiculeSelected.nom_vehicule }}</div>
+                                    <div><span class="font-medium">Type</span> : {{ vehiculeSelected.categorie === 'interne' ? 'Interne' : 'Externe' }}</div>
+                                    <div v-if="vehiculeSelected.categorie === 'interne'">
+                                        <span class="font-medium">Site</span> : {{ vehiculeSelected.site_nom ?? '—' }}
+                                    </div>
+                                    <div v-else>
+                                        <span class="font-medium">Propriétaire</span> : {{ vehiculeSelected.proprietaire_nom ?? '—' }}
+                                    </div>
+                                    <div>
+                                        <span class="font-medium">Traitement comptable</span> :
+                                        {{ vehiculeSelected.categorie === 'interne' ? 'Charge entreprise' : 'Déduction sur commission propriétaire' }}
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -370,31 +445,16 @@ function submit() {
                                 </p>
                             </div>
                             <div>
-                                <Label for="dep-date" class="mb-1.5 block text-xs font-medium">
-                                    Date <span class="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                    id="dep-date"
-                                    v-model="form.date_depense"
-                                    type="date"
-                                    :class="{ 'border-destructive': form.errors.date_depense }"
-                                />
-                                <p v-if="form.errors.date_depense" class="mt-1 text-xs text-destructive">
-                                    {{ form.errors.date_depense }}
-                                </p>
+                                <Label for="dep-site" class="mb-1.5 block text-xs font-medium">Site</Label>
+                                <select
+                                    id="dep-site"
+                                    v-model="form.site_id"
+                                    class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                                >
+                                    <option value="">Aucun site spécifique</option>
+                                    <option v-for="s in sites" :key="s.id" :value="s.id">{{ s.nom }}</option>
+                                </select>
                             </div>
-                        </div>
-
-                        <div>
-                            <Label for="dep-site" class="mb-1.5 block text-xs font-medium">Site</Label>
-                            <select
-                                id="dep-site"
-                                v-model="form.site_id"
-                                class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                            >
-                                <option value="">Aucun site spécifique</option>
-                                <option v-for="s in sites" :key="s.id" :value="s.id">{{ s.nom }}</option>
-                            </select>
                         </div>
 
                         <div>
@@ -415,19 +475,6 @@ function submit() {
                             </p>
                         </div>
 
-                        <div>
-                            <Label class="mb-2 block text-xs font-medium">Enregistrer comme</Label>
-                            <div class="flex gap-4">
-                                <label class="flex cursor-pointer items-center gap-2 text-sm">
-                                    <input v-model="form.statut" type="radio" value="brouillon" class="accent-primary" />
-                                    Brouillon
-                                </label>
-                                <label class="flex cursor-pointer items-center gap-2 text-sm">
-                                    <input v-model="form.statut" type="radio" value="soumis" class="accent-primary" />
-                                    Soumettre pour validation
-                                </label>
-                            </div>
-                        </div>
                     </div>
 
                     <!-- ── Actions ────────────────────────────────────────── -->
@@ -435,13 +482,25 @@ function submit() {
                         <Button type="button" variant="outline" size="sm" as-child>
                             <a href="/depenses">Annuler</a>
                         </Button>
-                        <Button
-                            type="submit"
-                            size="sm"
-                            :disabled="form.processing || !form.depense_type_id"
-                        >
-                            {{ form.processing ? 'Enregistrement…' : 'Enregistrer' }}
-                        </Button>
+                        <div class="flex gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                :disabled="form.processing || !form.depense_type_id"
+                                @click="submitAs('brouillon')"
+                            >
+                                {{ form.processing && form.statut === 'brouillon' ? 'Enregistrement…' : 'Enregistrer comme brouillon' }}
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                :disabled="form.processing || !form.depense_type_id"
+                                @click="submitAs('soumis')"
+                            >
+                                {{ form.processing && form.statut === 'soumis' ? 'Envoi…' : 'Soumettre pour validation' }}
+                            </Button>
+                        </div>
                     </div>
                 </form>
             </div>
