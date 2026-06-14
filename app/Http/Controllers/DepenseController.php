@@ -19,8 +19,9 @@ use App\Services\DepenseImputationService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -36,7 +37,7 @@ class DepenseController extends Controller
         $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
 
         $paginator = $this->buildQuery($filters, $orgId)
-            ->with(['depenseType', 'site', 'user'])
+            ->with(['depenseType', 'site', 'user', 'validateur'])
             ->paginate(30)
             ->withQueryString();
 
@@ -80,13 +81,14 @@ class DepenseController extends Controller
             fwrite($handle, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel
 
             fputcsv($handle, [
-                'Date', 'Type', 'Catégorie', 'Concerné', 'Véhicule',
+                'Référence', 'Date', 'Type', 'Catégorie', 'Concerné', 'Véhicule',
                 'Montant (GNF)', 'Statut', 'Site', 'Saisi par', 'Validé par', 'Commentaire',
             ], ';');
 
             foreach ($depenses as $d) {
                 $row = $this->transformDepense($d, $labelCache, $vehiculeInfoCache);
                 fputcsv($handle, [
+                    $d->id,
                     $row['date_depense'],
                     $row['type']['libelle'] ?? '',
                     $row['type']['categorie_label'] ?? '',
@@ -96,7 +98,7 @@ class DepenseController extends Controller
                     $d->statut->label(),
                     $row['site']['nom'] ?? '',
                     $row['user']['name'] ?? '',
-                    $d->validateur?->name ?? '',
+                    $row['validateur']['name'] ?? '',
                     $row['commentaire'] ?? '',
                 ], ';');
             }
@@ -105,12 +107,16 @@ class DepenseController extends Controller
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
-    public function exportPdf(Request $request): \Illuminate\Http\Response
+    public function exportPdf(Request $request): \Symfony\Component\HttpFoundation\Response
     {
         $this->authorize('viewAny', Depense::class);
 
         $orgId = auth()->user()->organization_id;
         $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
+        $org = Organization::find($orgId);
+        $printedBy = auth()->user()->name;
+        $now = now();
+        $dateStr = $now->format('dmY');
 
         $depenses = $this->buildQuery($filters, $orgId)
             ->with(['depenseType', 'site', 'user', 'validateur'])
@@ -118,25 +124,102 @@ class DepenseController extends Controller
 
         [$labelCache, $vehiculeInfoCache] = $this->preloadBeneficiaires($depenses->all());
 
-        $rows = $depenses->map(fn (Depense $d) => array_merge(
-            $this->transformDepense($d, $labelCache, $vehiculeInfoCache),
-            ['validateur_nom' => $d->validateur?->name]
-        ));
+        $rows = $depenses->map(fn (Depense $d) => $this->transformDepense($d, $labelCache, $vehiculeInfoCache));
 
-        $total = $depenses->sum(fn ($d) => (float) $d->montant);
+        // Filtre site actif → un seul PDF pour ce site
+        if (! empty($filters['site'])) {
+            $site = Site::find($filters['site']);
+            $slug = $this->slugifySite($site?->nom ?? 'site');
+            $pdf = $this->buildSitePdf($rows, $org, $site, $filters, $printedBy, $now);
+
+            return $pdf->download("depenses-{$slug}-{$dateStr}.pdf");
+        }
+
+        // Sans filtre site → PDF multi-sites avec saut de page entre chaque site
+        $grouped = $rows->groupBy(fn ($row) => $row['site']['id'] ?? 'sans-site');
+
+        $sites = $grouped->map(fn ($siteRows) => [
+            'site_nom' => $siteRows->first()['site']['nom'] ?? null,
+            'rows'     => $siteRows,
+            'total'    => $siteRows->sum('montant'),
+        ])->values();
+
+        return $this->buildMultiSitePdf($sites, $org, $filters, $printedBy, $now)
+            ->download("depenses-{$dateStr}.pdf");
+    }
+
+    public function imprimer(Request $request): \Illuminate\Http\Response
+    {
+        $this->authorize('viewAny', Depense::class);
+
+        $orgId = auth()->user()->organization_id;
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
         $org = Organization::find($orgId);
-        $siteNom = ! empty($filters['site']) ? Site::find($filters['site'])?->nom : null;
+        $printedBy = auth()->user()->name;
+        $now = now();
 
-        $pdf = Pdf::loadView('pdf.depenses', [
+        $depenses = $this->buildQuery($filters, $orgId)
+            ->with(['depenseType', 'site', 'user', 'validateur'])
+            ->get();
+
+        [$labelCache, $vehiculeInfoCache] = $this->preloadBeneficiaires($depenses->all());
+        $rows = $depenses->map(fn (Depense $d) => $this->transformDepense($d, $labelCache, $vehiculeInfoCache));
+
+        $grouped = $rows->groupBy(fn ($row) => $row['site']['id'] ?? 'sans-site');
+
+        $sites = $grouped->map(fn ($siteRows) => [
+            'site_nom' => $siteRows->first()['site']['nom'] ?? null,
+            'rows'     => $siteRows,
+            'total'    => $siteRows->sum('montant'),
+        ])->values();
+
+        return response()->view('print.depenses', [
+            'sites'        => $sites,
+            'filters'      => $filters,
+            'org'          => $org,
+            'printed_by'   => $printedBy,
+            'generated_at' => $now,
+        ]);
+    }
+
+    private function buildSitePdf(
+        \Illuminate\Support\Collection $rows,
+        ?Organization $org,
+        ?Site $site,
+        array $filters,
+        string $printedBy,
+        \Carbon\Carbon $generatedAt,
+    ): \Barryvdh\DomPDF\PDF {
+        return Pdf::loadView('pdf.depenses', [
             'rows' => $rows,
-            'total' => $total,
+            'total' => $rows->sum('montant'),
             'filters' => $filters,
             'org' => $org,
-            'site_nom' => $siteNom,
-            'generated_at' => now(),
+            'site_nom' => $site?->nom,
+            'printed_by' => $printedBy,
+            'generated_at' => $generatedAt,
         ])->setPaper('a4', 'landscape');
+    }
 
-        return $pdf->download('depenses-'.now()->format('Y-m-d').'.pdf');
+    private function buildMultiSitePdf(
+        \Illuminate\Support\Collection $sites,
+        ?Organization $org,
+        array $filters,
+        string $printedBy,
+        \Carbon\Carbon $generatedAt,
+    ): \Barryvdh\DomPDF\PDF {
+        return Pdf::loadView('pdf.depenses_multi', [
+            'sites'        => $sites,
+            'filters'      => $filters,
+            'org'          => $org,
+            'printed_by'   => $printedBy,
+            'generated_at' => $generatedAt,
+        ])->setPaper('a4', 'landscape');
+    }
+
+    private function slugifySite(string $nom): string
+    {
+        return Str::slug($nom);
     }
 
     public function show(Depense $depense): Response
@@ -170,6 +253,7 @@ class DepenseController extends Controller
                 'statut_label' => $depense->statut->label(),
                 'commentaire' => $depense->commentaire,
                 'motif_rejet' => $depense->motif_rejet,
+                'commentaire_rejet' => $depense->commentaire_rejet,
                 'justificatif_path' => $depense->justificatif_path,
                 'date_validation' => $depense->date_validation?->toDateTimeString(),
                 'created_at' => $depense->created_at->toDateTimeString(),
@@ -339,19 +423,24 @@ class DepenseController extends Controller
         }
 
         $validated = $request->validate([
-            'motif_rejet' => ['required', 'string', 'max:1000'],
+            'motif_rejet'       => ['required', 'string', 'in:Non conforme,Autre'],
+            'commentaire_rejet' => ['required_if:motif_rejet,Autre', 'nullable', 'string', 'min:5', 'max:255'],
         ], [
-            'motif_rejet.required' => 'Le motif de rejet est obligatoire.',
+            'motif_rejet.required'          => 'Le motif de rejet est obligatoire.',
+            'motif_rejet.in'                => 'Le motif sélectionné est invalide.',
+            'commentaire_rejet.required_if' => 'Le commentaire est obligatoire pour le motif "Autre".',
+            'commentaire_rejet.min'         => 'Le commentaire doit faire au moins 5 caractères.',
         ]);
 
         $depense->update([
-            'statut' => StatutDepense::ANNULE,
-            'validateur_id' => auth()->id(),
-            'date_validation' => now(),
-            'motif_rejet' => $validated['motif_rejet'],
+            'statut'            => StatutDepense::REJETE,
+            'validateur_id'     => auth()->id(),
+            'date_validation'   => now(),
+            'motif_rejet'       => $validated['motif_rejet'],
+            'commentaire_rejet' => $validated['motif_rejet'] === 'Autre' ? ($validated['commentaire_rejet'] ?? null) : null,
         ]);
 
-        return back()->with('success', 'Dépense annulée.');
+        return back()->with('success', 'Dépense rejetée.');
     }
 
     public function destroy(Depense $depense): RedirectResponse
@@ -473,6 +562,7 @@ class DepenseController extends Controller
             'vehicule_nom' => $vehiculeNom,
             'site' => $d->site ? ['id' => $d->site->id, 'nom' => $d->site->nom] : null,
             'user' => ['id' => $d->user->id, 'name' => $d->user->name],
+            'validateur' => $d->validateur ? ['id' => $d->validateur->id, 'name' => $d->validateur->name] : null,
         ];
     }
 

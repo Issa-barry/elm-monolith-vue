@@ -45,11 +45,19 @@ class DepenseFactory extends Factory
         return $this->state(['statut' => StatutDepense::VALIDE->value]);
     }
 
-    public function annule(string $motif = 'Motif test'): static
+    public function rejete(string $motif = 'Non conforme'): static
+    {
+        return $this->state([
+            'statut' => StatutDepense::REJETE->value,
+            'motif_rejet' => $motif,
+        ]);
+    }
+
+    public function annule(): static
     {
         return $this->state([
             'statut' => StatutDepense::ANNULE->value,
-            'motif_rejet' => $motif,
+            'motif_rejet' => null,
         ]);
     }
 }

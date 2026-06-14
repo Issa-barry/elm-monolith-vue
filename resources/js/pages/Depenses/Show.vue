@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
 import { AlertTriangle, CheckCircle, Clock, Edit, Send, Trash2, XCircle } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 interface Imputation {
@@ -28,6 +37,7 @@ interface DepenseDetail {
     statut_label: string;
     commentaire: string | null;
     motif_rejet: string | null;
+    commentaire_rejet: string | null;
     justificatif_path: string | null;
     date_validation: string | null;
     created_at: string;
@@ -59,6 +69,7 @@ const statutConfig: Record<string, { label: string; class: string; icon: unknown
     brouillon: { label: 'Brouillon', class: 'bg-slate-100 text-slate-700 border-slate-200', icon: Clock },
     soumis: { label: 'Soumis', class: 'bg-blue-100 text-blue-700 border-blue-200', icon: Send },
     valide: { label: 'Validée', class: 'bg-green-100 text-green-700 border-green-200', icon: CheckCircle },
+    rejete: { label: 'Rejetée', class: 'bg-orange-100 text-orange-700 border-orange-200', icon: XCircle },
     annule: { label: 'Annulée', class: 'bg-red-100 text-red-700 border-red-200', icon: XCircle },
 };
 
@@ -78,15 +89,31 @@ const impactBanner: Record<string, string> = {
     vehicule: 'border-green-200 bg-green-50 text-green-700',
 };
 
+const toast = useToast();
 const statut = computed(() => statutConfig[props.depense.statut] ?? { label: props.depense.statut, class: '', icon: Clock });
 
 const showRejectDialog = ref(false);
-const motifRejet = ref('');
+const rejectMotif = ref('');
+const rejectCommentaire = ref('');
+const rejectErrors = ref<{ motif?: string; commentaire?: string }>({});
 const processing = ref(false);
+
+function ouvrirDialogRejet() {
+    rejectMotif.value = '';
+    rejectCommentaire.value = '';
+    rejectErrors.value = {};
+    showRejectDialog.value = true;
+}
+
+function fermerDialogRejet() {
+    if (processing.value) return;
+    showRejectDialog.value = false;
+}
 
 function soumettre() {
     processing.value = true;
     router.patch(`/depenses/${props.depense.id}/soumettre`, {}, {
+        onSuccess: () => toast.add({ severity: 'success', summary: 'Soumise', detail: 'Dépense soumise pour validation.', life: 3000 }),
         onFinish: () => { processing.value = false; },
     });
 }
@@ -94,15 +121,49 @@ function soumettre() {
 function valider() {
     processing.value = true;
     router.patch(`/depenses/${props.depense.id}/valider`, {}, {
+        onSuccess: () => toast.add({ severity: 'success', summary: 'Validée', detail: 'Dépense validée avec succès.', life: 3000 }),
         onFinish: () => { processing.value = false; },
     });
 }
 
 function rejeter() {
+    rejectErrors.value = {};
+
+    if (!rejectMotif.value) {
+        rejectErrors.value.motif = 'Le motif de rejet est obligatoire.';
+        return;
+    }
+    if (rejectMotif.value === 'Autre') {
+        const trim = rejectCommentaire.value.trim();
+        if (!trim) {
+            rejectErrors.value.commentaire = 'Le commentaire est obligatoire pour le motif "Autre".';
+            return;
+        }
+        if (trim.length < 5) {
+            rejectErrors.value.commentaire = 'Le commentaire doit faire au moins 5 caractères.';
+            return;
+        }
+    }
+
     processing.value = true;
-    router.patch(`/depenses/${props.depense.id}/rejeter`, { motif_rejet: motifRejet.value }, {
-        onFinish: () => { processing.value = false; showRejectDialog.value = false; },
-    });
+    router.patch(
+        `/depenses/${props.depense.id}/rejeter`,
+        {
+            motif_rejet: rejectMotif.value,
+            commentaire_rejet: rejectMotif.value === 'Autre' ? rejectCommentaire.value.trim() : null,
+        },
+        {
+            onSuccess: () => {
+                showRejectDialog.value = false;
+                toast.add({ severity: 'warn', summary: 'Rejetée', detail: 'Dépense rejetée.', life: 3000 });
+            },
+            onError: (errors) => {
+                if (errors.motif_rejet) rejectErrors.value.motif = errors.motif_rejet;
+                if (errors.commentaire_rejet) rejectErrors.value.commentaire = errors.commentaire_rejet;
+            },
+            onFinish: () => { processing.value = false; },
+        },
+    );
 }
 
 function supprimer() {
@@ -154,7 +215,7 @@ function formatDate(iso: string | null): string {
                             <CheckCircle class="mr-1 h-3.5 w-3.5" />
                             Valider
                         </Button>
-                        <Button v-if="depense.can_reject" size="sm" variant="destructive" :disabled="processing" @click="showRejectDialog = true">
+                        <Button v-if="depense.can_reject" size="sm" variant="destructive" :disabled="processing" @click="ouvrirDialogRejet">
                             <XCircle class="mr-1 h-3.5 w-3.5" />
                             Rejeter
                         </Button>
@@ -164,12 +225,15 @@ function formatDate(iso: string | null): string {
                     </div>
                 </div>
 
-                <!-- Motif rejet si annulé -->
-                <div v-if="depense.statut === 'annule' && depense.motif_rejet" class="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                    <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+                <!-- Motif rejet si rejeté ou annulé avec motif -->
+                <div v-if="['rejete', 'annule'].includes(depense.statut) && depense.motif_rejet" class="flex items-start gap-2.5 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-700">
+                    <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-orange-600" />
                     <div>
                         <p class="font-medium">Motif du rejet</p>
                         <p class="mt-0.5">{{ depense.motif_rejet }}</p>
+                        <p v-if="depense.commentaire_rejet" class="mt-1 italic opacity-80">
+                            {{ depense.commentaire_rejet }}
+                        </p>
                     </div>
                 </div>
 
@@ -250,24 +314,59 @@ function formatDate(iso: string | null): string {
         </div>
 
         <!-- Reject dialog -->
-        <Teleport to="body">
-            <div v-if="showRejectDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                <div class="w-full max-w-md rounded-xl border bg-card p-5 shadow-xl space-y-4">
-                    <h3 class="text-base font-semibold">Motif de rejet</h3>
-                    <textarea
-                        v-model="motifRejet"
-                        rows="3"
-                        placeholder="Expliquer le motif du rejet…"
-                        class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    />
-                    <div class="flex justify-end gap-2">
-                        <Button variant="outline" size="sm" @click="showRejectDialog = false">Annuler</Button>
-                        <Button size="sm" variant="destructive" :disabled="!motifRejet.trim() || processing" @click="rejeter">
-                            Confirmer le rejet
-                        </Button>
+        <Dialog :open="showRejectDialog" @update:open="(v: boolean) => { if (!v) fermerDialogRejet(); }">
+            <DialogContent class="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle class="flex items-center gap-2 text-destructive">
+                        <AlertTriangle class="h-5 w-5" />
+                        Rejeter la dépense
+                    </DialogTitle>
+                </DialogHeader>
+
+                <div class="space-y-4 py-2">
+                    <!-- Motif -->
+                    <div class="space-y-1.5">
+                        <Label for="show-reject-motif">
+                            Motif de rejet <span class="text-destructive">*</span>
+                        </Label>
+                        <select
+                            id="show-reject-motif"
+                            v-model="rejectMotif"
+                            class="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                            <option value="" disabled>Sélectionner un motif…</option>
+                            <option value="Non conforme">Non conforme</option>
+                            <option value="Autre">Autre</option>
+                        </select>
+                        <p v-if="rejectErrors.motif" class="text-sm text-destructive">{{ rejectErrors.motif }}</p>
+                    </div>
+
+                    <!-- Commentaire (Autre seulement) -->
+                    <div v-if="rejectMotif === 'Autre'" class="space-y-1.5">
+                        <Label for="show-reject-commentaire">
+                            Commentaire <span class="text-destructive">*</span>
+                        </Label>
+                        <textarea
+                            id="show-reject-commentaire"
+                            v-model="rejectCommentaire"
+                            rows="3"
+                            placeholder="Veuillez préciser le motif du rejet…"
+                            class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        />
+                        <p v-if="rejectErrors.commentaire" class="text-sm text-destructive">{{ rejectErrors.commentaire }}</p>
                     </div>
                 </div>
-            </div>
-        </Teleport>
+
+                <DialogFooter>
+                    <Button variant="outline" :disabled="processing" @click="fermerDialogRejet">
+                        Annuler
+                    </Button>
+                    <Button variant="destructive" :disabled="processing" @click="rejeter">
+                        <span v-if="processing">Rejet en cours…</span>
+                        <span v-else>Rejeter la dépense</span>
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </AppLayout>
 </template>

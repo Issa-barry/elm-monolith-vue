@@ -2,11 +2,22 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<title>Liste des dépenses{{ $site_nom ? ' — '.$site_nom : '' }}</title>
+<title>Liste des dépenses</title>
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: DejaVu Sans, sans-serif; font-size: 9px; color: #1a1a1a; background: #fff; }
-    .page { padding: 24px 28px; }
+
+    /* Saut de page entre sites — chaque site commence sur une nouvelle page */
+    .page-break {
+        page-break-before: always;
+        break-before: page;
+        display: block;
+        height: 0;
+        line-height: 0;
+        font-size: 0;
+    }
+
+    .site-page { padding: 24px 28px; }
 
     /* Header */
     .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; border-bottom: 2px solid #1d4ed8; padding-bottom: 14px; }
@@ -35,6 +46,7 @@
     .badge-brouillon { background: #f1f5f9; color: #475569; }
     .badge-soumis    { background: #dbeafe; color: #1d4ed8; }
     .badge-valide    { background: #d1fae5; color: #065f46; }
+    .badge-rejete    { background: #ffedd5; color: #c2410c; }
     .badge-annule    { background: #fee2e2; color: #b91c1c; }
 
     /* Signature column */
@@ -48,35 +60,43 @@
 </style>
 </head>
 <body>
-<div class="page">
+
+@foreach($sites as $siteData)
+
+{{-- Saut de page avant chaque site sauf le premier --}}
+@if(!$loop->first)
+<div class="page-break"></div>
+@endif
+
+<div class="site-page">
 
     <div class="header">
         <div>
             <div class="org-name">{{ $org?->name ?? 'ELM' }}</div>
         </div>
         <div class="doc-title">
-            <div class="doc-type">Liste des dépenses{{ $site_nom ? ' — '.$site_nom : '' }}</div>
+            <div class="doc-type">Liste des dépenses{{ $siteData['site_nom'] ? ' — '.$siteData['site_nom'] : '' }}</div>
             <div class="doc-date">Imprimé le {{ $generated_at->format('d/m/Y à H:i') }} par {{ $printed_by }}</div>
         </div>
     </div>
 
     <div class="meta">
         @if(!empty($filters['date_debut']) || !empty($filters['date_fin']))
-            <div>Période :
-                <span>
-                    {{ !empty($filters['date_debut']) ? \Carbon\Carbon::parse($filters['date_debut'])->format('d/m/Y') : '—' }}
-                    →
-                    {{ !empty($filters['date_fin']) ? \Carbon\Carbon::parse($filters['date_fin'])->format('d/m/Y') : '—' }}
-                </span>
-            </div>
+        <div>Période :
+            <span>
+                {{ !empty($filters['date_debut']) ? \Carbon\Carbon::parse($filters['date_debut'])->format('d/m/Y') : '—' }}
+                →
+                {{ !empty($filters['date_fin']) ? \Carbon\Carbon::parse($filters['date_fin'])->format('d/m/Y') : '—' }}
+            </span>
+        </div>
         @endif
         @if(!empty($filters['statut']))
-            <div>Statut : <span>{{ $filters['statut'] }}</span></div>
+        <div>Statut : <span>{{ $filters['statut'] }}</span></div>
         @endif
         @if(!empty($filters['search']))
-            <div>Recherche : <span>{{ $filters['search'] }}</span></div>
+        <div>Recherche : <span>{{ $filters['search'] }}</span></div>
         @endif
-        <div>Total : <span>{{ number_format($rows->count(), 0, ',', ' ') }} dépense(s)</span></div>
+        <div>Total : <span>{{ number_format($siteData['rows']->count(), 0, ',', ' ') }} dépense(s)</span></div>
     </div>
 
     <table>
@@ -93,13 +113,13 @@
             </tr>
         </thead>
         <tbody>
-            @forelse($rows as $row)
+            @forelse($siteData['rows'] as $row)
             <tr>
                 <td class="mono">{{ \Carbon\Carbon::parse($row['date_depense'])->format('d/m/Y') }}</td>
                 <td>
                     {{ $row['type']['libelle'] ?? '—' }}
                     @if(!empty($row['type']['categorie_label']))
-                        <br><small style="color:#6b7280">{{ $row['type']['categorie_label'] }}</small>
+                    <br><small style="color:#6b7280">{{ $row['type']['categorie_label'] }}</small>
                     @endif
                 </td>
                 <td>{{ $row['beneficiaire_label'] ?? '—' }}</td>
@@ -118,10 +138,10 @@
             </tr>
             @endforelse
 
-            @if($rows->count() > 0)
+            @if($siteData['rows']->count() > 0)
             <tr class="total-row">
                 <td colspan="4" style="text-align:right; padding-right:8px; color:#374151;">Montant total :</td>
-                <td class="right">{{ number_format($total, 0, ',', ' ') }} GNF</td>
+                <td class="right">{{ number_format($siteData['total'], 0, ',', ' ') }} GNF</td>
                 <td colspan="3"></td>
             </tr>
             @endif
@@ -134,5 +154,8 @@
     </div>
 
 </div>
+
+@endforeach
+
 </body>
 </html>

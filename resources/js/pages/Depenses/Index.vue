@@ -2,17 +2,26 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
+    AlertTriangle,
     Check,
     ChevronLeft,
     ChevronRight,
@@ -22,12 +31,14 @@ import {
     MoreVertical,
     Pencil,
     Plus,
+    Printer,
     Receipt,
     Search,
     Send,
     Trash2,
     X,
 } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { ref } from 'vue';
 
 interface Option {
@@ -53,6 +64,7 @@ interface DepenseRow {
     vehicule_nom: string | null;
     site: { id: string; nom: string } | null;
     user: { id: string; name: string };
+    validateur: { id: string; name: string } | null;
 }
 
 interface Paginator {
@@ -87,6 +99,7 @@ const props = defineProps<{
 }>();
 
 const { can } = usePermissions();
+const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -142,18 +155,87 @@ function exportPdf() {
     window.location.href = `/depenses/export/pdf?${params.toString()}`;
 }
 
+function imprimer() {
+    const params = new URLSearchParams();
+    const p = currentParams();
+    Object.entries(p).forEach(([k, v]) => { if (v) params.set(k, v); });
+    window.open(`/depenses/imprimer?${params.toString()}`, '_blank');
+}
+
+const rejectingDepenseId = ref<string | null>(null);
+const rejectMotif = ref('');
+const rejectCommentaire = ref('');
+const rejectErrors = ref<{ motif?: string; commentaire?: string }>({});
+const rejectProcessing = ref(false);
+
 function soumettre(id: string) {
-    router.patch(`/depenses/${id}/soumettre`, {}, { preserveScroll: true });
+    router.patch(`/depenses/${id}/soumettre`, {}, {
+        preserveScroll: true,
+        onSuccess: () => toast.add({ severity: 'success', summary: 'Soumise', detail: 'Dépense soumise pour validation.', life: 3000 }),
+    });
 }
 
 function valider(id: string) {
-    router.patch(`/depenses/${id}/valider`, {}, { preserveScroll: true });
+    router.patch(`/depenses/${id}/valider`, {}, {
+        preserveScroll: true,
+        onSuccess: () => toast.add({ severity: 'success', summary: 'Validée', detail: 'Dépense validée avec succès.', life: 3000 }),
+    });
 }
 
 function rejeter(id: string) {
-    const motif = prompt('Motif de rejet (obligatoire) :');
-    if (!motif?.trim()) return;
-    router.patch(`/depenses/${id}/rejeter`, { motif_rejet: motif }, { preserveScroll: true });
+    rejectingDepenseId.value = id;
+    rejectMotif.value = '';
+    rejectCommentaire.value = '';
+    rejectErrors.value = {};
+}
+
+function fermerModalRejet() {
+    if (rejectProcessing.value) return;
+    rejectingDepenseId.value = null;
+    rejectMotif.value = '';
+    rejectCommentaire.value = '';
+    rejectErrors.value = {};
+}
+
+function confirmerRejet() {
+    rejectErrors.value = {};
+
+    if (!rejectMotif.value) {
+        rejectErrors.value.motif = 'Le motif de rejet est obligatoire.';
+        return;
+    }
+    if (rejectMotif.value === 'Autre') {
+        const trim = rejectCommentaire.value.trim();
+        if (!trim) {
+            rejectErrors.value.commentaire = 'Le commentaire est obligatoire pour le motif "Autre".';
+            return;
+        }
+        if (trim.length < 5) {
+            rejectErrors.value.commentaire = 'Le commentaire doit faire au moins 5 caractères.';
+            return;
+        }
+    }
+
+    rejectProcessing.value = true;
+    router.patch(
+        `/depenses/${rejectingDepenseId.value}/rejeter`,
+        {
+            motif_rejet: rejectMotif.value,
+            commentaire_rejet: rejectMotif.value === 'Autre' ? rejectCommentaire.value.trim() : null,
+        },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                rejectingDepenseId.value = null;
+                toast.add({ severity: 'warn', summary: 'Rejetée', detail: 'Dépense rejetée.', life: 3000 });
+            },
+            onError: (errors) => {
+                if (errors.motif_rejet) rejectErrors.value.motif = errors.motif_rejet;
+                if (errors.commentaire_rejet) rejectErrors.value.commentaire = errors.commentaire_rejet;
+            },
+            onFinish: () => { rejectProcessing.value = false; },
+        },
+    );
 }
 
 function destroy(id: string) {
@@ -175,6 +257,7 @@ const statutVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'o
     brouillon: 'secondary',
     soumis: 'outline',
     valide: 'default',
+    rejete: 'destructive',
     annule: 'destructive',
 };
 
@@ -182,6 +265,7 @@ const statutColors: Record<string, string> = {
     brouillon: '',
     soumis: 'border-blue-400 text-blue-700',
     valide: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+    rejete: 'bg-orange-100 text-orange-700 border-orange-300',
     annule: '',
 };
 
@@ -218,7 +302,11 @@ const hasActiveFilters = ref(
                     </Button>
                     <Button variant="outline" size="sm" @click="exportPdf">
                         <FileText class="mr-1.5 h-3.5 w-3.5" />
-                        PDF
+                        Télécharger PDF
+                    </Button>
+                    <Button variant="outline" size="sm" @click="imprimer">
+                        <Printer class="mr-1.5 h-3.5 w-3.5" />
+                        Imprimer
                     </Button>
                     <Link v-if="can('depenses.create')" href="/depenses/create">
                         <Button>
@@ -312,10 +400,12 @@ const hasActiveFilters = ref(
                             <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Date</th>
                             <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Type</th>
                             <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Concerné</th>
+                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Véhicule</th>
                             <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Montant</th>
                             <th class="px-4 py-2.5 text-center font-medium text-muted-foreground">Statut</th>
                             <th class="px-4 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Site</th>
                             <th class="px-4 py-2.5 text-left font-medium text-muted-foreground hidden xl:table-cell">Saisi par</th>
+                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground hidden xl:table-cell">Validé par</th>
                             <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Actions</th>
                         </tr>
                     </thead>
@@ -345,9 +435,11 @@ const hasActiveFilters = ref(
                             <!-- Concerné -->
                             <td class="px-4 py-3">
                                 <div class="text-sm font-medium">{{ d.beneficiaire_label ?? '—' }}</div>
-                                <div v-if="d.vehicule_nom" class="mt-0.5 text-xs text-muted-foreground">
-                                    {{ d.vehicule_nom }}
-                                </div>
+                            </td>
+
+                            <!-- Véhicule -->
+                            <td class="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell">
+                                {{ d.vehicule_nom ?? '—' }}
                             </td>
 
                             <!-- Montant -->
@@ -375,6 +467,11 @@ const hasActiveFilters = ref(
                                 {{ d.user.name }}
                             </td>
 
+                            <!-- Validé par -->
+                            <td class="px-4 py-3 text-xs text-muted-foreground hidden xl:table-cell">
+                                {{ d.validateur?.name ?? '—' }}
+                            </td>
+
                             <!-- Actions -->
                             <td class="px-4 py-3">
                                 <div class="flex justify-end">
@@ -393,9 +490,9 @@ const hasActiveFilters = ref(
                                                 </Link>
                                             </DropdownMenuItem>
 
-                                            <!-- Modifier (brouillon ou annulé) -->
+                                            <!-- Modifier (brouillon, rejeté ou annulé) -->
                                             <DropdownMenuItem
-                                                v-if="['brouillon', 'annule'].includes(d.statut) && can('depenses.update')"
+                                                v-if="['brouillon', 'rejete', 'annule'].includes(d.statut) && can('depenses.update')"
                                                 as-child
                                             >
                                                 <Link :href="`/depenses/${d.id}/edit`" class="flex w-full items-center gap-2">
@@ -454,7 +551,7 @@ const hasActiveFilters = ref(
                         </tr>
 
                         <tr v-if="depenses.data.length === 0">
-                            <td colspan="8" class="px-4 py-16 text-center text-sm text-muted-foreground">
+                            <td colspan="10" class="px-4 py-16 text-center text-sm text-muted-foreground">
                                 <div class="flex flex-col items-center gap-3">
                                     <Receipt class="h-12 w-12 opacity-20" />
                                     <p>Aucune dépense enregistrée.</p>
@@ -495,5 +592,60 @@ const hasActiveFilters = ref(
                 </template>
             </div>
         </div>
+        <!-- Reject dialog -->
+        <Dialog :open="!!rejectingDepenseId" @update:open="(v: boolean) => { if (!v) fermerModalRejet(); }">
+            <DialogContent class="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle class="flex items-center gap-2 text-destructive">
+                        <AlertTriangle class="h-5 w-5" />
+                        Rejeter la dépense
+                    </DialogTitle>
+                </DialogHeader>
+
+                <div class="space-y-4 py-2">
+                    <!-- Motif -->
+                    <div class="space-y-1.5">
+                        <Label for="idx-reject-motif">
+                            Motif de rejet <span class="text-destructive">*</span>
+                        </Label>
+                        <select
+                            id="idx-reject-motif"
+                            v-model="rejectMotif"
+                            class="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                            <option value="" disabled>Sélectionner un motif…</option>
+                            <option value="Non conforme">Non conforme</option>
+                            <option value="Autre">Autre</option>
+                        </select>
+                        <p v-if="rejectErrors.motif" class="text-sm text-destructive">{{ rejectErrors.motif }}</p>
+                    </div>
+
+                    <!-- Commentaire (Autre seulement) -->
+                    <div v-if="rejectMotif === 'Autre'" class="space-y-1.5">
+                        <Label for="idx-reject-commentaire">
+                            Commentaire <span class="text-destructive">*</span>
+                        </Label>
+                        <textarea
+                            id="idx-reject-commentaire"
+                            v-model="rejectCommentaire"
+                            rows="3"
+                            placeholder="Veuillez préciser le motif du rejet…"
+                            class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        />
+                        <p v-if="rejectErrors.commentaire" class="text-sm text-destructive">{{ rejectErrors.commentaire }}</p>
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button variant="outline" :disabled="rejectProcessing" @click="fermerModalRejet">
+                        Annuler
+                    </Button>
+                    <Button variant="destructive" :disabled="rejectProcessing" @click="confirmerRejet">
+                        <span v-if="rejectProcessing">Rejet en cours…</span>
+                        <span v-else>Rejeter la dépense</span>
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </AppLayout>
 </template>

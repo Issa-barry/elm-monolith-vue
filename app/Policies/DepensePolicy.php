@@ -28,7 +28,7 @@ class DepensePolicy
     {
         return $user->can('depenses.update')
             && $user->organization_id === $depense->organization_id
-            && in_array($depense->statut, [StatutDepense::BROUILLON, StatutDepense::ANNULE]);
+            && in_array($depense->statut, [StatutDepense::BROUILLON, StatutDepense::REJETE, StatutDepense::ANNULE]);
     }
 
     public function valider(User $user, Depense $depense): bool

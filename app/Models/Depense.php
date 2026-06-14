@@ -32,6 +32,7 @@ class Depense extends Model
         'validateur_id',
         'date_validation',
         'motif_rejet',
+        'commentaire_rejet',
         'justificatif_path',
     ];
 

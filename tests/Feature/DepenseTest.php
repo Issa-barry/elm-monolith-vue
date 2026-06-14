@@ -301,7 +301,27 @@ class DepenseTest extends TestCase
             ->assertSessionHasErrors(['motif_rejet']);
     }
 
-    public function test_rejeter_transitions_soumis_to_annule(): void
+    public function test_rejeter_transitions_soumis_to_rejete(): void
+    {
+        $depense = Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $this->patch("/depenses/{$depense->id}/rejeter", [
+            'motif_rejet' => 'Non conforme',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('depenses', [
+            'id' => $depense->id,
+            'statut' => StatutDepense::REJETE->value,
+            'motif_rejet' => 'Non conforme',
+            'commentaire_rejet' => null,
+        ]);
+    }
+
+    public function test_rejeter_rejects_invalid_motif_value(): void
     {
         $depense = Depense::factory()->soumis()->create([
             'organization_id' => $this->org->id,
@@ -311,13 +331,95 @@ class DepenseTest extends TestCase
 
         $this->patch("/depenses/{$depense->id}/rejeter", [
             'motif_rejet' => 'Justificatif insuffisant.',
+        ])->assertSessionHasErrors(['motif_rejet']);
+    }
+
+    public function test_rejeter_autre_requires_commentaire(): void
+    {
+        $depense = Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $this->patch("/depenses/{$depense->id}/rejeter", [
+            'motif_rejet' => 'Autre',
+        ])->assertSessionHasErrors(['commentaire_rejet']);
+    }
+
+    public function test_rejeter_autre_commentaire_too_short_fails(): void
+    {
+        $depense = Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $this->patch("/depenses/{$depense->id}/rejeter", [
+            'motif_rejet'       => 'Autre',
+            'commentaire_rejet' => 'abc',
+        ])->assertSessionHasErrors(['commentaire_rejet']);
+    }
+
+    public function test_rejeter_autre_saves_commentaire_rejet(): void
+    {
+        $depense = Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $this->patch("/depenses/{$depense->id}/rejeter", [
+            'motif_rejet'       => 'Autre',
+            'commentaire_rejet' => 'Montant incohérent avec le justificatif fourni.',
         ])->assertRedirect();
 
         $this->assertDatabaseHas('depenses', [
-            'id' => $depense->id,
-            'statut' => StatutDepense::ANNULE->value,
-            'motif_rejet' => 'Justificatif insuffisant.',
+            'id'                => $depense->id,
+            'statut'            => StatutDepense::REJETE->value,
+            'motif_rejet'       => 'Autre',
+            'commentaire_rejet' => 'Montant incohérent avec le justificatif fourni.',
         ]);
+    }
+
+    public function test_rejeter_non_conforme_sets_null_commentaire(): void
+    {
+        $depense = Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $this->patch("/depenses/{$depense->id}/rejeter", [
+            'motif_rejet'       => 'Non conforme',
+            'commentaire_rejet' => 'Ce commentaire doit être ignoré.',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('depenses', [
+            'id'                => $depense->id,
+            'motif_rejet'       => 'Non conforme',
+            'commentaire_rejet' => null,
+        ]);
+    }
+
+    public function test_show_includes_commentaire_rejet(): void
+    {
+        $depense = Depense::factory()->create([
+            'organization_id'   => $this->org->id,
+            'user_id'           => $this->user->id,
+            'depense_type_id'   => $this->typeInterne->id,
+            'statut'            => StatutDepense::REJETE->value,
+            'motif_rejet'       => 'Autre',
+            'commentaire_rejet' => 'Montant incohérent.',
+        ]);
+
+        $this->get("/depenses/{$depense->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Depenses/Show')
+                ->where('depense.motif_rejet', 'Autre')
+                ->where('depense.commentaire_rejet', 'Montant incohérent.')
+            );
     }
 
     public function test_valider_auto_imputes_employe_depense(): void
@@ -407,6 +509,74 @@ class DepenseTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
 
+    public function test_index_includes_vehicule_nom_in_data(): void
+    {
+        $typeVehicule = DepenseType::factory()->vehicule()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
+
+        Depense::factory()->create([
+            'organization_id'  => $this->org->id,
+            'user_id'          => $this->user->id,
+            'depense_type_id'  => $typeVehicule->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id'  => $vehicule->id,
+        ]);
+
+        $this->get('/depenses')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Depenses/Index')
+                ->where('depenses.data.0.vehicule_nom', $vehicule->nom_vehicule)
+            );
+    }
+
+    public function test_index_vehicule_nom_is_null_for_non_vehicule_depense(): void
+    {
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $this->get('/depenses')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('depenses.data.0.vehicule_nom', null)
+            );
+    }
+
+    public function test_index_includes_validateur_after_validation(): void
+    {
+        $depense = Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $this->patch("/depenses/{$depense->id}/valider");
+
+        $this->get('/depenses')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('depenses.data.0.validateur.name', $this->user->name)
+            );
+    }
+
+    public function test_index_validateur_is_null_for_non_validated_depense(): void
+    {
+        Depense::factory()->brouillon()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $this->get('/depenses')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('depenses.data.0.validateur', null)
+            );
+    }
+
     // ── Exports ──────────────────────────────────────────────────────────────
 
     public function test_export_excel_returns_csv_download(): void
@@ -444,18 +614,233 @@ class DepenseTest extends TestCase
         $this->assertCount(2, $lines); // header + 1 data row
     }
 
-    public function test_export_pdf_returns_pdf_download(): void
+    public function test_export_excel_has_reference_column(): void
     {
+        $response = $this->get('/depenses/export/excel');
+        $response->assertOk();
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('Référence', $content);
+    }
+
+    public function test_export_excel_has_valide_par_column(): void
+    {
+        $response = $this->get('/depenses/export/excel');
+        $response->assertOk();
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('Validé par', $content);
+    }
+
+    public function test_export_excel_has_no_signature_column(): void
+    {
+        $response = $this->get('/depenses/export/excel');
+        $response->assertOk();
+        $content = $response->streamedContent();
+        $this->assertStringNotContainsString('Signature', $content);
+    }
+
+    public function test_export_excel_includes_validateur_name_when_validated(): void
+    {
+        $depense = Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+        $this->patch("/depenses/{$depense->id}/valider");
+
+        $response = $this->get('/depenses/export/excel?statut=valide');
+        $response->assertOk();
+        $content = $response->streamedContent();
+        $this->assertStringContainsString($this->user->name, $content);
+    }
+
+    public function test_export_excel_includes_depense_id_as_reference(): void
+    {
+        $depense = Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $response = $this->get('/depenses/export/excel');
+        $response->assertOk();
+        $content = $response->streamedContent();
+        $this->assertStringContainsString($depense->id, $content);
+    }
+
+    public function test_export_pdf_with_site_filter_returns_single_pdf(): void
+    {
+        $site = Site::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Matoto']);
         Depense::factory()->create([
             'organization_id' => $this->org->id,
             'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
+            'site_id' => $site->id,
+        ]);
+
+        $response = $this->get("/depenses/export/pdf?site={$site->id}");
+
+        $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringContainsString('matoto', $response->headers->get('Content-Disposition') ?? '');
+    }
+
+    public function test_export_pdf_without_site_filter_returns_single_pdf_when_one_site(): void
+    {
+        $site = Site::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Dabompa']);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'site_id' => $site->id,
         ]);
 
         $response = $this->get('/depenses/export/pdf');
 
-        $response->assertOk()
-            ->assertHeader('Content-Type', 'application/pdf');
+        $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
+    }
+
+    public function test_export_pdf_with_multiple_sites_returns_single_pdf(): void
+    {
+        $site1 = Site::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Matoto']);
+        $site2 = Site::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Dabompa']);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'site_id' => $site1->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'site_id' => $site2->id,
+        ]);
+
+        $response = $this->get('/depenses/export/pdf');
+
+        $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        // Fichier unique — pas de ZIP dans le nom
+        $disposition = $response->headers->get('Content-Disposition') ?? '';
+        $this->assertStringContainsString('depenses', $disposition);
+        $this->assertStringNotContainsString('.zip', $disposition);
+    }
+
+    public function test_export_pdf_multi_site_template_has_page_break(): void
+    {
+        $html = view('pdf.depenses_multi', [
+            'sites' => collect([
+                ['site_nom' => 'Matoto',  'rows' => collect([]), 'total' => 0],
+                ['site_nom' => 'Dabompa', 'rows' => collect([]), 'total' => 0],
+            ]),
+            'filters'      => [],
+            'org'          => $this->org,
+            'printed_by'   => $this->user->name,
+            'generated_at' => now(),
+        ])->render();
+
+        $this->assertStringContainsString('page-break-before', $html);
+    }
+
+    public function test_export_pdf_multi_site_template_has_signature_column(): void
+    {
+        $html = view('pdf.depenses_multi', [
+            'sites'        => collect([['site_nom' => 'Matoto', 'rows' => collect([]), 'total' => 0]]),
+            'filters'      => [],
+            'org'          => $this->org,
+            'printed_by'   => $this->user->name,
+            'generated_at' => now(),
+        ])->render();
+
+        $this->assertStringContainsString('Signature', $html);
+    }
+
+    public function test_export_pdf_multi_site_template_has_no_valide_par_column(): void
+    {
+        $html = view('pdf.depenses_multi', [
+            'sites'        => collect([['site_nom' => 'Matoto', 'rows' => collect([]), 'total' => 0]]),
+            'filters'      => [],
+            'org'          => $this->org,
+            'printed_by'   => $this->user->name,
+            'generated_at' => now(),
+        ])->render();
+
+        $this->assertStringNotContainsString('Validé par', $html);
+    }
+
+    public function test_pdf_template_excludes_valide_par_column(): void
+    {
+        $html = view('pdf.depenses', [
+            'rows' => collect([]),
+            'total' => 0,
+            'filters' => [],
+            'org' => $this->org,
+            'site_nom' => 'Matoto',
+            'printed_by' => $this->user->name,
+            'generated_at' => now(),
+        ])->render();
+
+        $this->assertStringNotContainsString('Validé par', $html);
+    }
+
+    public function test_pdf_template_has_signature_column(): void
+    {
+        $html = view('pdf.depenses', [
+            'rows' => collect([]),
+            'total' => 0,
+            'filters' => [],
+            'org' => $this->org,
+            'site_nom' => 'Matoto',
+            'printed_by' => $this->user->name,
+            'generated_at' => now(),
+        ])->render();
+
+        $this->assertStringContainsString('Signature', $html);
+    }
+
+    public function test_pdf_template_uses_org_name(): void
+    {
+        $html = view('pdf.depenses', [
+            'rows' => collect([]),
+            'total' => 0,
+            'filters' => [],
+            'org' => $this->org,
+            'site_nom' => 'Matoto',
+            'printed_by' => $this->user->name,
+            'generated_at' => now(),
+        ])->render();
+
+        $this->assertStringContainsString($this->org->name, $html);
+        $this->assertStringNotContainsString($this->org->slug, $html);
+    }
+
+    public function test_pdf_template_has_printed_by(): void
+    {
+        $html = view('pdf.depenses', [
+            'rows' => collect([]),
+            'total' => 0,
+            'filters' => [],
+            'org' => $this->org,
+            'site_nom' => 'Matoto',
+            'printed_by' => $this->user->name,
+            'generated_at' => now(),
+        ])->render();
+
+        $this->assertStringContainsString('Imprimé le', $html);
+        $this->assertStringContainsString($this->user->name, $html);
+    }
+
+    public function test_pdf_template_has_site_in_title(): void
+    {
+        $html = view('pdf.depenses', [
+            'rows' => collect([]),
+            'total' => 0,
+            'filters' => [],
+            'org' => $this->org,
+            'site_nom' => 'Matoto',
+            'printed_by' => $this->user->name,
+            'generated_at' => now(),
+        ])->render();
+
+        $this->assertStringContainsString('Matoto', $html);
     }
 
     // ── Destroy ──────────────────────────────────────────────────────────────
@@ -489,5 +874,181 @@ class DepenseTest extends TestCase
         $otherDepense = Depense::factory()->brouillon()->create();
 
         $this->delete("/depenses/{$otherDepense->id}")->assertForbidden();
+    }
+
+    // ── Filtre REJETE ─────────────────────────────────────────────────────────
+
+    public function test_filtre_rejete_retourne_depenses_rejetees(): void
+    {
+        Depense::factory()->rejete()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+        Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $this->get('/depenses?statut=rejete')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('depenses.data', 1)
+                ->where('depenses.data.0.statut', 'rejete')
+            );
+    }
+
+    public function test_update_allowed_from_rejete_status(): void
+    {
+        $depense = Depense::factory()->rejete()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $this->patch("/depenses/{$depense->id}", [
+            'depense_type_id' => $this->typeInterne->id,
+            'montant'         => 75000,
+            'date_depense'    => '2026-06-14',
+            'commentaire'     => 'Corrigé après rejet',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('depenses', [
+            'id'      => $depense->id,
+            'montant' => 75000,
+        ]);
+    }
+
+    // ── Imprimer ──────────────────────────────────────────────────────────────
+
+    public function test_imprimer_returns_ok_html(): void
+    {
+        $this->get('/depenses/imprimer')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'text/html; charset=UTF-8');
+    }
+
+    public function test_imprimer_has_signature_column(): void
+    {
+        $content = $this->get('/depenses/imprimer')->content();
+        $this->assertStringContainsString('Signature', $content);
+    }
+
+    public function test_imprimer_has_no_valide_par_column(): void
+    {
+        $content = $this->get('/depenses/imprimer')->content();
+        $this->assertStringNotContainsString('Validé par', $content);
+    }
+
+    public function test_imprimer_has_window_print_script(): void
+    {
+        $content = $this->get('/depenses/imprimer')->content();
+        $this->assertStringContainsString('window.print()', $content);
+    }
+
+    public function test_imprimer_has_a4_print_rule(): void
+    {
+        $content = $this->get('/depenses/imprimer')->content();
+        $this->assertStringContainsString('size: A4', $content);
+    }
+
+    public function test_imprimer_respects_statut_filter(): void
+    {
+        // Dates distinctes visibles dans le rendu (d/m/Y)
+        Depense::factory()->brouillon()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'date_depense'    => '2020-01-15',
+        ]);
+        Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'date_depense'    => '2020-02-20',
+        ]);
+
+        $content = $this->get('/depenses/imprimer?statut=brouillon')->content();
+        $this->assertStringContainsString('15/01/2020', $content);
+        $this->assertStringNotContainsString('20/02/2020', $content);
+    }
+
+    public function test_imprimer_groups_by_site_with_page_break(): void
+    {
+        $site1 = Site::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Matoto']);
+        $site2 = Site::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Dabompa']);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'site_id'         => $site1->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'site_id'         => $site2->id,
+        ]);
+
+        $content = $this->get('/depenses/imprimer')->content();
+        $this->assertStringContainsString('page-break-after', $content);
+        $this->assertStringContainsString('Matoto', $content);
+        $this->assertStringContainsString('Dabompa', $content);
+    }
+
+    public function test_imprimer_single_site_filter_shows_only_that_site(): void
+    {
+        $site1 = Site::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Conakry']);
+        $site2 = Site::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Kindia']);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'site_id'         => $site1->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'site_id'         => $site2->id,
+        ]);
+
+        $content = $this->get("/depenses/imprimer?site={$site1->id}")->content();
+        $this->assertStringContainsString('Conakry', $content);
+        $this->assertStringNotContainsString('Kindia', $content);
+    }
+
+    public function test_imprimer_shows_org_name(): void
+    {
+        // Le nom org n'est rendu que si au moins une dépense existe (dans le @foreach)
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $content = $this->get('/depenses/imprimer')->content();
+        $this->assertStringContainsString($this->org->name, $content);
+    }
+
+    public function test_imprimer_shows_printed_by(): void
+    {
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id'         => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $content = $this->get('/depenses/imprimer')->content();
+        $this->assertStringContainsString($this->user->name, $content);
+    }
+
+    public function test_imprimer_forbidden_for_unauthenticated(): void
+    {
+        $this->app['auth']->logout();
+        $this->get('/depenses/imprimer')->assertRedirect('/login');
     }
 }

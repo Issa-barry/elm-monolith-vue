@@ -235,6 +235,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     Route::middleware('module:'.ModuleFeature::DEPENSES)->group(function () {
         Route::get('depenses/export/excel', [DepenseController::class, 'exportCsv'])->name('depenses.export.excel');
         Route::get('depenses/export/pdf', [DepenseController::class, 'exportPdf'])->name('depenses.export.pdf');
+        Route::get('depenses/imprimer', [DepenseController::class, 'imprimer'])->name('depenses.imprimer');
         Route::resource('depenses', DepenseController::class);
         Route::patch('depenses/{depense}/soumettre', [DepenseController::class, 'soumettre'])->name('depenses.soumettre');
         Route::patch('depenses/{depense}/valider', [DepenseController::class, 'valider'])->name('depenses.valider');
