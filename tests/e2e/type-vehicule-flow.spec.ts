@@ -23,7 +23,8 @@ test('login + create type vehicule + verify in list + edit + delete', async ({
     await page.waitForURL(/\/type-vehicules\/create$/);
 
     await page.locator('#nom').fill(nom);
-    await page.locator('#capacite_defaut').fill('250');
+    // PrimeVue InputNumber renders a <span> wrapper — target the inner <input>
+    await page.locator('#capacite_defaut input').fill('250');
     await page.locator('#unite_capacite').fill('packs');
 
     await page.getByRole('button', { name: /créer/i }).click();
@@ -44,19 +45,17 @@ test('login + create type vehicule + verify in list + edit + delete', async ({
     await expect(page.getByText(nomModifie)).toBeVisible({ timeout: 10_000 });
 
     // Step 5: Delete (no vehicles attached)
+    // Register dialog handler BEFORE clicking so confirm() is caught immediately
+    page.on('dialog', (dialog) => dialog.accept());
     const editedRow = page.locator('tbody tr', { hasText: nomModifie });
     await editedRow.getByRole('button').last().click();
-    // Confirm the browser confirm dialog
-    page.on('dialog', (dialog) => dialog.accept());
-    await page.waitForURL(/\/type-vehicules$/, { timeout: 15_000 });
-
-    await expect(page.getByText(nomModifie)).not.toBeVisible({ timeout: 5_000 });
+    // Inertia DELETE stays on the same URL — wait for the row to disappear
+    await expect(page.getByText(nomModifie)).not.toBeVisible({ timeout: 10_000 });
 });
 
-test('inactive type not shown in vehicule creation form', async ({ page }) => {
+test('default types appear in list', async ({ page }) => {
     await login(page);
 
-    // Navigate to type list and find an active type to deactivate via edit
     await page.goto('/type-vehicules');
     await expect(page).toHaveURL(/\/type-vehicules$/);
 

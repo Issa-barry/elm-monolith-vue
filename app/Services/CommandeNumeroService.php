@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 class CommandeNumeroService
 {
     /**
-     * Génère un numéro de commande atomique au format CMD-JJMMAAAA-XXX.
+     * Génère un numéro de commande atomique au format CMD-JJMMAA-XXX.
      *
      * Le compteur est mensuel (repart à 001 chaque mois) et thread-safe
      * grâce à un verrou SELECT ... FOR UPDATE sur la table commande_sequences.
@@ -42,7 +42,7 @@ class CommandeNumeroService
                 ->where('periode', $periode)
                 ->update(['compteur' => $prochain]);
 
-            $reference = 'CMD-'.$now->format('dmY').'-'.str_pad((string) $prochain, 3, '0', STR_PAD_LEFT);
+            $reference = 'CMD-'.$now->format('dmy').'-'.str_pad((string) $prochain, 3, '0', STR_PAD_LEFT);
 
             return [$reference, $prochain];
         });

@@ -22,12 +22,12 @@ class CommandeNumeroServiceTest extends TestCase
     {
         [$reference] = $this->service->generer();
 
-        $this->assertMatchesRegularExpression('/^CMD-\d{8}-\d{3}$/', $reference);
+        $this->assertMatchesRegularExpression('/^CMD-\d{6}-\d{3}$/', $reference);
     }
 
     public function test_reference_contient_date_du_jour(): void
     {
-        $dateAttendue = now()->format('dmY');
+        $dateAttendue = now()->format('dmy');
 
         [$reference] = $this->service->generer();
 

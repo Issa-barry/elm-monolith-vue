@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\StatutDepense;
 use App\Models\Depense;
 use App\Models\User;
 
@@ -26,12 +27,26 @@ class DepensePolicy
     public function update(User $user, Depense $depense): bool
     {
         return $user->can('depenses.update')
+            && $user->organization_id === $depense->organization_id
+            && in_array($depense->statut, [StatutDepense::BROUILLON, StatutDepense::REJETE]);
+    }
+
+    public function valider(User $user, Depense $depense): bool
+    {
+        return $user->can('depenses.update')
+            && $user->organization_id === $depense->organization_id;
+    }
+
+    public function imputer(User $user, Depense $depense): bool
+    {
+        return $user->can('depenses.update')
             && $user->organization_id === $depense->organization_id;
     }
 
     public function delete(User $user, Depense $depense): bool
     {
         return $user->can('depenses.delete')
-            && $user->organization_id === $depense->organization_id;
+            && $user->organization_id === $depense->organization_id
+            && $depense->statut === StatutDepense::BROUILLON;
     }
 }

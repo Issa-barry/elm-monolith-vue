@@ -9,31 +9,88 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { Pencil, Plus, Power, Trash2 } from 'lucide-vue-next';
+import {
+    Pencil,
+    Plus,
+    Power,
+    Search,
+    Tags,
+    Trash2,
+} from 'lucide-vue-next';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
-import { computed, ref } from 'vue';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
+import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
+import { useToast } from 'primevue/usetoast';
+import { computed, ref, watch } from 'vue';
 
+interface Option {
+    value: string;
+    label: string;
+}
 interface DepenseType {
     id: string;
-    code: string;
     libelle: string;
     description: string | null;
-    requires_vehicle: boolean;
-    requires_comment: boolean;
+    categorie: string;
+    categorie_label: string;
+    commentaire_obligatoire: boolean;
+    justificatif_obligatoire: boolean;
+    type_paie: string | null;
     is_active: boolean;
-    sort_order: number;
+    depenses_count: number;
 }
 
-defineProps<{
+const props = defineProps<{
     types: DepenseType[];
+    categories: Option[];
 }>();
+
+const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Paramètres', href: '/settings/profile' },
     { title: 'Types de dépense', href: '/settings/depense-types' },
 ];
 
-// ── Dialog ────────────────────────────────────────────────────────────────────
+// ── Filtres ───────────────────────────────────────────────────────────────────
+
+const search = ref('');
+const filters = ref({ global: { value: '', matchMode: 'contains' } });
+watch(search, (val) => { filters.value.global.value = val; });
+
+const ALL = '__all__';
+const selectedCategorie = ref<string>(ALL);
+const selectedStatut = ref<string>(ALL);
+
+const categorieOptions = computed(() => [
+    { value: ALL, label: 'Tous les concernés' },
+    ...props.categories,
+]);
+
+const statutOptions = [
+    { value: ALL, label: 'Tous les statuts' },
+    { value: 'actif', label: 'Actif' },
+    { value: 'inactif', label: 'Inactif' },
+];
+
+const filtered = computed(() => {
+    let data = props.types;
+    if (selectedCategorie.value !== ALL) {
+        data = data.filter((t) => t.categorie === selectedCategorie.value);
+    }
+    if (selectedStatut.value !== ALL) {
+        data = data.filter((t) =>
+            selectedStatut.value === 'actif' ? t.is_active : !t.is_active,
+        );
+    }
+    return data;
+});
+
+// ── Dialog Create / Edit ──────────────────────────────────────────────────────
 
 const showDialog = ref(false);
 const editingType = ref<DepenseType | null>(null);
@@ -43,31 +100,32 @@ const dialogTitle = computed(() =>
 );
 
 const form = useForm({
-    code: '',
     libelle: '',
     description: '',
-    requires_vehicle: false,
-    requires_comment: false,
+    categorie: 'interne',
+    commentaire_obligatoire: false,
+    justificatif_obligatoire: false,
+    type_paie: '' as string,
     is_active: true,
-    sort_order: 0,
 });
 
 function openCreate() {
     editingType.value = null;
     form.reset();
     form.is_active = true;
+    form.categorie = 'interne';
     showDialog.value = true;
 }
 
 function openEdit(type: DepenseType) {
     editingType.value = type;
-    form.code = type.code;
     form.libelle = type.libelle;
     form.description = type.description ?? '';
-    form.requires_vehicle = type.requires_vehicle;
-    form.requires_comment = type.requires_comment;
+    form.categorie = type.categorie;
+    form.commentaire_obligatoire = type.commentaire_obligatoire;
+    form.justificatif_obligatoire = type.justificatif_obligatoire;
+    form.type_paie = type.type_paie ?? '';
     form.is_active = type.is_active;
-    form.sort_order = type.sort_order;
     showDialog.value = true;
 }
 
@@ -76,6 +134,7 @@ function handleSubmit() {
         form.put(`/settings/depense-types/${editingType.value.id}`, {
             onSuccess: () => {
                 showDialog.value = false;
+                toast.add({ severity: 'success', summary: 'Type mis à jour', life: 3000 });
             },
         });
     } else {
@@ -83,6 +142,7 @@ function handleSubmit() {
             onSuccess: () => {
                 showDialog.value = false;
                 form.reset();
+                toast.add({ severity: 'success', summary: 'Type créé', life: 3000 });
             },
         });
     }
@@ -91,33 +151,42 @@ function handleSubmit() {
 // ── Actions ───────────────────────────────────────────────────────────────────
 
 function toggle(type: DepenseType) {
-    router.patch(
-        `/settings/depense-types/${type.id}/toggle`,
-        {},
-        {
-            preserveScroll: true,
-        },
-    );
+    router.patch(`/settings/depense-types/${type.id}/toggle`, {}, { preserveScroll: true });
 }
 
 function destroy(type: DepenseType) {
+    if (type.depenses_count > 0) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Suppression impossible',
+            detail: `Ce type est utilisé dans ${type.depenses_count} dépense${type.depenses_count > 1 ? 's' : ''}. Désactivez-le plutôt.`,
+            life: 5000,
+        });
+        return;
+    }
     if (!confirm(`Supprimer le type « ${type.libelle} » ?`)) return;
-    router.delete(`/settings/depense-types/${type.id}`, {
-        preserveScroll: true,
-    });
+    router.delete(`/settings/depense-types/${type.id}`, { preserveScroll: true });
 }
+
+const categorieColors: Record<string, string> = {
+    interne: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+    employe: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+    livreur: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+    proprietaire: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
+    vehicule: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+};
 </script>
 
 <template>
     <Head title="Types de dépense" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <SettingsLayout>
+        <SettingsLayout :wide="true">
             <div class="space-y-6">
                 <div class="flex items-start justify-between gap-4">
                     <HeadingSmall
                         title="Types de dépense"
-                        description="Catégories utilisées pour classer les dépenses opérationnelles."
+                        description="Classement des dépenses par concerné : véhicule, livreur, salarié, propriétaire ou interne."
                     />
                     <Button size="sm" @click="openCreate">
                         <Plus class="mr-1.5 h-3.5 w-3.5" />
@@ -125,216 +194,201 @@ function destroy(type: DepenseType) {
                     </Button>
                 </div>
 
-                <!-- Table -->
-                <div class="rounded-lg border">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b bg-muted/40">
-                                <th
-                                    class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                >
-                                    Libellé / Code
-                                </th>
-                                <th
-                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                                >
-                                    Véhicule
-                                </th>
-                                <th
-                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                                >
-                                    Commentaire
-                                </th>
-                                <th
-                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                                >
-                                    Statut
-                                </th>
-                                <th
-                                    class="px-4 py-2.5 text-right font-medium text-muted-foreground"
-                                >
-                                    Actions
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="type in types"
-                                :key="type.id"
-                                class="border-b transition-colors last:border-b-0 hover:bg-muted/30"
-                                :class="{ 'opacity-50': !type.is_active }"
-                            >
-                                <td class="px-4 py-3">
-                                    <div class="font-medium">
-                                        {{ type.libelle }}
+                <!-- DataTable -->
+                <div class="overflow-hidden rounded-xl border bg-card">
+                    <DataTable
+                        :value="filtered"
+                        :paginator="filtered.length > 15"
+                        :rows="15"
+                        :global-filter-fields="['libelle', 'categorie_label', 'description']"
+                        v-model:filters="filters"
+                        data-key="id"
+                        striped-rows
+                        removable-sort
+                        class="text-sm"
+                        :pt="{
+                            root: { class: 'w-full' },
+                            header: { class: 'border-b bg-muted/30 px-4 py-3' },
+                            tbody: { class: 'divide-y' },
+                        }"
+                    >
+                        <template #header>
+                            <div class="flex flex-wrap items-center gap-3">
+                                <IconField class="max-w-xs flex-1">
+                                    <InputIcon class="pointer-events-none">
+                                        <Search class="h-4 w-4 text-muted-foreground" />
+                                    </InputIcon>
+                                    <InputText
+                                        v-model="search"
+                                        placeholder="Rechercher…"
+                                        class="w-full text-sm"
+                                    />
+                                </IconField>
+                                <Select
+                                    v-model="selectedCategorie"
+                                    :options="categorieOptions"
+                                    option-label="label"
+                                    option-value="value"
+                                    class="w-64"
+                                />
+                                <Select
+                                    v-model="selectedStatut"
+                                    :options="statutOptions"
+                                    option-label="label"
+                                    option-value="value"
+                                    class="w-44"
+                                />
+                                <span class="text-xs text-muted-foreground">
+                                    {{ filtered.length }} type{{ filtered.length !== 1 ? 's' : '' }}
+                                </span>
+                            </div>
+                        </template>
+
+                        <!-- Libellé -->
+                        <Column field="libelle" header="Libellé" sortable style="min-width: 220px">
+                            <template #body="{ data }">
+                                <div class="flex items-center gap-3" :class="{ 'opacity-50': !data.is_active }">
+                                    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30">
+                                        <Tags class="h-4 w-4 text-muted-foreground" />
                                     </div>
-                                    <div
-                                        class="font-mono text-xs text-muted-foreground"
-                                    >
-                                        {{ type.code }}
-                                    </div>
-                                    <div
-                                        v-if="type.description"
-                                        class="mt-0.5 text-xs text-muted-foreground"
-                                    >
-                                        {{ type.description }}
-                                    </div>
-                                </td>
-                                <td class="px-4 py-3 text-center">
-                                    <span
-                                        v-if="type.requires_vehicle"
-                                        class="text-xs font-medium text-amber-600"
-                                    >
-                                        Requis
-                                    </span>
-                                    <span
-                                        v-else
-                                        class="text-xs text-muted-foreground"
-                                        >—</span
-                                    >
-                                </td>
-                                <td class="px-4 py-3 text-center">
-                                    <span
-                                        v-if="type.requires_comment"
-                                        class="text-xs font-medium text-amber-600"
-                                    >
-                                        Requis
-                                    </span>
-                                    <span
-                                        v-else
-                                        class="text-xs text-muted-foreground"
-                                        >—</span
-                                    >
-                                </td>
-                                <td class="px-4 py-3 text-center">
-                                    <Badge
-                                        :variant="
-                                            type.is_active
-                                                ? 'default'
-                                                : 'secondary'
-                                        "
-                                    >
-                                        {{
-                                            type.is_active ? 'Actif' : 'Inactif'
-                                        }}
-                                    </Badge>
-                                </td>
-                                <td class="px-4 py-3">
-                                    <div class="flex justify-end gap-0.5">
-                                        <button
-                                            type="button"
-                                            :title="
-                                                type.is_active
-                                                    ? 'Désactiver'
-                                                    : 'Activer'
-                                            "
-                                            class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                            @click="toggle(type)"
-                                        >
-                                            <Power class="h-3.5 w-3.5" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            title="Modifier"
-                                            class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                            @click="openEdit(type)"
-                                        >
-                                            <Pencil class="h-3.5 w-3.5" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            title="Supprimer"
-                                            class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                                            @click="destroy(type)"
-                                        >
-                                            <Trash2 class="h-3.5 w-3.5" />
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                            <tr v-if="types.length === 0">
-                                <td
-                                    colspan="5"
-                                    class="px-4 py-10 text-center text-sm text-muted-foreground"
+                                    <span class="font-medium">{{ data.libelle }}</span>
+                                </div>
+                            </template>
+                        </Column>
+
+                        <!-- Concerné -->
+                        <Column field="categorie_label" header="Concerné" sortable style="width: 140px">
+                            <template #body="{ data }">
+                                <span
+                                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                    :class="categorieColors[data.categorie] ?? 'bg-muted text-muted-foreground'"
                                 >
-                                    Aucun type de dépense. Créez-en un.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                                    {{ data.categorie_label }}
+                                </span>
+                            </template>
+                        </Column>
+
+                        <!-- Commentaire obligatoire -->
+                        <Column header="Commentaire" style="width: 120px; text-align:center">
+                            <template #body="{ data }">
+                                <div class="flex justify-center">
+                                    <span v-if="data.commentaire_obligatoire" class="text-xs font-medium text-amber-600">Requis</span>
+                                    <span v-else class="text-xs text-muted-foreground">—</span>
+                                </div>
+                            </template>
+                        </Column>
+
+                        <!-- Justificatif obligatoire -->
+                        <Column header="Justificatif" style="width: 120px; text-align:center">
+                            <template #body="{ data }">
+                                <div class="flex justify-center">
+                                    <span v-if="data.justificatif_obligatoire" class="text-xs font-medium text-amber-600">Requis</span>
+                                    <span v-else class="text-xs text-muted-foreground">—</span>
+                                </div>
+                            </template>
+                        </Column>
+
+                        <!-- Statut -->
+                        <Column field="is_active" header="Statut" sortable style="width: 110px">
+                            <template #body="{ data }">
+                                <Badge :variant="data.is_active ? 'default' : 'secondary'">
+                                    {{ data.is_active ? 'Actif' : 'Inactif' }}
+                                </Badge>
+                            </template>
+                        </Column>
+
+                        <!-- Actions -->
+                        <Column header="" style="width: 110px">
+                            <template #body="{ data }">
+                                <div class="flex justify-end gap-0.5">
+                                    <button
+                                        type="button"
+                                        :title="data.is_active ? 'Désactiver' : 'Activer'"
+                                        class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                        @click="toggle(data)"
+                                    >
+                                        <Power class="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        title="Modifier"
+                                        class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                        @click="openEdit(data)"
+                                    >
+                                        <Pencil class="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        title="Supprimer"
+                                        class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                        @click="destroy(data)"
+                                    >
+                                        <Trash2 class="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            </template>
+                        </Column>
+
+                        <template #empty>
+                            <div class="flex flex-col items-center gap-3 py-12 text-muted-foreground">
+                                <Tags class="h-10 w-10 opacity-30" />
+                                <p class="text-sm">Aucun type de dépense.</p>
+                                <Button variant="outline" size="sm" @click="openCreate">
+                                    <Plus class="mr-2 h-4 w-4" />
+                                    Créer le premier type
+                                </Button>
+                            </div>
+                        </template>
+                    </DataTable>
                 </div>
             </div>
         </SettingsLayout>
     </AppLayout>
 
-    <!-- Dialog create / edit -->
+    <!-- Dialog Create / Edit -->
     <Dialog
         v-model:visible="showDialog"
         modal
         :header="dialogTitle"
-        :style="{ width: 'min(520px, 95vw)' }"
+        :style="{ width: 'min(560px, 95vw)' }"
         :dismissable-mask="true"
     >
         <form class="space-y-4 pt-2 pb-1" @submit.prevent="handleSubmit">
-            <!-- Code + Libellé -->
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <Label
-                        for="dt-code"
-                        class="mb-1.5 block text-xs font-medium"
-                    >
-                        Code <span class="text-destructive">*</span>
-                    </Label>
-                    <Input
-                        id="dt-code"
-                        v-model="form.code"
-                        placeholder="ex: carburant"
-                        :class="{ 'border-destructive': form.errors.code }"
-                        :disabled="!!editingType"
-                    />
-                    <p
-                        v-if="form.errors.code"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ form.errors.code }}
-                    </p>
-                    <p
-                        v-if="!editingType"
-                        class="mt-1 text-xs text-muted-foreground"
-                    >
-                        Non modifiable après création.
-                    </p>
-                </div>
-                <div>
-                    <Label
-                        for="dt-libelle"
-                        class="mb-1.5 block text-xs font-medium"
-                    >
-                        Libellé <span class="text-destructive">*</span>
-                    </Label>
-                    <Input
-                        id="dt-libelle"
-                        v-model="form.libelle"
-                        placeholder="ex: Carburant"
-                        :class="{ 'border-destructive': form.errors.libelle }"
-                    />
-                    <p
-                        v-if="form.errors.libelle"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ form.errors.libelle }}
-                    </p>
-                </div>
+            <!-- Libellé -->
+            <div>
+                <Label for="dt-libelle" class="mb-1.5 block text-xs font-medium">
+                    Libellé <span class="text-destructive">*</span>
+                </Label>
+                <Input
+                    id="dt-libelle"
+                    v-model="form.libelle"
+                    placeholder="ex: Carburant véhicule"
+                    :class="{ 'border-destructive': form.errors.libelle }"
+                />
+                <p v-if="form.errors.libelle" class="mt-1 text-xs text-destructive">{{ form.errors.libelle }}</p>
+            </div>
+
+            <!-- Concerné -->
+            <div>
+                <Label for="dt-categorie" class="mb-1.5 block text-xs font-medium">
+                    Concerné <span class="text-destructive">*</span>
+                </Label>
+                <select
+                    id="dt-categorie"
+                    v-model="form.categorie"
+                    class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                    :class="{ 'border-destructive': form.errors.categorie }"
+                >
+                    <option v-for="c in categories" :key="c.value" :value="c.value">
+                        {{ c.label }}
+                    </option>
+                </select>
+                <p v-if="form.errors.categorie" class="mt-1 text-xs text-destructive">{{ form.errors.categorie }}</p>
             </div>
 
             <!-- Description -->
             <div>
-                <Label
-                    for="dt-description"
-                    class="mb-1.5 block text-xs font-medium"
-                >
-                    Description
-                </Label>
+                <Label for="dt-description" class="mb-1.5 block text-xs font-medium">Description</Label>
                 <textarea
                     id="dt-description"
                     v-model="form.description"
@@ -345,100 +399,47 @@ function destroy(type: DepenseType) {
             </div>
 
             <!-- Options -->
-            <div class="space-y-2.5">
+            <div class="space-y-2.5 rounded-lg border bg-muted/30 p-3">
+                <p class="text-xs font-medium text-muted-foreground">Options</p>
                 <div class="flex items-center gap-3">
                     <Checkbox
-                        id="dt-requires-vehicle"
-                        :model-value="form.requires_vehicle"
-                        @update:model-value="
-                            form.requires_vehicle = $event === true
-                        "
+                        id="dt-comment"
+                        :model-value="form.commentaire_obligatoire"
+                        @update:model-value="form.commentaire_obligatoire = $event === true"
                     />
                     <div>
-                        <Label
-                            for="dt-requires-vehicle"
-                            class="cursor-pointer text-sm font-medium"
-                        >
-                            Véhicule obligatoire
-                        </Label>
-                        <p class="text-xs text-muted-foreground">
-                            Le champ véhicule sera requis sur les dépenses de ce
-                            type.
-                        </p>
+                        <Label for="dt-comment" class="cursor-pointer text-sm font-medium">Commentaire obligatoire</Label>
+                        <p class="text-xs text-muted-foreground">Un commentaire devra être saisi.</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
                     <Checkbox
-                        id="dt-requires-comment"
-                        :model-value="form.requires_comment"
-                        @update:model-value="
-                            form.requires_comment = $event === true
-                        "
+                        id="dt-justif"
+                        :model-value="form.justificatif_obligatoire"
+                        @update:model-value="form.justificatif_obligatoire = $event === true"
                     />
                     <div>
-                        <Label
-                            for="dt-requires-comment"
-                            class="cursor-pointer text-sm font-medium"
-                        >
-                            Commentaire obligatoire
-                        </Label>
-                        <p class="text-xs text-muted-foreground">
-                            Un commentaire devra être saisi pour ce type.
-                        </p>
+                        <Label for="dt-justif" class="cursor-pointer text-sm font-medium">Justificatif obligatoire</Label>
+                        <p class="text-xs text-muted-foreground">Un justificatif (reçu, photo) devra être fourni.</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
                     <Checkbox
-                        id="dt-is-active"
+                        id="dt-active"
                         :model-value="form.is_active"
                         @update:model-value="form.is_active = $event === true"
                     />
                     <div>
-                        <Label
-                            for="dt-is-active"
-                            class="cursor-pointer text-sm font-medium"
-                        >
-                            Actif
-                        </Label>
-                        <p class="text-xs text-muted-foreground">
-                            Un type inactif ne peut pas être utilisé sur une
-                            nouvelle dépense.
-                        </p>
+                        <Label for="dt-active" class="cursor-pointer text-sm font-medium">Actif</Label>
+                        <p class="text-xs text-muted-foreground">Un type inactif ne peut pas être utilisé sur une nouvelle dépense.</p>
                     </div>
                 </div>
             </div>
 
-            <!-- Sort order -->
-            <div class="w-28">
-                <Label for="dt-sort" class="mb-1.5 block text-xs font-medium">
-                    Ordre d'affichage
-                </Label>
-                <Input
-                    id="dt-sort"
-                    v-model.number="form.sort_order"
-                    type="number"
-                    min="0"
-                    max="9999"
-                />
-            </div>
-
             <div class="flex justify-between pt-2">
-                <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    @click="showDialog = false"
-                >
-                    Annuler
-                </Button>
+                <Button type="button" variant="outline" size="sm" @click="showDialog = false">Annuler</Button>
                 <Button type="submit" size="sm" :disabled="form.processing">
-                    {{
-                        form.processing
-                            ? 'Enregistrement…'
-                            : editingType
-                              ? 'Enregistrer'
-                              : 'Créer'
-                    }}
+                    {{ form.processing ? 'Enregistrement…' : editingType ? 'Enregistrer' : 'Créer' }}
                 </Button>
             </div>
         </form>
