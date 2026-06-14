@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\CategorieDepense;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\StoreDepenseTypeRequest;
 use App\Http\Requests\Settings\UpdateDepenseTypeRequest;
 use App\Models\DepenseType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -24,17 +26,20 @@ class DepenseTypeController extends Controller
             ->get()
             ->map(fn (DepenseType $t) => [
                 'id' => $t->id,
-                'code' => $t->code,
                 'libelle' => $t->libelle,
                 'description' => $t->description,
-                'requires_vehicle' => $t->requires_vehicle,
-                'requires_comment' => $t->requires_comment,
+                'categorie' => $t->categorie->value,
+                'categorie_label' => $t->categorie->label(),
+                'commentaire_obligatoire' => $t->commentaire_obligatoire,
+                'justificatif_obligatoire' => $t->justificatif_obligatoire,
+                'type_paie' => $t->type_paie,
                 'is_active' => $t->is_active,
-                'sort_order' => $t->sort_order,
+                'depenses_count' => $t->depenses()->count(),
             ]);
 
         return Inertia::render('settings/DepenseTypes/Index', [
             'types' => $types,
+            'categories' => CategorieDepense::options(),
         ]);
     }
 
@@ -42,10 +47,12 @@ class DepenseTypeController extends Controller
     {
         $this->authorize('create', DepenseType::class);
 
+        $orgId = auth()->user()->organization_id;
+
         DepenseType::create([
             ...$request->validated(),
-            'organization_id' => auth()->user()->organization_id,
-            'code' => strtolower(trim($request->code)),
+            'organization_id' => $orgId,
+            'code' => $this->generateCode($request->libelle, $orgId),
         ]);
 
         return back()->with('success', 'Type de dépense créé.');
@@ -55,10 +62,7 @@ class DepenseTypeController extends Controller
     {
         $this->authorize('update', $depense_type);
 
-        $depense_type->update([
-            ...$request->validated(),
-            'code' => strtolower(trim($request->code)),
-        ]);
+        $depense_type->update($request->validated());
 
         return back()->with('success', 'Type de dépense mis à jour.');
     }
@@ -79,11 +83,30 @@ class DepenseTypeController extends Controller
         $this->authorize('delete', $depense_type);
 
         if ($depense_type->depenses()->exists()) {
-            return back()->withErrors(['delete' => 'Ce type est utilisé dans des dépenses. Désactivez-le plutôt.']);
+            return back()->withErrors(['delete' => 'Ce type est utilisé dans des dépenses. Désactivez-le plutôt que de le supprimer.']);
         }
 
         $depense_type->delete();
 
         return back()->with('success', 'Type de dépense supprimé.');
+    }
+
+    private function generateCode(string $libelle, string $orgId, ?string $excludeId = null): string
+    {
+        $base = Str::slug($libelle, '_');
+        $code = $base;
+        $i = 2;
+
+        while (
+            DepenseType::where('organization_id', $orgId)
+                ->where('code', $code)
+                ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+                ->whereNull('deleted_at')
+                ->exists()
+        ) {
+            $code = $base.'_'.$i++;
+        }
+
+        return $code;
     }
 }

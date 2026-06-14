@@ -38,6 +38,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
+use App\Http\Controllers\TypeVehiculeController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserInvitationController;
 use App\Http\Controllers\VehiculeController;
@@ -173,6 +174,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
             Route::post('/{propositionVehicule}/valider', [PropositionVehiculeController::class, 'valider'])->name('valider');
         });
 
+        Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
         Route::resource('vehicules', VehiculeController::class);
         Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
         Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
@@ -231,8 +233,11 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 
     // ── Module : Dépenses opérationnelles ────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::DEPENSES)->group(function () {
-        Route::resource('depenses', DepenseController::class)->except(['show']);
-        Route::patch('depenses/{depense}/approuver', [DepenseController::class, 'approuver'])->name('depenses.approuver');
+        Route::get('depenses/export/excel', [DepenseController::class, 'exportCsv'])->name('depenses.export.excel');
+        Route::get('depenses/export/pdf', [DepenseController::class, 'exportPdf'])->name('depenses.export.pdf');
+        Route::resource('depenses', DepenseController::class);
+        Route::patch('depenses/{depense}/soumettre', [DepenseController::class, 'soumettre'])->name('depenses.soumettre');
+        Route::patch('depenses/{depense}/valider', [DepenseController::class, 'valider'])->name('depenses.valider');
         Route::patch('depenses/{depense}/rejeter', [DepenseController::class, 'rejeter'])->name('depenses.rejeter');
     });
 

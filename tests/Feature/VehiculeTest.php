@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -21,12 +22,19 @@ class VehiculeTest extends TestCase
         $this->initOrgAndUser(['vehicules.read', 'vehicules.create', 'vehicules.update', 'vehicules.delete']);
     }
 
+    private function typeId(): string
+    {
+        return TypeVehicule::where('organization_id', $this->org->id)->value('id');
+    }
+
     private function makeVehicule(Organization $org): Vehicule
     {
+        $typeVehicule = TypeVehicule::factory()->create(['organization_id' => $org->id]);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
 
         return Vehicule::factory()->create([
             'organization_id' => $org->id,
+            'type_vehicule_id' => $typeVehicule->id,
             'proprietaire_id' => $proprietaire->id,
             'categorie' => 'externe',
         ]);
@@ -74,7 +82,7 @@ class VehiculeTest extends TestCase
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion 01',
                 'immatriculation' => 'RC-001-GN',
-                'type_vehicule' => 'camion',
+                'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'externe',
                 'proprietaire_id' => $proprietaire->id,
                 'capacite_packs' => 200,
@@ -104,7 +112,7 @@ class VehiculeTest extends TestCase
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Tricycle 01',
                 'immatriculation' => 'TC-TEST-GN',
-                'type_vehicule' => 'tricycle',
+                'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'interne',
                 'site_id' => $site->id,
                 'capacite_packs' => 50,
@@ -133,7 +141,7 @@ class VehiculeTest extends TestCase
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Tricycle Sans Site',
                 'immatriculation' => 'TC-NOSITE-GN',
-                'type_vehicule' => 'tricycle',
+                'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'interne',
                 'pris_en_charge_par_usine' => true,
             ])
@@ -153,7 +161,7 @@ class VehiculeTest extends TestCase
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Tricycle Autre Org',
                 'immatriculation' => 'TC-AUTREORG-GN',
-                'type_vehicule' => 'tricycle',
+                'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'interne',
                 'site_id' => $otherSite->id,
                 'pris_en_charge_par_usine' => true,
@@ -165,7 +173,7 @@ class VehiculeTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [])
-            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule', 'categorie', 'pris_en_charge_par_usine']);
+            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule_id', 'categorie', 'pris_en_charge_par_usine']);
     }
 
     public function test_store_fails_sans_pris_en_charge_par_usine(): void
@@ -176,7 +184,7 @@ class VehiculeTest extends TestCase
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion Sans Charge',
                 'immatriculation' => 'RC-050-GN',
-                'type_vehicule' => 'camion',
+                'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'externe',
                 'proprietaire_id' => $proprietaire->id,
             ])
@@ -191,7 +199,7 @@ class VehiculeTest extends TestCase
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion Oui',
                 'immatriculation' => 'RC-051-GN',
-                'type_vehicule' => 'camion',
+                'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'externe',
                 'proprietaire_id' => $proprietaire->id,
                 'pris_en_charge_par_usine' => true,
@@ -212,7 +220,7 @@ class VehiculeTest extends TestCase
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion Non',
                 'immatriculation' => 'RC-052-GN',
-                'type_vehicule' => 'camion',
+                'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'externe',
                 'proprietaire_id' => $proprietaire->id,
                 'pris_en_charge_par_usine' => false,
@@ -233,7 +241,7 @@ class VehiculeTest extends TestCase
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Interne Charge',
                 'immatriculation' => 'TC-053-GN',
-                'type_vehicule' => 'tricycle',
+                'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'interne',
                 'site_id' => $site->id,
                 'pris_en_charge_par_usine' => false, // ignoré par le backend
@@ -254,11 +262,11 @@ class VehiculeTest extends TestCase
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion Type Invalide',
                 'immatriculation' => 'RC-002-GN',
-                'type_vehicule' => 'avion',
+                'type_vehicule_id' => 'invalid-ulid-that-does-not-exist',
                 'categorie' => 'externe',
                 'proprietaire_id' => $proprietaire->id,
             ])
-            ->assertSessionHasErrors('type_vehicule');
+            ->assertSessionHasErrors('type_vehicule_id');
     }
 
     public function test_store_fails_with_proprietaire_from_other_org(): void
@@ -270,7 +278,7 @@ class VehiculeTest extends TestCase
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion Autre Org',
                 'immatriculation' => 'RC-003-GN',
-                'type_vehicule' => 'camion',
+                'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'externe',
                 'proprietaire_id' => $proprietaire->id,
             ])
@@ -283,7 +291,7 @@ class VehiculeTest extends TestCase
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion Externe Sans Proprio',
                 'immatriculation' => 'RC-004-GN',
-                'type_vehicule' => 'camion',
+                'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'externe',
             ])
             ->assertSessionHasErrors('proprietaire_id');
@@ -298,7 +306,7 @@ class VehiculeTest extends TestCase
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion Externe',
                 'immatriculation' => 'RC-EXT-GN',
-                'type_vehicule' => 'camion',
+                'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'externe',
                 'proprietaire_id' => $proprietaire->id,
                 'site_id' => $site->id,
@@ -345,7 +353,7 @@ class VehiculeTest extends TestCase
             ->put(route('vehicules.update', $vehicule), [
                 'nom_vehicule' => 'Camion modifie',
                 'immatriculation' => $vehicule->immatriculation,
-                'type_vehicule' => 'camion',
+                'type_vehicule_id' => $vehicule->type_vehicule_id,
                 'categorie' => 'externe',
                 'proprietaire_id' => $nouveauProprietaire->id,
                 'is_active' => true,
@@ -366,7 +374,7 @@ class VehiculeTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('vehicules.update', $vehicule), [])
-            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule', 'categorie', 'pris_en_charge_par_usine']);
+            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule_id', 'categorie', 'pris_en_charge_par_usine']);
     }
 
     public function test_update_modifie_pris_en_charge(): void
@@ -378,7 +386,7 @@ class VehiculeTest extends TestCase
             ->put(route('vehicules.update', $vehicule), [
                 'nom_vehicule' => $vehicule->nom_vehicule,
                 'immatriculation' => $vehicule->immatriculation,
-                'type_vehicule' => $vehicule->type_vehicule->value,
+                'type_vehicule_id' => $vehicule->type_vehicule_id,
                 'categorie' => $vehicule->categorie,
                 'proprietaire_id' => $vehicule->proprietaire_id,
                 'pris_en_charge_par_usine' => true,
@@ -399,7 +407,7 @@ class VehiculeTest extends TestCase
             ->put(route('vehicules.update', $vehicule), [
                 'nom_vehicule' => $vehicule->nom_vehicule,
                 'immatriculation' => $vehicule->immatriculation,
-                'type_vehicule' => $vehicule->type_vehicule->value,
+                'type_vehicule_id' => $vehicule->type_vehicule_id,
                 'categorie' => $vehicule->categorie,
                 'proprietaire_id' => $vehicule->proprietaire_id,
                 // pris_en_charge_par_usine absent
@@ -415,7 +423,7 @@ class VehiculeTest extends TestCase
             ->put(route('vehicules.update', $vehicule), [
                 'nom_vehicule' => $vehicule->nom_vehicule,
                 'immatriculation' => $vehicule->immatriculation,
-                'type_vehicule' => $vehicule->type_vehicule->value,
+                'type_vehicule_id' => $vehicule->type_vehicule_id,
                 'categorie' => $vehicule->categorie,
                 'proprietaire_id' => $vehicule->proprietaire_id,
                 'is_active' => true,
@@ -460,7 +468,7 @@ class VehiculeTest extends TestCase
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion Doublon',
                 'immatriculation' => 'RC-100-GN',
-                'type_vehicule' => 'camion',
+                'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'interne',
             ])
             ->assertSessionHasErrors('immatriculation');
@@ -479,7 +487,7 @@ class VehiculeTest extends TestCase
             ->put(route('vehicules.update', $vehicule), [
                 'nom_vehicule' => $vehicule->nom_vehicule,
                 'immatriculation' => 'RC-999-GN',
-                'type_vehicule' => $vehicule->type_vehicule->value,
+                'type_vehicule_id' => $vehicule->type_vehicule_id,
                 'categorie' => $vehicule->categorie,
                 'proprietaire_id' => $vehicule->proprietaire_id,
             ])

@@ -79,6 +79,8 @@ const vehiculesItems = computed((): NavItem[] => {
         sub.push({ title: 'Liste de véhicules', href: '/vehicules' });
     if (can('equipes-livraison.read'))
         sub.push({ title: 'Équipes de livraison', href: '/equipes-livraison' });
+    if (can('type-vehicules.read'))
+        sub.push({ title: 'Types de véhicules', href: '/type-vehicules' });
     if (can('propositions.read'))
         sub.push({
             title: 'Propositions',

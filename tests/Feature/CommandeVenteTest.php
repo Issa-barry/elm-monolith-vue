@@ -988,7 +988,7 @@ class CommandeVenteTest extends TestCase
         $this->assertEquals(StatutCommandeVente::CLOTUREE, $commande->fresh()->statut);
     }
 
-    // ── référence CMD-JJMMAAAA-XXX ────────────────────────────────────────────
+    // ── référence CMD-JJMMAA-XXX ─────────────────────────────────────────────
 
     public function test_store_genere_reference_au_format_cmd(): void
     {
@@ -1006,7 +1006,7 @@ class CommandeVenteTest extends TestCase
         $commande = CommandeVente::where('organization_id', $this->org->id)->latest()->first();
 
         $this->assertNotNull($commande);
-        $this->assertMatchesRegularExpression('/^CMD-\d{8}-\d{3}$/', $commande->reference);
+        $this->assertMatchesRegularExpression('/^CMD-\d{6}-\d{3}$/', $commande->reference);
     }
 
     public function test_references_incrementales_dans_le_mois(): void

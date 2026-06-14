@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\TypeVehicule;
 use App\Models\EquipeLivraison;
 use App\Models\Organization;
+use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Database\Seeder;
 
@@ -33,6 +34,10 @@ class VehiculesSeeder extends Seeder
     public function run(): void
     {
         $org = Organization::where('slug', 'elm')->firstOrFail();
+
+        $matoto = Site::where('organization_id', $org->id)
+            ->where('nom', 'Matoto')
+            ->firstOrFail();
 
         $equipe = fn (string $nom) => EquipeLivraison::query()
             ->where('nom', $nom)
@@ -126,7 +131,7 @@ class VehiculesSeeder extends Seeder
                 'equipe' => $eqConakry2,
             ],
 
-            // ── Internes (propriété de l'organisation) ───────────────────────
+            // ── Internes (propriété de l'organisation — site Matoto) ─────────
             [
                 'nom_vehicule' => 'elm-1',
                 'marque' => 'Toyota',
@@ -135,6 +140,7 @@ class VehiculesSeeder extends Seeder
                 'type_vehicule' => TypeVehicule::MINIBUS->value,
                 'capacite_packs' => 120,
                 'categorie' => 'interne',
+                'site_id' => $matoto->id,
                 'proprietaire_id' => null,
                 'pris_en_charge_par_usine' => true,
                 'is_active' => true,
@@ -148,6 +154,7 @@ class VehiculesSeeder extends Seeder
                 'type_vehicule' => TypeVehicule::MINIBUS->value,
                 'capacite_packs' => 80,
                 'categorie' => 'interne',
+                'site_id' => $matoto->id,
                 'proprietaire_id' => null,
                 'pris_en_charge_par_usine' => true,
                 'is_active' => true,
@@ -161,6 +168,7 @@ class VehiculesSeeder extends Seeder
                 'type_vehicule' => TypeVehicule::CAMION->value,
                 'capacite_packs' => 300,
                 'categorie' => 'interne',
+                'site_id' => $matoto->id,
                 'proprietaire_id' => null,
                 'pris_en_charge_par_usine' => true,
                 'is_active' => true,
@@ -174,6 +182,7 @@ class VehiculesSeeder extends Seeder
                 'type_vehicule' => TypeVehicule::MINIBUS->value,
                 'capacite_packs' => 100,
                 'categorie' => 'interne',
+                'site_id' => $matoto->id,
                 'proprietaire_id' => null,
                 'pris_en_charge_par_usine' => true,
                 'is_active' => true,
