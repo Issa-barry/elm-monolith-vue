@@ -543,7 +543,7 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                 Détails
                             </h2>
 
-                            <div class="grid grid-cols-2 gap-3">
+                            <div class="grid grid-cols-3 gap-3">
                                 <div>
                                     <Label
                                         for="dep-montant"
@@ -569,6 +569,30 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                         class="mt-1 text-xs text-destructive"
                                     >
                                         {{ form.errors.montant }}
+                                    </p>
+                                </div>
+                                <div>
+                                    <Label
+                                        for="dep-date"
+                                        class="mb-1.5 block text-xs font-medium"
+                                    >
+                                        Date
+                                        <span class="text-destructive">*</span>
+                                    </Label>
+                                    <Input
+                                        id="dep-date"
+                                        v-model="form.date_depense"
+                                        type="date"
+                                        :class="{
+                                            'border-destructive':
+                                                form.errors.date_depense,
+                                        }"
+                                    />
+                                    <p
+                                        v-if="form.errors.date_depense"
+                                        class="mt-1 text-xs text-destructive"
+                                    >
+                                        {{ form.errors.date_depense }}
                                     </p>
                                 </div>
                                 <div>
