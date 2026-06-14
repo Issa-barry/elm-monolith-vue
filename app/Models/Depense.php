@@ -3,10 +3,6 @@
 namespace App\Models;
 
 use App\Enums\StatutDepense;
-use App\Models\Employe;
-use App\Models\Livreur;
-use App\Models\Proprietaire;
-use App\Models\Vehicule;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;

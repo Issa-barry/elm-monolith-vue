@@ -2,12 +2,16 @@
 
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RequireActiveLivreur;
+use App\Http\Middleware\RequireModuleEnabled;
+use App\Http\Middleware\RequireSiteAssigned;
 use App\Support\AuthRedirects;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
+use Spatie\Permission\Middleware\RoleMiddleware;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -18,10 +22,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
-            'module' => \App\Http\Middleware\RequireModuleEnabled::class,
-            'require.site' => \App\Http\Middleware\RequireSiteAssigned::class,
-            'active.livreur' => \App\Http\Middleware\RequireActiveLivreur::class,
+            'role' => RoleMiddleware::class,
+            'module' => RequireModuleEnabled::class,
+            'require.site' => RequireSiteAssigned::class,
+            'active.livreur' => RequireActiveLivreur::class,
         ]);
 
         $middleware->redirectUsersTo(function (Request $request): string {

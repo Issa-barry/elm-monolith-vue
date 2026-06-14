@@ -14,6 +14,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Permission;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -899,7 +900,7 @@ class CommandeVenteTest extends TestCase
         ]);
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('motifStandardProvider')]
+    #[DataProvider('motifStandardProvider')]
     public function test_annuler_stores_correct_label_for_standard_motif(string $code, string $expectedLabel): void
     {
         $commande = CommandeVente::factory()->create([

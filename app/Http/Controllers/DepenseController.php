@@ -17,13 +17,16 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\DepenseImputationService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DepenseController extends Controller
 {
@@ -61,7 +64,7 @@ class DepenseController extends Controller
         ]);
     }
 
-    public function exportCsv(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function exportCsv(Request $request): StreamedResponse
     {
         $this->authorize('viewAny', Depense::class);
 
@@ -140,8 +143,8 @@ class DepenseController extends Controller
 
         $sites = $grouped->map(fn ($siteRows) => [
             'site_nom' => $siteRows->first()['site']['nom'] ?? null,
-            'rows'     => $siteRows,
-            'total'    => $siteRows->sum('montant'),
+            'rows' => $siteRows,
+            'total' => $siteRows->sum('montant'),
         ])->values();
 
         return $this->buildMultiSitePdf($sites, $org, $filters, $printedBy, $now)
@@ -169,26 +172,26 @@ class DepenseController extends Controller
 
         $sites = $grouped->map(fn ($siteRows) => [
             'site_nom' => $siteRows->first()['site']['nom'] ?? null,
-            'rows'     => $siteRows,
-            'total'    => $siteRows->sum('montant'),
+            'rows' => $siteRows,
+            'total' => $siteRows->sum('montant'),
         ])->values();
 
         return response()->view('print.depenses', [
-            'sites'        => $sites,
-            'filters'      => $filters,
-            'org'          => $org,
-            'printed_by'   => $printedBy,
+            'sites' => $sites,
+            'filters' => $filters,
+            'org' => $org,
+            'printed_by' => $printedBy,
             'generated_at' => $now,
         ]);
     }
 
     private function buildSitePdf(
-        \Illuminate\Support\Collection $rows,
+        Collection $rows,
         ?Organization $org,
         ?Site $site,
         array $filters,
         string $printedBy,
-        \Carbon\Carbon $generatedAt,
+        Carbon $generatedAt,
     ): \Barryvdh\DomPDF\PDF {
         return Pdf::loadView('pdf.depenses', [
             'rows' => $rows,
@@ -202,17 +205,17 @@ class DepenseController extends Controller
     }
 
     private function buildMultiSitePdf(
-        \Illuminate\Support\Collection $sites,
+        Collection $sites,
         ?Organization $org,
         array $filters,
         string $printedBy,
-        \Carbon\Carbon $generatedAt,
+        Carbon $generatedAt,
     ): \Barryvdh\DomPDF\PDF {
         return Pdf::loadView('pdf.depenses_multi', [
-            'sites'        => $sites,
-            'filters'      => $filters,
-            'org'          => $org,
-            'printed_by'   => $printedBy,
+            'sites' => $sites,
+            'filters' => $filters,
+            'org' => $org,
+            'printed_by' => $printedBy,
             'generated_at' => $generatedAt,
         ])->setPaper('a4', 'landscape');
     }
@@ -423,20 +426,20 @@ class DepenseController extends Controller
         }
 
         $validated = $request->validate([
-            'motif_rejet'       => ['required', 'string', 'in:Non conforme,Autre'],
+            'motif_rejet' => ['required', 'string', 'in:Non conforme,Autre'],
             'commentaire_rejet' => ['required_if:motif_rejet,Autre', 'nullable', 'string', 'min:5', 'max:255'],
         ], [
-            'motif_rejet.required'          => 'Le motif de rejet est obligatoire.',
-            'motif_rejet.in'                => 'Le motif sélectionné est invalide.',
+            'motif_rejet.required' => 'Le motif de rejet est obligatoire.',
+            'motif_rejet.in' => 'Le motif sélectionné est invalide.',
             'commentaire_rejet.required_if' => 'Le commentaire est obligatoire pour le motif "Autre".',
-            'commentaire_rejet.min'         => 'Le commentaire doit faire au moins 5 caractères.',
+            'commentaire_rejet.min' => 'Le commentaire doit faire au moins 5 caractères.',
         ]);
 
         $depense->update([
-            'statut'            => StatutDepense::REJETE,
-            'validateur_id'     => auth()->id(),
-            'date_validation'   => now(),
-            'motif_rejet'       => $validated['motif_rejet'],
+            'statut' => StatutDepense::REJETE,
+            'validateur_id' => auth()->id(),
+            'date_validation' => now(),
+            'motif_rejet' => $validated['motif_rejet'],
             'commentaire_rejet' => $validated['motif_rejet'] === 'Autre' ? ($validated['commentaire_rejet'] ?? null) : null,
         ]);
 

@@ -4,8 +4,12 @@ namespace Tests\Feature;
 
 use App\Mail\ContactMessageReceived;
 use App\Models\ContactMessage;
+use App\Models\Organization;
+use App\Models\Site;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class ContactTest extends TestCase
@@ -76,12 +80,12 @@ class ContactTest extends TestCase
     public function test_mark_read_works_for_staff(): void
     {
         // needs staff user with organization
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        $org = \App\Models\Organization::factory()->create();
-        $user = \App\Models\User::factory()->create(['organization_id' => $org->id]);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
 
-        $site = \App\Models\Site::create([
+        $site = Site::create([
             'organization_id' => $org->id,
             'nom' => 'Site Test',
             'type' => 'depot',

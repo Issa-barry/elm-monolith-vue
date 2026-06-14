@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Client;
 
 use App\Enums\StatutCommission;
+use App\Enums\StatutDepense;
 use App\Enums\StatutPropositionVehicule;
 use App\Enums\TypeVehicule;
 use App\Http\Controllers\Controller;
@@ -733,14 +734,15 @@ class ClientDashboardController extends Controller
             return [];
         }
 
-        return Depense::whereIn('vehicule_id', $vehiculeIdsCibles->all())
-            ->where('statut', 'approuve')
+        return Depense::where('beneficiaire_type', 'vehicule')
+            ->whereIn('beneficiaire_id', $vehiculeIdsCibles->all())
+            ->where('statut', StatutDepense::VALIDE->value)
             ->where('organization_id', $organizationId)
             ->when($dateDebut, fn ($q) => $q->whereDate('date_depense', '>=', $dateDebut))
             ->when($dateFin, fn ($q) => $q->whereDate('date_depense', '<=', $dateFin))
-            ->selectRaw('vehicule_id, SUM(montant) as total')
-            ->groupBy('vehicule_id')
-            ->pluck('total', 'vehicule_id')
+            ->selectRaw('beneficiaire_id, SUM(montant) as total')
+            ->groupBy('beneficiaire_id')
+            ->pluck('total', 'beneficiaire_id')
             ->map(fn ($v) => (float) $v)
             ->toArray();
     }

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\Backoffice;
 
 use App\Http\Controllers\Controller;
+use App\Models\Site;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -30,7 +32,7 @@ class MeController extends Controller
         ]);
     }
 
-    private function resolveSite(\App\Models\User $user, ?\App\Models\Site $site): ?array
+    private function resolveSite(User $user, ?Site $site): ?array
     {
         if ($site) {
             return [

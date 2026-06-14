@@ -119,7 +119,7 @@ class RegistrationTest extends TestCase
             'telephone' => null,
         ]);
 
-        $user = \App\Models\User::where('email', 'test@example.com')->first();
+        $user = User::where('email', 'test@example.com')->first();
         $this->assertTrue($user->hasRole('client'));
     }
 

@@ -12,6 +12,7 @@ use App\Services\OtpService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
 use Spatie\Permission\Models\Role;
@@ -52,7 +53,7 @@ class CreateNewUser implements CreatesNewUsers
             'telephone' => ['nullable', 'string', 'max:30'],
             'telephone_country' => ['nullable', 'string', Rule::in(array_keys(self::PHONE_BY_COUNTRY))],
             'telephone_local' => ['nullable', 'string', 'regex:/^\d*$/', 'max:15'],
-            'password' => ['required', 'string', \Illuminate\Validation\Rules\Password::default()],
+            'password' => ['required', 'string', Password::default()],
         ], [
             'telephone_local.regex' => 'Saisissez uniquement des chiffres pour le numéro.',
         ])->validate();

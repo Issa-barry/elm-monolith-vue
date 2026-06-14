@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CommandeVente;
 use App\Models\CommissionPart;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,7 +18,7 @@ class FraisCommissionPartController extends Controller
      */
     public function update(Request $request, CommissionPart $part): RedirectResponse
     {
-        $this->authorize('viewAny', \App\Models\CommandeVente::class);
+        $this->authorize('viewAny', CommandeVente::class);
 
         $part->load('commission');
 

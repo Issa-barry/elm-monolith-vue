@@ -5,9 +5,11 @@ namespace Tests\Feature;
 use App\Enums\StatutCommission;
 use App\Models\CommissionVente;
 use App\Models\Organization;
+use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class VersementCommissionTest extends TestCase
@@ -17,13 +19,13 @@ class VersementCommissionTest extends TestCase
     private function utilisateur(Organization $org): User
     {
         Permission::firstOrCreate(['name' => 'ventes.update', 'guard_name' => 'web']);
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
         $user->givePermissionTo('ventes.update');
 
         // Site requis par RequireSiteAssigned
-        $site = \App\Models\Site::create([
+        $site = Site::create([
             'organization_id' => $org->id,
             'nom' => 'Site Test',
             'type' => 'depot',

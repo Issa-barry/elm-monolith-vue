@@ -9,6 +9,7 @@ use App\Models\UserInvitation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -56,7 +57,7 @@ class UserInvitationTest extends TestCase
 
     private function makeInvitation(Site $site, array $overrides = []): UserInvitation
     {
-        $token = \Illuminate\Support\Str::random(64);
+        $token = Str::random(64);
 
         return UserInvitation::create(array_merge([
             'email' => 'invite@example.com',
@@ -73,7 +74,7 @@ class UserInvitationTest extends TestCase
     private function plainToken(UserInvitation $invitation): string
     {
         // Regenerate a fresh token with known value so we can find it
-        $token = \Illuminate\Support\Str::random(64);
+        $token = Str::random(64);
         $invitation->update(['token_hash' => hash('sha256', $token)]);
 
         return $token;

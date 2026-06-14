@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Site;
 use App\Models\User;
 use App\Services\MatriculeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -31,16 +33,16 @@ class UserController extends Controller
 {
     public const STAFF_ROLES = ['super_admin', 'admin_entreprise', 'manager', 'commerciale', 'comptable'];
 
-    private function getRoleOptions(): \Illuminate\Support\Collection
+    private function getRoleOptions(): Collection
     {
         return Role::whereIn('name', self::STAFF_ROLES)
             ->get(['id', 'name'])
             ->map(fn ($r) => ['value' => $r->name, 'label' => $r->name]);
     }
 
-    private function getSiteOptions(string $orgId): \Illuminate\Support\Collection
+    private function getSiteOptions(string $orgId): Collection
     {
-        return \App\Models\Site::where('organization_id', $orgId)
+        return Site::where('organization_id', $orgId)
             ->orderBy('nom')
             ->get(['id', 'nom', 'code'])
             ->map(fn ($s) => ['value' => $s->id, 'label' => "{$s->nom} ({$s->code})"]);

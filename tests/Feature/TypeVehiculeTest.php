@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Proprietaire;
 use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -182,7 +183,7 @@ class TypeVehiculeTest extends TestCase
     {
         $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
 
-        $proprietaire = \App\Models\Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'type_vehicule_id' => $type->id,

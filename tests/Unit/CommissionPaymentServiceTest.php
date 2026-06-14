@@ -14,6 +14,7 @@ use App\Models\Vehicule;
 use App\Services\CommissionPaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class CommissionPaymentServiceTest extends TestCase
@@ -228,7 +229,7 @@ class CommissionPaymentServiceTest extends TestCase
 
     private function makeTransfert(Organization $org, Vehicule $vehicule): TransfertLogistique
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
 
         $site = Site::create([
@@ -271,11 +272,11 @@ class CommissionPaymentServiceTest extends TestCase
 
     private function makeUser(Organization $org): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
 
-        $site = \App\Models\Site::create([
+        $site = Site::create([
             'organization_id' => $org->id,
             'nom' => 'Site Test',
             'type' => 'depot',

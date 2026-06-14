@@ -7,8 +7,6 @@ use App\Enums\StatutDepense;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Employe;
-use App\Models\Livreur;
-use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -356,7 +354,7 @@ class DepenseTest extends TestCase
         ]);
 
         $this->patch("/depenses/{$depense->id}/rejeter", [
-            'motif_rejet'       => 'Autre',
+            'motif_rejet' => 'Autre',
             'commentaire_rejet' => 'abc',
         ])->assertSessionHasErrors(['commentaire_rejet']);
     }
@@ -370,14 +368,14 @@ class DepenseTest extends TestCase
         ]);
 
         $this->patch("/depenses/{$depense->id}/rejeter", [
-            'motif_rejet'       => 'Autre',
+            'motif_rejet' => 'Autre',
             'commentaire_rejet' => 'Montant incohérent avec le justificatif fourni.',
         ])->assertRedirect();
 
         $this->assertDatabaseHas('depenses', [
-            'id'                => $depense->id,
-            'statut'            => StatutDepense::REJETE->value,
-            'motif_rejet'       => 'Autre',
+            'id' => $depense->id,
+            'statut' => StatutDepense::REJETE->value,
+            'motif_rejet' => 'Autre',
             'commentaire_rejet' => 'Montant incohérent avec le justificatif fourni.',
         ]);
     }
@@ -391,13 +389,13 @@ class DepenseTest extends TestCase
         ]);
 
         $this->patch("/depenses/{$depense->id}/rejeter", [
-            'motif_rejet'       => 'Non conforme',
+            'motif_rejet' => 'Non conforme',
             'commentaire_rejet' => 'Ce commentaire doit être ignoré.',
         ])->assertRedirect();
 
         $this->assertDatabaseHas('depenses', [
-            'id'                => $depense->id,
-            'motif_rejet'       => 'Non conforme',
+            'id' => $depense->id,
+            'motif_rejet' => 'Non conforme',
             'commentaire_rejet' => null,
         ]);
     }
@@ -405,11 +403,11 @@ class DepenseTest extends TestCase
     public function test_show_includes_commentaire_rejet(): void
     {
         $depense = Depense::factory()->create([
-            'organization_id'   => $this->org->id,
-            'user_id'           => $this->user->id,
-            'depense_type_id'   => $this->typeInterne->id,
-            'statut'            => StatutDepense::REJETE->value,
-            'motif_rejet'       => 'Autre',
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'statut' => StatutDepense::REJETE->value,
+            'motif_rejet' => 'Autre',
             'commentaire_rejet' => 'Montant incohérent.',
         ]);
 
@@ -515,11 +513,11 @@ class DepenseTest extends TestCase
         $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
 
         Depense::factory()->create([
-            'organization_id'  => $this->org->id,
-            'user_id'          => $this->user->id,
-            'depense_type_id'  => $typeVehicule->id,
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeVehicule->id,
             'beneficiaire_type' => 'vehicule',
-            'beneficiaire_id'  => $vehicule->id,
+            'beneficiaire_id' => $vehicule->id,
         ]);
 
         $this->get('/depenses')
@@ -534,7 +532,7 @@ class DepenseTest extends TestCase
     {
         Depense::factory()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
@@ -549,7 +547,7 @@ class DepenseTest extends TestCase
     {
         $depense = Depense::factory()->soumis()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
@@ -566,7 +564,7 @@ class DepenseTest extends TestCase
     {
         Depense::factory()->brouillon()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
@@ -642,7 +640,7 @@ class DepenseTest extends TestCase
     {
         $depense = Depense::factory()->soumis()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
         ]);
         $this->patch("/depenses/{$depense->id}/valider");
@@ -657,7 +655,7 @@ class DepenseTest extends TestCase
     {
         $depense = Depense::factory()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
@@ -731,9 +729,9 @@ class DepenseTest extends TestCase
                 ['site_nom' => 'Matoto',  'rows' => collect([]), 'total' => 0],
                 ['site_nom' => 'Dabompa', 'rows' => collect([]), 'total' => 0],
             ]),
-            'filters'      => [],
-            'org'          => $this->org,
-            'printed_by'   => $this->user->name,
+            'filters' => [],
+            'org' => $this->org,
+            'printed_by' => $this->user->name,
             'generated_at' => now(),
         ])->render();
 
@@ -743,10 +741,10 @@ class DepenseTest extends TestCase
     public function test_export_pdf_multi_site_template_has_signature_column(): void
     {
         $html = view('pdf.depenses_multi', [
-            'sites'        => collect([['site_nom' => 'Matoto', 'rows' => collect([]), 'total' => 0]]),
-            'filters'      => [],
-            'org'          => $this->org,
-            'printed_by'   => $this->user->name,
+            'sites' => collect([['site_nom' => 'Matoto', 'rows' => collect([]), 'total' => 0]]),
+            'filters' => [],
+            'org' => $this->org,
+            'printed_by' => $this->user->name,
             'generated_at' => now(),
         ])->render();
 
@@ -756,10 +754,10 @@ class DepenseTest extends TestCase
     public function test_export_pdf_multi_site_template_has_no_valide_par_column(): void
     {
         $html = view('pdf.depenses_multi', [
-            'sites'        => collect([['site_nom' => 'Matoto', 'rows' => collect([]), 'total' => 0]]),
-            'filters'      => [],
-            'org'          => $this->org,
-            'printed_by'   => $this->user->name,
+            'sites' => collect([['site_nom' => 'Matoto', 'rows' => collect([]), 'total' => 0]]),
+            'filters' => [],
+            'org' => $this->org,
+            'printed_by' => $this->user->name,
             'generated_at' => now(),
         ])->render();
 
@@ -882,12 +880,12 @@ class DepenseTest extends TestCase
     {
         Depense::factory()->rejete()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
         ]);
         Depense::factory()->soumis()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
@@ -903,19 +901,19 @@ class DepenseTest extends TestCase
     {
         $depense = Depense::factory()->rejete()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
         $this->patch("/depenses/{$depense->id}", [
             'depense_type_id' => $this->typeInterne->id,
-            'montant'         => 75000,
-            'date_depense'    => '2026-06-14',
-            'commentaire'     => 'Corrigé après rejet',
+            'montant' => 75000,
+            'date_depense' => '2026-06-14',
+            'commentaire' => 'Corrigé après rejet',
         ])->assertRedirect();
 
         $this->assertDatabaseHas('depenses', [
-            'id'      => $depense->id,
+            'id' => $depense->id,
             'montant' => 75000,
         ]);
     }
@@ -958,15 +956,15 @@ class DepenseTest extends TestCase
         // Dates distinctes visibles dans le rendu (d/m/Y)
         Depense::factory()->brouillon()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
-            'date_depense'    => '2020-01-15',
+            'date_depense' => '2020-01-15',
         ]);
         Depense::factory()->soumis()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
-            'date_depense'    => '2020-02-20',
+            'date_depense' => '2020-02-20',
         ]);
 
         $content = $this->get('/depenses/imprimer?statut=brouillon')->content();
@@ -981,15 +979,15 @@ class DepenseTest extends TestCase
 
         Depense::factory()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
-            'site_id'         => $site1->id,
+            'site_id' => $site1->id,
         ]);
         Depense::factory()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
-            'site_id'         => $site2->id,
+            'site_id' => $site2->id,
         ]);
 
         $content = $this->get('/depenses/imprimer')->content();
@@ -1005,15 +1003,15 @@ class DepenseTest extends TestCase
 
         Depense::factory()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
-            'site_id'         => $site1->id,
+            'site_id' => $site1->id,
         ]);
         Depense::factory()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
-            'site_id'         => $site2->id,
+            'site_id' => $site2->id,
         ]);
 
         $content = $this->get("/depenses/imprimer?site={$site1->id}")->content();
@@ -1026,7 +1024,7 @@ class DepenseTest extends TestCase
         // Le nom org n'est rendu que si au moins une dépense existe (dans le @foreach)
         Depense::factory()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
@@ -1038,7 +1036,7 @@ class DepenseTest extends TestCase
     {
         Depense::factory()->create([
             'organization_id' => $this->org->id,
-            'user_id'         => $this->user->id,
+            'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
