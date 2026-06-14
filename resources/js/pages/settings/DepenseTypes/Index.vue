@@ -9,14 +9,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import {
-    Pencil,
-    Plus,
-    Power,
-    Search,
-    Tags,
-    Trash2,
-} from 'lucide-vue-next';
+import { Pencil, Plus, Power, Search, Tags, Trash2 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
@@ -60,7 +53,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const search = ref('');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => { filters.value.global.value = val; });
+watch(search, (val) => {
+    filters.value.global.value = val;
+});
 
 const ALL = '__all__';
 const selectedCategorie = ref<string>(ALL);
@@ -134,7 +129,11 @@ function handleSubmit() {
         form.put(`/settings/depense-types/${editingType.value.id}`, {
             onSuccess: () => {
                 showDialog.value = false;
-                toast.add({ severity: 'success', summary: 'Type mis à jour', life: 3000 });
+                toast.add({
+                    severity: 'success',
+                    summary: 'Type mis à jour',
+                    life: 3000,
+                });
             },
         });
     } else {
@@ -142,7 +141,11 @@ function handleSubmit() {
             onSuccess: () => {
                 showDialog.value = false;
                 form.reset();
-                toast.add({ severity: 'success', summary: 'Type créé', life: 3000 });
+                toast.add({
+                    severity: 'success',
+                    summary: 'Type créé',
+                    life: 3000,
+                });
             },
         });
     }
@@ -151,7 +154,11 @@ function handleSubmit() {
 // ── Actions ───────────────────────────────────────────────────────────────────
 
 function toggle(type: DepenseType) {
-    router.patch(`/settings/depense-types/${type.id}/toggle`, {}, { preserveScroll: true });
+    router.patch(
+        `/settings/depense-types/${type.id}/toggle`,
+        {},
+        { preserveScroll: true },
+    );
 }
 
 function destroy(type: DepenseType) {
@@ -165,15 +172,21 @@ function destroy(type: DepenseType) {
         return;
     }
     if (!confirm(`Supprimer le type « ${type.libelle} » ?`)) return;
-    router.delete(`/settings/depense-types/${type.id}`, { preserveScroll: true });
+    router.delete(`/settings/depense-types/${type.id}`, {
+        preserveScroll: true,
+    });
 }
 
 const categorieColors: Record<string, string> = {
-    interne: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+    interne:
+        'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
     employe: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-    livreur: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
-    proprietaire: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
-    vehicule: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+    livreur:
+        'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+    proprietaire:
+        'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
+    vehicule:
+        'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
 };
 </script>
 
@@ -200,7 +213,11 @@ const categorieColors: Record<string, string> = {
                         :value="filtered"
                         :paginator="filtered.length > 15"
                         :rows="15"
-                        :global-filter-fields="['libelle', 'categorie_label', 'description']"
+                        :global-filter-fields="[
+                            'libelle',
+                            'categorie_label',
+                            'description',
+                        ]"
                         v-model:filters="filters"
                         data-key="id"
                         striped-rows
@@ -216,7 +233,9 @@ const categorieColors: Record<string, string> = {
                             <div class="flex flex-wrap items-center gap-3">
                                 <IconField class="max-w-xs flex-1">
                                     <InputIcon class="pointer-events-none">
-                                        <Search class="h-4 w-4 text-muted-foreground" />
+                                        <Search
+                                            class="h-4 w-4 text-muted-foreground"
+                                        />
                                     </InputIcon>
                                     <InputText
                                         v-model="search"
@@ -239,29 +258,53 @@ const categorieColors: Record<string, string> = {
                                     class="w-44"
                                 />
                                 <span class="text-xs text-muted-foreground">
-                                    {{ filtered.length }} type{{ filtered.length !== 1 ? 's' : '' }}
+                                    {{ filtered.length }} type{{
+                                        filtered.length !== 1 ? 's' : ''
+                                    }}
                                 </span>
                             </div>
                         </template>
 
                         <!-- Libellé -->
-                        <Column field="libelle" header="Libellé" sortable style="min-width: 220px">
+                        <Column
+                            field="libelle"
+                            header="Libellé"
+                            sortable
+                            style="min-width: 220px"
+                        >
                             <template #body="{ data }">
-                                <div class="flex items-center gap-3" :class="{ 'opacity-50': !data.is_active }">
-                                    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30">
-                                        <Tags class="h-4 w-4 text-muted-foreground" />
+                                <div
+                                    class="flex items-center gap-3"
+                                    :class="{ 'opacity-50': !data.is_active }"
+                                >
+                                    <div
+                                        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30"
+                                    >
+                                        <Tags
+                                            class="h-4 w-4 text-muted-foreground"
+                                        />
                                     </div>
-                                    <span class="font-medium">{{ data.libelle }}</span>
+                                    <span class="font-medium">{{
+                                        data.libelle
+                                    }}</span>
                                 </div>
                             </template>
                         </Column>
 
                         <!-- Concerné -->
-                        <Column field="categorie_label" header="Concerné" sortable style="width: 140px">
+                        <Column
+                            field="categorie_label"
+                            header="Concerné"
+                            sortable
+                            style="width: 140px"
+                        >
                             <template #body="{ data }">
                                 <span
                                     class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                    :class="categorieColors[data.categorie] ?? 'bg-muted text-muted-foreground'"
+                                    :class="
+                                        categorieColors[data.categorie] ??
+                                        'bg-muted text-muted-foreground'
+                                    "
                                 >
                                     {{ data.categorie_label }}
                                 </span>
@@ -269,29 +312,60 @@ const categorieColors: Record<string, string> = {
                         </Column>
 
                         <!-- Commentaire obligatoire -->
-                        <Column header="Commentaire" style="width: 120px; text-align:center">
+                        <Column
+                            header="Commentaire"
+                            style="width: 120px; text-align: center"
+                        >
                             <template #body="{ data }">
                                 <div class="flex justify-center">
-                                    <span v-if="data.commentaire_obligatoire" class="text-xs font-medium text-amber-600">Requis</span>
-                                    <span v-else class="text-xs text-muted-foreground">—</span>
+                                    <span
+                                        v-if="data.commentaire_obligatoire"
+                                        class="text-xs font-medium text-amber-600"
+                                        >Requis</span
+                                    >
+                                    <span
+                                        v-else
+                                        class="text-xs text-muted-foreground"
+                                        >—</span
+                                    >
                                 </div>
                             </template>
                         </Column>
 
                         <!-- Justificatif obligatoire -->
-                        <Column header="Justificatif" style="width: 120px; text-align:center">
+                        <Column
+                            header="Justificatif"
+                            style="width: 120px; text-align: center"
+                        >
                             <template #body="{ data }">
                                 <div class="flex justify-center">
-                                    <span v-if="data.justificatif_obligatoire" class="text-xs font-medium text-amber-600">Requis</span>
-                                    <span v-else class="text-xs text-muted-foreground">—</span>
+                                    <span
+                                        v-if="data.justificatif_obligatoire"
+                                        class="text-xs font-medium text-amber-600"
+                                        >Requis</span
+                                    >
+                                    <span
+                                        v-else
+                                        class="text-xs text-muted-foreground"
+                                        >—</span
+                                    >
                                 </div>
                             </template>
                         </Column>
 
                         <!-- Statut -->
-                        <Column field="is_active" header="Statut" sortable style="width: 110px">
+                        <Column
+                            field="is_active"
+                            header="Statut"
+                            sortable
+                            style="width: 110px"
+                        >
                             <template #body="{ data }">
-                                <Badge :variant="data.is_active ? 'default' : 'secondary'">
+                                <Badge
+                                    :variant="
+                                        data.is_active ? 'default' : 'secondary'
+                                    "
+                                >
                                     {{ data.is_active ? 'Actif' : 'Inactif' }}
                                 </Badge>
                             </template>
@@ -303,7 +377,11 @@ const categorieColors: Record<string, string> = {
                                 <div class="flex justify-end gap-0.5">
                                     <button
                                         type="button"
-                                        :title="data.is_active ? 'Désactiver' : 'Activer'"
+                                        :title="
+                                            data.is_active
+                                                ? 'Désactiver'
+                                                : 'Activer'
+                                        "
                                         class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                         @click="toggle(data)"
                                     >
@@ -330,10 +408,16 @@ const categorieColors: Record<string, string> = {
                         </Column>
 
                         <template #empty>
-                            <div class="flex flex-col items-center gap-3 py-12 text-muted-foreground">
+                            <div
+                                class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
+                            >
                                 <Tags class="h-10 w-10 opacity-30" />
                                 <p class="text-sm">Aucun type de dépense.</p>
-                                <Button variant="outline" size="sm" @click="openCreate">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    @click="openCreate"
+                                >
                                     <Plus class="mr-2 h-4 w-4" />
                                     Créer le premier type
                                 </Button>
@@ -356,7 +440,10 @@ const categorieColors: Record<string, string> = {
         <form class="space-y-4 pt-2 pb-1" @submit.prevent="handleSubmit">
             <!-- Libellé -->
             <div>
-                <Label for="dt-libelle" class="mb-1.5 block text-xs font-medium">
+                <Label
+                    for="dt-libelle"
+                    class="mb-1.5 block text-xs font-medium"
+                >
                     Libellé <span class="text-destructive">*</span>
                 </Label>
                 <Input
@@ -365,12 +452,20 @@ const categorieColors: Record<string, string> = {
                     placeholder="ex: Carburant véhicule"
                     :class="{ 'border-destructive': form.errors.libelle }"
                 />
-                <p v-if="form.errors.libelle" class="mt-1 text-xs text-destructive">{{ form.errors.libelle }}</p>
+                <p
+                    v-if="form.errors.libelle"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ form.errors.libelle }}
+                </p>
             </div>
 
             <!-- Concerné -->
             <div>
-                <Label for="dt-categorie" class="mb-1.5 block text-xs font-medium">
+                <Label
+                    for="dt-categorie"
+                    class="mb-1.5 block text-xs font-medium"
+                >
                     Concerné <span class="text-destructive">*</span>
                 </Label>
                 <select
@@ -379,16 +474,29 @@ const categorieColors: Record<string, string> = {
                     class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
                     :class="{ 'border-destructive': form.errors.categorie }"
                 >
-                    <option v-for="c in categories" :key="c.value" :value="c.value">
+                    <option
+                        v-for="c in categories"
+                        :key="c.value"
+                        :value="c.value"
+                    >
                         {{ c.label }}
                     </option>
                 </select>
-                <p v-if="form.errors.categorie" class="mt-1 text-xs text-destructive">{{ form.errors.categorie }}</p>
+                <p
+                    v-if="form.errors.categorie"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ form.errors.categorie }}
+                </p>
             </div>
 
             <!-- Description -->
             <div>
-                <Label for="dt-description" class="mb-1.5 block text-xs font-medium">Description</Label>
+                <Label
+                    for="dt-description"
+                    class="mb-1.5 block text-xs font-medium"
+                    >Description</Label
+                >
                 <textarea
                     id="dt-description"
                     v-model="form.description"
@@ -405,22 +513,38 @@ const categorieColors: Record<string, string> = {
                     <Checkbox
                         id="dt-comment"
                         :model-value="form.commentaire_obligatoire"
-                        @update:model-value="form.commentaire_obligatoire = $event === true"
+                        @update:model-value="
+                            form.commentaire_obligatoire = $event === true
+                        "
                     />
                     <div>
-                        <Label for="dt-comment" class="cursor-pointer text-sm font-medium">Commentaire obligatoire</Label>
-                        <p class="text-xs text-muted-foreground">Un commentaire devra être saisi.</p>
+                        <Label
+                            for="dt-comment"
+                            class="cursor-pointer text-sm font-medium"
+                            >Commentaire obligatoire</Label
+                        >
+                        <p class="text-xs text-muted-foreground">
+                            Un commentaire devra être saisi.
+                        </p>
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
                     <Checkbox
                         id="dt-justif"
                         :model-value="form.justificatif_obligatoire"
-                        @update:model-value="form.justificatif_obligatoire = $event === true"
+                        @update:model-value="
+                            form.justificatif_obligatoire = $event === true
+                        "
                     />
                     <div>
-                        <Label for="dt-justif" class="cursor-pointer text-sm font-medium">Justificatif obligatoire</Label>
-                        <p class="text-xs text-muted-foreground">Un justificatif (reçu, photo) devra être fourni.</p>
+                        <Label
+                            for="dt-justif"
+                            class="cursor-pointer text-sm font-medium"
+                            >Justificatif obligatoire</Label
+                        >
+                        <p class="text-xs text-muted-foreground">
+                            Un justificatif (reçu, photo) devra être fourni.
+                        </p>
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
@@ -430,16 +554,35 @@ const categorieColors: Record<string, string> = {
                         @update:model-value="form.is_active = $event === true"
                     />
                     <div>
-                        <Label for="dt-active" class="cursor-pointer text-sm font-medium">Actif</Label>
-                        <p class="text-xs text-muted-foreground">Un type inactif ne peut pas être utilisé sur une nouvelle dépense.</p>
+                        <Label
+                            for="dt-active"
+                            class="cursor-pointer text-sm font-medium"
+                            >Actif</Label
+                        >
+                        <p class="text-xs text-muted-foreground">
+                            Un type inactif ne peut pas être utilisé sur une
+                            nouvelle dépense.
+                        </p>
                     </div>
                 </div>
             </div>
 
             <div class="flex justify-between pt-2">
-                <Button type="button" variant="outline" size="sm" @click="showDialog = false">Annuler</Button>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    @click="showDialog = false"
+                    >Annuler</Button
+                >
                 <Button type="submit" size="sm" :disabled="form.processing">
-                    {{ form.processing ? 'Enregistrement…' : editingType ? 'Enregistrer' : 'Créer' }}
+                    {{
+                        form.processing
+                            ? 'Enregistrement…'
+                            : editingType
+                              ? 'Enregistrer'
+                              : 'Créer'
+                    }}
                 </Button>
             </div>
         </form>

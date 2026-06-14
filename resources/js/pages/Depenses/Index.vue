@@ -127,7 +127,10 @@ function currentParams() {
 }
 
 function applyFilters() {
-    router.get('/depenses', currentParams(), { preserveScroll: true, replace: true });
+    router.get('/depenses', currentParams(), {
+        preserveScroll: true,
+        replace: true,
+    });
 }
 
 function resetFilters() {
@@ -144,21 +147,27 @@ function resetFilters() {
 function exportExcel() {
     const params = new URLSearchParams();
     const p = currentParams();
-    Object.entries(p).forEach(([k, v]) => { if (v) params.set(k, v); });
+    Object.entries(p).forEach(([k, v]) => {
+        if (v) params.set(k, v);
+    });
     window.location.href = `/depenses/export/excel?${params.toString()}`;
 }
 
 function exportPdf() {
     const params = new URLSearchParams();
     const p = currentParams();
-    Object.entries(p).forEach(([k, v]) => { if (v) params.set(k, v); });
+    Object.entries(p).forEach(([k, v]) => {
+        if (v) params.set(k, v);
+    });
     window.location.href = `/depenses/export/pdf?${params.toString()}`;
 }
 
 function imprimer() {
     const params = new URLSearchParams();
     const p = currentParams();
-    Object.entries(p).forEach(([k, v]) => { if (v) params.set(k, v); });
+    Object.entries(p).forEach(([k, v]) => {
+        if (v) params.set(k, v);
+    });
     window.open(`/depenses/imprimer?${params.toString()}`, '_blank');
 }
 
@@ -169,17 +178,37 @@ const rejectErrors = ref<{ motif?: string; commentaire?: string }>({});
 const rejectProcessing = ref(false);
 
 function soumettre(id: string) {
-    router.patch(`/depenses/${id}/soumettre`, {}, {
-        preserveScroll: true,
-        onSuccess: () => toast.add({ severity: 'success', summary: 'Soumise', detail: 'Dépense soumise pour validation.', life: 3000 }),
-    });
+    router.patch(
+        `/depenses/${id}/soumettre`,
+        {},
+        {
+            preserveScroll: true,
+            onSuccess: () =>
+                toast.add({
+                    severity: 'success',
+                    summary: 'Soumise',
+                    detail: 'Dépense soumise pour validation.',
+                    life: 3000,
+                }),
+        },
+    );
 }
 
 function valider(id: string) {
-    router.patch(`/depenses/${id}/valider`, {}, {
-        preserveScroll: true,
-        onSuccess: () => toast.add({ severity: 'success', summary: 'Validée', detail: 'Dépense validée avec succès.', life: 3000 }),
-    });
+    router.patch(
+        `/depenses/${id}/valider`,
+        {},
+        {
+            preserveScroll: true,
+            onSuccess: () =>
+                toast.add({
+                    severity: 'success',
+                    summary: 'Validée',
+                    detail: 'Dépense validée avec succès.',
+                    life: 3000,
+                }),
+        },
+    );
 }
 
 function rejeter(id: string) {
@@ -207,11 +236,13 @@ function confirmerRejet() {
     if (rejectMotif.value === 'Autre') {
         const trim = rejectCommentaire.value.trim();
         if (!trim) {
-            rejectErrors.value.commentaire = 'Le commentaire est obligatoire pour le motif "Autre".';
+            rejectErrors.value.commentaire =
+                'Le commentaire est obligatoire pour le motif "Autre".';
             return;
         }
         if (trim.length < 5) {
-            rejectErrors.value.commentaire = 'Le commentaire doit faire au moins 5 caractères.';
+            rejectErrors.value.commentaire =
+                'Le commentaire doit faire au moins 5 caractères.';
             return;
         }
     }
@@ -221,19 +252,31 @@ function confirmerRejet() {
         `/depenses/${rejectingDepenseId.value}/rejeter`,
         {
             motif_rejet: rejectMotif.value,
-            commentaire_rejet: rejectMotif.value === 'Autre' ? rejectCommentaire.value.trim() : null,
+            commentaire_rejet:
+                rejectMotif.value === 'Autre'
+                    ? rejectCommentaire.value.trim()
+                    : null,
         },
         {
             preserveScroll: true,
             onSuccess: () => {
                 rejectingDepenseId.value = null;
-                toast.add({ severity: 'warn', summary: 'Rejetée', detail: 'Dépense rejetée.', life: 3000 });
+                toast.add({
+                    severity: 'warn',
+                    summary: 'Rejetée',
+                    detail: 'Dépense rejetée.',
+                    life: 3000,
+                });
             },
             onError: (errors) => {
-                if (errors.motif_rejet) rejectErrors.value.motif = errors.motif_rejet;
-                if (errors.commentaire_rejet) rejectErrors.value.commentaire = errors.commentaire_rejet;
+                if (errors.motif_rejet)
+                    rejectErrors.value.motif = errors.motif_rejet;
+                if (errors.commentaire_rejet)
+                    rejectErrors.value.commentaire = errors.commentaire_rejet;
             },
-            onFinish: () => { rejectProcessing.value = false; },
+            onFinish: () => {
+                rejectProcessing.value = false;
+            },
         },
     );
 }
@@ -244,7 +287,12 @@ function destroy(id: string) {
 }
 
 function fmt(n: number) {
-    return n.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' GNF';
+    return (
+        n.toLocaleString('fr-FR', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+        }) + ' GNF'
+    );
 }
 
 function formatPaginationLabel(label: string) {
@@ -253,7 +301,10 @@ function formatPaginationLabel(label: string) {
     return el.textContent?.trim() ?? label.trim();
 }
 
-const statutVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+const statutVariant: Record<
+    string,
+    'default' | 'secondary' | 'destructive' | 'outline'
+> = {
     brouillon: 'secondary',
     soumis: 'outline',
     valide: 'default',
@@ -278,7 +329,15 @@ const categorieColors: Record<string, string> = {
 };
 
 const hasActiveFilters = ref(
-    !!(props.filters.search || props.filters.type || props.filters.statut || props.filters.categorie || props.filters.site || props.filters.date_debut || props.filters.date_fin),
+    !!(
+        props.filters.search ||
+        props.filters.type ||
+        props.filters.statut ||
+        props.filters.categorie ||
+        props.filters.site ||
+        props.filters.date_debut ||
+        props.filters.date_fin
+    ),
 );
 </script>
 
@@ -290,9 +349,13 @@ const hasActiveFilters = ref(
             <!-- En-tête -->
             <div class="flex items-center justify-between gap-4">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">Dépenses</h1>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Dépenses
+                    </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ depenses.total }} dépense{{ depenses.total !== 1 ? 's' : '' }}
+                        {{ depenses.total }} dépense{{
+                            depenses.total !== 1 ? 's' : ''
+                        }}
                     </p>
                 </div>
                 <div class="flex items-center gap-2">
@@ -319,18 +382,22 @@ const hasActiveFilters = ref(
 
             <!-- Recherche -->
             <div class="relative">
-                <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search
+                    class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                />
                 <input
                     v-model="filterSearch"
                     type="search"
                     placeholder="Rechercher une dépense…"
-                    class="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    class="h-10 w-full rounded-lg border border-input bg-background pr-3 pl-9 text-sm shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     @keydown.enter="applyFilters"
                 />
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-end gap-2 rounded-xl border bg-muted/30 p-3">
+            <div
+                class="flex flex-wrap items-end gap-2 rounded-xl border bg-muted/30 p-3"
+            >
                 <div class="flex flex-1 flex-wrap gap-2">
                     <!-- Recherche (type) -->
                     <select
@@ -338,7 +405,9 @@ const hasActiveFilters = ref(
                         class="h-8 rounded-md border border-input bg-background px-2 text-sm"
                     >
                         <option value="">Tous les types</option>
-                        <option v-for="t in types" :key="t.id" :value="t.id">{{ t.libelle }}</option>
+                        <option v-for="t in types" :key="t.id" :value="t.id">
+                            {{ t.libelle }}
+                        </option>
                     </select>
 
                     <!-- Concerné (catégorie) -->
@@ -347,7 +416,13 @@ const hasActiveFilters = ref(
                         class="h-8 rounded-md border border-input bg-background px-2 text-sm"
                     >
                         <option value="">Tous les concernés</option>
-                        <option v-for="c in categories" :key="c.value" :value="c.value">{{ c.label }}</option>
+                        <option
+                            v-for="c in categories"
+                            :key="c.value"
+                            :value="c.value"
+                        >
+                            {{ c.label }}
+                        </option>
                     </select>
 
                     <!-- Statut -->
@@ -356,7 +431,13 @@ const hasActiveFilters = ref(
                         class="h-8 rounded-md border border-input bg-background px-2 text-sm"
                     >
                         <option value="">Tous les statuts</option>
-                        <option v-for="s in statuts" :key="s.value" :value="s.value">{{ s.label }}</option>
+                        <option
+                            v-for="s in statuts"
+                            :key="s.value"
+                            :value="s.value"
+                        >
+                            {{ s.label }}
+                        </option>
                     </select>
 
                     <!-- Site -->
@@ -365,7 +446,9 @@ const hasActiveFilters = ref(
                         class="h-8 rounded-md border border-input bg-background px-2 text-sm"
                     >
                         <option value="">Tous les sites</option>
-                        <option v-for="s in sites" :key="s.id" :value="s.id">{{ s.nom }}</option>
+                        <option v-for="s in sites" :key="s.id" :value="s.id">
+                            {{ s.nom }}
+                        </option>
                     </select>
 
                     <!-- Dates -->
@@ -385,7 +468,12 @@ const hasActiveFilters = ref(
                         <Search class="mr-1.5 h-3.5 w-3.5" />
                         Filtrer
                     </Button>
-                    <Button v-if="hasActiveFilters" size="sm" variant="ghost" @click="resetFilters">
+                    <Button
+                        v-if="hasActiveFilters"
+                        size="sm"
+                        variant="ghost"
+                        @click="resetFilters"
+                    >
                         <X class="mr-1.5 h-3.5 w-3.5" />
                         Réinitialiser
                     </Button>
@@ -397,16 +485,56 @@ const hasActiveFilters = ref(
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Date</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Type</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">Concerné</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Véhicule</th>
-                            <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Montant</th>
-                            <th class="px-4 py-2.5 text-center font-medium text-muted-foreground">Statut</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Site</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground hidden xl:table-cell">Saisi par</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-muted-foreground hidden xl:table-cell">Validé par</th>
-                            <th class="px-4 py-2.5 text-right font-medium text-muted-foreground">Actions</th>
+                            <th
+                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Date
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Type
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                            >
+                                Concerné
+                            </th>
+                            <th
+                                class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground lg:table-cell"
+                            >
+                                Véhicule
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                            >
+                                Montant
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                            >
+                                Statut
+                            </th>
+                            <th
+                                class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground lg:table-cell"
+                            >
+                                Site
+                            </th>
+                            <th
+                                class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground xl:table-cell"
+                            >
+                                Saisi par
+                            </th>
+                            <th
+                                class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground xl:table-cell"
+                            >
+                                Validé par
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                            >
+                                Actions
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -416,17 +544,24 @@ const hasActiveFilters = ref(
                             class="border-b transition-colors last:border-b-0 hover:bg-muted/20"
                         >
                             <!-- Date -->
-                            <td class="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground tabular-nums">
+                            <td
+                                class="px-4 py-3 text-sm whitespace-nowrap text-muted-foreground tabular-nums"
+                            >
                                 {{ d.date_depense }}
                             </td>
 
                             <!-- Type -->
                             <td class="px-4 py-3">
-                                <div class="font-medium">{{ d.type?.libelle ?? '—' }}</div>
+                                <div class="font-medium">
+                                    {{ d.type?.libelle ?? '—' }}
+                                </div>
                                 <span
                                     v-if="d.type"
                                     class="mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
-                                    :class="categorieColors[d.type.categorie] ?? 'bg-muted text-muted-foreground'"
+                                    :class="
+                                        categorieColors[d.type.categorie] ??
+                                        'bg-muted text-muted-foreground'
+                                    "
                                 >
                                     {{ d.type.categorie_label }}
                                 </span>
@@ -434,23 +569,31 @@ const hasActiveFilters = ref(
 
                             <!-- Concerné -->
                             <td class="px-4 py-3">
-                                <div class="text-sm font-medium">{{ d.beneficiaire_label ?? '—' }}</div>
+                                <div class="text-sm font-medium">
+                                    {{ d.beneficiaire_label ?? '—' }}
+                                </div>
                             </td>
 
                             <!-- Véhicule -->
-                            <td class="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell">
+                            <td
+                                class="hidden px-4 py-3 text-xs text-muted-foreground lg:table-cell"
+                            >
                                 {{ d.vehicule_nom ?? '—' }}
                             </td>
 
                             <!-- Montant -->
-                            <td class="px-4 py-3 text-right font-mono font-medium whitespace-nowrap">
+                            <td
+                                class="px-4 py-3 text-right font-mono font-medium whitespace-nowrap"
+                            >
                                 {{ fmt(d.montant) }}
                             </td>
 
                             <!-- Statut -->
                             <td class="px-4 py-3 text-center">
                                 <Badge
-                                    :variant="statutVariant[d.statut] ?? 'secondary'"
+                                    :variant="
+                                        statutVariant[d.statut] ?? 'secondary'
+                                    "
                                     :class="statutColors[d.statut]"
                                 >
                                     {{ d.statut_label }}
@@ -458,17 +601,23 @@ const hasActiveFilters = ref(
                             </td>
 
                             <!-- Site -->
-                            <td class="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell">
+                            <td
+                                class="hidden px-4 py-3 text-xs text-muted-foreground lg:table-cell"
+                            >
                                 {{ d.site?.nom ?? '—' }}
                             </td>
 
                             <!-- Saisi par -->
-                            <td class="px-4 py-3 text-xs text-muted-foreground hidden xl:table-cell">
+                            <td
+                                class="hidden px-4 py-3 text-xs text-muted-foreground xl:table-cell"
+                            >
                                 {{ d.user.name }}
                             </td>
 
                             <!-- Validé par -->
-                            <td class="px-4 py-3 text-xs text-muted-foreground hidden xl:table-cell">
+                            <td
+                                class="hidden px-4 py-3 text-xs text-muted-foreground xl:table-cell"
+                            >
                                 {{ d.validateur?.name ?? '—' }}
                             </td>
 
@@ -477,14 +626,24 @@ const hasActiveFilters = ref(
                                 <div class="flex justify-end">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger as-child>
-                                            <Button variant="ghost" size="icon" class="h-8 w-8">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                class="h-8 w-8"
+                                            >
                                                 <MoreVertical class="h-4 w-4" />
                                             </Button>
                                         </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" class="w-48">
+                                        <DropdownMenuContent
+                                            align="end"
+                                            class="w-48"
+                                        >
                                             <!-- Voir -->
                                             <DropdownMenuItem as-child>
-                                                <Link :href="`/depenses/${d.id}`" class="flex w-full items-center gap-2">
+                                                <Link
+                                                    :href="`/depenses/${d.id}`"
+                                                    class="flex w-full items-center gap-2"
+                                                >
                                                     <Eye class="h-4 w-4" />
                                                     Voir le détail
                                                 </Link>
@@ -492,10 +651,20 @@ const hasActiveFilters = ref(
 
                                             <!-- Modifier (brouillon, rejeté ou annulé) -->
                                             <DropdownMenuItem
-                                                v-if="['brouillon', 'rejete', 'annule'].includes(d.statut) && can('depenses.update')"
+                                                v-if="
+                                                    [
+                                                        'brouillon',
+                                                        'rejete',
+                                                        'annule',
+                                                    ].includes(d.statut) &&
+                                                    can('depenses.update')
+                                                "
                                                 as-child
                                             >
-                                                <Link :href="`/depenses/${d.id}/edit`" class="flex w-full items-center gap-2">
+                                                <Link
+                                                    :href="`/depenses/${d.id}/edit`"
+                                                    class="flex w-full items-center gap-2"
+                                                >
                                                     <Pencil class="h-4 w-4" />
                                                     Modifier
                                                 </Link>
@@ -515,7 +684,10 @@ const hasActiveFilters = ref(
 
                                             <!-- Valider (soumis + permission) -->
                                             <DropdownMenuItem
-                                                v-if="d.statut === 'soumis' && can('depenses.update')"
+                                                v-if="
+                                                    d.statut === 'soumis' &&
+                                                    can('depenses.update')
+                                                "
                                                 class="cursor-pointer text-emerald-700 focus:text-emerald-700"
                                                 @click="valider(d.id)"
                                             >
@@ -525,7 +697,10 @@ const hasActiveFilters = ref(
 
                                             <!-- Rejeter (soumis + permission) -->
                                             <DropdownMenuItem
-                                                v-if="d.statut === 'soumis' && can('depenses.update')"
+                                                v-if="
+                                                    d.statut === 'soumis' &&
+                                                    can('depenses.update')
+                                                "
                                                 class="cursor-pointer text-destructive focus:text-destructive"
                                                 @click="rejeter(d.id)"
                                             >
@@ -533,11 +708,19 @@ const hasActiveFilters = ref(
                                                 Rejeter
                                             </DropdownMenuItem>
 
-                                            <DropdownMenuSeparator v-if="d.statut === 'brouillon' && can('depenses.delete')" />
+                                            <DropdownMenuSeparator
+                                                v-if="
+                                                    d.statut === 'brouillon' &&
+                                                    can('depenses.delete')
+                                                "
+                                            />
 
                                             <!-- Supprimer (brouillon seulement) -->
                                             <DropdownMenuItem
-                                                v-if="d.statut === 'brouillon' && can('depenses.delete')"
+                                                v-if="
+                                                    d.statut === 'brouillon' &&
+                                                    can('depenses.delete')
+                                                "
                                                 class="cursor-pointer text-destructive focus:text-destructive"
                                                 @click="destroy(d.id)"
                                             >
@@ -551,11 +734,17 @@ const hasActiveFilters = ref(
                         </tr>
 
                         <tr v-if="depenses.data.length === 0">
-                            <td colspan="10" class="px-4 py-16 text-center text-sm text-muted-foreground">
+                            <td
+                                colspan="10"
+                                class="px-4 py-16 text-center text-sm text-muted-foreground"
+                            >
                                 <div class="flex flex-col items-center gap-3">
                                     <Receipt class="h-12 w-12 opacity-20" />
                                     <p>Aucune dépense enregistrée.</p>
-                                    <Link v-if="can('depenses.create')" href="/depenses/create">
+                                    <Link
+                                        v-if="can('depenses.create')"
+                                        href="/depenses/create"
+                                    >
                                         <Button variant="outline" size="sm">
                                             <Plus class="mr-2 h-4 w-4" />
                                             Enregistrer une dépense
@@ -569,34 +758,77 @@ const hasActiveFilters = ref(
             </div>
 
             <!-- Pagination -->
-            <div v-if="depenses.last_page > 1" class="flex items-center justify-center gap-1">
+            <div
+                v-if="depenses.last_page > 1"
+                class="flex items-center justify-center gap-1"
+            >
                 <template v-for="link in depenses.links" :key="link.label">
                     <Link
                         v-if="link.url"
                         :href="link.url"
                         class="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm transition-colors hover:bg-muted"
-                        :class="{ 'border-primary bg-primary text-primary-foreground hover:bg-primary/90': link.active }"
+                        :class="{
+                            'border-primary bg-primary text-primary-foreground hover:bg-primary/90':
+                                link.active,
+                        }"
                     >
-                        <ChevronLeft v-if="link.label.includes('Précédent') || link.label.includes('&laquo')" class="h-4 w-4" />
-                        <ChevronRight v-else-if="link.label.includes('Suivant') || link.label.includes('&raquo')" class="h-4 w-4" />
-                        <span v-else>{{ formatPaginationLabel(link.label) }}</span>
+                        <ChevronLeft
+                            v-if="
+                                link.label.includes('Précédent') ||
+                                link.label.includes('&laquo')
+                            "
+                            class="h-4 w-4"
+                        />
+                        <ChevronRight
+                            v-else-if="
+                                link.label.includes('Suivant') ||
+                                link.label.includes('&raquo')
+                            "
+                            class="h-4 w-4"
+                        />
+                        <span v-else>{{
+                            formatPaginationLabel(link.label)
+                        }}</span>
                     </Link>
                     <span
                         v-else
                         class="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm opacity-40"
                     >
-                        <ChevronLeft v-if="link.label.includes('Précédent') || link.label.includes('&laquo')" class="h-4 w-4" />
-                        <ChevronRight v-else-if="link.label.includes('Suivant') || link.label.includes('&raquo')" class="h-4 w-4" />
-                        <span v-else>{{ formatPaginationLabel(link.label) }}</span>
+                        <ChevronLeft
+                            v-if="
+                                link.label.includes('Précédent') ||
+                                link.label.includes('&laquo')
+                            "
+                            class="h-4 w-4"
+                        />
+                        <ChevronRight
+                            v-else-if="
+                                link.label.includes('Suivant') ||
+                                link.label.includes('&raquo')
+                            "
+                            class="h-4 w-4"
+                        />
+                        <span v-else>{{
+                            formatPaginationLabel(link.label)
+                        }}</span>
                     </span>
                 </template>
             </div>
         </div>
         <!-- Reject dialog -->
-        <Dialog :open="!!rejectingDepenseId" @update:open="(v: boolean) => { if (!v) fermerModalRejet(); }">
+        <Dialog
+            :open="!!rejectingDepenseId"
+            @update:open="
+                (v: boolean) => {
+                    if (!v) fermerModalRejet();
+                }
+            "
+        >
             <DialogContent class="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle class="flex items-center gap-2 text-destructive">
+                    <DialogTitle
+                        class="flex items-center gap-2 text-destructive"
+                    >
                         <AlertTriangle class="h-5 w-5" />
                         Rejeter la dépense
                     </DialogTitle>
@@ -606,18 +838,26 @@ const hasActiveFilters = ref(
                     <!-- Motif -->
                     <div class="space-y-1.5">
                         <Label for="idx-reject-motif">
-                            Motif de rejet <span class="text-destructive">*</span>
+                            Motif de rejet
+                            <span class="text-destructive">*</span>
                         </Label>
                         <select
                             id="idx-reject-motif"
                             v-model="rejectMotif"
-                            class="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            class="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         >
-                            <option value="" disabled>Sélectionner un motif…</option>
+                            <option value="" disabled>
+                                Sélectionner un motif…
+                            </option>
                             <option value="Non conforme">Non conforme</option>
                             <option value="Autre">Autre</option>
                         </select>
-                        <p v-if="rejectErrors.motif" class="text-sm text-destructive">{{ rejectErrors.motif }}</p>
+                        <p
+                            v-if="rejectErrors.motif"
+                            class="text-sm text-destructive"
+                        >
+                            {{ rejectErrors.motif }}
+                        </p>
                     </div>
 
                     <!-- Commentaire (Autre seulement) -->
@@ -630,17 +870,30 @@ const hasActiveFilters = ref(
                             v-model="rejectCommentaire"
                             rows="3"
                             placeholder="Veuillez préciser le motif du rejet…"
-                            class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         />
-                        <p v-if="rejectErrors.commentaire" class="text-sm text-destructive">{{ rejectErrors.commentaire }}</p>
+                        <p
+                            v-if="rejectErrors.commentaire"
+                            class="text-sm text-destructive"
+                        >
+                            {{ rejectErrors.commentaire }}
+                        </p>
                     </div>
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" :disabled="rejectProcessing" @click="fermerModalRejet">
+                    <Button
+                        variant="outline"
+                        :disabled="rejectProcessing"
+                        @click="fermerModalRejet"
+                    >
                         Annuler
                     </Button>
-                    <Button variant="destructive" :disabled="rejectProcessing" @click="confirmerRejet">
+                    <Button
+                        variant="destructive"
+                        :disabled="rejectProcessing"
+                        @click="confirmerRejet"
+                    >
                         <span v-if="rejectProcessing">Rejet en cours…</span>
                         <span v-else>Rejeter la dépense</span>
                     </Button>
