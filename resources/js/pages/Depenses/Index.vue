@@ -637,6 +637,7 @@ const hasActiveFilters = ref(
                                                 variant="ghost"
                                                 size="icon"
                                                 class="h-8 w-8"
+                                                aria-label="Actions"
                                             >
                                                 <MoreVertical class="h-4 w-4" />
                                             </Button>
