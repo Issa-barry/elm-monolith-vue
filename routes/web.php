@@ -16,6 +16,11 @@ use App\Http\Controllers\CommissionLogistiqueController;
 use App\Http\Controllers\CommissionPaymentController;
 use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\CommissionVenteController;
+use App\Http\Controllers\Comptabilite\ComptabiliteDashboardController;
+use App\Http\Controllers\Comptabilite\JournalTresorerieController;
+use App\Http\Controllers\Comptabilite\PaiementFicheController;
+use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
+use App\Http\Controllers\Comptabilite\PaiementPeriodeController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\ContratController;
 use App\Http\Controllers\DashboardController;
@@ -271,6 +276,32 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         // Paiements de paie
         Route::post('paie-lignes/{ligne}/paiements', [PaiePaiementController::class, 'store'])->name('paie-paiements.store');
         Route::delete('paie-paiements/{paiement}', [PaiePaiementController::class, 'destroy'])->name('paie-paiements.destroy');
+    });
+
+    // ── Module : Comptabilité ─────────────────────────────────────────────────
+    Route::middleware('module:'.ModuleFeature::COMPTABILITE)->prefix('comptabilite')->name('comptabilite.')->group(function () {
+        Route::get('/', [ComptabiliteDashboardController::class, 'index'])->name('dashboard');
+
+        Route::get('periodes', [PaiementPeriodeController::class, 'index'])->name('periodes.index');
+        Route::get('periodes/creer', [PaiementPeriodeController::class, 'create'])->name('periodes.create');
+        Route::post('periodes', [PaiementPeriodeController::class, 'store'])->name('periodes.store');
+        Route::get('periodes/{periode}', [PaiementPeriodeController::class, 'show'])->name('periodes.show');
+        Route::delete('periodes/{periode}', [PaiementPeriodeController::class, 'destroy'])->name('periodes.destroy');
+        Route::post('periodes/{periode}/calculer', [PaiementPeriodeController::class, 'calculer'])->name('periodes.calculer');
+        Route::post('periodes/{periode}/valider', [PaiementPeriodeController::class, 'valider'])->name('periodes.valider');
+        Route::post('periodes/{periode}/cloturer', [PaiementPeriodeController::class, 'cloturer'])->name('periodes.cloturer');
+
+        Route::get('fiches/livreurs', [PaiementFicheController::class, 'indexLivreurs'])->name('fiches.livreurs');
+        Route::get('fiches/proprietaires', [PaiementFicheController::class, 'indexProprietaires'])->name('fiches.proprietaires');
+        Route::get('fiches/salaries', [PaiementFicheController::class, 'indexSalaries'])->name('fiches.salaries');
+        Route::get('fiches/export/excel', [PaiementFicheController::class, 'exportExcel'])->name('fiches.excel');
+        Route::get('fiches/{fiche}', [PaiementFicheController::class, 'show'])->name('fiches.show');
+        Route::get('fiches/{fiche}/pdf', [PaiementFicheController::class, 'exportPdf'])->name('fiches.pdf');
+
+        Route::post('fiches/{fiche}/paiements', [PaiementFichePaiementController::class, 'store'])->name('fiches.paiements.store');
+        Route::delete('fiches-paiements/{paiement}', [PaiementFichePaiementController::class, 'destroy'])->name('fiches.paiements.destroy');
+
+        Route::get('journal', [JournalTresorerieController::class, 'index'])->name('journal');
     });
 
     // ── Module : Logistique inter-sites ───────────────────────────────────────

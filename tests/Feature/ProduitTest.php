@@ -33,11 +33,11 @@ class ProduitTest extends TestCase
     /** Crée un utilisateur NON admin, affecté à un site de l'organisation courante. */
     private function makeNonAdminUserOnSite(Site $site): User
     {
-        Role::firstOrCreate(['name' => 'employe', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
         Permission::firstOrCreate(['name' => 'produits.update', 'guard_name' => 'web']);
 
         $user = User::factory()->create(['organization_id' => $this->org->id]);
-        $user->assignRole('employe');
+        $user->assignRole('manager');
         $user->givePermissionTo('produits.update');
         $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
 
@@ -786,10 +786,9 @@ class ProduitTest extends TestCase
         $response = $this->actingAs($this->user)
             ->getJson(route('produits.historique', $produit));
 
-        $modifications = $response->json('modifications');
-        foreach ($modifications as $m) {
-            $this->assertNotSame('stock_adjusted', $m['event_code']);
-        }
+        $response->assertOk();
+        $eventCodes = array_column($response->json('modifications'), 'event_code');
+        $this->assertNotContains('stock_adjusted', $eventCodes);
     }
 
     // ── Indicateur de tendance stock ──────────────────────────────────────────

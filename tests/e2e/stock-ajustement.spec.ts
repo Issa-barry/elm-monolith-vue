@@ -42,6 +42,10 @@ test('ajuster stock depuis la liste — augmenter', async ({ page }) => {
     const stockText = await dialog.locator('.text-2xl').first().innerText();
     const _stockAvant = parseInt(stockText.trim(), 10);
 
+    // Select a site first (required before entering quantity)
+    await dialog.locator('[data-pc-name="dropdown"]').first().click();
+    await page.locator('[role="option"]').first().click();
+
     // Fill "augmenter"
     await dialog.locator('#ajuster-augmenter').fill('5');
 
@@ -49,7 +53,7 @@ test('ajuster stock depuis la liste — augmenter', async ({ page }) => {
     await expect(dialog.locator('text=Stock après ajustement')).toBeVisible();
 
     // Select motif
-    await dialog.locator('[data-pc-name="dropdown"]').click();
+    await dialog.locator('[data-pc-name="dropdown"]').last().click();
     await page.getByRole('option', { name: 'Après production' }).click();
 
     await dialog.locator('button', { hasText: /valider/i }).click();
@@ -85,11 +89,15 @@ test('ajuster stock depuis la liste — diminuer', async ({ page }) => {
         .filter({ hasText: /ajuster le stock/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
+    // Select a site first (required before entering quantity)
+    await dialog.locator('[data-pc-name="dropdown"]').first().click();
+    await page.locator('[role="option"]').first().click();
+
     await dialog.locator('#ajuster-diminuer').fill('3');
     await expect(dialog.locator('text=Stock après ajustement')).toBeVisible();
 
     // Select motif
-    await dialog.locator('[data-pc-name="dropdown"]').click();
+    await dialog.locator('[data-pc-name="dropdown"]').last().click();
     await page.getByRole('option', { name: 'Perte' }).click();
 
     await dialog.locator('button', { hasText: /valider/i }).click();
@@ -122,10 +130,14 @@ test('ajuster stock depuis la fiche produit', async ({ page }) => {
         .filter({ hasText: /ajuster le stock/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
+    // Select a site first (required before entering quantity)
+    await dialog.locator('[data-pc-name="dropdown"]').first().click();
+    await page.locator('[role="option"]').first().click();
+
     await dialog.locator('#ajuster-augmenter').fill('2');
 
     // Select motif
-    await dialog.locator('[data-pc-name="dropdown"]').click();
+    await dialog.locator('[data-pc-name="dropdown"]').last().click();
     await page.getByRole('option', { name: 'Après production' }).click();
 
     await dialog.locator('button', { hasText: /valider/i }).click();
@@ -151,6 +163,10 @@ test('ajuster stock — remplir un champ efface lautre (exclusion mutuelle)', as
         .locator('[role="dialog"]')
         .filter({ hasText: /ajuster le stock/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+    // Select a site first (required before entering quantity)
+    await dialog.locator('[data-pc-name="dropdown"]').first().click();
+    await page.locator('[role="option"]').first().click();
 
     const augInput = dialog.locator('#ajuster-augmenter');
     const dimInput = dialog.locator('#ajuster-diminuer');

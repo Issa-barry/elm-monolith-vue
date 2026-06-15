@@ -32,6 +32,8 @@ class ModuleFeature
 
     public const RH = 'module.rh';
 
+    public const COMPTABILITE = 'module.comptabilite';
+
     public const ALL = [
         self::VENTES,
         self::ACHATS,
@@ -46,6 +48,7 @@ class ModuleFeature
         self::LOGISTIQUE,
         self::DEPENSES,
         self::RH,
+        self::COMPTABILITE,
     ];
 
     /**
@@ -81,6 +84,7 @@ class ModuleFeature
             self::LOGISTIQUE => 'Logistique inter-sites',
             self::DEPENSES => 'Dépenses opérationnelles',
             self::RH => 'Ressources humaines',
+            self::COMPTABILITE => 'Comptabilité & Paiements',
         ];
     }
 }

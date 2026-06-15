@@ -19,6 +19,7 @@ import {
     Briefcase,
     Building2,
     Car,
+    Calculator,
     Layers,
     LayoutGrid,
     Package,
@@ -184,6 +185,31 @@ const mainNavItems = computed((): NavItem[] => {
             href: rhItems.value[0].href,
             icon: Briefcase,
             items: rhItems.value,
+        });
+    }
+
+    if (canSee('comptabilite.read', 'comptabilite')) {
+        items.push({
+            title: 'Comptabilité',
+            href: '/comptabilite',
+            icon: Calculator,
+            items: [
+                { title: 'Tableau de bord', href: '/comptabilite' },
+                { title: 'Périodes', href: '/comptabilite/periodes' },
+                {
+                    title: 'Fiches livreurs',
+                    href: '/comptabilite/fiches/livreurs',
+                },
+                {
+                    title: 'Fiches propriétaires',
+                    href: '/comptabilite/fiches/proprietaires',
+                },
+                {
+                    title: 'Fiches salariés',
+                    href: '/comptabilite/fiches/salaries',
+                },
+                { title: 'Journal', href: '/comptabilite/journal' },
+            ],
         });
     }
 
