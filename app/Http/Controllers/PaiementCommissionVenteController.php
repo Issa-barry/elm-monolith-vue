@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ModePaiement;
+use App\Enums\StatutDepense;
 use App\Models\CommandeVente;
 use App\Models\CommissionPart;
 use App\Models\Depense;
@@ -122,8 +123,9 @@ class PaiementCommissionVenteController extends Controller
             ->where('organization_id', $orgId)
             ->pluck('id');
 
-        $totalFrais = (float) Depense::whereIn('vehicule_id', $vehiculeIds)
-            ->where('statut', 'approuve')
+        $totalFrais = (float) Depense::where('beneficiaire_type', 'vehicule')
+            ->whereIn('beneficiaire_id', $vehiculeIds)
+            ->where('statut', StatutDepense::VALIDE->value)
             ->where('organization_id', $orgId)
             ->sum('montant');
 

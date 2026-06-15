@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\ModePaiement;
 use App\Enums\StatutCommission;
+use App\Enums\StatutDepense;
 use App\Models\CommandeVente;
 use App\Models\CommissionPart;
 use App\Models\CommissionVente;
@@ -100,8 +101,9 @@ class CommissionVenteController extends Controller
             $allVehiculeIds = $vehiculesByProprio->flatten()->pluck('id');
 
             if ($allVehiculeIds->isNotEmpty()) {
-                $depQuery = Depense::whereIn('vehicule_id', $allVehiculeIds)
-                    ->where('statut', 'approuve')
+                $depQuery = Depense::where('beneficiaire_type', 'vehicule')
+                    ->whereIn('beneficiaire_id', $allVehiculeIds)
+                    ->where('statut', StatutDepense::VALIDE->value)
                     ->where('organization_id', $orgId);
 
                 match ($periode) {
@@ -112,7 +114,7 @@ class CommissionVenteController extends Controller
                     default => null,
                 };
 
-                $fraisParVehicule = $depQuery->get(['vehicule_id', 'montant'])->groupBy('vehicule_id');
+                $fraisParVehicule = $depQuery->get(['beneficiaire_id', 'montant'])->groupBy('beneficiaire_id');
 
                 foreach ($vehiculesByProprio as $proprioId => $vehicules) {
                     $total = 0.0;
@@ -264,9 +266,10 @@ class CommissionVenteController extends Controller
                 ->pluck('id');
 
             if ($vehiculeIds->isNotEmpty()) {
-                $fraisDepenses = Depense::with(['depenseType:id,libelle', 'vehicule:id,nom_vehicule'])
-                    ->whereIn('vehicule_id', $vehiculeIds)
-                    ->where('statut', 'approuve')
+                $fraisDepenses = Depense::with(['depenseType:id,libelle'])
+                    ->where('beneficiaire_type', 'vehicule')
+                    ->whereIn('beneficiaire_id', $vehiculeIds)
+                    ->where('statut', StatutDepense::VALIDE->value)
                     ->where('organization_id', $orgId)
                     ->orderByDesc('date_depense')
                     ->get();

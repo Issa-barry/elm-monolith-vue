@@ -30,7 +30,8 @@ class VehiculeFraisController extends Controller
 
         $depenses = Depense::query()
             ->with('depenseType:id,libelle,code')
-            ->where('vehicule_id', $vehiculeId)
+            ->where('beneficiaire_type', 'vehicule')
+            ->where('beneficiaire_id', $vehiculeId)
             ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
             ->orderByDesc('date_depense')
             ->get()
