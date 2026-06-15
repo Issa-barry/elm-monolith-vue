@@ -12,16 +12,31 @@ import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed } from 'vue';
 
+interface SiteStock {
+    site_id: string;
+    site_code: string | null;
+    site_nom: string | null;
+    qte_stock: number;
+}
+
 interface ProduitMin {
     id: string;
     nom: string;
     code_interne: string | null;
     qte_stock: number | null;
+    stocks_par_site: SiteStock[];
+}
+
+interface Site {
+    id: string;
+    nom: string;
+    code: string;
 }
 
 const props = defineProps<{
     visible: boolean;
     produit: ProduitMin;
+    sites: Site[];
 }>();
 
 const emit = defineEmits<{
@@ -34,6 +49,7 @@ const localVisible = computed({
 });
 
 const form = useForm({
+    site_id: null as string | null,
     augmenter: null as number | null,
     diminuer: null as number | null,
     motif_type: null as string | null,
@@ -54,7 +70,13 @@ const motifOptions = computed(() => {
 
 const isAutre = computed(() => form.motif_type === 'autre');
 
-const stockActuel = computed(() => props.produit.qte_stock ?? 0);
+const stockActuel = computed(() => {
+    if (!form.site_id) return props.produit.qte_stock ?? 0;
+    const siteStock = props.produit.stocks_par_site.find(
+        (s) => s.site_id === form.site_id,
+    );
+    return siteStock?.qte_stock ?? 0;
+});
 
 const stockPreview = computed(() => {
     if (form.augmenter && form.augmenter > 0)
@@ -63,6 +85,13 @@ const stockPreview = computed(() => {
         return stockActuel.value - form.diminuer;
     return null;
 });
+
+const siteOptions = computed(() =>
+    props.sites.map((s) => ({
+        label: s.nom + (s.code ? ` (${s.code})` : ''),
+        value: s.id,
+    })),
+);
 
 function resetMotifIfInvalid() {
     if (!form.motif_type) return;
@@ -136,7 +165,9 @@ function submit() {
                 </p>
             </div>
             <div class="ml-auto shrink-0 text-right">
-                <p class="text-xs text-muted-foreground">Stock actuel</p>
+                <p class="text-xs text-muted-foreground">
+                    {{ form.site_id ? 'Stock sur ce site' : 'Stock total' }}
+                </p>
                 <p class="text-2xl font-bold tabular-nums">
                     {{ formatNum(stockActuel) }}
                 </p>
@@ -144,9 +175,28 @@ function submit() {
         </div>
 
         <div class="space-y-4">
+            <!-- Site (obligatoire) -->
+            <div class="space-y-1.5">
+                <label for="ajuster-site" class="text-sm font-medium">
+                    Site <span class="text-destructive">*</span>
+                </label>
+                <Dropdown
+                    v-model="form.site_id"
+                    input-id="ajuster-site"
+                    :options="siteOptions"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Sélectionner un site…"
+                    class="w-full"
+                    :class="form.errors.site_id ? 'p-invalid' : ''"
+                />
+                <p v-if="form.errors.site_id" class="text-xs text-destructive">
+                    {{ form.errors.site_id }}
+                </p>
+            </div>
+
             <!-- Augmenter + Diminuer côte à côte -->
             <div class="grid grid-cols-2 gap-3">
-                <!-- Augmenter -->
                 <div class="space-y-1.5">
                     <label
                         for="ajuster-augmenter"
@@ -160,6 +210,7 @@ function submit() {
                         input-id="ajuster-augmenter"
                         :min="1"
                         :use-grouping="true"
+                        :disabled="!form.site_id"
                         class="w-full"
                         :input-class="
                             [
@@ -178,7 +229,6 @@ function submit() {
                     </p>
                 </div>
 
-                <!-- Diminuer -->
                 <div class="space-y-1.5">
                     <label
                         for="ajuster-diminuer"
@@ -192,6 +242,7 @@ function submit() {
                         input-id="ajuster-diminuer"
                         :min="1"
                         :use-grouping="true"
+                        :disabled="!form.site_id"
                         class="w-full"
                         :input-class="
                             [
@@ -211,7 +262,7 @@ function submit() {
                 </div>
             </div>
 
-            <!-- Motif filtré selon la direction -->
+            <!-- Motif -->
             <div class="space-y-1.5">
                 <label for="ajuster-motif" class="text-sm font-medium">
                     Motif <span class="text-destructive">*</span>
@@ -239,7 +290,7 @@ function submit() {
                 </p>
             </div>
 
-            <!-- Détail motif (affiché uniquement pour "Autre") -->
+            <!-- Détail motif -->
             <div v-if="isAutre" class="space-y-1.5">
                 <label for="ajuster-motif-detail" class="text-sm font-medium">
                     Préciser <span class="text-destructive">*</span>
@@ -282,7 +333,9 @@ function submit() {
                 <Button variant="outline" @click="close">Annuler</Button>
                 <Button
                     :disabled="
-                        form.processing || (!form.augmenter && !form.diminuer)
+                        form.processing ||
+                        !form.site_id ||
+                        (!form.augmenter && !form.diminuer)
                     "
                     @click="submit"
                 >

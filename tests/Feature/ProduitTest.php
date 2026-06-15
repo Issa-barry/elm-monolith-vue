@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\MouvementStock;
 use App\Models\Organization;
 use App\Models\Produit;
+use App\Models\ProduitStock;
+use App\Models\Site;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -18,6 +20,11 @@ class ProduitTest extends TestCase
     {
         parent::setUp();
         $this->initOrgAndUser(['produits.read', 'produits.create', 'produits.update', 'produits.delete']);
+    }
+
+    private function defaultSite(): Site
+    {
+        return $this->user->sites()->wherePivot('is_default', true)->first();
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
@@ -41,6 +48,71 @@ class ProduitTest extends TestCase
         $this->actingAs($user)
             ->get(route('produits.index'))
             ->assertStatus(403);
+    }
+
+    public function test_index_filtre_par_type(): void
+    {
+        Produit::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Produit materiel',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'is_alerte' => false,
+        ]);
+        Produit::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Produit service',
+            'type' => 'service',
+            'statut' => 'actif',
+            'is_alerte' => false,
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('produits.index', ['type' => 'materiel']));
+
+        $response->assertStatus(200);
+        $produits = $response->original->getData()['page']['props']['produits'];
+        $this->assertCount(1, $produits);
+        $this->assertSame('Produit materiel', $produits[0]['nom']);
+    }
+
+    public function test_index_filtre_par_statut(): void
+    {
+        Produit::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Actif',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'is_alerte' => false,
+        ]);
+        Produit::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Archivé',
+            'type' => 'materiel',
+            'statut' => 'archive',
+            'is_alerte' => false,
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('produits.index', ['statut' => 'actif']));
+
+        $response->assertStatus(200);
+        $produits = $response->original->getData()['page']['props']['produits'];
+        $this->assertCount(1, $produits);
+        $this->assertSame('Actif', $produits[0]['nom']);
+    }
+
+    public function test_index_inclut_sites_et_options(): void
+    {
+        $response = $this->actingAs($this->user)
+            ->get(route('produits.index'));
+
+        $response->assertStatus(200);
+        $props = $response->original->getData()['page']['props'];
+        $this->assertArrayHasKey('sites', $props);
+        $this->assertArrayHasKey('types', $props);
+        $this->assertArrayHasKey('statuts', $props);
+        $this->assertArrayHasKey('filters', $props);
     }
 
     // ── create ────────────────────────────────────────────────────────────────
@@ -90,7 +162,7 @@ class ProduitTest extends TestCase
             ->assertSessionHasErrors('type');
     }
 
-    private function makeProduit(Organization $org): Produit
+    private function makeProduit(Organization $org, int $qteStock = 50): Produit
     {
         return Produit::create([
             'organization_id' => $org->id,
@@ -98,7 +170,7 @@ class ProduitTest extends TestCase
             'type' => 'materiel',
             'statut' => 'actif',
             'prix_achat' => 500,
-            'qte_stock' => 50,
+            'qte_stock' => $qteStock,
             'is_alerte' => false,
         ]);
     }
@@ -112,6 +184,27 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('produits.show', $produit))
             ->assertStatus(200);
+    }
+
+    public function test_show_inclut_stocks_par_site(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $site = $this->defaultSite();
+
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
+            'qte_stock' => 30,
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('produits.show', $produit));
+
+        $response->assertStatus(200);
+        $props = $response->original->getData()['page']['props'];
+        $this->assertCount(1, $props['produit']['stocks_par_site']);
+        $this->assertSame(30, $props['produit']['stocks_par_site'][0]['qte_stock']);
     }
 
     public function test_show_returns_403_for_other_organization(): void
@@ -192,10 +285,12 @@ class ProduitTest extends TestCase
 
     public function test_ajuster_stock_augmente_le_stock(): void
     {
-        $produit = $this->makeProduit($this->org); // qte_stock = 50
+        $produit = $this->makeProduit($this->org, 50);
+        $site = $this->defaultSite();
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
                 'augmenter' => 20,
                 'motif_type' => 'apres_production',
             ])
@@ -208,6 +303,7 @@ class ProduitTest extends TestCase
 
         $this->assertDatabaseHas('mouvements_stock', [
             'produit_id' => $produit->id,
+            'site_id' => $site->id,
             'type' => 'entree',
             'quantite' => 20,
             'stock_avant' => 50,
@@ -217,10 +313,12 @@ class ProduitTest extends TestCase
 
     public function test_ajuster_stock_diminue_le_stock(): void
     {
-        $produit = $this->makeProduit($this->org); // qte_stock = 50
+        $produit = $this->makeProduit($this->org, 50);
+        $site = $this->defaultSite();
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
                 'diminuer' => 15,
                 'motif_type' => 'perte',
             ])
@@ -233,6 +331,7 @@ class ProduitTest extends TestCase
 
         $this->assertDatabaseHas('mouvements_stock', [
             'produit_id' => $produit->id,
+            'site_id' => $site->id,
             'type' => 'sortie',
             'quantite' => 15,
             'stock_avant' => 50,
@@ -240,12 +339,77 @@ class ProduitTest extends TestCase
         ]);
     }
 
-    public function test_ajuster_stock_enregistre_le_motif(): void
+    public function test_ajuster_stock_cree_produit_stock_par_site(): void
     {
-        $produit = $this->makeProduit($this->org);
+        $produit = $this->makeProduit($this->org, 50);
+        $site = $this->defaultSite();
+
+        $this->assertDatabaseMissing('produit_stocks', ['produit_id' => $produit->id]);
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produit_stocks', [
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
+            'qte_stock' => 60, // 50 migré + 10 ajout
+        ]);
+    }
+
+    public function test_ajuster_stock_agrege_stock_total_sur_plusieurs_sites(): void
+    {
+        $produit = $this->makeProduit($this->org, 0);
+        $site1 = $this->defaultSite();
+        $site2 = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Site 2',
+            'type' => 'depot',
+            'localisation' => 'Kindia',
+        ]);
+
+        // Stock site 1 : 30
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site1->id,
+            'qte_stock' => 30,
+        ]);
+
+        // Stock site 2 : 20
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site2->id,
+            'qte_stock' => 20,
+        ]);
+
+        // Ajout de 10 sur site1 → site1 = 40, total = 60
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site1->id,
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produits', ['id' => $produit->id, 'qte_stock' => 60]);
+        $this->assertDatabaseHas('produit_stocks', ['produit_id' => $produit->id, 'site_id' => $site1->id, 'qte_stock' => 40]);
+        $this->assertDatabaseHas('produit_stocks', ['produit_id' => $produit->id, 'site_id' => $site2->id, 'qte_stock' => 20]);
+    }
+
+    public function test_ajuster_stock_enregistre_le_motif(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
                 'augmenter' => 10,
                 'motif_type' => 'correction_stock',
             ])
@@ -257,12 +421,46 @@ class ProduitTest extends TestCase
         ]);
     }
 
-    public function test_ajuster_stock_echoue_si_deux_champs_renseignes(): void
+    public function test_ajuster_stock_echoue_sans_site_id(): void
     {
         $produit = $this->makeProduit($this->org);
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertSessionHasErrors('site_id');
+    }
+
+    public function test_ajuster_stock_echoue_avec_site_autre_organisation(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $otherOrg = Organization::factory()->create();
+        $otherSite = Site::create([
+            'organization_id' => $otherOrg->id,
+            'nom' => 'Site autre org',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $otherSite->id,
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertStatus(404);
+    }
+
+    public function test_ajuster_stock_echoue_si_deux_champs_renseignes(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
                 'augmenter' => 10,
                 'diminuer' => 5,
                 'motif_type' => 'correction_stock',
@@ -273,9 +471,11 @@ class ProduitTest extends TestCase
     public function test_ajuster_stock_echoue_si_aucun_champ_renseigne(): void
     {
         $produit = $this->makeProduit($this->org);
+        $site = $this->defaultSite();
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
                 'motif_type' => 'correction_stock',
             ])
             ->assertSessionHasErrors('augmenter');
@@ -284,34 +484,47 @@ class ProduitTest extends TestCase
     public function test_ajuster_stock_echoue_si_quantite_nulle_ou_negative(): void
     {
         $produit = $this->makeProduit($this->org);
+        $site = $this->defaultSite();
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
                 'augmenter' => 0,
             ])
             ->assertSessionHasErrors('augmenter');
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
                 'diminuer' => -5,
             ])
             ->assertSessionHasErrors('diminuer');
     }
 
-    public function test_ajuster_stock_echoue_si_retrait_depasse_stock(): void
+    public function test_ajuster_stock_echoue_si_retrait_depasse_stock_du_site(): void
     {
-        $produit = $this->makeProduit($this->org); // qte_stock = 50
+        $produit = $this->makeProduit($this->org, 0);
+        $site = $this->defaultSite();
+
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
+            'qte_stock' => 50,
+        ]);
+        $produit->update(['qte_stock' => 50]);
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
                 'diminuer' => 100,
                 'motif_type' => 'correction_stock',
             ])
             ->assertSessionHasErrors('diminuer');
 
-        // Le stock ne doit pas avoir changé
-        $this->assertDatabaseHas('produits', [
-            'id' => $produit->id,
+        $this->assertDatabaseHas('produit_stocks', [
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
             'qte_stock' => 50,
         ]);
     }
@@ -320,9 +533,11 @@ class ProduitTest extends TestCase
     {
         $otherOrg = Organization::factory()->create();
         $produit = $this->makeProduit($otherOrg);
+        $site = $this->defaultSite();
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
                 'augmenter' => 10,
             ])
             ->assertStatus(403);
@@ -330,16 +545,85 @@ class ProduitTest extends TestCase
 
     public function test_ajuster_stock_ne_cree_pas_mouvement_si_validation_echoue(): void
     {
-        $produit = $this->makeProduit($this->org);
+        $produit = $this->makeProduit($this->org, 0);
+        $site = $this->defaultSite();
+
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
+            'qte_stock' => 50,
+        ]);
+
         $countBefore = MouvementStock::where('produit_id', $produit->id)->count();
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
                 'diminuer' => 9999,
                 'motif_type' => 'correction_stock',
             ])
             ->assertSessionHasErrors('diminuer');
 
         $this->assertSame($countBefore, MouvementStock::where('produit_id', $produit->id)->count());
+    }
+
+    // ── historique ────────────────────────────────────────────────────────────
+
+    public function test_historique_retourne_ajustements_et_modifications(): void
+    {
+        $produit = $this->makeProduit($this->org, 0);
+        $site = $this->defaultSite();
+
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
+            'qte_stock' => 50,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ]);
+
+        $response = $this->actingAs($this->user)
+            ->getJson(route('produits.historique', $produit));
+
+        $response->assertStatus(200)
+            ->assertJsonStructure(['ajustements', 'modifications']);
+
+        $this->assertNotEmpty($response->json('ajustements'));
+    }
+
+    public function test_historique_modifications_exclut_stock_adjusted(): void
+    {
+        $produit = $this->makeProduit($this->org, 0);
+        $site = $this->defaultSite();
+
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
+            'qte_stock' => 50,
+        ]);
+
+        // Ajustement stock → crée un AuditLog STOCK_ADJUSTED
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'augmenter' => 5,
+                'motif_type' => 'correction_stock',
+            ]);
+
+        $response = $this->actingAs($this->user)
+            ->getJson(route('produits.historique', $produit));
+
+        $modifications = $response->json('modifications');
+        foreach ($modifications as $m) {
+            $this->assertNotSame('stock_adjusted', $m['event_code']);
+        }
     }
 }

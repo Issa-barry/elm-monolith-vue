@@ -96,6 +96,12 @@ const props = defineProps<{
         date_debut?: string;
         date_fin?: string;
     };
+    stats: {
+        total: number;
+        montant_total: number;
+        en_attente: number;
+        validees: number;
+    };
 }>();
 
 const { can } = usePermissions();
@@ -377,6 +383,34 @@ const hasActiveFilters = ref(
                             Nouvelle dépense
                         </Button>
                     </Link>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">Total dépenses</p>
+                    <p class="mt-1 text-3xl font-bold">{{ stats.total }}</p>
+                </div>
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">Montant total</p>
+                    <p class="mt-1 text-xl font-bold tabular-nums">
+                        {{ fmt(stats.montant_total) }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">
+                        En attente de validation
+                    </p>
+                    <p class="mt-1 text-3xl font-bold text-blue-500">
+                        {{ stats.en_attente }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">Validées</p>
+                    <p class="mt-1 text-3xl font-bold text-emerald-500">
+                        {{ stats.validees }}
+                    </p>
                 </div>
             </div>
 
