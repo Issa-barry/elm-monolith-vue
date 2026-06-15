@@ -197,7 +197,8 @@ class VehiculeController extends Controller
 
         $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur']);
 
-        $depenses = Depense::where('vehicule_id', $vehicule->id)
+        $depenses = Depense::where('beneficiaire_type', 'vehicule')
+            ->where('beneficiaire_id', $vehicule->id)
             ->where('organization_id', $vehicule->organization_id)
             ->with('depenseType:id,libelle')
             ->orderByDesc('date_depense')
