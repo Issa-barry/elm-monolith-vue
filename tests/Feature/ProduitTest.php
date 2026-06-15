@@ -7,7 +7,10 @@ use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\ProduitStock;
 use App\Models\Site;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -25,6 +28,20 @@ class ProduitTest extends TestCase
     private function defaultSite(): Site
     {
         return $this->user->sites()->wherePivot('is_default', true)->first();
+    }
+
+    /** Crée un utilisateur NON admin, affecté à un site de l'organisation courante. */
+    private function makeNonAdminUserOnSite(Site $site): User
+    {
+        Role::firstOrCreate(['name' => 'employe', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'produits.update', 'guard_name' => 'web']);
+
+        $user = User::factory()->create(['organization_id' => $this->org->id]);
+        $user->assignRole('employe');
+        $user->givePermissionTo('produits.update');
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
+        return $user;
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
@@ -598,6 +615,154 @@ class ProduitTest extends TestCase
         $this->assertNotEmpty($response->json('ajustements'));
     }
 
+    // ── Sécurité multi-agences ────────────────────────────────────────────────
+
+    public function test_admin_peut_ajuster_stock_sur_nimporte_quel_site(): void
+    {
+        $produit = $this->makeProduit($this->org, 0);
+
+        $autresSite = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Site secondaire',
+            'type' => 'depot',
+            'localisation' => 'Kindia',
+        ]);
+
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $autresSite->id,
+            'qte_stock' => 20,
+        ]);
+
+        // $this->user est admin_entreprise (via makeUserWithPermissions)
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $autresSite->id,
+                'augmenter' => 5,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produit_stocks', [
+            'produit_id' => $produit->id,
+            'site_id' => $autresSite->id,
+            'qte_stock' => 25,
+        ]);
+    }
+
+    public function test_non_admin_peut_ajuster_stock_de_son_site(): void
+    {
+        $produit = $this->makeProduit($this->org, 0);
+        $site = $this->defaultSite();
+
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
+            'qte_stock' => 30,
+        ]);
+
+        $employe = $this->makeNonAdminUserOnSite($site);
+
+        $this->actingAs($employe)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produit_stocks', [
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
+            'qte_stock' => 40,
+        ]);
+    }
+
+    public function test_non_admin_ne_peut_pas_ajuster_stock_dun_autre_site(): void
+    {
+        $produit = $this->makeProduit($this->org, 0);
+        $siteEmploye = $this->defaultSite();
+
+        $siteInterdit = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Site interdit',
+            'type' => 'depot',
+            'localisation' => 'Labé',
+        ]);
+
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $siteInterdit->id,
+            'qte_stock' => 50,
+        ]);
+
+        $employe = $this->makeNonAdminUserOnSite($siteEmploye);
+
+        $this->actingAs($employe)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $siteInterdit->id,
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertStatus(403);
+
+        // Le stock ne doit pas avoir changé
+        $this->assertDatabaseHas('produit_stocks', [
+            'produit_id' => $produit->id,
+            'site_id' => $siteInterdit->id,
+            'qte_stock' => 50,
+        ]);
+    }
+
+    public function test_ajustement_modifie_uniquement_le_site_selectionne(): void
+    {
+        $produit = $this->makeProduit($this->org, 0);
+        $site1 = $this->defaultSite();
+        $site2 = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Site 2',
+            'type' => 'depot',
+            'localisation' => 'Mamou',
+        ]);
+
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site1->id,
+            'qte_stock' => 100,
+        ]);
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site2->id,
+            'qte_stock' => 200,
+        ]);
+
+        // Ajustement sur site1 uniquement
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site1->id,
+                'augmenter' => 50,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produit_stocks', [
+            'produit_id' => $produit->id,
+            'site_id' => $site1->id,
+            'qte_stock' => 150,
+        ]);
+        // Site2 inchangé
+        $this->assertDatabaseHas('produit_stocks', [
+            'produit_id' => $produit->id,
+            'site_id' => $site2->id,
+            'qte_stock' => 200,
+        ]);
+    }
+
     public function test_historique_modifications_exclut_stock_adjusted(): void
     {
         $produit = $this->makeProduit($this->org, 0);
@@ -625,5 +790,142 @@ class ProduitTest extends TestCase
         foreach ($modifications as $m) {
             $this->assertNotSame('stock_adjusted', $m['event_code']);
         }
+    }
+
+    // ── Indicateur de tendance stock ──────────────────────────────────────────
+
+    public function test_index_inclut_last_mouvement_entree(): void
+    {
+        $produit = $this->makeProduit($this->org, 0);
+        $site = $this->defaultSite();
+
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
+            'qte_stock' => 30,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'augmenter' => 15,
+                'motif_type' => 'correction_stock',
+            ]);
+
+        $response = $this->actingAs($this->user)->get(route('produits.index'));
+        $response->assertStatus(200);
+
+        $produits = $response->original->getData()['page']['props']['produits'];
+        $found = collect($produits)->firstWhere('id', $produit->id);
+
+        $this->assertNotNull($found);
+        $this->assertSame('entree', $found['last_mouvement_type']);
+        $this->assertSame(15, $found['last_mouvement_quantite']);
+    }
+
+    public function test_index_inclut_last_mouvement_sortie(): void
+    {
+        $produit = $this->makeProduit($this->org, 0);
+        $site = $this->defaultSite();
+
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
+            'qte_stock' => 100,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'diminuer' => 20,
+                'motif_type' => 'correction_stock',
+            ]);
+
+        $response = $this->actingAs($this->user)->get(route('produits.index'));
+        $response->assertStatus(200);
+
+        $produits = $response->original->getData()['page']['props']['produits'];
+        $found = collect($produits)->firstWhere('id', $produit->id);
+
+        $this->assertNotNull($found);
+        $this->assertSame('sortie', $found['last_mouvement_type']);
+        $this->assertSame(20, $found['last_mouvement_quantite']);
+    }
+
+    public function test_index_last_mouvement_null_si_aucun_ajustement(): void
+    {
+        $produit = $this->makeProduit($this->org, 0);
+        $site = $this->defaultSite();
+
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
+            'qte_stock' => 10,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('produits.index'));
+        $response->assertStatus(200);
+
+        $produits = $response->original->getData()['page']['props']['produits'];
+        $found = collect($produits)->firstWhere('id', $produit->id);
+
+        $this->assertNotNull($found);
+        $this->assertNull($found['last_mouvement_type']);
+        $this->assertNull($found['last_mouvement_quantite']);
+    }
+
+    public function test_index_last_mouvement_filtre_par_site(): void
+    {
+        $produit = $this->makeProduit($this->org, 0);
+        $site1 = $this->defaultSite();
+        $site2 = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Site 2',
+            'type' => 'depot',
+            'localisation' => 'Mamou',
+        ]);
+
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site1->id,
+            'qte_stock' => 50,
+        ]);
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site2->id,
+            'qte_stock' => 50,
+        ]);
+
+        // Entrée sur site1
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site1->id,
+                'augmenter' => 10,
+                'motif_type' => 'correction_stock',
+            ]);
+
+        // Sortie sur site2
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site2->id,
+                'diminuer' => 5,
+                'motif_type' => 'correction_stock',
+            ]);
+
+        // Filtrer sur site1 → doit voir l'entrée de site1, pas la sortie de site2
+        $response = $this->actingAs($this->user)
+            ->get(route('produits.index', ['site_id' => $site1->id]));
+
+        $produits = $response->original->getData()['page']['props']['produits'];
+        $found = collect($produits)->firstWhere('id', $produit->id);
+
+        $this->assertNotNull($found);
+        $this->assertSame('entree', $found['last_mouvement_type']);
+        $this->assertSame(10, $found['last_mouvement_quantite']);
     }
 }

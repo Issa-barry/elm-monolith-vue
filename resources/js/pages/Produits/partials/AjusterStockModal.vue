@@ -5,12 +5,12 @@ import {
     MOTIFS_DIMINUTION,
 } from '@/shared/motifs-ajustement-stock';
 import { useForm } from '@inertiajs/vue3';
-import { ArrowDown, ArrowUp, Package } from 'lucide-vue-next';
+import { ArrowDown, ArrowUp, Lock, Package } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 
 interface SiteStock {
     site_id: string;
@@ -37,6 +37,8 @@ const props = defineProps<{
     visible: boolean;
     produit: ProduitMin;
     sites: Site[];
+    isAdmin: boolean;
+    userDefaultSiteId: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -47,6 +49,16 @@ const localVisible = computed({
     get: () => props.visible,
     set: (val) => emit('update:visible', val),
 });
+
+// Pré-remplir le site pour les non-admins dès l'ouverture du modal
+watch(
+    () => props.visible,
+    (val) => {
+        if (val && !props.isAdmin && props.userDefaultSiteId) {
+            form.site_id = props.userDefaultSiteId;
+        }
+    },
+);
 
 const form = useForm({
     site_id: null as string | null,
@@ -175,12 +187,15 @@ function submit() {
         </div>
 
         <div class="space-y-4">
-            <!-- Site (obligatoire) -->
+            <!-- Site -->
             <div class="space-y-1.5">
                 <label for="ajuster-site" class="text-sm font-medium">
                     Site <span class="text-destructive">*</span>
                 </label>
+
+                <!-- Admin : peut choisir n'importe quel site -->
                 <Dropdown
+                    v-if="isAdmin"
                     v-model="form.site_id"
                     input-id="ajuster-site"
                     :options="siteOptions"
@@ -190,6 +205,22 @@ function submit() {
                     class="w-full"
                     :class="form.errors.site_id ? 'p-invalid' : ''"
                 />
+
+                <!-- Non-admin : site verrouillé sur son agence -->
+                <div
+                    v-else
+                    class="flex items-center gap-2 rounded-md border border-input bg-muted/50 px-3 py-2 text-sm"
+                >
+                    <Lock class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span class="font-medium">
+                        {{
+                            siteOptions.find((o) => o.value === form.site_id)
+                                ?.label ?? '—'
+                        }}
+                    </span>
+                    <span class="ml-auto text-xs text-muted-foreground">Votre agence</span>
+                </div>
+
                 <p v-if="form.errors.site_id" class="text-xs text-destructive">
                     {{ form.errors.site_id }}
                 </p>

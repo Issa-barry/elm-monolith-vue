@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { stripHtml } from '@/lib/stripHtml';
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Tab from 'primevue/tab';
@@ -95,7 +96,8 @@ function formatVal(key: string, val: unknown): string {
         return new Intl.NumberFormat('fr-FR').format(Number(val)) + ' GNF';
     if (['qte_stock', 'seuil_alerte_stock'].includes(key))
         return new Intl.NumberFormat('fr-FR').format(Number(val));
-    return String(val);
+    if (typeof val === 'number') return String(val);
+    return stripHtml(String(val));
 }
 
 function diffRows(entry: AuditEntry) {

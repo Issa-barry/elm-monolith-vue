@@ -65,7 +65,15 @@ class ProduitController extends Controller
 
         $filteredSiteId = $filters['site_id'] ?? null;
 
-        $mapped = $produits->map(function (Produit $p) use ($allProduitStocks, $filteredSiteId, $usedIds) {
+        // Dernier mouvement par produit (filtré par site si filtre actif)
+        $lastMouvements = MouvementStock::whereIn('produit_id', $produitIds)
+            ->when($filteredSiteId, fn ($q) => $q->where('site_id', $filteredSiteId))
+            ->orderByDesc('created_at')
+            ->get(['produit_id', 'type', 'quantite'])
+            ->groupBy('produit_id')
+            ->map(fn ($ms) => $ms->first());
+
+        $mapped = $produits->map(function (Produit $p) use ($allProduitStocks, $filteredSiteId, $usedIds, $lastMouvements) {
             $siteStocks = $allProduitStocks->get($p->id, collect());
             $hasStock = $p->type?->hasStock() ?? true;
 
@@ -82,6 +90,7 @@ class ProduitController extends Controller
 
             $inStock = ! $hasStock || $qteDisplay > 0;
             $isLowStock = $hasStock && $qteDisplay > 0 && $seuilDisplay !== null && $seuilDisplay > 0 && $qteDisplay <= $seuilDisplay;
+            $lastMouvement = $lastMouvements->get($p->id);
 
             return [
                 'id' => $p->id,
@@ -105,6 +114,8 @@ class ProduitController extends Controller
                 'in_stock' => $inStock,
                 'is_low_stock' => $isLowStock,
                 'is_used' => isset($usedIds[$p->id]),
+                'last_mouvement_type' => $lastMouvement?->type,
+                'last_mouvement_quantite' => $lastMouvement?->quantite,
                 'stocks_par_site' => $siteStocks->map(fn ($s) => [
                     'site_id' => $s->site_id,
                     'site_code' => $s->site?->code,
@@ -451,6 +462,12 @@ class ProduitController extends Controller
             ->where('organization_id', $produit->organization_id)
             ->firstOrFail();
 
+        // Non-admins ne peuvent ajuster que les sites auxquels ils sont affectés
+        $user = auth()->user();
+        if (! $user->isAdmin() && ! $user->isAssignedToSite($site->id)) {
+            abort(403, 'Vous ne pouvez ajuster que le stock de votre agence.');
+        }
+
         $hasAugmenter = ! empty($data['augmenter']);
         $hasDiminuer = ! empty($data['diminuer']);
 
@@ -486,7 +503,6 @@ class ProduitController extends Controller
             ]);
         }
 
-        $user = auth()->user();
         $quantite = $hasAugmenter ? (int) $data['augmenter'] : (int) $data['diminuer'];
         $type = $hasAugmenter ? 'entree' : 'sortie';
         $stockApres = $hasAugmenter ? $stockAvant + $quantite : $stockAvant - $quantite;

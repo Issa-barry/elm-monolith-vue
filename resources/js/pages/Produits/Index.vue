@@ -11,10 +11,12 @@ import {
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     Archive,
+    ArrowDown,
+    ArrowUp,
     Download,
     Eye,
     History,
@@ -87,6 +89,8 @@ interface Produit {
     is_low_stock: boolean;
     has_stock: boolean;
     is_used: boolean;
+    last_mouvement_type: 'entree' | 'sortie' | null;
+    last_mouvement_quantite: number | null;
     stocks_par_site: SiteStock[];
 }
 
@@ -116,9 +120,17 @@ const props = defineProps<{
     filters: Filters;
 }>();
 
-const { can } = usePermissions();
+const { can, hasRole } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
+const page = usePage();
+
+const isAdmin = computed(
+    () => hasRole('super_admin') || hasRole('admin_entreprise'),
+);
+const userDefaultSiteId = computed(
+    () => (page.props.auth?.default_site?.id as string) ?? null,
+);
 
 // ── Filtres serveur ───────────────────────────────────────────────────────────
 
@@ -184,6 +196,12 @@ const siteOptions = computed(() => [
         value: s.id,
     })),
 ]);
+
+const currentSiteLabel = computed(() => {
+    if (!selectedSite.value) return 'Toutes agences';
+    const site = props.sites.find((s) => s.id === selectedSite.value);
+    return site ? site.nom : 'Toutes agences';
+});
 
 const typeOptions = computed(() => [
     { label: 'Tous les types', value: '' },
@@ -538,12 +556,22 @@ function confirmArchive(produit: Produit) {
                         dans le catalogue
                     </p>
                 </div>
-                <Link v-if="can('produits.create')" href="/produits/create">
-                    <Button>
-                        <Plus class="mr-2 h-4 w-4" />
-                        Nouveau produit
+                <div class="flex items-center gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        @click="exportExcel"
+                    >
+                        <Download class="mr-2 h-4 w-4" />
+                        Exporter Excel
                     </Button>
-                </Link>
+                    <Link v-if="can('produits.create')" href="/produits/create">
+                        <Button>
+                            <Plus class="mr-2 h-4 w-4" />
+                            Nouveau produit
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             <!-- Barre de filtres -->
@@ -598,17 +626,6 @@ function confirmArchive(produit: Produit) {
                 >
                     <X class="mr-1.5 h-3.5 w-3.5" />
                     Effacer
-                </Button>
-
-                <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    class="ml-auto h-9"
-                    @click="exportExcel"
-                >
-                    <Download class="mr-2 h-4 w-4" />
-                    Exporter Excel
                 </Button>
             </div>
 
@@ -722,6 +739,15 @@ function confirmArchive(produit: Produit) {
                         </template>
                     </Column>
 
+                    <!-- Agence -->
+                    <Column header="Agence" style="width: 150px">
+                        <template #body>
+                            <span class="text-sm text-muted-foreground">
+                                {{ currentSiteLabel }}
+                            </span>
+                        </template>
+                    </Column>
+
                     <!-- Prix de vente -->
                     <Column
                         field="prix_vente"
@@ -754,25 +780,41 @@ function confirmArchive(produit: Produit) {
                                 <span class="text-xs text-muted-foreground">—</span>
                             </template>
                             <template v-else>
-                                <div class="flex items-center gap-1.5">
+                                <div class="flex flex-col gap-0.5">
+                                    <div class="flex items-center gap-1.5">
+                                        <span
+                                            class="text-sm font-medium tabular-nums"
+                                            :class="
+                                                data.is_low_stock
+                                                    ? 'text-amber-600'
+                                                    : 'text-foreground'
+                                            "
+                                        >
+                                            {{
+                                                new Intl.NumberFormat(
+                                                    'fr-FR',
+                                                ).format(data.qte_stock ?? 0)
+                                            }}
+                                        </span>
+                                        <AlertTriangle
+                                            v-if="data.is_low_stock"
+                                            class="h-3.5 w-3.5 text-amber-500"
+                                        />
+                                    </div>
                                     <span
-                                        class="text-sm font-medium tabular-nums"
-                                        :class="
-                                            data.is_low_stock
-                                                ? 'text-amber-600'
-                                                : 'text-foreground'
-                                        "
+                                        v-if="data.last_mouvement_type === 'entree'"
+                                        class="inline-flex items-center gap-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400"
                                     >
-                                        {{
-                                            new Intl.NumberFormat(
-                                                'fr-FR',
-                                            ).format(data.qte_stock ?? 0)
-                                        }}
+                                        <ArrowUp class="h-3 w-3" />
+                                        +{{ new Intl.NumberFormat('fr-FR').format(data.last_mouvement_quantite ?? 0) }}
                                     </span>
-                                    <AlertTriangle
-                                        v-if="data.is_low_stock"
-                                        class="h-3.5 w-3.5 text-amber-500"
-                                    />
+                                    <span
+                                        v-else-if="data.last_mouvement_type === 'sortie'"
+                                        class="inline-flex items-center gap-0.5 text-xs font-medium text-red-600 dark:text-red-400"
+                                    >
+                                        <ArrowDown class="h-3 w-3" />
+                                        -{{ new Intl.NumberFormat('fr-FR').format(data.last_mouvement_quantite ?? 0) }}
+                                    </span>
                                 </div>
                             </template>
                         </template>
@@ -961,6 +1003,8 @@ function confirmArchive(produit: Produit) {
             v-model:visible="showStockModal"
             :produit="stockAjustementProduit"
             :sites="sites"
+            :is-admin="isAdmin"
+            :user-default-site-id="userDefaultSiteId"
         />
 
         <!-- Modal historique -->

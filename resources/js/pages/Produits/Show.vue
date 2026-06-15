@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowDown,
@@ -22,7 +22,7 @@ import {
     TrendingDown,
     Warehouse,
 } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
 import HistoriqueModal from './partials/HistoriqueModal.vue';
 
@@ -99,7 +99,16 @@ const props = defineProps<{
     sites: Site[];
 }>();
 
-const { can } = usePermissions();
+const { can, hasRole } = usePermissions();
+const page = usePage();
+
+const isAdmin = computed(
+    () => hasRole('super_admin') || hasRole('admin_entreprise'),
+);
+const userDefaultSiteId = computed(
+    () => (page.props.auth?.default_site?.id as string) ?? null,
+);
+
 const showStockModal = ref(false);
 const showHistoriqueModal = ref(false);
 
@@ -706,6 +715,8 @@ const ajustements = props.mouvements.map((m) => ({
             v-model:visible="showStockModal"
             :produit="produit"
             :sites="sites"
+            :is-admin="isAdmin"
+            :user-default-site-id="userDefaultSiteId"
         />
     </AppLayout>
 </template>
