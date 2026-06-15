@@ -30,7 +30,7 @@ const CATEGORIES = [
 interface FormData {
     nom_vehicule: string;
     immatriculation: string;
-    type_vehicule: string | null;
+    type_vehicule_id: string | null;
     categorie: string | null;
     capacite_packs: number | null;
     site_id?: string | null;
@@ -68,7 +68,7 @@ function onTypeChange(value: string) {
     const type = props.types.find((t) => t.value === value);
     emit('update:form', {
         ...props.form,
-        type_vehicule: value,
+        type_vehicule_id: value,
         capacite_packs: type ? type.capacite_defaut : props.form.capacite_packs,
     });
 }
@@ -100,7 +100,7 @@ function removePhoto() {
 const isExterne = computed(() => props.form.categorie === 'externe');
 
 const selectedType = computed(() =>
-    props.types.find((t) => t.value === props.form.type_vehicule),
+    props.types.find((t) => t.value === props.form.type_vehicule_id),
 );
 
 // ── AutoComplete : Propriétaire ───────────────────────────────────────────────
@@ -148,7 +148,7 @@ const canSubmit = computed(
         (props.form.categorie === 'interne' || !!props.form.proprietaire_id) &&
         props.form.nom_vehicule.trim().length > 0 &&
         props.form.immatriculation.trim().length > 0 &&
-        !!props.form.type_vehicule &&
+        !!props.form.type_vehicule_id &&
         props.form.pris_en_charge_par_usine !== null,
 );
 
@@ -368,20 +368,20 @@ function handleSubmit() {
                     </Label>
                     <Dropdown
                         input-id="type_vehicule"
-                        :model-value="form.type_vehicule"
+                        :model-value="form.type_vehicule_id"
                         @update:model-value="onTypeChange($event)"
                         :options="types"
                         option-label="label"
                         option-value="value"
                         placeholder="Sélectionner…"
                         class="w-full"
-                        :class="{ 'p-invalid': errors.type_vehicule }"
+                        :class="{ 'p-invalid': errors.type_vehicule_id }"
                     />
                     <p
-                        v-if="errors.type_vehicule"
+                        v-if="errors.type_vehicule_id"
                         class="mt-1 text-xs text-destructive"
                     >
-                        {{ errors.type_vehicule }}
+                        {{ errors.type_vehicule_id }}
                     </p>
                 </div>
 

@@ -6,6 +6,7 @@ use App\Enums\StatutCommission;
 use App\Features\ModuleFeature;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
+use App\Models\CommissionPayment;
 use App\Models\CommissionPaymentItem;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -18,6 +19,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 class CommissionVehiculeTest extends TestCase
@@ -27,7 +29,7 @@ class CommissionVehiculeTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
     }
 
     // ── Setup helpers ─────────────────────────────────────────────────────────
@@ -88,7 +90,7 @@ class CommissionVehiculeTest extends TestCase
     private function makeTransfert(Organization $org, Vehicule $vehicule): TransfertLogistique
     {
         // makeUser already sets up a user for auth; create a minimal one here for created_by
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $sysUser = User::factory()->create(['organization_id' => $org->id]);
 
         $site = Site::firstOrCreate(
@@ -325,7 +327,7 @@ class CommissionVehiculeTest extends TestCase
         $part = $this->makePart($commission, $livreur, ['montant_net' => 3000]);
 
         // Simuler un paiement alloué
-        $payment = \App\Models\CommissionPayment::create([
+        $payment = CommissionPayment::create([
             'organization_id' => $org->id,
             'vehicule_id' => $vehicule->id,
             'livreur_id' => $livreur->id,

@@ -17,12 +17,11 @@ return new class extends Migration
             $table->boolean('requires_vehicle')->default(false);
             $table->boolean('requires_comment')->default(false);
             $table->boolean('is_active')->default(true);
-            $table->unsignedSmallInteger('sort_order')->default(0);
             $table->timestamps();
             $table->softDeletes();
 
             $table->unique(['organization_id', 'code']);
-            $table->index(['organization_id', 'is_active', 'sort_order']);
+            $table->index(['organization_id', 'is_active']);
         });
     }
 

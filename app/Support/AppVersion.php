@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use Illuminate\Support\Carbon;
+
 class AppVersion
 {
     public static function label(): string
@@ -95,7 +97,7 @@ class AppVersion
         $timezone = (string) config('app.timezone', 'UTC');
 
         try {
-            return \Illuminate\Support\Carbon::parse($raw)
+            return Carbon::parse($raw)
                 ->setTimezone($timezone)
                 ->format('d/m/Y H:i');
         } catch (\Throwable) {

@@ -14,6 +14,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Permission;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -899,7 +900,7 @@ class CommandeVenteTest extends TestCase
         ]);
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('motifStandardProvider')]
+    #[DataProvider('motifStandardProvider')]
     public function test_annuler_stores_correct_label_for_standard_motif(string $code, string $expectedLabel): void
     {
         $commande = CommandeVente::factory()->create([
@@ -988,7 +989,7 @@ class CommandeVenteTest extends TestCase
         $this->assertEquals(StatutCommandeVente::CLOTUREE, $commande->fresh()->statut);
     }
 
-    // ── référence CMD-JJMMAAAA-XXX ────────────────────────────────────────────
+    // ── référence CMD-JJMMAA-XXX ─────────────────────────────────────────────
 
     public function test_store_genere_reference_au_format_cmd(): void
     {
@@ -1006,7 +1007,7 @@ class CommandeVenteTest extends TestCase
         $commande = CommandeVente::where('organization_id', $this->org->id)->latest()->first();
 
         $this->assertNotNull($commande);
-        $this->assertMatchesRegularExpression('/^CMD-\d{8}-\d{3}$/', $commande->reference);
+        $this->assertMatchesRegularExpression('/^CMD-\d{6}-\d{3}$/', $commande->reference);
     }
 
     public function test_references_incrementales_dans_le_mois(): void

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
 use App\Services\CommissionPaymentService;
 use Illuminate\Http\RedirectResponse;
@@ -18,7 +19,7 @@ class CommissionPaymentController extends Controller
      */
     public function storeLivreur(Request $request, string $livreurId): RedirectResponse
     {
-        $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
+        $this->authorize('viewAny', TransfertLogistique::class);
 
         $orgId = auth()->user()->organization_id;
 
@@ -54,7 +55,7 @@ class CommissionPaymentController extends Controller
      */
     public function store(Request $request, Vehicule $vehicule): RedirectResponse
     {
-        $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
+        $this->authorize('viewAny', TransfertLogistique::class);
 
         abort_unless(
             $vehicule->organization_id === auth()->user()->organization_id,

@@ -11,6 +11,7 @@ use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class PaiementCommissionVenteTest extends TestCase
@@ -22,7 +23,7 @@ class PaiementCommissionVenteTest extends TestCase
         $org = Organization::factory()->create();
 
         Permission::firstOrCreate(['name' => 'ventes.read', 'guard_name' => 'web']);
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
         $user->givePermissionTo('ventes.read');
@@ -100,7 +101,7 @@ class PaiementCommissionVenteTest extends TestCase
     public function test_paiement_commission_vente_refuse_sans_permission(): void
     {
         $org = Organization::factory()->create();
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
 

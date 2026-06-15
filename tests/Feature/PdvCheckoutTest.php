@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -18,7 +19,7 @@ class PdvCheckoutTest extends TestCase
 {
     use HasAdminSetup, RefreshDatabase;
 
-    private \App\Models\User $user;
+    private User $user;
 
     private Organization $org;
 

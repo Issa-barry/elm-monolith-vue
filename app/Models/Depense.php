@@ -2,26 +2,34 @@
 
 namespace App\Models;
 
+use App\Enums\StatutDepense;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Depense extends Model
 {
-    use HasUlids, SoftDeletes;
+    use HasFactory, HasUlids, SoftDeletes;
 
     protected $fillable = [
         'organization_id',
         'site_id',
         'user_id',
         'depense_type_id',
-        'vehicule_id',
-        'employe_id',
+        'beneficiaire_type',
+        'beneficiaire_id',
         'montant',
         'date_depense',
         'commentaire',
         'statut',
+        'validateur_id',
+        'date_validation',
+        'motif_rejet',
+        'commentaire_rejet',
+        'justificatif_path',
     ];
 
     protected function casts(): array
@@ -29,6 +37,8 @@ class Depense extends Model
         return [
             'montant' => 'decimal:2',
             'date_depense' => 'date',
+            'statut' => StatutDepense::class,
+            'date_validation' => 'datetime',
         ];
     }
 
@@ -54,14 +64,35 @@ class Depense extends Model
         return $this->belongsTo(DepenseType::class);
     }
 
-    public function vehicule(): BelongsTo
+    public function validateur(): BelongsTo
     {
-        return $this->belongsTo(Vehicule::class);
+        return $this->belongsTo(User::class, 'validateur_id');
     }
 
-    public function employe(): BelongsTo
+    public function imputations(): HasMany
     {
-        return $this->belongsTo(Employe::class);
+        return $this->hasMany(DepenseImputation::class);
+    }
+
+    // keyed on beneficiaire_id only — always pair with where('beneficiaire_type', X) in queries
+    public function vehiculeBeneficiaire(): BelongsTo
+    {
+        return $this->belongsTo(Vehicule::class, 'beneficiaire_id');
+    }
+
+    public function employeBeneficiaire(): BelongsTo
+    {
+        return $this->belongsTo(Employe::class, 'beneficiaire_id');
+    }
+
+    public function livreurBeneficiaire(): BelongsTo
+    {
+        return $this->belongsTo(Livreur::class, 'beneficiaire_id');
+    }
+
+    public function proprietaireBeneficiaire(): BelongsTo
+    {
+        return $this->belongsTo(Proprietaire::class, 'beneficiaire_id');
     }
 
     // ── Scopes ────────────────────────────────────────────────────────────────

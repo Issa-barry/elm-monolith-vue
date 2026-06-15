@@ -37,7 +37,7 @@ interface VehiculeData {
     nom_vehicule: string;
     immatriculation: string;
     type_label: string;
-    type_vehicule: string | null;
+    type_vehicule_id: string | null;
     categorie: string | null;
     capacite_packs: number | null;
     site_id: string | null;

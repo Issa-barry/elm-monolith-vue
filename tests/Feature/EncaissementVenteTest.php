@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class EncaissementVenteTest extends TestCase
@@ -21,7 +22,7 @@ class EncaissementVenteTest extends TestCase
     private function utilisateur(Organization $org): User
     {
         Permission::firstOrCreate(['name' => 'ventes.update', 'guard_name' => 'web']);
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
         $user->givePermissionTo('ventes.update');

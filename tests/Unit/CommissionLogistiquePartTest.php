@@ -5,12 +5,14 @@ namespace Tests\Unit;
 use App\Enums\StatutCommission;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
+use App\Models\CommissionPayment;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class CommissionLogistiquePartTest extends TestCase
@@ -143,7 +145,7 @@ class CommissionLogistiquePartTest extends TestCase
 
     private function makeTransfert(Organization $org, Vehicule $vehicule): TransfertLogistique
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
 
         $site = Site::create([
@@ -164,12 +166,12 @@ class CommissionLogistiquePartTest extends TestCase
         ]);
     }
 
-    private function makePayment(CommissionLogistiquePart $part): \App\Models\CommissionPayment
+    private function makePayment(CommissionLogistiquePart $part): CommissionPayment
     {
         $vehicule = $part->commission->vehicule;
         $user = User::factory()->create(['organization_id' => $vehicule->organization_id]);
 
-        return \App\Models\CommissionPayment::create([
+        return CommissionPayment::create([
             'organization_id' => $vehicule->organization_id,
             'vehicule_id' => $vehicule->id,
             'livreur_id' => null,

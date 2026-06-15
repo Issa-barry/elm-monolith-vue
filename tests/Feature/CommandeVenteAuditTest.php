@@ -12,6 +12,7 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -60,7 +61,7 @@ class CommandeVenteAuditTest extends TestCase
         return compact('produit', 'vehicule', 'client');
     }
 
-    private function storeCommande(array $overrides = []): \Illuminate\Testing\TestResponse
+    private function storeCommande(array $overrides = []): TestResponse
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
 

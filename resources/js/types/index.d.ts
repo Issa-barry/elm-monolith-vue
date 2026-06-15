@@ -8,6 +8,7 @@ export type Resource =
     | 'livreurs'
     | 'proprietaires'
     | 'vehicules'
+    | 'type-vehicules'
     | 'equipes-livraison'
     | 'sites'
     | 'produits'

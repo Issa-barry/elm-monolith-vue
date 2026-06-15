@@ -16,6 +16,7 @@ use App\Services\AuditLogService;
 use App\Services\ImageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -23,7 +24,7 @@ class ProduitController extends Controller
 {
     public function __construct(private readonly AuditLogService $auditService) {}
 
-    public function index(Request $r): \Illuminate\Http\Resources\Json\AnonymousResourceCollection
+    public function index(Request $r): AnonymousResourceCollection
     {
         $this->authorize('viewAny', Produit::class);
 

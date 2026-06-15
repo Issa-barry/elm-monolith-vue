@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class ModuleFeatureTest extends TestCase
@@ -19,7 +20,7 @@ class ModuleFeatureTest extends TestCase
 
     private function staffUser(Organization $org): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
 
         $perms = [
             'ventes.read', 'ventes.create',
@@ -199,7 +200,7 @@ class ModuleFeatureTest extends TestCase
 
     public function test_toggle_requires_parametres_update_permission(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');

@@ -3,15 +3,19 @@
 namespace Tests\Unit;
 
 use App\Enums\PackingStatut;
+use App\Enums\PrestataireType;
 use App\Enums\ProduitStatut;
 use App\Enums\StatutCommandeAchat;
 use App\Enums\StatutCommandeVente;
-use App\Enums\TypeVehicule;
+use App\Enums\StatutCommission;
 use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
+use App\Models\CommissionPart;
+use App\Models\CommissionVente;
 use App\Models\EncaissementVente;
+use App\Models\FactureVente;
 use App\Models\Organization;
 use App\Models\Packing;
 use App\Models\Parametre;
@@ -19,11 +23,13 @@ use App\Models\Prestataire;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\Versement;
 use App\Models\VersementCommission;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class ModelTest extends TestCase
@@ -126,7 +132,7 @@ class ModelTest extends TestCase
         $org = $this->makeOrg();
         Prestataire::create(['organization_id' => $org->id, 'nom' => 'CONS', 'type' => 'consultant']);
 
-        $consultants = Prestataire::parType(\App\Enums\PrestataireType::CONSULTANT)
+        $consultants = Prestataire::parType(PrestataireType::CONSULTANT)
             ->where('organization_id', $org->id)
             ->get();
 
@@ -835,13 +841,15 @@ class ModelTest extends TestCase
     public function test_vehicule_type_label(): void
     {
         $org = $this->makeOrg();
+        $type = TypeVehicule::factory()->create(['organization_id' => $org->id, 'nom' => 'Camion']);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
-            'type_vehicule' => TypeVehicule::CAMION,
+            'type_vehicule_id' => $type->id,
         ]);
 
+        $vehicule->load('typeVehicule');
         $this->assertSame('Camion', $vehicule->type_label);
     }
 
@@ -884,7 +892,7 @@ class ModelTest extends TestCase
         $user = $this->makeUser($org);
         $this->actingAs($user);
 
-        $commission = \App\Models\CommissionVente::factory()->create([
+        $commission = CommissionVente::factory()->create([
             'organization_id' => $org->id,
         ]);
 
@@ -896,7 +904,7 @@ class ModelTest extends TestCase
             'frais_supplementaires' => 0,
             'montant_net' => 5000,
             'montant_verse' => 0,
-            'statut' => \App\Enums\StatutCommission::IMPAYE,
+            'statut' => StatutCommission::IMPAYE,
         ]);
 
         $vc = VersementCommission::create([
@@ -906,7 +914,7 @@ class ModelTest extends TestCase
             'mode_paiement' => 'especes',
         ]);
 
-        $this->assertInstanceOf(\App\Models\CommissionPart::class, $vc->part);
+        $this->assertInstanceOf(CommissionPart::class, $vc->part);
         $this->assertEquals($user->id, $vc->created_by);
     }
 
@@ -921,7 +929,7 @@ class ModelTest extends TestCase
         $site = Site::create(['organization_id' => $org->id, 'nom' => 'S', 'type' => 'depot', 'localisation' => 'X']);
         $commande = CommandeVente::create(['organization_id' => $org->id, 'site_id' => $site->id, 'total_commande' => 2000, 'statut' => StatutCommandeVente::LIVRAISON_EN_COURS]);
 
-        $facture = \App\Models\FactureVente::create([
+        $facture = FactureVente::create([
             'organization_id' => $org->id,
             'commande_vente_id' => $commande->id,
             'montant_brut' => 2000,
@@ -935,7 +943,7 @@ class ModelTest extends TestCase
             'mode_paiement' => 'especes',
         ]);
 
-        $this->assertInstanceOf(\App\Models\FactureVente::class, $encaissement->facture);
+        $this->assertInstanceOf(FactureVente::class, $encaissement->facture);
         $this->assertInstanceOf(User::class, $encaissement->creator);
     }
 
@@ -943,7 +951,7 @@ class ModelTest extends TestCase
 
     public function test_user_is_super_admin_returns_false_for_regular_user(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $org = $this->makeOrg();
         $user = $this->makeUser($org);
         $user->assignRole('admin_entreprise');
@@ -953,7 +961,7 @@ class ModelTest extends TestCase
 
     public function test_user_is_super_admin_returns_true_for_super_admin(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
         $org = $this->makeOrg();
         $user = $this->makeUser($org);
         $user->assignRole('super_admin');
@@ -963,7 +971,7 @@ class ModelTest extends TestCase
 
     public function test_user_permissions_map_returns_array(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $org = $this->makeOrg();
         $user = $this->makeUser($org);
         $user->assignRole('admin_entreprise');
@@ -976,7 +984,7 @@ class ModelTest extends TestCase
 
     public function test_user_permissions_map_returns_true_for_super_admin(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
         $org = $this->makeOrg();
         $user = $this->makeUser($org);
         $user->assignRole('super_admin');

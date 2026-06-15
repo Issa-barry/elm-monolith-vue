@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Services\CommandeNumeroService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class CommandeNumeroServiceTest extends TestCase
@@ -22,12 +23,12 @@ class CommandeNumeroServiceTest extends TestCase
     {
         [$reference] = $this->service->generer();
 
-        $this->assertMatchesRegularExpression('/^CMD-\d{8}-\d{3}$/', $reference);
+        $this->assertMatchesRegularExpression('/^CMD-\d{6}-\d{3}$/', $reference);
     }
 
     public function test_reference_contient_date_du_jour(): void
     {
-        $dateAttendue = now()->format('dmY');
+        $dateAttendue = now()->format('dmy');
 
         [$reference] = $this->service->generer();
 
@@ -76,7 +77,7 @@ class CommandeNumeroServiceTest extends TestCase
 
     public function test_overflow_lance_exception_apres_999(): void
     {
-        \Illuminate\Support\Facades\DB::table('commande_sequences')->insert([
+        DB::table('commande_sequences')->insert([
             'periode' => now()->format('Y-m'),
             'compteur' => 999,
         ]);

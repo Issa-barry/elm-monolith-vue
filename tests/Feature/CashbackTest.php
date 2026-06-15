@@ -14,6 +14,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Services\CashbackService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Role;
@@ -392,14 +393,14 @@ class CashbackTest extends TestCase
         ]);
 
         // Rejoue la logique de réparation
-        \Illuminate\Support\Facades\DB::table('cashback_transactions as ct')
+        DB::table('cashback_transactions as ct')
             ->leftJoin('cashback_versements as cv', 'cv.cashback_transaction_id', '=', 'ct.id')
             ->whereNull('cv.id')
             ->where('ct.statut', 'verse')
             ->where('ct.montant_verse', 0)
             ->select('ct.id', 'ct.montant')
             ->get()
-            ->each(fn ($row) => \Illuminate\Support\Facades\DB::table('cashback_transactions')
+            ->each(fn ($row) => DB::table('cashback_transactions')
                 ->where('id', $row->id)
                 ->update(['montant_verse' => $row->montant]));
 

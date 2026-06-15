@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CommandeVente;
 use App\Models\CommissionVente;
 use Illuminate\Http\RedirectResponse;
 
@@ -14,7 +15,7 @@ class CommissionVenteValidationController extends Controller
      */
     public function store(CommissionVente $commission_vente): RedirectResponse
     {
-        $this->authorize('viewAny', \App\Models\CommandeVente::class);
+        $this->authorize('viewAny', CommandeVente::class);
 
         return back()->with('info', 'Cette commission est déjà active.');
     }

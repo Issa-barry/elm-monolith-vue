@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\TypeVehicule;
 use App\Models\Depense;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use App\Models\VehiculeFrais;
 use App\Services\ImageService;
@@ -33,7 +33,7 @@ class VehiculeController extends Controller
             'marque' => $v->marque,
             'modele' => $v->modele,
             'immatriculation' => $v->immatriculation,
-            'type_vehicule' => $v->type_vehicule?->value,
+            'type_vehicule_id' => $v->type_vehicule_id,
             'type_label' => $v->type_label,
             'categorie' => $v->categorie,
             'capacite_packs' => $v->capacite_packs,
@@ -75,7 +75,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('viewAny', Vehicule::class);
 
-        $vehicules = Vehicule::with(['site', 'proprietaire.user.sites', 'equipe.membres.livreur'])
+        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'equipe.membres.livreur'])
             ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom_vehicule')
             ->get()
@@ -123,7 +123,7 @@ class VehiculeController extends Controller
 
         return Inertia::render('Vehicules/Create', [
             'proprietaires' => $this->proprietairesOptions(),
-            'types' => TypeVehicule::options(),
+            'types' => $this->typesOptions(),
             'initial_proprietaire_id' => $initialProprietaireId,
             'initial_site_id' => $initialSiteId,
             'currentSiteName' => $currentSiteName,
@@ -143,7 +143,10 @@ class VehiculeController extends Controller
                 'required', 'string', 'max:20',
                 Rule::unique('vehicules', 'immatriculation')->where('organization_id', $orgId),
             ],
-            'type_vehicule' => ['required', Rule::in(TypeVehicule::allowedValues())],
+            'type_vehicule_id' => [
+                'required', 'string',
+                Rule::exists('type_vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
+            ],
             'categorie' => ['required', 'in:interne,externe'],
             'capacite_packs' => 'nullable|integer|min:1|max:99999',
             'site_id' => [
@@ -192,7 +195,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('view', $vehicule);
 
-        $vehicule->load(['site', 'proprietaire', 'equipe.membres.livreur']);
+        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur']);
 
         $depenses = Depense::where('vehicule_id', $vehicule->id)
             ->where('organization_id', $vehicule->organization_id)
@@ -310,12 +313,12 @@ class VehiculeController extends Controller
         $this->authorize('update', $vehicule);
 
         $user = auth()->user();
-        $vehicule->load(['site', 'proprietaire', 'equipe.membres.livreur']);
+        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur']);
 
         return Inertia::render('Vehicules/Edit', [
             'vehicule' => $this->vehiculeData($vehicule),
             'proprietaires' => $this->proprietairesOptions(),
-            'types' => TypeVehicule::options(),
+            'types' => $this->typesOptions(),
             'currentSiteName' => ($user->sites()->wherePivot('is_default', true)->first()
                 ?? $user->sites()->first())?->nom
                 ?? $user->organization?->nom
@@ -337,7 +340,10 @@ class VehiculeController extends Controller
                     ->where('organization_id', $orgId)
                     ->ignore($vehicule->id),
             ],
-            'type_vehicule' => ['required', Rule::in(TypeVehicule::allowedValues())],
+            'type_vehicule_id' => [
+                'required', 'string',
+                Rule::exists('type_vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
+            ],
             'categorie' => ['required', 'in:interne,externe'],
             'capacite_packs' => 'nullable|integer|min:1|max:99999',
             'proprietaire_id' => [
@@ -397,6 +403,20 @@ class VehiculeController extends Controller
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    private function typesOptions(): array
+    {
+        return TypeVehicule::where('organization_id', auth()->user()->organization_id)
+            ->where('is_active', true)
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (TypeVehicule $t) => [
+                'value' => $t->id,
+                'label' => $t->nom,
+                'capacite_defaut' => $t->capacite_defaut,
+            ])
+            ->toArray();
+    }
+
     private function proprietairesOptions(): array
     {
         return Proprietaire::where('organization_id', auth()->user()->organization_id)
@@ -429,8 +449,8 @@ class VehiculeController extends Controller
             'nom_vehicule.required' => 'Le nom du véhicule est obligatoire.',
             'immatriculation.required' => "L'immatriculation est obligatoire.",
             'immatriculation.unique' => 'Ce matricule est déjà utilisé par un autre véhicule.',
-            'type_vehicule.required' => 'Le type de véhicule est obligatoire.',
-            'type_vehicule.in' => 'Type de véhicule invalide.',
+            'type_vehicule_id.required' => 'Le type de véhicule est obligatoire.',
+            'type_vehicule_id.exists' => 'Type de véhicule invalide.',
             'categorie.required' => 'La catégorie est obligatoire.',
             'categorie.in' => 'Catégorie invalide (interne ou externe).',
             'site_id.required' => 'Le site est obligatoire pour un véhicule interne.',
