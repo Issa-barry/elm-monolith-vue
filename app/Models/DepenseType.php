@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\CategorieDepense;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -10,7 +12,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class DepenseType extends Model
 {
-    use HasUlids, SoftDeletes;
+    use HasFactory, HasUlids, SoftDeletes;
 
     protected $table = 'depense_types';
 
@@ -19,22 +21,20 @@ class DepenseType extends Model
         'code',
         'libelle',
         'description',
-        'requires_vehicle',
-        'requires_comment',
-        'applique_aux_employes',
+        'categorie',
+        'commentaire_obligatoire',
+        'justificatif_obligatoire',
         'type_paie',
         'is_active',
-        'sort_order',
     ];
 
     protected function casts(): array
     {
         return [
-            'requires_vehicle' => 'boolean',
-            'requires_comment' => 'boolean',
-            'applique_aux_employes' => 'boolean',
+            'categorie' => CategorieDepense::class,
+            'commentaire_obligatoire' => 'boolean',
+            'justificatif_obligatoire' => 'boolean',
             'is_active' => 'boolean',
-            'sort_order' => 'integer',
         ];
     }
 
@@ -47,7 +47,7 @@ class DepenseType extends Model
 
     public function scopeOrdered($query)
     {
-        return $query->orderBy('sort_order')->orderBy('libelle');
+        return $query->orderBy('libelle');
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\ModePaiement;
 use App\Enums\StatutFactureVente;
+use App\Models\CommandeVente;
 use App\Models\FactureVente;
 use App\Models\Livreur;
 use App\Models\Site;
@@ -16,7 +17,7 @@ class FactureVenteController extends Controller
 {
     public function index(Request $request): Response
     {
-        $this->authorize('viewAny', \App\Models\CommandeVente::class);
+        $this->authorize('viewAny', CommandeVente::class);
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -105,7 +106,7 @@ class FactureVenteController extends Controller
                         'montant' => (float) $e->montant,
                         'date_encaissement' => $e->date_encaissement?->format('d/m/Y'),
                         'enregistre_le' => $e->created_at?->format('d/m/Y H:i'),
-                        'mode_paiement' => $e->mode_paiement instanceof \App\Enums\ModePaiement
+                        'mode_paiement' => $e->mode_paiement instanceof ModePaiement
                             ? $e->mode_paiement->label()
                             : (string) $e->mode_paiement,
                         'note' => $e->note,

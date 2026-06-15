@@ -6,6 +6,7 @@ use App\Enums\BaseCalculLogistique;
 use App\Enums\StatutTransfert;
 use App\Enums\TypeEcartLogistique;
 use App\Jobs\NotifierLivreursTransfertJob;
+use App\Models\CommissionLogistique;
 use App\Models\EquipeLivraison;
 use App\Models\Produit;
 use App\Models\Site;
@@ -598,7 +599,7 @@ class TransfertLogistiqueController extends Controller
         return $base;
     }
 
-    private function mapCommission(\App\Models\CommissionLogistique $c): array
+    private function mapCommission(CommissionLogistique $c): array
     {
         return [
             'id' => $c->id,

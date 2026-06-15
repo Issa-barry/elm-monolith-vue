@@ -32,6 +32,6 @@ class PaieVariable extends Model
 
     public function depense(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Depense::class);
+        return $this->belongsTo(Depense::class);
     }
 }

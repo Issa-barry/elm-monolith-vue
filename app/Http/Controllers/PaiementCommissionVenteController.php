@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ModePaiement;
+use App\Models\CommandeVente;
 use App\Models\CommissionPart;
 use App\Models\Depense;
 use App\Models\Livreur;
@@ -29,7 +30,7 @@ class PaiementCommissionVenteController extends Controller
      */
     public function store(Request $request, string $type, string $beneficiaireId): RedirectResponse
     {
-        $this->authorize('viewAny', \App\Models\CommandeVente::class);
+        $this->authorize('viewAny', CommandeVente::class);
 
         abort_unless(in_array($type, ['livreur', 'proprietaire'], true), 422, 'Type bénéficiaire invalide.');
 

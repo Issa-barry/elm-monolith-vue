@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\ModePaiement;
 use App\Enums\StatutCommission;
+use App\Models\CommandeVente;
 use App\Models\CommissionPart;
 use App\Models\CommissionVente;
 use App\Models\Depense;
@@ -25,7 +26,7 @@ class CommissionVenteController extends Controller
 
     public function index(Request $request): Response
     {
-        $this->authorize('viewAny', \App\Models\CommandeVente::class);
+        $this->authorize('viewAny', CommandeVente::class);
 
         $orgId = auth()->user()->organization_id;
         $tab = $request->input('tab', 'livreurs');
@@ -217,7 +218,7 @@ class CommissionVenteController extends Controller
             'filtre_statut' => $filtreStatut,
             'search' => $search,
             'statuts' => StatutCommission::options(),
-            'can_payer' => auth()->user()->can('viewAny', \App\Models\CommandeVente::class),
+            'can_payer' => auth()->user()->can('viewAny', CommandeVente::class),
         ]);
     }
 
@@ -226,7 +227,7 @@ class CommissionVenteController extends Controller
      */
     public function showBeneficiaire(Request $request, string $type, string $beneficiaireId): Response
     {
-        $this->authorize('viewAny', \App\Models\CommandeVente::class);
+        $this->authorize('viewAny', CommandeVente::class);
 
         abort_unless(in_array($type, ['livreur', 'proprietaire'], true), 422);
 
@@ -431,7 +432,7 @@ class CommissionVenteController extends Controller
 
     public function show(CommissionVente $commission_vente): Response
     {
-        $this->authorize('viewAny', \App\Models\CommandeVente::class);
+        $this->authorize('viewAny', CommandeVente::class);
 
         abort_unless(
             $commission_vente->organization_id === auth()->user()->organization_id,

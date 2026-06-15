@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Api\Client;
 
+use App\Enums\StatutTransfert;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
+use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Http\JsonResponse;
@@ -24,8 +26,8 @@ class VehiculesController extends Controller
         $vehicules = $this->vehiculesPartenaires($organizationId, $proprietaire, $livreur);
 
         // IDs des véhicules actuellement en transit
-        $enTransit = \App\Models\TransfertLogistique::query()
-            ->where('statut', \App\Enums\StatutTransfert::TRANSIT->value)
+        $enTransit = TransfertLogistique::query()
+            ->where('statut', StatutTransfert::TRANSIT->value)
             ->whereNotNull('vehicule_id')
             ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
             ->pluck('vehicule_id')

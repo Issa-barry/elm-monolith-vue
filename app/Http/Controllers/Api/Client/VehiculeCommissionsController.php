@@ -9,6 +9,7 @@ use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\Vehicule;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -71,7 +72,7 @@ class VehiculeCommissionsController extends Controller
             ->get()
             ->map(function ($row) {
                 $date = $row->commission_date
-                    ? \Carbon\Carbon::parse($row->commission_date)
+                    ? Carbon::parse($row->commission_date)
                     : null;
 
                 $statutMobile = match ($row->statut) {
@@ -95,7 +96,7 @@ class VehiculeCommissionsController extends Controller
         return response()->json($parts->values());
     }
 
-    private function labelMois(\Carbon\Carbon $date): string
+    private function labelMois(Carbon $date): string
     {
         $mois = [
             1 => 'Janvier', 2 => 'Février', 3 => 'Mars', 4 => 'Avril',

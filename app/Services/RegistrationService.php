@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class RegistrationService
 {
@@ -100,7 +101,7 @@ class RegistrationService
     /**
      * Valide le token email, active le compte et retourne l'utilisateur.
      *
-     * @throws \Symfony\Component\HttpKernel\Exception\HttpException
+     * @throws HttpException
      */
     public function verifyEmail(string $token): User
     {

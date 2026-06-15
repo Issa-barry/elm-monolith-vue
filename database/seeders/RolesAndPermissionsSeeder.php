@@ -15,7 +15,7 @@ class RolesAndPermissionsSeeder extends Seeder
 {
     private const RESOURCES = [
         'clients', 'prestataires', 'livreurs', 'proprietaires',
-        'vehicules', 'equipes-livraison', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres',
+        'vehicules', 'type-vehicules', 'equipes-livraison', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres',
         'logistique', 'depenses',
         'rh-employes', 'rh-contrats', 'rh-paie',
     ];
@@ -61,6 +61,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'livreurs.create',          'livreurs.read',          'livreurs.update',          'livreurs.delete',
             'proprietaires.create',     'proprietaires.read',     'proprietaires.update',     'proprietaires.delete',
             'vehicules.create',         'vehicules.read',         'vehicules.update',         'vehicules.delete',
+            'type-vehicules.create',    'type-vehicules.read',    'type-vehicules.update',    'type-vehicules.delete',
             'equipes-livraison.create', 'equipes-livraison.read', 'equipes-livraison.update', 'equipes-livraison.delete',
             'sites.create',             'sites.read',             'sites.update',             'sites.delete',
             'produits.create',          'produits.read',          'produits.update',          'produits.delete',
@@ -86,6 +87,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'livreurs.create',          'livreurs.read',          'livreurs.update',
             'proprietaires.read',
             'vehicules.create',         'vehicules.read',         'vehicules.update',
+            'type-vehicules.create',    'type-vehicules.read',    'type-vehicules.update',
             'equipes-livraison.create', 'equipes-livraison.read', 'equipes-livraison.update',
             'sites.create',             'sites.read',             'sites.update',
             'produits.read',            'produits.create',        'produits.update',

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
+use App\Http\Controllers\Client\ClientDashboardController;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommissionPart;
@@ -17,6 +18,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class ClientDashboardTest extends TestCase
@@ -25,7 +27,7 @@ class ClientDashboardTest extends TestCase
 
     private function clientUser(Organization $org): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
         $user = User::factory()->create([
             'organization_id' => $org->id,
             'telephone' => '+224620000001',
@@ -37,7 +39,7 @@ class ClientDashboardTest extends TestCase
 
     private function staffUser(Organization $org): User
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
 
@@ -222,7 +224,7 @@ class ClientDashboardTest extends TestCase
             'is_active' => true,
         ]);
 
-        $controller = app(\App\Http\Controllers\Client\ClientDashboardController::class);
+        $controller = app(ClientDashboardController::class);
         $method = new \ReflectionMethod($controller, 'resolveQrPayload');
         $method->setAccessible(true);
 
@@ -233,7 +235,7 @@ class ClientDashboardTest extends TestCase
 
     public function test_qr_payload_is_livreur_commissions_url_for_livreur(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'livreur', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'livreur', 'guard_name' => 'web']);
         $org = Organization::factory()->create();
         $user = User::factory()->create([
             'organization_id' => $org->id,
@@ -250,7 +252,7 @@ class ClientDashboardTest extends TestCase
             'is_active' => true,
         ]);
 
-        $controller = app(\App\Http\Controllers\Client\ClientDashboardController::class);
+        $controller = app(ClientDashboardController::class);
         $method = new \ReflectionMethod($controller, 'resolveQrPayload');
         $method->setAccessible(true);
 
@@ -272,7 +274,7 @@ class ClientDashboardTest extends TestCase
             'telephone' => $user->telephone,
         ]);
 
-        $controller = app(\App\Http\Controllers\Client\ClientDashboardController::class);
+        $controller = app(ClientDashboardController::class);
         $method = new \ReflectionMethod($controller, 'resolveQrPayload');
         $method->setAccessible(true);
 

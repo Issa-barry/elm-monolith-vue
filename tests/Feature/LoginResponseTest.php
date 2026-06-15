@@ -7,6 +7,7 @@ use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class LoginResponseTest extends TestCase
@@ -28,7 +29,7 @@ class LoginResponseTest extends TestCase
 
     public function test_non_client_user_is_redirected_to_dashboard(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
@@ -42,7 +43,7 @@ class LoginResponseTest extends TestCase
 
     public function test_client_user_is_redirected_to_client_dashboard(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('client');
@@ -56,7 +57,7 @@ class LoginResponseTest extends TestCase
 
     public function test_proprietaire_user_is_redirected_to_client_dashboard(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'proprietaire', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'proprietaire', 'guard_name' => 'web']);
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('proprietaire');
@@ -70,7 +71,7 @@ class LoginResponseTest extends TestCase
 
     public function test_login_response_returns_json_when_request_wants_json(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
@@ -85,7 +86,7 @@ class LoginResponseTest extends TestCase
 
     public function test_client_user_ignores_staff_intended_url_and_goes_to_client_dashboard(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('client');
@@ -99,7 +100,7 @@ class LoginResponseTest extends TestCase
 
     public function test_staff_user_ignores_client_intended_url_and_goes_to_dashboard(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
@@ -113,7 +114,7 @@ class LoginResponseTest extends TestCase
 
     public function test_client_user_keeps_client_intended_url(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('client');

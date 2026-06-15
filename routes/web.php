@@ -4,6 +4,8 @@ use App\Features\ModuleFeature;
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\Auth\AcceptInvitationController;
 use App\Http\Controllers\Auth\LivreurRegistrationController;
+use App\Http\Controllers\Auth\RegisterLookupController;
+use App\Http\Controllers\Auth\RegisterOtpController;
 use App\Http\Controllers\CashbackController;
 use App\Http\Controllers\Client\ClientDashboardController;
 use App\Http\Controllers\ClientController;
@@ -16,6 +18,7 @@ use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\CommissionVenteController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\ContratController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepenseController;
 use App\Http\Controllers\EmployeController;
 use App\Http\Controllers\EncaissementVenteController;
@@ -35,9 +38,12 @@ use App\Http\Controllers\PropositionVehiculeController;
 use App\Http\Controllers\ProprietaireController;
 use App\Http\Controllers\ReceptionValidationAdminController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\ScanLivraisonController;
+use App\Http\Controllers\ScanUserController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
+use App\Http\Controllers\TypeVehiculeController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserInvitationController;
 use App\Http\Controllers\VehiculeController;
@@ -50,9 +56,9 @@ use Inertia\Inertia;
 
 // ── Inscription multi-étapes (lookup téléphone + vérification OTP) ─────────────
 Route::middleware('guest')->group(function () {
-    Route::post('/register/lookup', \App\Http\Controllers\Auth\RegisterLookupController::class)
+    Route::post('/register/lookup', RegisterLookupController::class)
         ->name('register.lookup');
-    Route::post('/register/otp/verify', \App\Http\Controllers\Auth\RegisterOtpController::class)
+    Route::post('/register/otp/verify', RegisterOtpController::class)
         ->name('register.otp.verify');
     Route::get('/register/livreur', [LivreurRegistrationController::class, 'create'])
         ->name('livreur.register');
@@ -94,7 +100,7 @@ Route::get('/help', function () {
 
 Route::post('contact', [ContactController::class, 'store'])->name('contact.store');
 
-Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])
+Route::get('dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])
     ->name('dashboard');
 
@@ -173,6 +179,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
             Route::post('/{propositionVehicule}/valider', [PropositionVehiculeController::class, 'valider'])->name('valider');
         });
 
+        Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
         Route::resource('vehicules', VehiculeController::class);
         Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
         Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
@@ -231,8 +238,12 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 
     // ── Module : Dépenses opérationnelles ────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::DEPENSES)->group(function () {
-        Route::resource('depenses', DepenseController::class)->except(['show']);
-        Route::patch('depenses/{depense}/approuver', [DepenseController::class, 'approuver'])->name('depenses.approuver');
+        Route::get('depenses/export/excel', [DepenseController::class, 'exportCsv'])->name('depenses.export.excel');
+        Route::get('depenses/export/pdf', [DepenseController::class, 'exportPdf'])->name('depenses.export.pdf');
+        Route::get('depenses/imprimer', [DepenseController::class, 'imprimer'])->name('depenses.imprimer');
+        Route::resource('depenses', DepenseController::class);
+        Route::patch('depenses/{depense}/soumettre', [DepenseController::class, 'soumettre'])->name('depenses.soumettre');
+        Route::patch('depenses/{depense}/valider', [DepenseController::class, 'valider'])->name('depenses.valider');
         Route::patch('depenses/{depense}/rejeter', [DepenseController::class, 'rejeter'])->name('depenses.rejeter');
     });
 
@@ -333,9 +344,9 @@ Route::middleware(['auth', 'role:client|proprietaire|livreur', 'active.livreur']
 Route::middleware(['auth'])->group(function () {
     Route::get('livreurs/{livreur}', [LivreurController::class, 'show'])->name('livreurs.show');
     // Résolution ULID → URL fiche (pour le scanner USB qui lit le QR mobile)
-    Route::get('scan/user/{userId}', \App\Http\Controllers\ScanUserController::class)->name('scan.user');
+    Route::get('scan/user/{userId}', ScanUserController::class)->name('scan.user');
     // Résolution référence livraison → URL page backoffice (scanner QR de la livraison)
-    Route::get('scan/livraison/{reference}', \App\Http\Controllers\ScanLivraisonController::class)->name('scan.livraison');
+    Route::get('scan/livraison/{reference}', ScanLivraisonController::class)->name('scan.livraison');
 });
 
 require __DIR__.'/settings.php';

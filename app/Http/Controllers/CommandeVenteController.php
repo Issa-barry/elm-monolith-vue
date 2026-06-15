@@ -20,6 +20,7 @@ use App\Services\CommandeVenteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -644,7 +645,7 @@ class CommandeVenteController extends Controller
         return $site;
     }
 
-    private function produitsActifs(string $orgId): \Illuminate\Support\Collection
+    private function produitsActifs(string $orgId): Collection
     {
         return Produit::where('organization_id', $orgId)
             ->where('statut', ProduitStatut::ACTIF)
@@ -659,7 +660,7 @@ class CommandeVenteController extends Controller
             ]);
     }
 
-    private function vehiculesActifs(string $orgId): \Illuminate\Support\Collection
+    private function vehiculesActifs(string $orgId): Collection
     {
         return Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur')])
             ->where('organization_id', $orgId)
@@ -678,7 +679,7 @@ class CommandeVenteController extends Controller
             ]);
     }
 
-    private function clientsActifs(string $orgId): \Illuminate\Support\Collection
+    private function clientsActifs(string $orgId): Collection
     {
         return Client::where('organization_id', $orgId)
             ->where('is_active', true)

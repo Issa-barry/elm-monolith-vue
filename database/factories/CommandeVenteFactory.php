@@ -14,7 +14,7 @@ class CommandeVenteFactory extends Factory
             'vehicule_id' => null,
             'site_id' => null,
             'client_id' => null,
-            'reference' => 'CMD-'.now()->format('dmY').'-'.str_pad((string) fake()->unique()->numberBetween(1, 999), 3, '0', STR_PAD_LEFT),
+            'reference' => 'CMD-'.now()->format('dmy').'-'.str_pad((string) fake()->unique()->numberBetween(1, 999), 3, '0', STR_PAD_LEFT),
             'total_commande' => fake()->numberBetween(5000, 100000),
             'statut' => 'brouillon',
         ];

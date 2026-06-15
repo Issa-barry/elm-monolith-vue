@@ -3,7 +3,9 @@
 namespace App\Http\Middleware;
 
 use App\Enums\StatutTransfert;
+use App\Models\ContactMessage;
 use App\Models\Produit;
+use App\Models\PropositionVehicule;
 use App\Models\TransfertLogistique;
 use App\Services\ModuleService;
 use App\Support\AppVersion;
@@ -109,7 +111,7 @@ class HandleInertiaRequests extends Middleware
             return 0;
         }
 
-        return \App\Models\PropositionVehicule::where('organization_id', $user->organization_id)
+        return PropositionVehicule::where('organization_id', $user->organization_id)
             ->whereIn('statut', ['soumise', 'en_revision', 'a_completer'])
             ->count();
     }
@@ -125,7 +127,7 @@ class HandleInertiaRequests extends Middleware
             return 0;
         }
 
-        return \App\Models\ContactMessage::where('organization_id', $user->organization_id)
+        return ContactMessage::where('organization_id', $user->organization_id)
             ->whereNull('read_at')
             ->count();
     }

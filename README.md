@@ -1,5 +1,5 @@
 # Eau maman — Monolithe
-composer2 update
+composer update
 PHP artisan migrate:fresh --seed
 PHP artisan optimize:clear
 PHP artisan optimize

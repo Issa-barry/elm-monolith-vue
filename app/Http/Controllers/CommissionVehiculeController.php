@@ -7,6 +7,7 @@ use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPayment;
 use App\Models\Livreur;
 use App\Models\Site;
+use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
 use App\Services\CommissionPaymentService;
 use App\Services\CommissionSearchService;
@@ -26,7 +27,7 @@ class CommissionVehiculeController extends Controller
      */
     public function index(Request $request): Response
     {
-        $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
+        $this->authorize('viewAny', TransfertLogistique::class);
 
         $orgId = auth()->user()->organization_id;
         $search = trim((string) $request->input('search', ''));
@@ -130,7 +131,7 @@ class CommissionVehiculeController extends Controller
      */
     public function showLivreur(Request $request, string $livreurId): Response
     {
-        $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
+        $this->authorize('viewAny', TransfertLogistique::class);
 
         $orgId = auth()->user()->organization_id;
         $allParts = CommissionPaymentService::releveLivreur($livreurId, $orgId);
@@ -258,11 +259,11 @@ class CommissionVehiculeController extends Controller
      */
     public function show(Request $request, Vehicule $vehicule): Response
     {
-        $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
+        $this->authorize('viewAny', TransfertLogistique::class);
         abort_unless($vehicule->organization_id === auth()->user()->organization_id, 403);
 
         $soldes = CommissionPaymentService::soldesParVehicule($vehicule);
-        $payments = \App\Models\CommissionPayment::with('createur:id,prenom,nom')
+        $payments = CommissionPayment::with('createur:id,prenom,nom')
             ->where('vehicule_id', $vehicule->id)
             ->where('organization_id', $vehicule->organization_id)
             ->orderByDesc('paid_at')
@@ -295,7 +296,7 @@ class CommissionVehiculeController extends Controller
             ],
             'can_payer' => auth()->user()->can('verserCommission', $vehicule->commissions()->first()
                 ? $vehicule->commissions()->first()->transfert
-                : new \App\Models\TransfertLogistique),
+                : new TransfertLogistique),
         ]);
     }
 
@@ -306,7 +307,7 @@ class CommissionVehiculeController extends Controller
      */
     public function releve(Request $request, Vehicule $vehicule, string $type, string $beneficiaireId): Response
     {
-        $this->authorize('viewAny', \App\Models\TransfertLogistique::class);
+        $this->authorize('viewAny', TransfertLogistique::class);
         abort_unless($vehicule->organization_id === auth()->user()->organization_id, 403);
         abort_unless(in_array($type, ['livreur', 'proprietaire'], true), 422);
 
