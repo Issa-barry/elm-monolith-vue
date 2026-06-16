@@ -10,6 +10,7 @@ use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\Site;
 use App\Services\PeriodeCalculatorService;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -217,7 +218,7 @@ class PaiementPeriodeController extends Controller
 
     private function genererReference(string $orgId, string $dateDebut): string
     {
-        $prefix = 'PAY-'.\Carbon\Carbon::parse($dateDebut)->format('Ym').'-';
+        $prefix = 'PAY-'.Carbon::parse($dateDebut)->format('Ym').'-';
         $count = PaiementPeriode::forOrg($orgId)
             ->where('reference', 'like', $prefix.'%')
             ->count();

@@ -130,7 +130,6 @@ class SalaireController extends Controller
         ]);
     }
 
-
     public function payerLigne(Request $request, string $ligneId): RedirectResponse
     {
         abort_unless(auth()->user()->can('comptabilite.payer'), 403);

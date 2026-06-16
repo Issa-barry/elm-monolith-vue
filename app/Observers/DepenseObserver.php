@@ -21,7 +21,7 @@ class DepenseObserver
         }
 
         $wasValide = $depense->getOriginal('statut') === StatutDepense::VALIDE;
-        $isValide  = $depense->statut === StatutDepense::VALIDE;
+        $isValide = $depense->statut === StatutDepense::VALIDE;
 
         if (! $wasValide && ! $isValide) {
             return;
@@ -29,8 +29,8 @@ class DepenseObserver
 
         match ($depense->beneficiaire_type) {
             'employe' => $this->syncPaieLigne($depense),
-            null      => $this->syncJournalDepenseInterne($depense, $isValide),
-            default   => null,
+            null => $this->syncJournalDepenseInterne($depense, $isValide),
+            default => null,
         };
     }
 

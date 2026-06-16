@@ -6,12 +6,12 @@ use App\Enums\StatutFichePaiement;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
+use App\Models\Organization;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFicheLigne;
 use App\Models\PaiementFichePaiement;
 use App\Models\PaiementPeriode;
 use App\Models\Site;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -181,7 +181,7 @@ class PaiementFicheTest extends TestCase
 
     public function test_fiche_autre_organisation_non_accessible(): void
     {
-        $autreOrg = \App\Models\Organization::factory()->create();
+        $autreOrg = Organization::factory()->create();
         $autreSite = Site::create([
             'organization_id' => $autreOrg->id,
             'nom' => 'Agence Externe',

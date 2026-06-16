@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Comptabilite;
 
 use App\Enums\SensJournal;
+use App\Enums\StatutFichePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\JournalTresorerie;
 use App\Models\PaiementFiche;
+use App\Models\PaiementPeriode;
 use App\Models\Site;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -16,7 +18,7 @@ class ComptabiliteDashboardController extends Controller
 {
     public function index(Request $request): Response
     {
-        $this->authorize('viewAny', \App\Models\PaiementPeriode::class);
+        $this->authorize('viewAny', PaiementPeriode::class);
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -56,7 +58,7 @@ class ComptabiliteDashboardController extends Controller
             ]);
 
         $fichesAPayer = PaiementFiche::where('organization_id', $orgId)
-            ->where('statut', '!=', \App\Enums\StatutFichePaiement::PAYE->value)
+            ->where('statut', '!=', StatutFichePaiement::PAYE->value)
             ->count();
 
         $sites = $user->isAdmin()

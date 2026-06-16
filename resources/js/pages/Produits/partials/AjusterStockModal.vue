@@ -10,7 +10,7 @@ import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface SiteStock {
     site_id: string;
@@ -68,6 +68,34 @@ const form = useForm({
     motif_detail: '',
 });
 
+// Clés de remontage forcé pour que le DOM de l'InputNumber reflète null (vide)
+const augKey = ref(0);
+const dimKey = ref(0);
+
+// Exclusion mutuelle : dès qu'un champ reçoit une valeur, on vide l'autre
+// et on force le remontage du composant pour que l'input DOM soit vidé.
+watch(
+    () => form.augmenter,
+    (val) => {
+        if (val !== null && val > 0 && form.diminuer !== null) {
+            form.diminuer = null;
+            dimKey.value++;
+            resetMotifIfInvalid();
+        }
+    },
+);
+
+watch(
+    () => form.diminuer,
+    (val) => {
+        if (val !== null && val > 0 && form.augmenter !== null) {
+            form.augmenter = null;
+            augKey.value++;
+            resetMotifIfInvalid();
+        }
+    },
+);
+
 const direction = computed<'augmenter' | 'diminuer' | ''>(() => {
     if (form.augmenter) return 'augmenter';
     if (form.diminuer) return 'diminuer';
@@ -114,20 +142,6 @@ function resetMotifIfInvalid() {
     }
 }
 
-function onAugmenterChange() {
-    if (form.augmenter) {
-        form.diminuer = null;
-        resetMotifIfInvalid();
-    }
-}
-
-function onDiminuerChange() {
-    if (form.diminuer) {
-        form.augmenter = null;
-        resetMotifIfInvalid();
-    }
-}
-
 function onMotifTypeChange() {
     if (form.motif_type !== 'autre') form.motif_detail = '';
 }
@@ -160,6 +174,8 @@ function submit() {
         @hide="
             form.reset();
             form.clearErrors();
+            augKey++;
+            dimKey++;
         "
     >
         <!-- Produit info -->
@@ -204,6 +220,7 @@ function submit() {
                     placeholder="Sélectionner un site…"
                     class="w-full"
                     :class="form.errors.site_id ? 'p-invalid' : ''"
+                    :pt="{ root: { 'data-testid': 'stock-site-select' } }"
                 />
 
                 <!-- Non-admin : site verrouillé sur son agence -->
@@ -228,7 +245,7 @@ function submit() {
 
             <!-- Augmenter + Diminuer côte à côte -->
             <div class="grid grid-cols-2 gap-3">
-                <div class="space-y-1.5">
+                <div class="space-y-1.5" data-testid="stock-augmenter-input">
                     <label
                         for="ajuster-augmenter"
                         class="flex items-center gap-1.5 text-sm font-medium"
@@ -237,6 +254,7 @@ function submit() {
                         Augmenter
                     </label>
                     <InputNumber
+                        :key="`aug-${augKey}`"
                         v-model="form.augmenter"
                         input-id="ajuster-augmenter"
                         :min="1"
@@ -250,7 +268,6 @@ function submit() {
                                 form.diminuer ? 'opacity-40' : '',
                             ].join(' ')
                         "
-                        @update:model-value="onAugmenterChange"
                     />
                     <p
                         v-if="form.errors.augmenter"
@@ -260,7 +277,7 @@ function submit() {
                     </p>
                 </div>
 
-                <div class="space-y-1.5">
+                <div class="space-y-1.5" data-testid="stock-diminuer-input">
                     <label
                         for="ajuster-diminuer"
                         class="flex items-center gap-1.5 text-sm font-medium"
@@ -269,6 +286,7 @@ function submit() {
                         Diminuer
                     </label>
                     <InputNumber
+                        :key="`dim-${dimKey}`"
                         v-model="form.diminuer"
                         input-id="ajuster-diminuer"
                         :min="1"
@@ -282,7 +300,6 @@ function submit() {
                                 form.augmenter ? 'opacity-40' : '',
                             ].join(' ')
                         "
-                        @update:model-value="onDiminuerChange"
                     />
                     <p
                         v-if="form.errors.diminuer"
@@ -311,6 +328,7 @@ function submit() {
                     :disabled="!direction"
                     class="w-full"
                     :class="form.errors.motif_type ? 'p-invalid' : ''"
+                    :pt="{ root: { 'data-testid': 'stock-motif-select' } }"
                     @change="onMotifTypeChange"
                 />
                 <p
@@ -363,6 +381,7 @@ function submit() {
             <div class="flex justify-end gap-2">
                 <Button variant="outline" @click="close">Annuler</Button>
                 <Button
+                    data-testid="stock-submit-button"
                     :disabled="
                         form.processing ||
                         !form.site_id ||

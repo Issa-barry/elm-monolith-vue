@@ -6,16 +6,18 @@ use App\Enums\StatutDepense;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
-use App\Models\CommissionLogistiquePart;
+use App\Models\Client;
+use App\Models\CommandeVente;
 use App\Models\CommissionPart;
+use App\Models\CommissionVente;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Livreur;
-use App\Models\Organization;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\Site;
 use App\Models\User;
+use App\Services\PeriodeCalculatorService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Role;
@@ -134,7 +136,7 @@ class PaiementPeriodeTest extends TestCase
             'is_active' => true,
         ]);
 
-        $commVente = \App\Models\CommissionVente::create([
+        $commVente = CommissionVente::create([
             'organization_id' => $this->org->id,
             'commande_vente_id' => $this->makeCommande()->id,
             'vehicule_id' => null,
@@ -189,7 +191,7 @@ class PaiementPeriodeTest extends TestCase
             'is_active' => true,
         ]);
 
-        $commVente = \App\Models\CommissionVente::create([
+        $commVente = CommissionVente::create([
             'organization_id' => $this->org->id,
             'commande_vente_id' => $this->makeCommande()->id,
             'vehicule_id' => null,
@@ -256,7 +258,7 @@ class PaiementPeriodeTest extends TestCase
 
         $this->expectException(\LogicException::class);
 
-        app(\App\Services\PeriodeCalculatorService::class)->calculer($periode);
+        app(PeriodeCalculatorService::class)->calculer($periode);
     }
 
     // ── valider ───────────────────────────────────────────────────────────────
@@ -294,9 +296,9 @@ class PaiementPeriodeTest extends TestCase
 
     // ── helper ────────────────────────────────────────────────────────────────
 
-    private function makeCommande(): \App\Models\CommandeVente
+    private function makeCommande(): CommandeVente
     {
-        $client = \App\Models\Client::create([
+        $client = Client::create([
             'organization_id' => $this->org->id,
             'nom' => 'Client Test',
             'prenom' => 'Test',
@@ -304,7 +306,7 @@ class PaiementPeriodeTest extends TestCase
             'cashback_eligible' => false,
         ]);
 
-        return \App\Models\CommandeVente::create([
+        return CommandeVente::create([
             'organization_id' => $this->org->id,
             'site_id' => $this->defaultSite()->id,
             'client_id' => $client->id,

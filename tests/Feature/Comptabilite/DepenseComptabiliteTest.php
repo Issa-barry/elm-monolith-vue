@@ -7,17 +7,18 @@ use App\Enums\StatutLignePaie;
 use App\Enums\StatutPeriodePaie;
 use App\Enums\TypeVariablePaie;
 use App\Features\ModuleFeature;
+use App\Models\CommandeVente;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommandeVente;
+use App\Models\CommissionVente;
 use App\Models\Contrat;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Employe;
+use App\Models\JournalTresorerie;
 use App\Models\Livreur;
 use App\Models\PaieLigne;
 use App\Models\PaiePeriode;
-use App\Models\JournalTresorerie;
 use App\Models\PaieVariable;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -394,7 +395,7 @@ class DepenseComptabiliteTest extends TestCase
 
         $this->assertDatabaseHas('journal_tresorerie', [
             'organization_id' => $this->org->id,
-            'source_type' => \App\Models\Depense::class,
+            'source_type' => Depense::class,
             'source_id' => $depense->id,
             'montant' => '75000.00',
             'sens' => 'sortie',
@@ -427,7 +428,7 @@ class DepenseComptabiliteTest extends TestCase
             'categorie' => 'depense_interne',
             'libelle' => 'Carburant',
             'montant' => 40_000,
-            'source_type' => \App\Models\Depense::class,
+            'source_type' => Depense::class,
             'source_id' => $depense->id,
             'created_by' => $this->user->id,
         ]);
@@ -589,7 +590,7 @@ class DepenseComptabiliteTest extends TestCase
         ]);
 
         $commandeVente = CommandeVente::factory()->create(['organization_id' => $this->org->id]);
-        $commissionVente = \App\Models\CommissionVente::factory()->create([
+        $commissionVente = CommissionVente::factory()->create([
             'organization_id' => $this->org->id,
             'vehicule_id' => $vehicule->id,
             'commande_vente_id' => $commandeVente->id,
@@ -643,7 +644,7 @@ class DepenseComptabiliteTest extends TestCase
         ]);
 
         $commandeVenteP = CommandeVente::factory()->create(['organization_id' => $this->org->id]);
-        $commissionVente = \App\Models\CommissionVente::factory()->create([
+        $commissionVente = CommissionVente::factory()->create([
             'organization_id' => $this->org->id,
             'vehicule_id' => $vehicule->id,
             'commande_vente_id' => $commandeVenteP->id,

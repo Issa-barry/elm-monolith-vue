@@ -16,10 +16,10 @@ use App\Http\Controllers\CommissionLogistiqueController;
 use App\Http\Controllers\CommissionPaymentController;
 use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\CommissionVenteController;
-use App\Http\Controllers\Comptabilite\ComptabiliteDashboardController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
 use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
 use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteCommissionVenteController;
+use App\Http\Controllers\Comptabilite\ComptabiliteDashboardController;
 use App\Http\Controllers\Comptabilite\JournalTresorerieController;
 use App\Http\Controllers\Comptabilite\PaiementFicheController;
 use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
@@ -278,7 +278,6 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     // ── Module : Comptabilité ─────────────────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::COMPTABILITE)->prefix('comptabilite')->name('comptabilite.')->group(function () {
         Route::get('/', [ComptabiliteDashboardController::class, 'index'])->name('dashboard');
-
 
         Route::get('fiches/livreurs', [PaiementFicheController::class, 'indexLivreurs'])->name('fiches.livreurs');
         Route::get('fiches/proprietaires', [PaiementFicheController::class, 'indexProprietaires'])->name('fiches.proprietaires');

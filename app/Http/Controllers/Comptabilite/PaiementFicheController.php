@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Comptabilite;
 
+use App\Enums\ModePaiement;
 use App\Enums\StatutFichePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
@@ -119,7 +120,7 @@ class PaiementFicheController extends Controller
                     'createur' => $p->createur?->name,
                 ]),
             ],
-            'modes_paiement' => \App\Enums\ModePaiement::options(),
+            'modes_paiement' => ModePaiement::options(),
             'can_payer' => auth()->user()->can('payer', $fiche),
         ]);
     }

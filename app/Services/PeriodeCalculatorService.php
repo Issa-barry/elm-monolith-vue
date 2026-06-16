@@ -12,9 +12,9 @@ use App\Models\CommissionPart;
 use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\PaieLigne;
-use App\Models\PaieVariable;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
+use App\Models\PaieVariable;
 use App\Models\Proprietaire;
 use Illuminate\Support\Facades\DB;
 
