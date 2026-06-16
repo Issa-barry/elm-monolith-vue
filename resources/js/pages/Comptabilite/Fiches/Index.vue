@@ -57,7 +57,12 @@ const props = defineProps<{
     sites: Site[];
     periodes: PeriodeOption[];
     statuts: Option[];
-    filters: { site_id?: string; statut?: string; periode_id?: string; search?: string };
+    filters: {
+        site_id?: string;
+        statut?: string;
+        periode_id?: string;
+        search?: string;
+    };
     stats: Stats;
 }>();
 
@@ -126,7 +131,8 @@ function fmt(n: number) {
 const ficheBadge = (s: string) =>
     ({
         a_payer: 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400',
-        partiellement_paye: 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
+        partiellement_paye:
+            'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
         paye: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
     })[s] ?? 'bg-muted text-muted-foreground';
 
@@ -136,7 +142,10 @@ function exportExcel() {
     if (selectedSite.value) params.set('site_id', selectedSite.value);
     if (selectedStatut.value) params.set('statut', selectedStatut.value);
     if (selectedPeriode.value) params.set('periode_id', selectedPeriode.value);
-    window.open('/comptabilite/fiches/export/excel?' + params.toString(), '_blank');
+    window.open(
+        '/comptabilite/fiches/export/excel?' + params.toString(),
+        '_blank',
+    );
 }
 </script>
 
@@ -147,8 +156,12 @@ function exportExcel() {
             <!-- Header -->
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">{{ typeTitle[type] }}</h1>
-                    <p class="mt-1 text-sm text-muted-foreground">Fiches de règlement par bénéficiaire</p>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        {{ typeTitle[type] }}
+                    </h1>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        Fiches de règlement par bénéficiaire
+                    </p>
                 </div>
                 <button
                     type="button"
@@ -163,23 +176,43 @@ function exportExcel() {
             <!-- KPI cards -->
             <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 <div class="rounded-xl border bg-card p-4 text-center">
-                    <p class="text-2xl font-bold text-red-600 dark:text-red-400">{{ stats.nb_a_payer }}</p>
+                    <p
+                        class="text-2xl font-bold text-red-600 dark:text-red-400"
+                    >
+                        {{ stats.nb_a_payer }}
+                    </p>
                     <p class="mt-1 text-xs text-muted-foreground">À payer</p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 text-center">
-                    <p class="text-2xl font-bold text-amber-600 dark:text-amber-400">{{ stats.nb_partiellement_paye }}</p>
+                    <p
+                        class="text-2xl font-bold text-amber-600 dark:text-amber-400"
+                    >
+                        {{ stats.nb_partiellement_paye }}
+                    </p>
                     <p class="mt-1 text-xs text-muted-foreground">Partiel</p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 text-center">
-                    <p class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{{ stats.nb_paye }}</p>
+                    <p
+                        class="text-2xl font-bold text-emerald-600 dark:text-emerald-400"
+                    >
+                        {{ stats.nb_paye }}
+                    </p>
                     <p class="mt-1 text-xs text-muted-foreground">Payé</p>
                 </div>
-                <div class="rounded-xl border bg-card p-4 text-center col-span-1 sm:col-span-2 lg:col-span-1">
+                <div
+                    class="col-span-1 rounded-xl border bg-card p-4 text-center sm:col-span-2 lg:col-span-1"
+                >
                     <p class="text-lg font-bold">{{ fmt(stats.total_net) }}</p>
                     <p class="mt-1 text-xs text-muted-foreground">Total net</p>
                 </div>
-                <div class="rounded-xl border bg-card p-4 text-center col-span-1 sm:col-span-2 lg:col-span-1">
-                    <p class="text-lg font-bold text-emerald-600 dark:text-emerald-400">{{ fmt(stats.total_paye) }}</p>
+                <div
+                    class="col-span-1 rounded-xl border bg-card p-4 text-center sm:col-span-2 lg:col-span-1"
+                >
+                    <p
+                        class="text-lg font-bold text-emerald-600 dark:text-emerald-400"
+                    >
+                        {{ fmt(stats.total_paye) }}
+                    </p>
                     <p class="mt-1 text-xs text-muted-foreground">Déjà payé</p>
                 </div>
             </div>
@@ -223,10 +256,18 @@ function exportExcel() {
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">
-                <DataTable :value="fiches.data" data-key="id" striped-rows class="text-sm">
+                <DataTable
+                    :value="fiches.data"
+                    data-key="id"
+                    striped-rows
+                    class="text-sm"
+                >
                     <Column header="Référence" style="width: 160px">
                         <template #body="{ data }">
-                            <span class="font-mono text-xs text-muted-foreground">{{ data.reference }}</span>
+                            <span
+                                class="font-mono text-xs text-muted-foreground"
+                                >{{ data.reference }}</span
+                            >
                         </template>
                     </Column>
 
@@ -239,13 +280,17 @@ function exportExcel() {
                             >
                                 {{ data.periode_reference }}
                             </Link>
-                            <span v-else class="text-xs text-muted-foreground">—</span>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
                         </template>
                     </Column>
 
                     <Column header="Agence" style="width: 130px">
                         <template #body="{ data }">
-                            <span class="text-sm text-muted-foreground">{{ data.site?.nom ?? '—' }}</span>
+                            <span class="text-sm text-muted-foreground">{{
+                                data.site?.nom ?? '—'
+                            }}</span>
                         </template>
                     </Column>
 
@@ -262,13 +307,17 @@ function exportExcel() {
 
                     <Column header="Brut" style="width: 130px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-sm">{{ fmt(data.montant_brut) }}</span>
+                            <span class="text-sm tabular-nums">{{
+                                fmt(data.montant_brut)
+                            }}</span>
                         </template>
                     </Column>
 
                     <Column header="Déductions" style="width: 130px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-sm text-red-600 dark:text-red-400">
+                            <span
+                                class="text-sm text-red-600 tabular-nums dark:text-red-400"
+                            >
                                 -{{ fmt(data.total_deductions) }}
                             </span>
                         </template>
@@ -276,7 +325,9 @@ function exportExcel() {
 
                     <Column header="Net à payer" style="width: 140px">
                         <template #body="{ data }">
-                            <span class="tabular-nums text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                            <span
+                                class="text-sm font-semibold text-emerald-600 tabular-nums dark:text-emerald-400"
+                            >
                                 {{ fmt(data.montant_net) }}
                             </span>
                         </template>
@@ -305,7 +356,9 @@ function exportExcel() {
                     </Column>
 
                     <template #empty>
-                        <div class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                        <div
+                            class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+                        >
                             <ReceiptText class="h-12 w-12 opacity-30" />
                             <p class="text-sm">Aucune fiche trouvée.</p>
                         </div>

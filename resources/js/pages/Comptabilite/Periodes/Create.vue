@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
-import Calendar from 'primevue/calendar';
 import Dropdown from 'primevue/dropdown';
 import Textarea from 'primevue/textarea';
 import { ref } from 'vue';
@@ -64,12 +63,17 @@ function submit() {
     <Head title="Nouvelle période de paiement" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto max-w-2xl p-6">
-            <h1 class="mb-6 text-xl font-semibold">Nouvelle période de paiement</h1>
+            <h1 class="mb-6 text-xl font-semibold">
+                Nouvelle période de paiement
+            </h1>
 
             <form class="flex flex-col gap-5" @submit.prevent="submit">
                 <!-- Type -->
                 <div class="flex flex-col gap-1.5">
-                    <label class="text-sm font-medium">Type de bénéficiaire <span class="text-destructive">*</span></label>
+                    <label class="text-sm font-medium"
+                        >Type de bénéficiaire
+                        <span class="text-destructive">*</span></label
+                    >
                     <Dropdown
                         v-model="form.type"
                         :options="types"
@@ -78,7 +82,9 @@ function submit() {
                         placeholder="Sélectionner un type"
                         class="w-full"
                     />
-                    <p v-if="errors.type" class="text-xs text-destructive">{{ errors.type }}</p>
+                    <p v-if="errors.type" class="text-xs text-destructive">
+                        {{ errors.type }}
+                    </p>
                 </div>
 
                 <!-- Agence -->
@@ -92,35 +98,57 @@ function submit() {
                         placeholder="Toutes les agences"
                         class="w-full"
                     />
-                    <p class="text-xs text-muted-foreground">Laisser vide pour inclure toutes les agences.</p>
+                    <p class="text-xs text-muted-foreground">
+                        Laisser vide pour inclure toutes les agences.
+                    </p>
                 </div>
 
                 <!-- Dates -->
                 <div class="grid grid-cols-2 gap-4">
                     <div class="flex flex-col gap-1.5">
-                        <label class="text-sm font-medium">Date de début <span class="text-destructive">*</span></label>
+                        <label class="text-sm font-medium"
+                            >Date de début
+                            <span class="text-destructive">*</span></label
+                        >
                         <input
                             v-model="form.date_debut"
                             type="date"
-                            class="h-10 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            class="h-10 rounded-lg border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
                         />
-                        <p v-if="errors.date_debut" class="text-xs text-destructive">{{ errors.date_debut }}</p>
+                        <p
+                            v-if="errors.date_debut"
+                            class="text-xs text-destructive"
+                        >
+                            {{ errors.date_debut }}
+                        </p>
                     </div>
                     <div class="flex flex-col gap-1.5">
-                        <label class="text-sm font-medium">Date de fin <span class="text-destructive">*</span></label>
+                        <label class="text-sm font-medium"
+                            >Date de fin
+                            <span class="text-destructive">*</span></label
+                        >
                         <input
                             v-model="form.date_fin"
                             type="date"
-                            class="h-10 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            class="h-10 rounded-lg border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
                         />
-                        <p v-if="errors.date_fin" class="text-xs text-destructive">{{ errors.date_fin }}</p>
+                        <p
+                            v-if="errors.date_fin"
+                            class="text-xs text-destructive"
+                        >
+                            {{ errors.date_fin }}
+                        </p>
                     </div>
                 </div>
 
                 <!-- Aide sur les dates -->
-                <div v-if="form.type" class="rounded-lg border bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+                <div
+                    v-if="form.type"
+                    class="rounded-lg border bg-muted/40 px-4 py-3 text-xs text-muted-foreground"
+                >
                     <template v-if="form.type === 'livreur'">
-                        Livreurs : cycles de 15 jours — ex : 01/06→15/06 ou 16/06→30/06
+                        Livreurs : cycles de 15 jours — ex : 01/06→15/06 ou
+                        16/06→30/06
                     </template>
                     <template v-else-if="form.type === 'proprietaire'">
                         Propriétaires : cycle mensuel — ex : 01/06→30/06

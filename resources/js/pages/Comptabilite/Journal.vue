@@ -36,7 +36,13 @@ const props = defineProps<{
     categories: Option[];
     sites: Site[];
     is_admin: boolean;
-    filters: { sens?: string; categorie?: string; date_from?: string; date_to?: string; site_id?: string };
+    filters: {
+        sens?: string;
+        categorie?: string;
+        date_from?: string;
+        date_to?: string;
+        site_id?: string;
+    };
     kpis: { total_entrees: number; total_sorties: number; solde: number };
 }>();
 
@@ -52,8 +58,14 @@ const selectedSite = ref(props.filters.site_id ?? '');
 const dateFrom = ref(props.filters.date_from ?? '');
 const dateTo = ref(props.filters.date_to ?? '');
 
-const sensOptions = computed(() => [{ label: 'Tous les sens', value: '' }, ...props.sens_options]);
-const categorieOptions = computed(() => [{ label: 'Toutes les catégories', value: '' }, ...props.categories]);
+const sensOptions = computed(() => [
+    { label: 'Tous les sens', value: '' },
+    ...props.sens_options,
+]);
+const categorieOptions = computed(() => [
+    { label: 'Toutes les catégories', value: '' },
+    ...props.categories,
+]);
 const siteOptions = computed(() => [
     { label: 'Toutes les agences', value: '' },
     ...props.sites.map((s) => ({ label: s.nom, value: s.id })),
@@ -84,8 +96,12 @@ function fmt(n: number) {
         <div class="flex flex-col gap-6 p-6">
             <!-- Header -->
             <div>
-                <h1 class="text-2xl font-semibold tracking-tight">Journal financier</h1>
-                <p class="mt-1 text-sm text-muted-foreground">Tous les mouvements de trésorerie</p>
+                <h1 class="text-2xl font-semibold tracking-tight">
+                    Journal financier
+                </h1>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Tous les mouvements de trésorerie
+                </p>
             </div>
 
             <!-- KPI strip -->
@@ -93,16 +109,28 @@ function fmt(n: number) {
                 <div class="rounded-xl border bg-card p-4">
                     <div class="flex items-center gap-2">
                         <ArrowUp class="h-4 w-4 text-emerald-500" />
-                        <span class="text-sm text-muted-foreground">Total entrées</span>
+                        <span class="text-sm text-muted-foreground"
+                            >Total entrées</span
+                        >
                     </div>
-                    <p class="mt-1 text-xl font-bold text-emerald-600 dark:text-emerald-400">{{ fmt(kpis.total_entrees) }}</p>
+                    <p
+                        class="mt-1 text-xl font-bold text-emerald-600 dark:text-emerald-400"
+                    >
+                        {{ fmt(kpis.total_entrees) }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4">
                     <div class="flex items-center gap-2">
                         <ArrowDown class="h-4 w-4 text-red-500" />
-                        <span class="text-sm text-muted-foreground">Total sorties</span>
+                        <span class="text-sm text-muted-foreground"
+                            >Total sorties</span
+                        >
                     </div>
-                    <p class="mt-1 text-xl font-bold text-red-600 dark:text-red-400">{{ fmt(kpis.total_sorties) }}</p>
+                    <p
+                        class="mt-1 text-xl font-bold text-red-600 dark:text-red-400"
+                    >
+                        {{ fmt(kpis.total_sorties) }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4">
                     <div class="flex items-center gap-2">
@@ -111,7 +139,11 @@ function fmt(n: number) {
                     </div>
                     <p
                         class="mt-1 text-xl font-bold"
-                        :class="kpis.solde >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'"
+                        :class="
+                            kpis.solde >= 0
+                                ? 'text-blue-600 dark:text-blue-400'
+                                : 'text-red-600 dark:text-red-400'
+                        "
                     >
                         {{ fmt(kpis.solde) }}
                     </p>
@@ -125,7 +157,7 @@ function fmt(n: number) {
                     <input
                         v-model="dateFrom"
                         type="date"
-                        class="h-9 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        class="h-9 rounded-lg border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
                     />
                 </div>
                 <div class="flex flex-col gap-1">
@@ -133,7 +165,7 @@ function fmt(n: number) {
                     <input
                         v-model="dateTo"
                         type="date"
-                        class="h-9 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        class="h-9 rounded-lg border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
                     />
                 </div>
                 <Dropdown
@@ -183,7 +215,9 @@ function fmt(n: number) {
                 >
                     <Column header="Date" style="width: 110px">
                         <template #body="{ data }">
-                            <span class="font-mono text-xs text-muted-foreground">
+                            <span
+                                class="font-mono text-xs text-muted-foreground"
+                            >
                                 {{ data.date_operation ?? '—' }}
                             </span>
                         </template>
@@ -191,13 +225,18 @@ function fmt(n: number) {
 
                     <Column header="Référence" style="width: 140px">
                         <template #body="{ data }">
-                            <span class="font-mono text-xs text-muted-foreground">{{ data.reference ?? '—' }}</span>
+                            <span
+                                class="font-mono text-xs text-muted-foreground"
+                                >{{ data.reference ?? '—' }}</span
+                            >
                         </template>
                     </Column>
 
                     <Column header="Type" style="width: 160px">
                         <template #body="{ data }">
-                            <span class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                            <span
+                                class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                            >
                                 {{ data.categorie_label }}
                             </span>
                         </template>
@@ -206,7 +245,12 @@ function fmt(n: number) {
                     <Column header="Libellé" style="min-width: 200px">
                         <template #body="{ data }">
                             <span class="text-sm">{{ data.libelle }}</span>
-                            <div v-if="data.site" class="text-xs text-muted-foreground">{{ data.site.nom }}</div>
+                            <div
+                                v-if="data.site"
+                                class="text-xs text-muted-foreground"
+                            >
+                                {{ data.site.nom }}
+                            </div>
                         </template>
                     </Column>
 
@@ -214,7 +258,7 @@ function fmt(n: number) {
                         <template #body="{ data }">
                             <span
                                 v-if="data.sens === 'entree'"
-                                class="flex items-center gap-1 tabular-nums text-sm font-medium text-emerald-600 dark:text-emerald-400"
+                                class="flex items-center gap-1 text-sm font-medium text-emerald-600 tabular-nums dark:text-emerald-400"
                             >
                                 <ArrowUp class="h-3.5 w-3.5" />
                                 {{ fmt(data.montant) }}
@@ -226,7 +270,7 @@ function fmt(n: number) {
                         <template #body="{ data }">
                             <span
                                 v-if="data.sens === 'sortie'"
-                                class="flex items-center gap-1 tabular-nums text-sm font-medium text-red-600 dark:text-red-400"
+                                class="flex items-center gap-1 text-sm font-medium text-red-600 tabular-nums dark:text-red-400"
                             >
                                 <ArrowDown class="h-3.5 w-3.5" />
                                 {{ fmt(data.montant) }}
@@ -235,9 +279,13 @@ function fmt(n: number) {
                     </Column>
 
                     <template #empty>
-                        <div class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                        <div
+                            class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+                        >
                             <BookOpen class="h-12 w-12 opacity-30" />
-                            <p class="text-sm">Aucun mouvement sur la période sélectionnée.</p>
+                            <p class="text-sm">
+                                Aucun mouvement sur la période sélectionnée.
+                            </p>
                         </div>
                     </template>
                 </DataTable>

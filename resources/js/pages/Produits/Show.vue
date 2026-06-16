@@ -413,13 +413,13 @@ const ajustements = props.mouvements.map((m) => ({
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="border-b text-xs text-muted-foreground">
-                                <th class="pb-2 pr-4 text-left font-medium">
+                                <th class="pr-4 pb-2 text-left font-medium">
                                     Site
                                 </th>
-                                <th class="pb-2 pr-4 text-right font-medium">
+                                <th class="pr-4 pb-2 text-right font-medium">
                                     Stock
                                 </th>
-                                <th class="pb-2 pr-4 text-right font-medium">
+                                <th class="pr-4 pb-2 text-right font-medium">
                                     Seuil alerte
                                 </th>
                                 <th class="pb-2 text-left font-medium">
@@ -459,7 +459,9 @@ const ajustements = props.mouvements.map((m) => ({
                                             : '—'
                                     }}
                                 </td>
-                                <td class="py-2.5 text-xs text-muted-foreground">
+                                <td
+                                    class="py-2.5 text-xs text-muted-foreground"
+                                >
                                     {{ formatDateShort(s.updated_at) }}
                                 </td>
                             </tr>
@@ -656,7 +658,9 @@ const ajustements = props.mouvements.map((m) => ({
                                     >
                                         {{ m.site_code ?? m.site_nom }}
                                     </span>
-                                    <span v-else class="text-muted-foreground">—</span>
+                                    <span v-else class="text-muted-foreground"
+                                        >—</span
+                                    >
                                 </td>
                                 <td class="w-40 py-2.5 pr-4">
                                     {{ m.createur_nom || '—' }}

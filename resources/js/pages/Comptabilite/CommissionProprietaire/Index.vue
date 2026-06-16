@@ -11,7 +11,15 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Building2, Download, FileText, HandCoins, MoreHorizontal, Truck, User } from 'lucide-vue-next';
+import {
+    Building2,
+    Download,
+    FileText,
+    HandCoins,
+    MoreHorizontal,
+    Truck,
+    User,
+} from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
@@ -33,11 +41,21 @@ interface BeneficiaireRow {
     statut_global: string;
 }
 
-interface PeriodeOption { code: string; label: string; }
+interface PeriodeOption {
+    code: string;
+    label: string;
+}
 
 const props = defineProps<{
     beneficiaires: BeneficiaireRow[];
-    kpis: { nb_proprietaires: number; total_brut: number; total_net: number; total_frais: number; total_verse: number; solde_total: number };
+    kpis: {
+        nb_proprietaires: number;
+        total_brut: number;
+        total_net: number;
+        total_frais: number;
+        total_verse: number;
+        solde_total: number;
+    };
     search: string;
     filtre_statut: string;
     selected_periode: string;
@@ -49,7 +67,10 @@ const props = defineProps<{
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Comptabilité', href: '/comptabilite' },
-    { title: 'Commission propriétaire', href: '/comptabilite/commissions/proprietaires' },
+    {
+        title: 'Commission propriétaire',
+        href: '/comptabilite/commissions/proprietaires',
+    },
 ];
 
 const searchVal = ref(props.search ?? '');
@@ -89,11 +110,14 @@ watch(statutFiltre, appliquerFiltres);
 watch(periodeFiltre, appliquerFiltres);
 
 function statutClass(s: string) {
-    return {
-        impaye: 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400',
-        partiel: 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
-        paye: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
-    }[s] ?? 'bg-muted text-muted-foreground';
+    return (
+        {
+            impaye: 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400',
+            partiel:
+                'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
+            paye: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
+        }[s] ?? 'bg-muted text-muted-foreground'
+    );
 }
 
 function statutLabel(s: string) {
@@ -134,12 +158,22 @@ function submitPaiement() {
     paiementForm.errors = {};
     router.post(
         `/comptabilite/commissions/proprietaires/${selectedBenef.value.beneficiaire_id}/paiements`,
-        { montant: paiementForm.montant, mode_paiement: paiementForm.mode_paiement, note: paiementForm.note || null },
+        {
+            montant: paiementForm.montant,
+            mode_paiement: paiementForm.mode_paiement,
+            note: paiementForm.note || null,
+        },
         {
             preserveScroll: true,
-            onSuccess: () => { showPaiementDialog.value = false; },
-            onError: (e) => { paiementForm.errors = e as Record<string, string>; },
-            onFinish: () => { paiementForm.processing = false; },
+            onSuccess: () => {
+                showPaiementDialog.value = false;
+            },
+            onError: (e) => {
+                paiementForm.errors = e as Record<string, string>;
+            },
+            onFinish: () => {
+                paiementForm.processing = false;
+            },
         },
     );
 }
@@ -153,15 +187,27 @@ function buildParams(): URLSearchParams {
 }
 
 function exportExcel() {
-    window.open('/comptabilite/commissions/proprietaires/export/excel?' + buildParams().toString(), '_blank');
+    window.open(
+        '/comptabilite/commissions/proprietaires/export/excel?' +
+            buildParams().toString(),
+        '_blank',
+    );
 }
 
 function exportPdf() {
-    window.open('/comptabilite/commissions/proprietaires/export/pdf?' + buildParams().toString(), '_blank');
+    window.open(
+        '/comptabilite/commissions/proprietaires/export/pdf?' +
+            buildParams().toString(),
+        '_blank',
+    );
 }
 
 function fmt(val: number | null | undefined) {
-    return new Intl.NumberFormat('fr-FR').format(Math.round(Math.abs(Number(val ?? 0)))) + ' GNF';
+    return (
+        new Intl.NumberFormat('fr-FR').format(
+            Math.round(Math.abs(Number(val ?? 0))),
+        ) + ' GNF'
+    );
 }
 
 function fmtTel(tel: string | null | undefined): string {
@@ -182,9 +228,13 @@ function fmtTel(tel: string | null | undefined): string {
         <div class="space-y-6 p-6">
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">Commission propriétaire</h1>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Commission propriétaire
+                    </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ kpis.nb_proprietaires }} propriétaire{{ kpis.nb_proprietaires !== 1 ? 's' : '' }}
+                        {{ kpis.nb_proprietaires }} propriétaire{{
+                            kpis.nb_proprietaires !== 1 ? 's' : ''
+                        }}
                     </p>
                 </div>
                 <div class="flex items-center gap-2">
@@ -210,35 +260,91 @@ function fmtTel(tel: string | null | undefined): string {
             <!-- KPIs -->
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 <div class="rounded-lg border bg-card p-4 text-center">
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total cumulé</p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">{{ fmt(kpis.total_brut) }}</p>
-                </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
-                    <p class="text-xs font-medium uppercase tracking-wide text-red-600 dark:text-red-400">Frais</p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums text-red-600 dark:text-red-400">
-                        {{ kpis.total_frais > 0 ? '-' + fmt(kpis.total_frais) : fmt(0) }}
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Total cumulé
+                    </p>
+                    <p class="mt-1 text-lg font-semibold tabular-nums">
+                        {{ fmt(kpis.total_brut) }}
                     </p>
                 </div>
                 <div class="rounded-lg border bg-card p-4 text-center">
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Net à payer</p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">{{ fmt(kpis.total_net) }}</p>
+                    <p
+                        class="text-xs font-medium tracking-wide text-red-600 uppercase dark:text-red-400"
+                    >
+                        Frais
+                    </p>
+                    <p
+                        class="mt-1 text-lg font-semibold text-red-600 tabular-nums dark:text-red-400"
+                    >
+                        {{
+                            kpis.total_frais > 0
+                                ? '-' + fmt(kpis.total_frais)
+                                : fmt(0)
+                        }}
+                    </p>
                 </div>
                 <div class="rounded-lg border bg-card p-4 text-center">
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Déjà payé</p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">{{ fmt(kpis.total_verse) }}</p>
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Net à payer
+                    </p>
+                    <p class="mt-1 text-lg font-semibold tabular-nums">
+                        {{ fmt(kpis.total_net) }}
+                    </p>
                 </div>
                 <div class="rounded-lg border bg-card p-4 text-center">
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Reste à payer</p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">{{ fmt(kpis.solde_total) }}</p>
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Déjà payé
+                    </p>
+                    <p class="mt-1 text-lg font-semibold tabular-nums">
+                        {{ fmt(kpis.total_verse) }}
+                    </p>
+                </div>
+                <div class="rounded-lg border bg-card p-4 text-center">
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Reste à payer
+                    </p>
+                    <p class="mt-1 text-lg font-semibold tabular-nums">
+                        {{ fmt(kpis.solde_total) }}
+                    </p>
                 </div>
             </div>
 
             <!-- Filtres -->
             <div class="flex flex-wrap items-center gap-3">
-                <InputText v-model="searchVal" placeholder="Nom, téléphone…" class="w-56 text-sm" />
-                <Dropdown v-model="statutFiltre" :options="STATUT_OPTIONS" option-label="label" option-value="value" placeholder="Tous les statuts" class="w-48 text-sm" />
-                <Dropdown v-model="periodeFiltre" :options="PERIODE_OPTIONS" option-label="label" option-value="code" placeholder="Toutes les périodes" class="w-56 text-sm" />
-                <span class="text-xs text-muted-foreground">{{ beneficiaires.length }} résultat{{ beneficiaires.length !== 1 ? 's' : '' }}</span>
+                <InputText
+                    v-model="searchVal"
+                    placeholder="Nom, téléphone…"
+                    class="w-56 text-sm"
+                />
+                <Dropdown
+                    v-model="statutFiltre"
+                    :options="STATUT_OPTIONS"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Tous les statuts"
+                    class="w-48 text-sm"
+                />
+                <Dropdown
+                    v-model="periodeFiltre"
+                    :options="PERIODE_OPTIONS"
+                    option-label="label"
+                    option-value="code"
+                    placeholder="Toutes les périodes"
+                    class="w-56 text-sm"
+                />
+                <span class="text-xs text-muted-foreground"
+                    >{{ beneficiaires.length }} résultat{{
+                        beneficiaires.length !== 1 ? 's' : ''
+                    }}</span
+                >
             </div>
 
             <!-- Tableau -->
@@ -246,15 +352,51 @@ function fmtTel(tel: string | null | undefined): string {
                 <table v-if="beneficiaires.length > 0" class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
-                            <th class="px-5 py-3.5 text-left font-medium text-muted-foreground">Propriétaire</th>
-                            <th class="px-5 py-3.5 text-left font-medium text-muted-foreground">Véhicule(s)</th>
-                            <th class="px-5 py-3.5 text-left font-medium text-muted-foreground">Agence</th>
-                            <th class="px-5 py-3.5 text-right font-medium text-muted-foreground">Total cumulé</th>
-                            <th class="px-5 py-3.5 text-right font-medium text-muted-foreground">Frais</th>
-                            <th class="px-5 py-3.5 text-right font-medium text-muted-foreground">Net à payer</th>
-                            <th class="px-5 py-3.5 text-right font-medium text-muted-foreground">Déjà payé</th>
-                            <th class="px-5 py-3.5 text-right font-medium text-muted-foreground">Reste à payer</th>
-                            <th class="px-5 py-3.5 text-left font-medium text-muted-foreground">Statut</th>
+                            <th
+                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
+                            >
+                                Propriétaire
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
+                            >
+                                Véhicule(s)
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
+                            >
+                                Agence
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                            >
+                                Total cumulé
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                            >
+                                Frais
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                            >
+                                Net à payer
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                            >
+                                Déjà payé
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                            >
+                                Reste à payer
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
+                            >
+                                Statut
+                            </th>
                             <th class="w-10 px-4 py-3.5" />
                         </tr>
                     </thead>
@@ -263,60 +405,129 @@ function fmtTel(tel: string | null | undefined): string {
                             v-for="b in beneficiaires"
                             :key="b.beneficiaire_id"
                             class="cursor-pointer transition-colors hover:bg-muted/10"
-                            @click="router.visit('/comptabilite/commissions/proprietaires/' + b.beneficiaire_id)"
+                            @click="
+                                router.visit(
+                                    '/comptabilite/commissions/proprietaires/' +
+                                        b.beneficiaire_id,
+                                )
+                            "
                         >
                             <td class="px-5 py-4">
                                 <div class="flex items-center gap-2.5">
-                                    <User class="h-4 w-4 shrink-0 text-muted-foreground" />
+                                    <User
+                                        class="h-4 w-4 shrink-0 text-muted-foreground"
+                                    />
                                     <div>
-                                        <p class="font-semibold">{{ b.beneficiaire_nom }}</p>
-                                        <p v-if="b.telephone" class="mt-0.5 text-xs text-muted-foreground">{{ fmtTel(b.telephone) }}</p>
+                                        <p class="font-semibold">
+                                            {{ b.beneficiaire_nom }}
+                                        </p>
+                                        <p
+                                            v-if="b.telephone"
+                                            class="mt-0.5 text-xs text-muted-foreground"
+                                        >
+                                            {{ fmtTel(b.telephone) }}
+                                        </p>
                                     </div>
                                 </div>
                             </td>
                             <td class="px-5 py-4">
-                                <div v-if="b.vehicules" class="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                <div
+                                    v-if="b.vehicules"
+                                    class="flex items-center gap-1.5 text-sm text-muted-foreground"
+                                >
                                     <Truck class="h-3.5 w-3.5 shrink-0" />
                                     <span>{{ b.vehicules }}</span>
                                 </div>
-                                <span v-else class="text-xs text-muted-foreground">—</span>
+                                <span
+                                    v-else
+                                    class="text-xs text-muted-foreground"
+                                    >—</span
+                                >
                             </td>
                             <td class="px-5 py-4 text-sm">
-                                <div v-if="b.agence" class="flex items-center gap-1.5 text-muted-foreground">
+                                <div
+                                    v-if="b.agence"
+                                    class="flex items-center gap-1.5 text-muted-foreground"
+                                >
                                     <Building2 class="h-3.5 w-3.5 shrink-0" />
                                     <span>{{ b.agence }}</span>
                                 </div>
-                                <span v-else class="text-xs text-muted-foreground">—</span>
+                                <span
+                                    v-else
+                                    class="text-xs text-muted-foreground"
+                                    >—</span
+                                >
                             </td>
-                            <td class="px-5 py-4 text-right font-semibold tabular-nums">{{ fmt(b.total_brut_cumule) }}</td>
-                            <td class="px-5 py-4 text-right tabular-nums text-red-600 dark:text-red-400">
-                                {{ b.total_frais > 0 ? '-' + fmt(b.total_frais) : '—' }}
+                            <td
+                                class="px-5 py-4 text-right font-semibold tabular-nums"
+                            >
+                                {{ fmt(b.total_brut_cumule) }}
                             </td>
-                            <td class="px-5 py-4 text-right font-semibold tabular-nums">{{ fmt(b.total_net_cumule) }}</td>
-                            <td class="px-5 py-4 text-right font-semibold tabular-nums">{{ fmt(b.total_verse) }}</td>
-                            <td class="px-5 py-4 text-right font-bold tabular-nums text-lg">{{ fmt(b.solde_restant) }}</td>
+                            <td
+                                class="px-5 py-4 text-right text-red-600 tabular-nums dark:text-red-400"
+                            >
+                                {{
+                                    b.total_frais > 0
+                                        ? '-' + fmt(b.total_frais)
+                                        : '—'
+                                }}
+                            </td>
+                            <td
+                                class="px-5 py-4 text-right font-semibold tabular-nums"
+                            >
+                                {{ fmt(b.total_net_cumule) }}
+                            </td>
+                            <td
+                                class="px-5 py-4 text-right font-semibold tabular-nums"
+                            >
+                                {{ fmt(b.total_verse) }}
+                            </td>
+                            <td
+                                class="px-5 py-4 text-right text-lg font-bold tabular-nums"
+                            >
+                                {{ fmt(b.solde_restant) }}
+                            </td>
                             <td class="px-5 py-4">
-                                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium" :class="statutClass(b.statut_global)">
+                                <span
+                                    class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
+                                    :class="statutClass(b.statut_global)"
+                                >
                                     {{ statutLabel(b.statut_global) }}
                                 </span>
                             </td>
                             <td class="px-4 py-3 text-right" @click.stop>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger as-child>
-                                        <Button variant="ghost" size="icon" class="h-7 w-7">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-7 w-7"
+                                        >
                                             <MoreHorizontal class="h-4 w-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
                                         <DropdownMenuItem as-child>
-                                            <Link :href="`/comptabilite/commissions/proprietaires/${b.beneficiaire_id}`" class="flex w-full cursor-pointer items-center">
+                                            <Link
+                                                :href="`/comptabilite/commissions/proprietaires/${b.beneficiaire_id}`"
+                                                class="flex w-full cursor-pointer items-center"
+                                            >
                                                 Détail
                                             </Link>
                                         </DropdownMenuItem>
-                                        <template v-if="can_payer && b.solde_restant > 0">
+                                        <template
+                                            v-if="
+                                                can_payer && b.solde_restant > 0
+                                            "
+                                        >
                                             <DropdownMenuSeparator />
-                                            <DropdownMenuItem class="cursor-pointer" @click="openPaiement(b)">
-                                                <HandCoins class="mr-2 h-4 w-4" />
+                                            <DropdownMenuItem
+                                                class="cursor-pointer"
+                                                @click="openPaiement(b)"
+                                            >
+                                                <HandCoins
+                                                    class="mr-2 h-4 w-4"
+                                                />
                                                 Payer
                                             </DropdownMenuItem>
                                         </template>
@@ -326,37 +537,87 @@ function fmtTel(tel: string | null | undefined): string {
                         </tr>
                     </tbody>
                 </table>
-                <div v-else class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                <div
+                    v-else
+                    class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+                >
                     <Building2 class="h-12 w-12 opacity-30" />
-                    <p class="text-sm">Aucune commission propriétaire trouvée.</p>
+                    <p class="text-sm">
+                        Aucune commission propriétaire trouvée.
+                    </p>
                 </div>
             </div>
         </div>
     </AppLayout>
 
     <!-- Dialog paiement -->
-    <Dialog v-model:visible="showPaiementDialog" modal :style="{ width: '420px' }" header="Enregistrer un paiement">
+    <Dialog
+        v-model:visible="showPaiementDialog"
+        modal
+        :style="{ width: '420px' }"
+        header="Enregistrer un paiement"
+    >
         <div class="flex flex-col gap-4 py-2">
             <div class="flex flex-col gap-1.5">
                 <Label>Montant (GNF)</Label>
-                <InputNumber v-model="paiementForm.montant" :min="1" :max="selectedBenef?.solde_restant ?? 0" :use-grouping="true" class="w-full" input-class="w-full" suffix=" GNF" locale="fr-FR" autofocus />
-                <p v-if="paiementForm.errors.montant" class="text-xs text-destructive">{{ paiementForm.errors.montant }}</p>
-                <p class="text-xs text-muted-foreground">Disponible : {{ fmt(selectedBenef?.solde_restant ?? 0) }}</p>
+                <InputNumber
+                    v-model="paiementForm.montant"
+                    :min="1"
+                    :max="selectedBenef?.solde_restant ?? 0"
+                    :use-grouping="true"
+                    class="w-full"
+                    input-class="w-full"
+                    suffix=" GNF"
+                    locale="fr-FR"
+                    autofocus
+                />
+                <p
+                    v-if="paiementForm.errors.montant"
+                    class="text-xs text-destructive"
+                >
+                    {{ paiementForm.errors.montant }}
+                </p>
+                <p class="text-xs text-muted-foreground">
+                    Disponible : {{ fmt(selectedBenef?.solde_restant ?? 0) }}
+                </p>
             </div>
             <div class="flex flex-col gap-1.5">
                 <Label>Mode de paiement</Label>
-                <Dropdown v-model="paiementForm.mode_paiement" :options="MODES" option-label="label" option-value="value" class="w-full text-sm" />
+                <Dropdown
+                    v-model="paiementForm.mode_paiement"
+                    :options="MODES"
+                    option-label="label"
+                    option-value="value"
+                    class="w-full text-sm"
+                />
             </div>
             <div class="flex flex-col gap-1.5">
                 <Label>Note (optionnel)</Label>
-                <textarea v-model="paiementForm.note" rows="2" class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
+                <textarea
+                    v-model="paiementForm.note"
+                    rows="2"
+                    class="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
+                />
             </div>
         </div>
         <template #footer>
             <div class="flex justify-end gap-2">
-                <Button variant="outline" size="sm" @click="showPaiementDialog = false">Annuler</Button>
-                <Button size="sm" :disabled="paiementForm.processing || !paiementForm.montant" @click="submitPaiement">
-                    {{ paiementForm.processing ? 'Enregistrement…' : 'Confirmer' }}
+                <Button
+                    variant="outline"
+                    size="sm"
+                    @click="showPaiementDialog = false"
+                    >Annuler</Button
+                >
+                <Button
+                    size="sm"
+                    :disabled="paiementForm.processing || !paiementForm.montant"
+                    @click="submitPaiement"
+                >
+                    {{
+                        paiementForm.processing
+                            ? 'Enregistrement…'
+                            : 'Confirmer'
+                    }}
                 </Button>
             </div>
         </template>

@@ -11,7 +11,7 @@ import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/vue3';
 
-interface StatsFactures { 
+interface StatsFactures {
     total_count: number;
     total_montant: number;
     payees_count: number;

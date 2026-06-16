@@ -11,7 +11,13 @@ import {
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
-import { Download, FileText, HandCoins, MoreHorizontal, Users } from 'lucide-vue-next';
+import {
+    Download,
+    FileText,
+    HandCoins,
+    MoreHorizontal,
+    Users,
+} from 'lucide-vue-next';
 import PvDropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import { computed, ref, watch } from 'vue';
@@ -37,8 +43,20 @@ interface LignePaie {
 
 const props = defineProps<{
     lignes: LignePaie[];
-    kpis: { nb_salaries: number; total_brut: number; total_net: number; total_paye: number; total_reste: number };
-    periode: { id: string; mois: number; annee: number; label: string; statut: string | null } | null;
+    kpis: {
+        nb_salaries: number;
+        total_brut: number;
+        total_net: number;
+        total_paye: number;
+        total_reste: number;
+    };
+    periode: {
+        id: string;
+        mois: number;
+        annee: number;
+        label: string;
+        statut: string | null;
+    } | null;
     periodes_disponibles: { mois: number; annee: number; label: string }[];
     filtre_mois: number;
     filtre_annee: number;
@@ -55,8 +73,25 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Paiement salaire', href: '/comptabilite/salaires' },
 ];
 
-const MOIS_LABELS = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-const MOIS_OPTIONS = MOIS_LABELS.slice(1).map((label, i) => ({ value: i + 1, label }));
+const MOIS_LABELS = [
+    '',
+    'Janvier',
+    'Février',
+    'Mars',
+    'Avril',
+    'Mai',
+    'Juin',
+    'Juillet',
+    'Août',
+    'Septembre',
+    'Octobre',
+    'Novembre',
+    'Décembre',
+];
+const MOIS_OPTIONS = MOIS_LABELS.slice(1).map((label, i) => ({
+    value: i + 1,
+    label,
+}));
 const ANNEES = Array.from({ length: 5 }, (_, i) => {
     const y = new Date().getFullYear() - i;
     return { value: y, label: String(y) };
@@ -100,8 +135,10 @@ watch(searchVal, () => {
     if (searchTimeout) clearTimeout(searchTimeout);
     searchTimeout = setTimeout(appliquerFiltres, 300);
 });
-watch([selectedMois, selectedAnnee, filtreStatut, filtreSite], appliquerFiltres);
-
+watch(
+    [selectedMois, selectedAnnee, filtreStatut, filtreSite],
+    appliquerFiltres,
+);
 
 function buildParams() {
     const p = new URLSearchParams();
@@ -110,8 +147,15 @@ function buildParams() {
     return p;
 }
 
-function exportExcel() { window.open('/comptabilite/salaires/export/excel?' + buildParams(), '_blank'); }
-function exportPdf() { window.open('/comptabilite/salaires/export/pdf?' + buildParams(), '_blank'); }
+function exportExcel() {
+    window.open(
+        '/comptabilite/salaires/export/excel?' + buildParams(),
+        '_blank',
+    );
+}
+function exportPdf() {
+    window.open('/comptabilite/salaires/export/pdf?' + buildParams(), '_blank');
+}
 
 const showPaiementDialog = ref(false);
 const selectedLigne = ref<LignePaie | null>(null);
@@ -123,7 +167,10 @@ function openPaiement(ligne: LignePaie) {
     showPaiementDialog.value = true;
 }
 
-function handlePaiementSubmit(payload: { montant: number; mode_paiement: string }) {
+function handlePaiementSubmit(payload: {
+    montant: number;
+    mode_paiement: string;
+}) {
     if (!selectedLigne.value) return;
     paiementProcessing.value = true;
     paiementErrors.value = {};
@@ -132,29 +179,49 @@ function handlePaiementSubmit(payload: { montant: number; mode_paiement: string 
         { ...payload, date_paiement: new Date().toISOString().slice(0, 10) },
         {
             preserveScroll: true,
-            onSuccess: () => { showPaiementDialog.value = false; },
-            onError: (e) => { paiementErrors.value = e as Record<string, string>; },
-            onFinish: () => { paiementProcessing.value = false; },
+            onSuccess: () => {
+                showPaiementDialog.value = false;
+            },
+            onError: (e) => {
+                paiementErrors.value = e as Record<string, string>;
+            },
+            onFinish: () => {
+                paiementProcessing.value = false;
+            },
         },
     );
 }
 
 function statutClass(s: string) {
-    return ({
-        paye: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
-        partiellement_paye: 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
-        calcule: 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
-        en_attente: 'bg-muted text-muted-foreground',
-    } as Record<string, string>)[s] ?? 'bg-muted text-muted-foreground';
+    return (
+        (
+            {
+                paye: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
+                partiellement_paye:
+                    'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
+                calcule:
+                    'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
+                en_attente: 'bg-muted text-muted-foreground',
+            } as Record<string, string>
+        )[s] ?? 'bg-muted text-muted-foreground'
+    );
 }
 
 function fmt(val: number | null | undefined) {
-    return new Intl.NumberFormat('fr-FR').format(Math.round(Math.abs(Number(val ?? 0)))) + ' GNF';
+    return (
+        new Intl.NumberFormat('fr-FR').format(
+            Math.round(Math.abs(Number(val ?? 0))),
+        ) + ' GNF'
+    );
 }
 
-const kpiDeductions = computed(() => props.lignes.reduce((s, l) => s + (l.deductions ?? 0), 0));
+const kpiDeductions = computed(() =>
+    props.lignes.reduce((s, l) => s + (l.deductions ?? 0), 0),
+);
 
-const periodeCourante = computed(() => `${MOIS_LABELS[selectedMois.value]} ${selectedAnnee.value}`);
+const periodeCourante = computed(
+    () => `${MOIS_LABELS[selectedMois.value]} ${selectedAnnee.value}`,
+);
 </script>
 
 <template>
@@ -164,9 +231,13 @@ const periodeCourante = computed(() => `${MOIS_LABELS[selectedMois.value]} ${sel
             <!-- En-tête -->
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">Paiement salaire</h1>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Paiement salaire
+                    </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ periodeCourante }} · {{ kpis.nb_salaries }} salarié{{ kpis.nb_salaries !== 1 ? 's' : '' }}
+                        {{ periodeCourante }} · {{ kpis.nb_salaries }} salarié{{
+                            kpis.nb_salaries !== 1 ? 's' : ''
+                        }}
                     </p>
                 </div>
                 <div class="flex items-center gap-2">
@@ -194,26 +265,60 @@ const periodeCourante = computed(() => `${MOIS_LABELS[selectedMois.value]} ${sel
             <!-- KPIs -->
             <div class="grid grid-cols-3 gap-3 sm:grid-cols-5">
                 <div class="rounded-lg border bg-card p-4 text-center">
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Salaire brut</p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">{{ fmt(kpis.total_brut) }}</p>
-                </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
-                    <p class="text-xs font-medium uppercase tracking-wide text-red-600 dark:text-red-400">Déductions</p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums text-red-600 dark:text-red-400">
-                        {{ kpiDeductions > 0 ? '-' + fmt(kpiDeductions) : fmt(0) }}
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Salaire brut
+                    </p>
+                    <p class="mt-1 text-lg font-semibold tabular-nums">
+                        {{ fmt(kpis.total_brut) }}
                     </p>
                 </div>
                 <div class="rounded-lg border bg-card p-4 text-center">
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Net à payer</p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">{{ fmt(kpis.total_net) }}</p>
+                    <p
+                        class="text-xs font-medium tracking-wide text-red-600 uppercase dark:text-red-400"
+                    >
+                        Déductions
+                    </p>
+                    <p
+                        class="mt-1 text-lg font-semibold text-red-600 tabular-nums dark:text-red-400"
+                    >
+                        {{
+                            kpiDeductions > 0
+                                ? '-' + fmt(kpiDeductions)
+                                : fmt(0)
+                        }}
+                    </p>
                 </div>
                 <div class="rounded-lg border bg-card p-4 text-center">
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Déjà payé</p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">{{ fmt(kpis.total_paye) }}</p>
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Net à payer
+                    </p>
+                    <p class="mt-1 text-lg font-semibold tabular-nums">
+                        {{ fmt(kpis.total_net) }}
+                    </p>
                 </div>
                 <div class="rounded-lg border bg-card p-4 text-center">
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Reste à payer</p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">{{ fmt(kpis.total_reste) }}</p>
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Déjà payé
+                    </p>
+                    <p class="mt-1 text-lg font-semibold tabular-nums">
+                        {{ fmt(kpis.total_paye) }}
+                    </p>
+                </div>
+                <div class="rounded-lg border bg-card p-4 text-center">
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Reste à payer
+                    </p>
+                    <p class="mt-1 text-lg font-semibold tabular-nums">
+                        {{ fmt(kpis.total_reste) }}
+                    </p>
                 </div>
             </div>
 
@@ -256,14 +361,25 @@ const periodeCourante = computed(() => `${MOIS_LABELS[selectedMois.value]} ${sel
                     class="w-48 text-sm"
                     @change="(e) => (filtreSite = e.value)"
                 />
-                <InputText v-model="searchVal" placeholder="Rechercher un salarié…" class="w-56 text-sm" />
-                <span class="text-xs text-muted-foreground">{{ lignes.length }} résultat{{ lignes.length !== 1 ? 's' : '' }}</span>
+                <InputText
+                    v-model="searchVal"
+                    placeholder="Rechercher un salarié…"
+                    class="w-56 text-sm"
+                />
+                <span class="text-xs text-muted-foreground"
+                    >{{ lignes.length }} résultat{{
+                        lignes.length !== 1 ? 's' : ''
+                    }}</span
+                >
             </div>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
                 <!-- Aucun résultat -->
-                <div v-if="lignes.length === 0" class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                <div
+                    v-if="lignes.length === 0"
+                    class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+                >
                     <Users class="h-12 w-12 opacity-30" />
                     <p class="text-sm">Aucune fiche de paie pour ce filtre.</p>
                 </div>
@@ -271,35 +387,105 @@ const periodeCourante = computed(() => `${MOIS_LABELS[selectedMois.value]} ${sel
                 <table v-else-if="lignes.length > 0" class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
-                            <th class="px-5 py-3.5 text-left font-medium text-muted-foreground">Salarié</th>
-                            <th class="px-5 py-3.5 text-left font-medium text-muted-foreground">Agence</th>
-                            <th class="px-5 py-3.5 text-right font-medium text-muted-foreground">Salaire brut</th>
-                            <th class="px-5 py-3.5 text-right font-medium text-muted-foreground">Primes</th>
-                            <th class="px-5 py-3.5 text-right font-medium text-muted-foreground">Déductions</th>
-                            <th class="px-5 py-3.5 text-right font-medium text-muted-foreground">Net à payer</th>
-                            <th class="px-5 py-3.5 text-right font-medium text-muted-foreground">Déjà payé</th>
-                            <th class="px-5 py-3.5 text-right font-medium text-muted-foreground">Reste à payer</th>
-                            <th class="px-5 py-3.5 text-left font-medium text-muted-foreground">Statut</th>
+                            <th
+                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
+                            >
+                                Salarié
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
+                            >
+                                Agence
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                            >
+                                Salaire brut
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                            >
+                                Primes
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                            >
+                                Déductions
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                            >
+                                Net à payer
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                            >
+                                Déjà payé
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                            >
+                                Reste à payer
+                            </th>
+                            <th
+                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
+                            >
+                                Statut
+                            </th>
                             <th class="w-10 px-4 py-3.5" />
                         </tr>
                     </thead>
                     <tbody class="divide-y">
-                        <tr v-for="l in lignes" :key="l.id" class="transition-colors hover:bg-muted/10">
+                        <tr
+                            v-for="l in lignes"
+                            :key="l.id"
+                            class="transition-colors hover:bg-muted/10"
+                        >
                             <td class="px-5 py-4">
                                 <p class="font-semibold">{{ l.employe_nom }}</p>
-                                <p class="mt-0.5 text-xs text-muted-foreground">{{ l.poste }}</p>
+                                <p class="mt-0.5 text-xs text-muted-foreground">
+                                    {{ l.poste }}
+                                </p>
                             </td>
-                            <td class="px-5 py-4 text-sm text-muted-foreground">{{ l.site }}</td>
-                            <td class="px-5 py-4 text-right tabular-nums text-base font-semibold">{{ fmt(l.brut) }}</td>
-                            <td class="px-5 py-4 text-right tabular-nums text-base font-semibold">
-                                {{ l.total_primes > 0 ? '+' + fmt(l.total_primes) : '—' }}
+                            <td class="px-5 py-4 text-sm text-muted-foreground">
+                                {{ l.site }}
                             </td>
-                            <td class="px-5 py-4 text-right tabular-nums text-base font-semibold text-red-600 dark:text-red-400">
-                                {{ l.deductions > 0 ? '-' + fmt(l.deductions) : '—' }}
+                            <td
+                                class="px-5 py-4 text-right text-base font-semibold tabular-nums"
+                            >
+                                {{ fmt(l.brut) }}
                             </td>
-                            <td class="px-5 py-4 text-right tabular-nums text-base font-semibold">{{ fmt(l.net) }}</td>
-                            <td class="px-5 py-4 text-right tabular-nums text-base font-semibold">{{ fmt(l.deja_paye) }}</td>
-                            <td class="px-5 py-4 text-right tabular-nums text-lg font-bold">
+                            <td
+                                class="px-5 py-4 text-right text-base font-semibold tabular-nums"
+                            >
+                                {{
+                                    l.total_primes > 0
+                                        ? '+' + fmt(l.total_primes)
+                                        : '—'
+                                }}
+                            </td>
+                            <td
+                                class="px-5 py-4 text-right text-base font-semibold text-red-600 tabular-nums dark:text-red-400"
+                            >
+                                {{
+                                    l.deductions > 0
+                                        ? '-' + fmt(l.deductions)
+                                        : '—'
+                                }}
+                            </td>
+                            <td
+                                class="px-5 py-4 text-right text-base font-semibold tabular-nums"
+                            >
+                                {{ fmt(l.net) }}
+                            </td>
+                            <td
+                                class="px-5 py-4 text-right text-base font-semibold tabular-nums"
+                            >
+                                {{ fmt(l.deja_paye) }}
+                            </td>
+                            <td
+                                class="px-5 py-4 text-right text-lg font-bold tabular-nums"
+                            >
                                 {{ fmt(l.reste_a_payer) }}
                             </td>
                             <td class="px-5 py-4">
@@ -313,14 +499,30 @@ const periodeCourante = computed(() => `${MOIS_LABELS[selectedMois.value]} ${sel
                             <td class="px-4 py-3 text-right">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger as-child>
-                                        <Button variant="ghost" size="icon" class="h-7 w-7">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="h-7 w-7"
+                                        >
                                             <MoreHorizontal class="h-4 w-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" class="w-48">
-                                        <template v-if="can_payer && l.reste_a_payer > 0">
-                                            <DropdownMenuItem class="cursor-pointer" @click="openPaiement(l)">
-                                                <HandCoins class="mr-2 h-4 w-4" />
+                                    <DropdownMenuContent
+                                        align="end"
+                                        class="w-48"
+                                    >
+                                        <template
+                                            v-if="
+                                                can_payer && l.reste_a_payer > 0
+                                            "
+                                        >
+                                            <DropdownMenuItem
+                                                class="cursor-pointer"
+                                                @click="openPaiement(l)"
+                                            >
+                                                <HandCoins
+                                                    class="mr-2 h-4 w-4"
+                                                />
                                                 Payer
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
@@ -331,7 +533,9 @@ const periodeCourante = computed(() => `${MOIS_LABELS[selectedMois.value]} ${sel
                                                 target="_blank"
                                                 class="flex w-full cursor-pointer items-center"
                                             >
-                                                <FileText class="mr-2 h-4 w-4" />
+                                                <FileText
+                                                    class="mr-2 h-4 w-4"
+                                                />
                                                 Exporter PDF
                                             </a>
                                         </DropdownMenuItem>
@@ -347,7 +551,9 @@ const periodeCourante = computed(() => `${MOIS_LABELS[selectedMois.value]} ${sel
 
     <PaymentDialogCompact
         v-model:visible="showPaiementDialog"
-        :title="selectedLigne ? `Payer — ${selectedLigne.employe_nom}` : 'Payer'"
+        :title="
+            selectedLigne ? `Payer — ${selectedLigne.employe_nom}` : 'Payer'
+        "
         :solde="selectedLigne?.reste_a_payer ?? 0"
         :processing="paiementProcessing"
         :errors="paiementErrors"

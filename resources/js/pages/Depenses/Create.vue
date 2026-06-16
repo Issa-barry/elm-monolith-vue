@@ -187,7 +187,9 @@ function handleMontantInput(e: Event) {
     const raw = (e.target as HTMLInputElement).value.replace(/\D/g, '');
     form.montant = raw ? parseInt(raw, 10) : '';
     montantDisplay.value = raw
-        ? parseInt(raw, 10).toLocaleString('fr-FR', { maximumFractionDigits: 0 })
+        ? parseInt(raw, 10).toLocaleString('fr-FR', {
+              maximumFractionDigits: 0,
+          })
         : '';
 }
 

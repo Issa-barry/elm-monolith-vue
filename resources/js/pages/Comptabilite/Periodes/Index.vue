@@ -40,7 +40,12 @@ const props = defineProps<{
     periodes: { data: Periode[]; links: unknown[] };
     types: Option[];
     statuts: Option[];
-    filters: { type?: string; statut?: string; date_debut?: string; date_fin?: string };
+    filters: {
+        type?: string;
+        statut?: string;
+        date_debut?: string;
+        date_fin?: string;
+    };
     kpis: Kpis;
     can_create: boolean;
 }>();
@@ -54,8 +59,14 @@ const breadcrumbs: BreadcrumbItem[] = [
 const selectedType = ref(props.filters.type ?? '');
 const selectedStatut = ref(props.filters.statut ?? '');
 
-const typeOptions = computed(() => [{ label: 'Tous les types', value: '' }, ...props.types]);
-const statutOptions = computed(() => [{ label: 'Tous les statuts', value: '' }, ...props.statuts]);
+const typeOptions = computed(() => [
+    { label: 'Tous les types', value: '' },
+    ...props.types,
+]);
+const statutOptions = computed(() => [
+    { label: 'Tous les statuts', value: '' },
+    ...props.statuts,
+]);
 
 function applyFilters() {
     router.get(
@@ -74,17 +85,24 @@ function fmt(n: number) {
 
 const typeBadge = (type: string) =>
     ({
-        livreur: 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
-        proprietaire: 'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400',
-        salarie: 'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400',
+        livreur:
+            'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
+        proprietaire:
+            'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400',
+        salarie:
+            'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400',
     })[type] ?? 'bg-muted text-muted-foreground';
 
 const statutBadge = (statut: string) =>
     ({
-        brouillon: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-        calculee: 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
-        validee: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
-        cloturee: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+        brouillon:
+            'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
+        calculee:
+            'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
+        validee:
+            'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
+        cloturee:
+            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
     })[statut] ?? 'bg-muted text-muted-foreground';
 </script>
 
@@ -95,9 +113,12 @@ const statutBadge = (statut: string) =>
             <!-- Header -->
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">Périodes de paiement</h1>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Périodes de paiement
+                    </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Gérer les cycles de paiement livreurs, propriétaires et salariés
+                        Gérer les cycles de paiement livreurs, propriétaires et
+                        salariés
                     </p>
                 </div>
                 <Link v-if="can_create" href="/comptabilite/periodes/creer">
@@ -111,19 +132,33 @@ const statutBadge = (statut: string) =>
             <!-- KPI cards -->
             <div class="grid gap-3 sm:grid-cols-4">
                 <div class="rounded-xl border bg-card p-4 text-center">
-                    <p class="text-2xl font-bold text-zinc-600 dark:text-zinc-400">{{ kpis.brouillon }}</p>
+                    <p
+                        class="text-2xl font-bold text-zinc-600 dark:text-zinc-400"
+                    >
+                        {{ kpis.brouillon }}
+                    </p>
                     <p class="mt-1 text-xs text-muted-foreground">Brouillon</p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 text-center">
-                    <p class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ kpis.calculee }}</p>
+                    <p
+                        class="text-2xl font-bold text-blue-600 dark:text-blue-400"
+                    >
+                        {{ kpis.calculee }}
+                    </p>
                     <p class="mt-1 text-xs text-muted-foreground">Calculée</p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 text-center">
-                    <p class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{{ kpis.validee }}</p>
+                    <p
+                        class="text-2xl font-bold text-emerald-600 dark:text-emerald-400"
+                    >
+                        {{ kpis.validee }}
+                    </p>
                     <p class="mt-1 text-xs text-muted-foreground">Validée</p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 text-center">
-                    <p class="text-2xl font-bold text-slate-500">{{ kpis.cloturee }}</p>
+                    <p class="text-2xl font-bold text-slate-500">
+                        {{ kpis.cloturee }}
+                    </p>
                     <p class="mt-1 text-xs text-muted-foreground">Clôturée</p>
                 </div>
             </div>
@@ -158,7 +193,11 @@ const statutBadge = (statut: string) =>
                     striped-rows
                     class="text-sm"
                 >
-                    <Column field="reference" header="Référence" style="width: 180px">
+                    <Column
+                        field="reference"
+                        header="Référence"
+                        style="width: 180px"
+                    >
                         <template #body="{ data }">
                             <Link
                                 :href="`/comptabilite/periodes/${data.id}`"
@@ -201,9 +240,15 @@ const statutBadge = (statut: string) =>
                     <Column header="Fiches / Net" style="width: 160px">
                         <template #body="{ data }">
                             <div class="text-sm">
-                                <span class="font-medium">{{ data.nb_fiches }}</span>
-                                <span class="text-muted-foreground"> fiches</span>
-                                <div class="text-xs text-muted-foreground">{{ fmt(data.total_net) }}</div>
+                                <span class="font-medium">{{
+                                    data.nb_fiches
+                                }}</span>
+                                <span class="text-muted-foreground">
+                                    fiches</span
+                                >
+                                <div class="text-xs text-muted-foreground">
+                                    {{ fmt(data.total_net) }}
+                                </div>
                             </div>
                         </template>
                     </Column>
@@ -231,7 +276,9 @@ const statutBadge = (statut: string) =>
                     </Column>
 
                     <template #empty>
-                        <div class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                        <div
+                            class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
+                        >
                             <Calendar class="h-12 w-12 opacity-30" />
                             <p class="text-sm">Aucune période trouvée.</p>
                         </div>

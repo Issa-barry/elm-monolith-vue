@@ -301,17 +301,32 @@ function exportExcel(): void {
     const columns = [
         { label: 'Code interne', value: (p: Produit) => p.code_interne },
         { label: 'Nom', value: (p: Produit) => p.nom },
-        { label: 'Code fournisseur', value: (p: Produit) => p.code_fournisseur },
+        {
+            label: 'Code fournisseur',
+            value: (p: Produit) => p.code_fournisseur,
+        },
         { label: 'Type', value: (p: Produit) => p.type_label },
         { label: 'Statut', value: (p: Produit) => p.statut_label },
         { label: 'Prix vente (GNF)', value: (p: Produit) => p.prix_vente },
         { label: "Prix d'achat (GNF)", value: (p: Produit) => p.prix_achat },
         { label: 'Prix usine (GNF)', value: (p: Produit) => p.prix_usine },
         { label: 'Coût (GNF)', value: (p: Produit) => p.cout },
-        { label: 'Code site', value: (_p: Produit, s?: SiteStock) => s?.site_code ?? '' },
-        { label: 'Nom site', value: (_p: Produit, s?: SiteStock) => s?.site_nom ?? '' },
-        { label: 'Stock site', value: (_p: Produit, s?: SiteStock) => s?.qte_stock ?? '' },
-        { label: 'Seuil alerte site', value: (_p: Produit, s?: SiteStock) => s?.seuil_alerte_stock ?? '' },
+        {
+            label: 'Code site',
+            value: (_p: Produit, s?: SiteStock) => s?.site_code ?? '',
+        },
+        {
+            label: 'Nom site',
+            value: (_p: Produit, s?: SiteStock) => s?.site_nom ?? '',
+        },
+        {
+            label: 'Stock site',
+            value: (_p: Produit, s?: SiteStock) => s?.qte_stock ?? '',
+        },
+        {
+            label: 'Seuil alerte site',
+            value: (_p: Produit, s?: SiteStock) => s?.seuil_alerte_stock ?? '',
+        },
         { label: 'Description', value: (p: Produit) => p.description },
     ];
 
@@ -468,16 +483,20 @@ function confirmArchive(produit: Produit) {
         acceptLabel: 'Archiver',
         acceptClass: 'p-button-warning',
         accept: () => {
-            router.patch(`/produits/${produit.id}/archiver`, {}, {
-                onSuccess: () => {
-                    toast.add({
-                        severity: 'success',
-                        summary: 'Archivé',
-                        detail: `${produit.nom} a été archivé.`,
-                        life: 3000,
-                    });
+            router.patch(
+                `/produits/${produit.id}/archiver`,
+                {},
+                {
+                    onSuccess: () => {
+                        toast.add({
+                            severity: 'success',
+                            summary: 'Archivé',
+                            detail: `${produit.nom} a été archivé.`,
+                            life: 3000,
+                        });
+                    },
                 },
-            });
+            );
         },
     });
 }
@@ -489,7 +508,6 @@ function confirmArchive(produit: Produit) {
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- ─── VUE DESKTOP ─── -->
         <div class="hidden flex-col gap-6 p-6 sm:flex">
-
             <!-- Alertes stock (cliquables pour filtrer) -->
             <div
                 v-if="ruptures.length > 0 || faibles.length > 0"
@@ -578,8 +596,14 @@ function confirmArchive(produit: Produit) {
             <div class="flex flex-wrap items-center gap-2">
                 <IconField class="max-w-xs flex-1">
                     <InputIcon class="pointer-events-none">
-                        <svg class="h-4 w-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+                        <svg
+                            class="h-4 w-4 text-muted-foreground"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <circle cx="11" cy="11" r="8" />
+                            <path d="m21 21-4.35-4.35" />
                         </svg>
                     </InputIcon>
                     <InputText
@@ -735,7 +759,9 @@ function confirmArchive(produit: Produit) {
                             >
                                 {{ data.type_label }}
                             </span>
-                            <span v-else class="text-xs text-muted-foreground">—</span>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
                         </template>
                     </Column>
 
@@ -777,7 +803,9 @@ function confirmArchive(produit: Produit) {
                     >
                         <template #body="{ data }">
                             <template v-if="!data.has_stock">
-                                <span class="text-xs text-muted-foreground">—</span>
+                                <span class="text-xs text-muted-foreground"
+                                    >—</span
+                                >
                             </template>
                             <template v-else>
                                 <div class="flex flex-col gap-0.5">
@@ -802,18 +830,38 @@ function confirmArchive(produit: Produit) {
                                         />
                                     </div>
                                     <span
-                                        v-if="data.last_mouvement_type === 'entree'"
+                                        v-if="
+                                            data.last_mouvement_type ===
+                                            'entree'
+                                        "
                                         class="inline-flex items-center gap-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400"
                                     >
                                         <ArrowUp class="h-3 w-3" />
-                                        +{{ new Intl.NumberFormat('fr-FR').format(data.last_mouvement_quantite ?? 0) }}
+                                        +{{
+                                            new Intl.NumberFormat(
+                                                'fr-FR',
+                                            ).format(
+                                                data.last_mouvement_quantite ??
+                                                    0,
+                                            )
+                                        }}
                                     </span>
                                     <span
-                                        v-else-if="data.last_mouvement_type === 'sortie'"
+                                        v-else-if="
+                                            data.last_mouvement_type ===
+                                            'sortie'
+                                        "
                                         class="inline-flex items-center gap-0.5 text-xs font-medium text-red-600 dark:text-red-400"
                                     >
                                         <ArrowDown class="h-3 w-3" />
-                                        -{{ new Intl.NumberFormat('fr-FR').format(data.last_mouvement_quantite ?? 0) }}
+                                        -{{
+                                            new Intl.NumberFormat(
+                                                'fr-FR',
+                                            ).format(
+                                                data.last_mouvement_quantite ??
+                                                    0,
+                                            )
+                                        }}
                                     </span>
                                 </div>
                             </template>

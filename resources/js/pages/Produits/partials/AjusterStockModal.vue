@@ -235,7 +235,9 @@ function submit() {
                                 ?.label ?? '—'
                         }}
                     </span>
-                    <span class="ml-auto text-xs text-muted-foreground">Votre agence</span>
+                    <span class="ml-auto text-xs text-muted-foreground"
+                        >Votre agence</span
+                    >
                 </div>
 
                 <p v-if="form.errors.site_id" class="text-xs text-destructive">

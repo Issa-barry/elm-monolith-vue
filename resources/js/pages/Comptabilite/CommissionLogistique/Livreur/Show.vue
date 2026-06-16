@@ -43,8 +43,14 @@ interface PaymentRow {
     created_by: string | null;
 }
 
-interface PeriodeOption { code: string; label: string; }
-interface ModePaiement { value: string; label: string; }
+interface PeriodeOption {
+    code: string;
+    label: string;
+}
+interface ModePaiement {
+    value: string;
+    label: string;
+}
 
 const props = defineProps<{
     livreur: { id: string; nom: string; telephone: string | null };
@@ -63,7 +69,10 @@ const props = defineProps<{
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Comptabilité', href: '/comptabilite' },
-    { title: 'Commission logistique', href: '/comptabilite/commissions/logistique' },
+    {
+        title: 'Commission logistique',
+        href: '/comptabilite/commissions/logistique',
+    },
     { title: props.livreur.nom, href: '' },
 ];
 
@@ -76,10 +85,14 @@ const periodeOptions: PeriodeOption[] = [
 function onPeriodeChange(value: string) {
     const params: Record<string, string> = {};
     if (value) params.periode = value;
-    router.get(`/comptabilite/commissions/logistique/livreurs/${props.livreur.id}`, params, {
-        preserveScroll: true,
-        replace: true,
-    });
+    router.get(
+        `/comptabilite/commissions/logistique/livreurs/${props.livreur.id}`,
+        params,
+        {
+            preserveScroll: true,
+            replace: true,
+        },
+    );
 }
 
 // Groupement par période
@@ -151,12 +164,22 @@ function submitPaiement() {
     paiementForm.errors = {};
     router.post(
         `/comptabilite/commissions/logistique/livreurs/${props.livreur.id}/paiements`,
-        { montant: paiementForm.montant, mode_paiement: paiementForm.mode_paiement, note: paiementForm.note || null },
+        {
+            montant: paiementForm.montant,
+            mode_paiement: paiementForm.mode_paiement,
+            note: paiementForm.note || null,
+        },
         {
             preserveScroll: true,
-            onSuccess: () => { showPaiementDialog.value = false; },
-            onError: (e) => { paiementForm.errors = e as Record<string, string>; },
-            onFinish: () => { paiementForm.processing = false; },
+            onSuccess: () => {
+                showPaiementDialog.value = false;
+            },
+            onError: (e) => {
+                paiementForm.errors = e as Record<string, string>;
+            },
+            onFinish: () => {
+                paiementForm.processing = false;
+            },
         },
     );
 }
@@ -187,9 +210,20 @@ function formatMode(mode: string) {
                         <ArrowLeft class="h-4 w-4" />
                     </Link>
                     <div>
-                        <p class="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Livreur</p>
-                        <p class="mt-0.5 text-xl font-semibold">{{ livreur.nom }}</p>
-                        <p v-if="livreur.telephone" class="text-sm text-muted-foreground">{{ livreur.telephone }}</p>
+                        <p
+                            class="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase"
+                        >
+                            Livreur
+                        </p>
+                        <p class="mt-0.5 text-xl font-semibold">
+                            {{ livreur.nom }}
+                        </p>
+                        <p
+                            v-if="livreur.telephone"
+                            class="text-sm text-muted-foreground"
+                        >
+                            {{ livreur.telephone }}
+                        </p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
@@ -201,9 +235,16 @@ function formatMode(mode: string) {
                     >
                         <History class="mr-1.5 h-3.5 w-3.5" />
                         Historique
-                        <span class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums">{{ payments.length }}</span>
+                        <span
+                            class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums"
+                            >{{ payments.length }}</span
+                        >
                     </Button>
-                    <Button v-if="can_payer && kpis.impaye > 0" size="sm" @click="openPaiement">
+                    <Button
+                        v-if="can_payer && kpis.impaye > 0"
+                        size="sm"
+                        @click="openPaiement"
+                    >
                         <HandCoins class="mr-1.5 h-4 w-4" />
                         Payer {{ fmt(kpis.impaye) }}
                     </Button>
@@ -213,51 +254,130 @@ function formatMode(mode: string) {
             <!-- KPIs -->
             <div class="grid grid-cols-3 gap-3">
                 <template v-if="periode_stats">
-                    <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
-                        <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Commission période</p>
-                        <p class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base">{{ fmt(periode_stats.total_commission) }}</p>
-                    </div>
-                    <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
-                        <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Déjà payé</p>
-                        <p class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base">{{ fmt(periode_stats.total_verse) }}</p>
+                    <div
+                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                    >
+                        <p
+                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            Commission période
+                        </p>
+                        <p
+                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                        >
+                            {{ fmt(periode_stats.total_commission) }}
+                        </p>
                     </div>
                     <div
                         class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
-                        :class="periode_stats.reste > 0 ? 'border-amber-200 dark:border-amber-900' : ''"
                     >
-                        <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Reste à payer</p>
+                        <p
+                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            Déjà payé
+                        </p>
                         <p
                             class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
-                            :class="periode_stats.reste > 0 ? 'text-amber-600 dark:text-amber-400' : ''"
+                        >
+                            {{ fmt(periode_stats.total_verse) }}
+                        </p>
+                    </div>
+                    <div
+                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                        :class="
+                            periode_stats.reste > 0
+                                ? 'border-amber-200 dark:border-amber-900'
+                                : ''
+                        "
+                    >
+                        <p
+                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            Reste à payer
+                        </p>
+                        <p
+                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                            :class="
+                                periode_stats.reste > 0
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : ''
+                            "
                         >
                             {{ fmt(periode_stats.reste) }}
                         </p>
                     </div>
                 </template>
                 <template v-else>
-                    <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
-                        <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Total cumulé</p>
-                        <p class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base">{{ fmt(kpis.impaye + kpis.paye) }}</p>
+                    <div
+                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                    >
+                        <p
+                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            Total cumulé
+                        </p>
+                        <p
+                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                        >
+                            {{ fmt(kpis.impaye + kpis.paye) }}
+                        </p>
                     </div>
-                    <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4" :class="kpis.impaye > 0 ? 'border-amber-200 dark:border-amber-900' : ''">
-                        <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Reste à payer</p>
-                        <p class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base" :class="kpis.impaye > 0 ? 'text-amber-600 dark:text-amber-400' : ''">
+                    <div
+                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                        :class="
+                            kpis.impaye > 0
+                                ? 'border-amber-200 dark:border-amber-900'
+                                : ''
+                        "
+                    >
+                        <p
+                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            Reste à payer
+                        </p>
+                        <p
+                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                            :class="
+                                kpis.impaye > 0
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : ''
+                            "
+                        >
                             {{ fmt(kpis.impaye) }}
                         </p>
                     </div>
-                    <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
-                        <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Déjà payé</p>
-                        <p class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base">{{ fmt(kpis.paye) }}</p>
+                    <div
+                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                    >
+                        <p
+                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            Déjà payé
+                        </p>
+                        <p
+                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                        >
+                            {{ fmt(kpis.paye) }}
+                        </p>
                     </div>
                 </template>
             </div>
 
             <!-- Tableau des parts -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
-                <div class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+                <div
+                    class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3"
+                >
                     <div class="flex items-center gap-2">
-                        <h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Détail par transfert</h2>
-                        <span class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums">{{ parts.length }}</span>
+                        <h2
+                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
+                            Détail par transfert
+                        </h2>
+                        <span
+                            class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums"
+                            >{{ parts.length }}</span
+                        >
                         <StatusDot
                             v-if="periode_stats"
                             :label="periode_stats.statut_label"
@@ -278,31 +398,66 @@ function formatMode(mode: string) {
 
                 <div v-if="parts.length > 0">
                     <template v-for="group in partsGrouped" :key="group.code">
-                        <div v-if="!periode_stats" class="flex items-center justify-between border-b bg-muted/30 px-4 py-2">
+                        <div
+                            v-if="!periode_stats"
+                            class="flex items-center justify-between border-b bg-muted/30 px-4 py-2"
+                        >
                             <div class="flex items-center gap-2">
-                                <CalendarDays class="h-3.5 w-3.5 text-muted-foreground" />
-                                <span class="text-xs font-semibold text-muted-foreground">{{ group.label }}</span>
-                                <StatusDot :label="group.statut_label" :dot-class="group.statut_dot_class" class="text-xs text-muted-foreground" />
+                                <CalendarDays
+                                    class="h-3.5 w-3.5 text-muted-foreground"
+                                />
+                                <span
+                                    class="text-xs font-semibold text-muted-foreground"
+                                    >{{ group.label }}</span
+                                >
+                                <StatusDot
+                                    :label="group.statut_label"
+                                    :dot-class="group.statut_dot_class"
+                                    class="text-xs text-muted-foreground"
+                                />
                             </div>
-                            <span class="text-xs font-semibold tabular-nums">{{ fmt(group.total_net) }}</span>
+                            <span class="text-xs font-semibold tabular-nums">{{
+                                fmt(group.total_net)
+                            }}</span>
                         </div>
                         <table class="w-full text-sm">
                             <tbody class="divide-y">
-                                <tr v-for="part in group.parts" :key="part.id" class="hover:bg-muted/10">
-                                    <td class="px-4 py-3 font-mono text-xs text-muted-foreground">
+                                <tr
+                                    v-for="part in group.parts"
+                                    :key="part.id"
+                                    class="hover:bg-muted/10"
+                                >
+                                    <td
+                                        class="px-4 py-3 font-mono text-xs text-muted-foreground"
+                                    >
                                         {{ part.transfert_reference ?? '—' }}
                                     </td>
-                                    <td class="px-4 py-3 text-xs text-muted-foreground">{{ part.earned_at ?? '—' }}</td>
-                                    <td class="px-4 py-3">
-                                        <StatusDot :label="part.statut_label" :dot-class="part.statut_dot_class" class="text-xs text-muted-foreground" />
+                                    <td
+                                        class="px-4 py-3 text-xs text-muted-foreground"
+                                    >
+                                        {{ part.earned_at ?? '—' }}
                                     </td>
-                                    <td class="px-4 py-3 text-right tabular-nums font-medium">{{ fmt(part.montant_net) }}</td>
+                                    <td class="px-4 py-3">
+                                        <StatusDot
+                                            :label="part.statut_label"
+                                            :dot-class="part.statut_dot_class"
+                                            class="text-xs text-muted-foreground"
+                                        />
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-right font-medium tabular-nums"
+                                    >
+                                        {{ fmt(part.montant_net) }}
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
                     </template>
                 </div>
-                <div v-else class="flex flex-col items-center gap-3 py-12 text-muted-foreground">
+                <div
+                    v-else
+                    class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
+                >
                     <HandCoins class="h-10 w-10 opacity-30" />
                     <p class="text-sm">Aucune commission pour cette période.</p>
                 </div>
@@ -311,7 +466,12 @@ function formatMode(mode: string) {
     </AppLayout>
 
     <!-- Dialog paiement -->
-    <Dialog v-model:visible="showPaiementDialog" modal :style="{ width: '420px' }" header="Enregistrer un paiement">
+    <Dialog
+        v-model:visible="showPaiementDialog"
+        modal
+        :style="{ width: '420px' }"
+        header="Enregistrer un paiement"
+    >
         <div class="flex flex-col gap-4 py-2">
             <div class="flex flex-col gap-1.5">
                 <Label>Montant (GNF)</Label>
@@ -326,8 +486,15 @@ function formatMode(mode: string) {
                     locale="fr-FR"
                     autofocus
                 />
-                <p v-if="paiementForm.errors.montant" class="text-xs text-destructive">{{ paiementForm.errors.montant }}</p>
-                <p class="text-xs text-muted-foreground">Disponible : {{ fmt(kpis.impaye) }}</p>
+                <p
+                    v-if="paiementForm.errors.montant"
+                    class="text-xs text-destructive"
+                >
+                    {{ paiementForm.errors.montant }}
+                </p>
+                <p class="text-xs text-muted-foreground">
+                    Disponible : {{ fmt(kpis.impaye) }}
+                </p>
             </div>
             <div class="flex flex-col gap-1.5">
                 <Label>Mode de paiement</Label>
@@ -344,33 +511,66 @@ function formatMode(mode: string) {
                 <textarea
                     v-model="paiementForm.note"
                     rows="2"
-                    class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                    class="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
                 />
             </div>
         </div>
         <template #footer>
             <div class="flex justify-end gap-2">
-                <Button variant="outline" size="sm" @click="showPaiementDialog = false">Annuler</Button>
-                <Button size="sm" :disabled="paiementForm.processing || !paiementForm.montant" @click="submitPaiement">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    @click="showPaiementDialog = false"
+                    >Annuler</Button
+                >
+                <Button
+                    size="sm"
+                    :disabled="paiementForm.processing || !paiementForm.montant"
+                    @click="submitPaiement"
+                >
                     <HandCoins class="mr-1.5 h-4 w-4" />
-                    {{ paiementForm.processing ? 'Enregistrement…' : 'Confirmer' }}
+                    {{
+                        paiementForm.processing
+                            ? 'Enregistrement…'
+                            : 'Confirmer'
+                    }}
                 </Button>
             </div>
         </template>
     </Dialog>
 
     <!-- Dialog historique -->
-    <Dialog v-model:visible="showHistoriqueDialog" modal :style="{ width: '480px' }" header="Historique des paiements">
+    <Dialog
+        v-model:visible="showHistoriqueDialog"
+        modal
+        :style="{ width: '480px' }"
+        header="Historique des paiements"
+    >
         <div v-if="payments.length > 0" class="divide-y">
-            <div v-for="p in payments" :key="p.id" class="flex items-start justify-between gap-3 py-3">
+            <div
+                v-for="p in payments"
+                :key="p.id"
+                class="flex items-start justify-between gap-3 py-3"
+            >
                 <div>
                     <p class="text-sm font-medium">{{ fmt(p.montant) }}</p>
-                    <p class="text-xs text-muted-foreground">{{ p.paid_at }} · {{ formatMode(p.mode_paiement) }}</p>
-                    <p v-if="p.note" class="text-xs text-muted-foreground">{{ p.note }}</p>
-                    <p v-if="p.created_by" class="text-xs text-muted-foreground/60">Par {{ p.created_by }}</p>
+                    <p class="text-xs text-muted-foreground">
+                        {{ p.paid_at }} · {{ formatMode(p.mode_paiement) }}
+                    </p>
+                    <p v-if="p.note" class="text-xs text-muted-foreground">
+                        {{ p.note }}
+                    </p>
+                    <p
+                        v-if="p.created_by"
+                        class="text-xs text-muted-foreground/60"
+                    >
+                        Par {{ p.created_by }}
+                    </p>
                 </div>
             </div>
         </div>
-        <p v-else class="py-8 text-center text-sm text-muted-foreground">Aucun paiement enregistré.</p>
+        <p v-else class="py-8 text-center text-sm text-muted-foreground">
+            Aucun paiement enregistré.
+        </p>
     </Dialog>
 </template>

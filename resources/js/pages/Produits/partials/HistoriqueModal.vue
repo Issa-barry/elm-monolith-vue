@@ -141,14 +141,16 @@ function formatQte(val: number | null | undefined): string {
                     <span
                         v-if="ajustements.length"
                         class="ml-1.5 rounded-full bg-teal-100 px-1.5 py-0.5 text-xs font-medium text-teal-700 dark:bg-teal-950/40 dark:text-teal-400"
-                    >{{ ajustements.length }}</span>
+                        >{{ ajustements.length }}</span
+                    >
                 </Tab>
                 <Tab value="1">
                     Modifications
                     <span
                         v-if="modifications.length"
                         class="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
-                    >{{ modifications.length }}</span>
+                        >{{ modifications.length }}</span
+                    >
                 </Tab>
             </TabList>
 
@@ -164,14 +166,36 @@ function formatQte(val: number | null | undefined): string {
                     <div v-else class="overflow-x-auto pt-2">
                         <table class="w-full text-sm">
                             <thead>
-                                <tr class="border-b text-xs text-muted-foreground">
-                                    <th class="pb-2 pr-4 text-left font-medium">Date</th>
-                                    <th class="pb-2 pr-4 text-left font-medium">Site</th>
-                                    <th class="pb-2 pr-4 text-left font-medium">Par</th>
-                                    <th class="pb-2 pr-4 text-center font-medium">Action</th>
-                                    <th class="pb-2 pr-4 text-right font-medium">Avant</th>
-                                    <th class="pb-2 pr-4 text-right font-medium">Après</th>
-                                    <th class="pb-2 text-left font-medium">Motif</th>
+                                <tr
+                                    class="border-b text-xs text-muted-foreground"
+                                >
+                                    <th class="pr-4 pb-2 text-left font-medium">
+                                        Date
+                                    </th>
+                                    <th class="pr-4 pb-2 text-left font-medium">
+                                        Site
+                                    </th>
+                                    <th class="pr-4 pb-2 text-left font-medium">
+                                        Par
+                                    </th>
+                                    <th
+                                        class="pr-4 pb-2 text-center font-medium"
+                                    >
+                                        Action
+                                    </th>
+                                    <th
+                                        class="pr-4 pb-2 text-right font-medium"
+                                    >
+                                        Avant
+                                    </th>
+                                    <th
+                                        class="pr-4 pb-2 text-right font-medium"
+                                    >
+                                        Après
+                                    </th>
+                                    <th class="pb-2 text-left font-medium">
+                                        Motif
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-border/50">
@@ -180,17 +204,23 @@ function formatQte(val: number | null | undefined): string {
                                     :key="m.id"
                                     class="group"
                                 >
-                                    <td class="py-2 pr-4 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                                    <td
+                                        class="py-2 pr-4 font-mono text-xs whitespace-nowrap text-muted-foreground"
+                                    >
                                         {{ m.created_at }}
                                     </td>
                                     <td class="py-2 pr-4 text-xs">
                                         <span
                                             v-if="m.site_code || m.site_nom"
-                                            class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-xs font-medium bg-muted text-muted-foreground"
+                                            class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-medium text-muted-foreground"
                                         >
                                             {{ m.site_code ?? m.site_nom }}
                                         </span>
-                                        <span v-else class="text-muted-foreground">—</span>
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
+                                            >—</span
+                                        >
                                     </td>
                                     <td class="py-2 pr-4 text-xs">
                                         {{ m.createur_nom || '—' }}
@@ -217,13 +247,19 @@ function formatQte(val: number | null | undefined): string {
                                             -{{ m.quantite }}
                                         </span>
                                     </td>
-                                    <td class="py-2 pr-4 text-right text-muted-foreground tabular-nums">
+                                    <td
+                                        class="py-2 pr-4 text-right text-muted-foreground tabular-nums"
+                                    >
                                         {{ formatQte(m.stock_avant) }}
                                     </td>
-                                    <td class="py-2 pr-4 text-right font-semibold tabular-nums">
+                                    <td
+                                        class="py-2 pr-4 text-right font-semibold tabular-nums"
+                                    >
                                         {{ formatQte(m.stock_apres) }}
                                     </td>
-                                    <td class="py-2 text-xs text-muted-foreground">
+                                    <td
+                                        class="py-2 text-xs text-muted-foreground"
+                                    >
                                         {{ m.notes || '—' }}
                                     </td>
                                 </tr>
@@ -241,7 +277,10 @@ function formatQte(val: number | null | undefined): string {
                         Aucune modification enregistrée.
                     </div>
 
-                    <ol v-else class="relative border-l border-border pl-1 pt-2">
+                    <ol
+                        v-else
+                        class="relative border-l border-border pt-2 pl-1"
+                    >
                         <li
                             v-for="entry in modifications"
                             :key="entry.id"
@@ -249,29 +288,65 @@ function formatQte(val: number | null | undefined): string {
                         >
                             <span
                                 class="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-background"
-                                :class="eventDotColor[entry.event_code] ?? 'bg-zinc-400'"
+                                :class="
+                                    eventDotColor[entry.event_code] ??
+                                    'bg-zinc-400'
+                                "
                             />
-                            <div class="flex flex-wrap items-baseline gap-1 text-xs">
+                            <div
+                                class="flex flex-wrap items-baseline gap-1 text-xs"
+                            >
                                 <span
                                     class="font-semibold"
-                                    :class="eventTextColor[entry.event_code] ?? 'text-muted-foreground'"
+                                    :class="
+                                        eventTextColor[entry.event_code] ??
+                                        'text-muted-foreground'
+                                    "
                                 >
-                                    {{ eventVerb[entry.event_code] ?? entry.event_label }}
+                                    {{
+                                        eventVerb[entry.event_code] ??
+                                        entry.event_label
+                                    }}
                                 </span>
-                                <strong class="text-foreground">{{ entry.actor_name }}</strong>
-                                <span class="text-muted-foreground">— {{ entry.created_at }}</span>
+                                <strong class="text-foreground">{{
+                                    entry.actor_name
+                                }}</strong>
+                                <span class="text-muted-foreground"
+                                    >— {{ entry.created_at }}</span
+                                >
                             </div>
 
                             <div
-                                v-if="(entry.old_values && Object.keys(entry.old_values).length > 0) || (entry.new_values && Object.keys(entry.new_values).length > 0)"
+                                v-if="
+                                    (entry.old_values &&
+                                        Object.keys(entry.old_values).length >
+                                            0) ||
+                                    (entry.new_values &&
+                                        Object.keys(entry.new_values).length >
+                                            0)
+                                "
                                 class="mt-2 overflow-hidden rounded-lg border text-xs"
                             >
                                 <table class="w-full">
                                     <thead>
                                         <tr class="border-b bg-muted/40">
-                                            <th class="px-3 py-1.5 text-left font-medium text-muted-foreground">Champ</th>
-                                            <th v-if="entry.old_values" class="px-3 py-1.5 text-left font-medium text-muted-foreground">Avant</th>
-                                            <th v-if="entry.new_values" class="px-3 py-1.5 text-left font-medium text-muted-foreground">Après</th>
+                                            <th
+                                                class="px-3 py-1.5 text-left font-medium text-muted-foreground"
+                                            >
+                                                Champ
+                                            </th>
+                                            <th
+                                                v-if="entry.old_values"
+                                                class="px-3 py-1.5 text-left font-medium text-muted-foreground"
+                                            >
+                                                Avant
+                                            </th>
+                                            <th
+                                                v-if="entry.new_values"
+                                                class="px-3 py-1.5 text-left font-medium text-muted-foreground"
+                                            >
+                                                Après
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y">
@@ -280,9 +355,23 @@ function formatQte(val: number | null | undefined): string {
                                             :key="row.field"
                                             class="hover:bg-muted/10"
                                         >
-                                            <td class="px-3 py-1.5 font-medium text-muted-foreground">{{ row.label }}</td>
-                                            <td v-if="entry.old_values" class="px-3 py-1.5 whitespace-pre-line">{{ row.old }}</td>
-                                            <td v-if="entry.new_values" class="px-3 py-1.5 whitespace-pre-line">{{ row.new }}</td>
+                                            <td
+                                                class="px-3 py-1.5 font-medium text-muted-foreground"
+                                            >
+                                                {{ row.label }}
+                                            </td>
+                                            <td
+                                                v-if="entry.old_values"
+                                                class="px-3 py-1.5 whitespace-pre-line"
+                                            >
+                                                {{ row.old }}
+                                            </td>
+                                            <td
+                                                v-if="entry.new_values"
+                                                class="px-3 py-1.5 whitespace-pre-line"
+                                            >
+                                                {{ row.new }}
+                                            </td>
                                         </tr>
                                     </tbody>
                                 </table>

@@ -18,8 +18,8 @@ import { Link, usePage } from '@inertiajs/vue3';
 import {
     Briefcase,
     Building2,
-    Car,
     Calculator,
+    Car,
     Layers,
     LayoutGrid,
     Package,
@@ -192,9 +192,18 @@ const mainNavItems = computed((): NavItem[] => {
             icon: Calculator,
             items: [
                 { title: 'Tableau de bord', href: '/comptabilite' },
-                { title: 'Commission livreur logistique', href: '/comptabilite/commissions/logistique' },
-                { title: 'Commission livreur vente', href: '/comptabilite/commissions/vente' },
-                { title: 'Commission propriétaire', href: '/comptabilite/commissions/proprietaires' },
+                {
+                    title: 'Commission livreur logistique',
+                    href: '/comptabilite/commissions/logistique',
+                },
+                {
+                    title: 'Commission livreur vente',
+                    href: '/comptabilite/commissions/vente',
+                },
+                {
+                    title: 'Commission propriétaire',
+                    href: '/comptabilite/commissions/proprietaires',
+                },
                 { title: 'Paiement salaire', href: '/comptabilite/salaires' },
                 { title: 'Journal financier', href: '/comptabilite/journal' },
             ],

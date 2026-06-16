@@ -58,9 +58,12 @@ const filteredProduits = computed(() => {
 });
 
 const typeBadgeClass: Record<string, string> = {
-    materiel: 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
-    fabricable: 'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400',
-    achat_vente: 'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400',
+    materiel:
+        'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
+    fabricable:
+        'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400',
+    achat_vente:
+        'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400',
     service: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
 };
 </script>
@@ -163,8 +166,11 @@ const typeBadgeClass: Record<string, string> = {
                         </p>
                         <span
                             v-if="data.type_label"
-                            class="rounded px-1 py-0.5 text-[10px] font-medium leading-none"
-                            :class="typeBadgeClass[data.type ?? ''] ?? 'bg-muted text-muted-foreground'"
+                            class="rounded px-1 py-0.5 text-[10px] leading-none font-medium"
+                            :class="
+                                typeBadgeClass[data.type ?? ''] ??
+                                'bg-muted text-muted-foreground'
+                            "
                         >
                             {{ data.type_label }}
                         </span>
