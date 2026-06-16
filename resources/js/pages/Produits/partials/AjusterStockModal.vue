@@ -8,9 +8,8 @@ import { useForm } from '@inertiajs/vue3';
 import { ArrowDown, ArrowUp, Lock, Package } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import { computed, ref, watch } from 'vue';
+import { computed, watch } from 'vue';
 
 interface SiteStock {
     site_id: string;
@@ -68,18 +67,23 @@ const form = useForm({
     motif_detail: '',
 });
 
-// Clés de remontage forcé pour que le DOM de l'InputNumber reflète null (vide)
-const augKey = ref(0);
-const dimKey = ref(0);
+function onAugmenterInput(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const num = input.valueAsNumber;
+    form.augmenter = Number.isFinite(num) && num > 0 ? Math.round(num) : null;
+}
 
-// Exclusion mutuelle : dès qu'un champ reçoit une valeur, on vide l'autre
-// et on force le remontage du composant pour que l'input DOM soit vidé.
+function onDiminuerInput(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const num = input.valueAsNumber;
+    form.diminuer = Number.isFinite(num) && num > 0 ? Math.round(num) : null;
+}
+
 watch(
     () => form.augmenter,
     (val) => {
         if (val !== null && val > 0 && form.diminuer !== null) {
             form.diminuer = null;
-            dimKey.value++;
             resetMotifIfInvalid();
         }
     },
@@ -90,7 +94,6 @@ watch(
     (val) => {
         if (val !== null && val > 0 && form.augmenter !== null) {
             form.augmenter = null;
-            augKey.value++;
             resetMotifIfInvalid();
         }
     },
@@ -174,8 +177,6 @@ function submit() {
         @hide="
             form.reset();
             form.clearErrors();
-            augKey++;
-            dimKey++;
         "
     >
         <!-- Produit info -->
@@ -255,21 +256,19 @@ function submit() {
                         <ArrowUp class="h-4 w-4 text-emerald-600" />
                         Augmenter
                     </label>
-                    <InputNumber
-                        :key="`aug-${augKey}`"
-                        v-model="form.augmenter"
-                        input-id="ajuster-augmenter"
-                        :min="1"
-                        :use-grouping="true"
+                    <input
+                        id="ajuster-augmenter"
+                        type="number"
+                        min="1"
+                        step="1"
+                        :value="form.augmenter ?? ''"
                         :disabled="!form.site_id"
-                        class="w-full"
-                        :input-class="
-                            [
-                                'w-full',
-                                form.errors.augmenter ? 'p-invalid' : '',
-                                form.diminuer ? 'opacity-40' : '',
-                            ].join(' ')
-                        "
+                        class="p-inputtext p-component w-full"
+                        :class="[
+                            form.errors.augmenter ? 'p-invalid' : '',
+                            form.diminuer ? 'opacity-40' : '',
+                        ]"
+                        @input="onAugmenterInput"
                     />
                     <p
                         v-if="form.errors.augmenter"
@@ -287,21 +286,19 @@ function submit() {
                         <ArrowDown class="h-4 w-4 text-destructive" />
                         Diminuer
                     </label>
-                    <InputNumber
-                        :key="`dim-${dimKey}`"
-                        v-model="form.diminuer"
-                        input-id="ajuster-diminuer"
-                        :min="1"
-                        :use-grouping="true"
+                    <input
+                        id="ajuster-diminuer"
+                        type="number"
+                        min="1"
+                        step="1"
+                        :value="form.diminuer ?? ''"
                         :disabled="!form.site_id"
-                        class="w-full"
-                        :input-class="
-                            [
-                                'w-full',
-                                form.errors.diminuer ? 'p-invalid' : '',
-                                form.augmenter ? 'opacity-40' : '',
-                            ].join(' ')
-                        "
+                        class="p-inputtext p-component w-full"
+                        :class="[
+                            form.errors.diminuer ? 'p-invalid' : '',
+                            form.augmenter ? 'opacity-40' : '',
+                        ]"
+                        @input="onDiminuerInput"
                     />
                     <p
                         v-if="form.errors.diminuer"
@@ -365,6 +362,7 @@ function submit() {
             <!-- Aperçu stock après -->
             <div
                 v-if="stockPreview !== null"
+                data-testid="stock-preview"
                 class="flex items-center justify-between rounded-lg border px-4 py-2.5 text-sm"
                 :class="
                     stockPreview < 0
