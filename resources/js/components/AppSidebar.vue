@@ -62,7 +62,6 @@ const rhItems = computed((): NavItem[] => {
         sub.push({ title: 'Employés', href: '/employes' });
     if (can('rh-contrats.read'))
         sub.push({ title: 'Contrats', href: '/contrats' });
-    if (can('rh-paie.read')) sub.push({ title: 'Paie', href: '/paie' });
     return sub;
 });
 
@@ -104,7 +103,6 @@ const mainNavItems = computed((): NavItem[] => {
             { title: 'Commandes', href: '/ventes' },
             { title: 'PDV', href: '/pdv' },
             { title: 'Factures', href: '/factures' },
-            { title: 'Commissions', href: '/commissions' },
         ];
         if (moduleActive('cashback')) {
             ventesSubItems.push({ title: 'Cashback', href: '/cashback' });
@@ -171,7 +169,6 @@ const mainNavItems = computed((): NavItem[] => {
                             ? transfertsAReceptionner.value
                             : undefined,
                 },
-                { title: 'Commissions', href: '/logistique/commissions' },
             ],
         });
     }
@@ -195,20 +192,11 @@ const mainNavItems = computed((): NavItem[] => {
             icon: Calculator,
             items: [
                 { title: 'Tableau de bord', href: '/comptabilite' },
-                { title: 'Périodes', href: '/comptabilite/periodes' },
-                {
-                    title: 'Fiches livreurs',
-                    href: '/comptabilite/fiches/livreurs',
-                },
-                {
-                    title: 'Fiches propriétaires',
-                    href: '/comptabilite/fiches/proprietaires',
-                },
-                {
-                    title: 'Fiches salariés',
-                    href: '/comptabilite/fiches/salaries',
-                },
-                { title: 'Journal', href: '/comptabilite/journal' },
+                { title: 'Commission livreur logistique', href: '/comptabilite/commissions/logistique' },
+                { title: 'Commission livreur vente', href: '/comptabilite/commissions/vente' },
+                { title: 'Commission propriétaire', href: '/comptabilite/commissions/proprietaires' },
+                { title: 'Paiement salaire', href: '/comptabilite/salaires' },
+                { title: 'Journal financier', href: '/comptabilite/journal' },
             ],
         });
     }

@@ -309,7 +309,7 @@ class PaiementPeriodeTest extends TestCase
             'site_id' => $this->defaultSite()->id,
             'client_id' => $client->id,
             'reference' => 'CMD-TEST-'.uniqid(),
-            'statut' => 'livre',
+            'statut' => 'livree',
             'total_commande' => 1000000,
         ]);
     }
