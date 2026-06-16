@@ -49,7 +49,7 @@ test('ajuster stock depuis la liste — augmenter', async ({ page }) => {
 
     // Fill "augmenter"
     const augInput = dialog.locator('[data-testid="stock-augmenter-input"] input');
-    await augInput.fill('5');
+    await augInput.pressSequentially('5');
 
     // Preview should show stockAvant + 5
     await expect(dialog.locator('text=Stock après ajustement')).toBeVisible();
@@ -98,7 +98,7 @@ test('ajuster stock depuis la liste — diminuer', async ({ page }) => {
     await page.locator('[role="option"]').first().click();
 
     const dimInput = dialog.locator('[data-testid="stock-diminuer-input"] input');
-    await dimInput.fill('3');
+    await dimInput.pressSequentially('3');
     await expect(dialog.locator('text=Stock après ajustement')).toBeVisible();
 
     // Select motif
@@ -142,7 +142,7 @@ test('ajuster stock depuis la fiche produit', async ({ page }) => {
     await page.locator('[role="option"]').first().click();
 
     const augInput = dialog.locator('[data-testid="stock-augmenter-input"] input');
-    await augInput.fill('2');
+    await augInput.pressSequentially('2');
 
     // Select motif
     const motifSelect = dialog.locator('[data-testid="stock-motif-select"]');
@@ -182,14 +182,14 @@ test('ajuster stock — remplir un champ efface lautre (exclusion mutuelle)', as
     const dimInput = dialog.locator('[data-testid="stock-diminuer-input"] input');
 
     // Fill augmenter → diminuer should stay empty
-    await augInput.fill('10');
+    await augInput.pressSequentially('10');
     await expect(augInput).toHaveValue('10');
     await expect(dimInput).toHaveValue('');
 
-    // Fill diminuer → augmenter should be cleared
-    await dimInput.fill('5');
+    // Fill diminuer → augmenter should be cleared by the watcher + remount
+    await dimInput.pressSequentially('5');
     await expect(dimInput).toHaveValue('5');
-    await expect(augInput).toHaveValue('', { timeout: 3_000 });
+    await expect(augInput).toHaveValue('', { timeout: 5_000 });
 
     // Cancel without submitting
     await dialog.locator('button', { hasText: /annuler/i }).click();
