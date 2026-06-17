@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AuditDrawer from '@/components/AuditDrawer.vue';
+import FilterBar from '@/components/FilterBar.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +17,7 @@ import {
     Download,
     FileText,
     HandCoins,
+    History,
     MoreHorizontal,
     Users,
 } from 'lucide-vue-next';
@@ -161,6 +164,16 @@ const showPaiementDialog = ref(false);
 const selectedLigne = ref<LignePaie | null>(null);
 const paiementProcessing = ref(false);
 const paiementErrors = ref<Record<string, string>>({});
+
+const showAudit = ref(false);
+const auditLigneId = ref('');
+const auditLigneNom = ref('');
+
+function openAudit(l: LignePaie) {
+    auditLigneId.value = l.id;
+    auditLigneNom.value = l.employe_nom;
+    showAudit.value = true;
+}
 
 function openPaiement(ligne: LignePaie) {
     selectedLigne.value = ligne;
@@ -323,7 +336,7 @@ const periodeCourante = computed(
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
+            <FilterBar>
                 <PvDropdown
                     :options="MOIS_OPTIONS"
                     option-label="label"
@@ -364,14 +377,9 @@ const periodeCourante = computed(
                 <InputText
                     v-model="searchVal"
                     placeholder="Rechercher un salarié…"
-                    class="w-56 text-sm"
+                    class="min-w-[180px] flex-1 text-sm"
                 />
-                <span class="text-xs text-muted-foreground"
-                    >{{ lignes.length }} résultat{{
-                        lignes.length !== 1 ? 's' : ''
-                    }}</span
-                >
-            </div>
+            </FilterBar>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -527,6 +535,14 @@ const periodeCourante = computed(
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
                                         </template>
+                                        <DropdownMenuItem
+                                            class="cursor-pointer"
+                                            @click="openAudit(l)"
+                                        >
+                                            <History class="mr-2 h-4 w-4" />
+                                            Historique
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
                                         <DropdownMenuItem as-child>
                                             <a
                                                 :href="`/comptabilite/salaires/export/pdf?mois=${selectedMois}&annee=${selectedAnnee}`"
@@ -558,5 +574,13 @@ const periodeCourante = computed(
         :processing="paiementProcessing"
         :errors="paiementErrors"
         @submit="handlePaiementSubmit"
+    />
+
+    <AuditDrawer
+        v-model:visible="showAudit"
+        :title="`Historique — ${auditLigneNom}`"
+        auditable-type="App\Models\PaieLigne"
+        :auditable-id="auditLigneId"
+        module="salaires"
     />
 </template>

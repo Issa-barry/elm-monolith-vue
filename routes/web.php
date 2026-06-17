@@ -20,6 +20,7 @@ use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as Comptabi
 use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
 use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteCommissionVenteController;
 use App\Http\Controllers\Comptabilite\ComptabiliteDashboardController;
+use App\Http\Controllers\Comptabilite\HistoriqueActionsController;
 use App\Http\Controllers\Comptabilite\JournalTresorerieController;
 use App\Http\Controllers\Comptabilite\PaiementFicheController;
 use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
@@ -254,6 +255,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::patch('depenses/{depense}/soumettre', [DepenseController::class, 'soumettre'])->name('depenses.soumettre');
         Route::patch('depenses/{depense}/valider', [DepenseController::class, 'valider'])->name('depenses.valider');
         Route::patch('depenses/{depense}/rejeter', [DepenseController::class, 'rejeter'])->name('depenses.rejeter');
+        Route::get('depenses/{depense}/historique', [DepenseController::class, 'historique'])->name('depenses.historique');
     });
 
     // ── Module : RH (Ressources humaines) ────────────────────────────────────
@@ -346,6 +348,12 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
             ->name('salaires.excel');
         Route::get('salaires/export/pdf', [SalaireController::class, 'exportPdf'])
             ->name('salaires.pdf');
+
+        // ── Historique des actions ────────────────────────────────────────────
+        Route::get('historique', [HistoriqueActionsController::class, 'index'])
+            ->name('historique.index');
+        Route::get('historique/entite', [HistoriqueActionsController::class, 'entite'])
+            ->name('historique.entite');
     });
 
     // ── Module : Logistique inter-sites ───────────────────────────────────────

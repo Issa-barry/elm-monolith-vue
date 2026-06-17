@@ -19,9 +19,10 @@ class AuditLogService
         ?array $oldValues = null,
         ?array $newValues = null,
         array $meta = [],
+        ?string $organizationIdOverride = null,
     ): AuditLog {
         return AuditLog::create([
-            'organization_id' => $auditable->organization_id,
+            'organization_id' => $organizationIdOverride ?? $auditable->organization_id,
             'auditable_type' => $auditable->getMorphClass(),
             'auditable_id' => $auditable->getKey(),
             'event_code' => $event->value,
@@ -33,6 +34,31 @@ class AuditLogService
             'meta' => $meta ?: null,
             'created_at' => now(),
         ]);
+    }
+
+    /**
+     * Generic field-level diff between two snapshots.
+     *
+     * Returns [$oldDiff, $newDiff] — each is null when nothing changed in its side.
+     */
+    public function diffFields(array $before, array $after, array $fields): array
+    {
+        $oldDiff = [];
+        $newDiff = [];
+
+        $normalize = fn ($v) => is_numeric($v) ? rtrim(number_format((float) $v, 2, '.', ''), '0') : (string) ($v ?? '');
+
+        foreach ($fields as $key) {
+            $oldVal = $before[$key] ?? null;
+            $newVal = $after[$key] ?? null;
+
+            if ($normalize($oldVal) !== $normalize($newVal)) {
+                $oldDiff[$key] = $oldVal;
+                $newDiff[$key] = $newVal;
+            }
+        }
+
+        return [empty($oldDiff) ? null : $oldDiff, empty($newDiff) ? null : $newDiff];
     }
 
     /**

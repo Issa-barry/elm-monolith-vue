@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Comptabilite;
 
+use App\Enums\AuditEvent;
 use App\Enums\StatutFichePaiement;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
@@ -9,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\Site;
+use App\Services\AuditLogService;
 use App\Services\PeriodeCalculatorService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -105,6 +107,12 @@ class PaiementPeriodeController extends Controller
             'created_by' => auth()->id(),
         ]);
 
+        app(AuditLogService::class)->record($periode, AuditEvent::CREATED, auth()->user(), null, null, [
+            'module' => 'periodes_paiement',
+            'site_id' => $periode->site_id,
+            'description' => "Période {$periode->reference} créée",
+        ]);
+
         return redirect()
             ->route('comptabilite.periodes.show', $periode)
             ->with('success', 'Période créée avec succès.');
@@ -161,6 +169,12 @@ class PaiementPeriodeController extends Controller
 
         $this->calculator->calculer($periode);
 
+        app(AuditLogService::class)->record($periode, AuditEvent::AUTO_GENERATED, auth()->user(), null, null, [
+            'module' => 'periodes_paiement',
+            'site_id' => $periode->site_id,
+            'description' => "Fiches générées automatiquement pour la période {$periode->reference}",
+        ]);
+
         return back()->with('success', 'Période calculée. Les fiches ont été générées.');
     }
 
@@ -174,6 +188,12 @@ class PaiementPeriodeController extends Controller
             'validated_at' => now(),
         ]);
 
+        app(AuditLogService::class)->record($periode, AuditEvent::VALIDATED, auth()->user(), null, null, [
+            'module' => 'periodes_paiement',
+            'site_id' => $periode->site_id,
+            'description' => "Période {$periode->reference} validée",
+        ]);
+
         return back()->with('success', 'Période validée.');
     }
 
@@ -183,12 +203,26 @@ class PaiementPeriodeController extends Controller
 
         $periode->update(['statut' => StatutPeriodePaiement::CLOTUREE->value]);
 
+        app(AuditLogService::class)->record($periode, AuditEvent::STATUS_CHANGED, auth()->user(), null, null, [
+            'module' => 'periodes_paiement',
+            'site_id' => $periode->site_id,
+            'statut_avant' => StatutPeriodePaiement::VALIDEE->value,
+            'statut_apres' => StatutPeriodePaiement::CLOTUREE->value,
+            'description' => "Période {$periode->reference} clôturée",
+        ]);
+
         return back()->with('success', 'Période clôturée.');
     }
 
     public function destroy(PaiementPeriode $periode): RedirectResponse
     {
         $this->authorize('delete', $periode);
+
+        app(AuditLogService::class)->record($periode, AuditEvent::DELETED, auth()->user(), null, null, [
+            'module' => 'periodes_paiement',
+            'site_id' => $periode->site_id,
+            'description' => "Période {$periode->reference} supprimée",
+        ]);
 
         $periode->delete();
 

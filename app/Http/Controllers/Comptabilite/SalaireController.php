@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Comptabilite;
 
+use App\Enums\AuditEvent;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\PaieLigne;
 use App\Models\PaiePeriode;
 use App\Models\Site;
+use App\Services\AuditLogService;
 use App\Services\PaieCalculService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -153,6 +155,16 @@ class SalaireController extends Controller
 
         $ligne->paiements()->create($data);
         $this->paieCalc->recalculerApresPaiement($ligne);
+
+        $employe = $ligne->employe;
+        $montantFmt = number_format((float) $data['montant'], 0, ',', "\u{202F}");
+        $employeNom = $employe?->nom_complet ?? '—';
+        app(AuditLogService::class)->record($ligne, AuditEvent::PAID, auth()->user(), null, null, [
+            'module' => 'salaires',
+            'montant' => $data['montant'],
+            'mode_paiement' => $data['mode_paiement'],
+            'description' => "Paiement de {$montantFmt} GNF effectué pour {$employeNom}",
+        ], $orgId);
 
         return back()->with('success', 'Paiement enregistré.');
     }

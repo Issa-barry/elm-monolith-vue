@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilterBar from '@/components/FilterBar.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
@@ -151,23 +152,17 @@ function fmt(n: number) {
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-end gap-3">
-                <div class="flex flex-col gap-1">
-                    <label class="text-xs text-muted-foreground">Du</label>
-                    <input
-                        v-model="dateFrom"
-                        type="date"
-                        class="h-9 rounded-lg border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
-                    />
-                </div>
-                <div class="flex flex-col gap-1">
-                    <label class="text-xs text-muted-foreground">Au</label>
-                    <input
-                        v-model="dateTo"
-                        type="date"
-                        class="h-9 rounded-lg border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
-                    />
-                </div>
+            <FilterBar>
+                <input
+                    v-model="dateFrom"
+                    type="date"
+                    class="h-9 rounded-md border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
+                />
+                <input
+                    v-model="dateTo"
+                    type="date"
+                    class="h-9 rounded-md border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
+                />
                 <Dropdown
                     v-model="selectedSens"
                     :options="sensOptions"
@@ -196,14 +191,16 @@ function fmt(n: number) {
                     class="min-w-[160px] text-sm"
                     @change="applyFilters"
                 />
-                <button
-                    type="button"
-                    class="h-9 rounded-lg border bg-card px-3 text-sm hover:bg-muted/50"
-                    @click="applyFilters"
-                >
-                    Filtrer
-                </button>
-            </div>
+                <template #actions>
+                    <button
+                        type="button"
+                        class="h-9 rounded-md border border-input bg-card px-3 text-sm hover:bg-muted/50"
+                        @click="applyFilters"
+                    >
+                        Filtrer
+                    </button>
+                </template>
+            </FilterBar>
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">

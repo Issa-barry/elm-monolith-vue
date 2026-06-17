@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AuditDrawer from '@/components/AuditDrawer.vue';
+import FilterBar from '@/components/FilterBar.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -16,6 +18,7 @@ import {
     Download,
     FileText,
     HandCoins,
+    History,
     MoreHorizontal,
     Truck,
     User,
@@ -141,6 +144,16 @@ const MODES = [
     { value: 'cheque', label: 'Chèque' },
     { value: 'mobile_money', label: 'Mobile Money' },
 ];
+
+const showAudit = ref(false);
+const auditBenefId = ref('');
+const auditBenefNom = ref('');
+
+function openAudit(b: BeneficiaireRow) {
+    auditBenefId.value = b.beneficiaire_id;
+    auditBenefNom.value = b.beneficiaire_nom;
+    showAudit.value = true;
+}
 
 function openPaiement(b: BeneficiaireRow) {
     selectedBenef.value = b;
@@ -318,12 +331,7 @@ function fmtTel(tel: string | null | undefined): string {
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <InputText
-                    v-model="searchVal"
-                    placeholder="Nom, téléphone…"
-                    class="w-56 text-sm"
-                />
+            <FilterBar>
                 <Dropdown
                     v-model="statutFiltre"
                     :options="STATUT_OPTIONS"
@@ -340,12 +348,12 @@ function fmtTel(tel: string | null | undefined): string {
                     placeholder="Toutes les périodes"
                     class="w-56 text-sm"
                 />
-                <span class="text-xs text-muted-foreground"
-                    >{{ beneficiaires.length }} résultat{{
-                        beneficiaires.length !== 1 ? 's' : ''
-                    }}</span
-                >
-            </div>
+                <InputText
+                    v-model="searchVal"
+                    placeholder="Rechercher un propriétaire…"
+                    class="min-w-[180px] flex-1 text-sm"
+                />
+            </FilterBar>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -515,6 +523,13 @@ function fmtTel(tel: string | null | undefined): string {
                                                 Détail
                                             </Link>
                                         </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            class="cursor-pointer"
+                                            @click="openAudit(b)"
+                                        >
+                                            <History class="mr-2 h-4 w-4" />
+                                            Historique
+                                        </DropdownMenuItem>
                                         <template
                                             v-if="
                                                 can_payer && b.solde_restant > 0
@@ -622,4 +637,12 @@ function fmtTel(tel: string | null | undefined): string {
             </div>
         </template>
     </Dialog>
+
+    <AuditDrawer
+        v-model:visible="showAudit"
+        :title="`Historique — ${auditBenefNom}`"
+        auditable-type="App\Models\Proprietaire"
+        :auditable-id="auditBenefId"
+        module="commissions_proprietaires"
+    />
 </template>

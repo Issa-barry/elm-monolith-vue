@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AuditDrawer from '@/components/AuditDrawer.vue';
+import FilterBar from '@/components/FilterBar.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -16,6 +18,7 @@ import {
     Download,
     FileText,
     HandCoins,
+    History,
     MoreHorizontal,
     Truck,
     User,
@@ -141,6 +144,16 @@ const showPaiementDialog = ref(false);
 const selectedLivreur = ref<LivreurRow | null>(null);
 const paiementProcessing = ref(false);
 const paiementErrors = ref<Record<string, string>>({});
+
+const showAudit = ref(false);
+const auditLivreurId = ref('');
+const auditLivreurNom = ref('');
+
+function openAudit(l: LivreurRow) {
+    auditLivreurId.value = l.livreur_id;
+    auditLivreurNom.value = l.nom;
+    showAudit.value = true;
+}
 
 function openPaiement(livreur: LivreurRow) {
     selectedLivreur.value = livreur;
@@ -321,12 +334,7 @@ function fmtTel(tel: string | null | undefined): string {
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <InputText
-                    v-model="searchVal"
-                    placeholder="Nom, téléphone, véhicule…"
-                    class="w-64 text-sm"
-                />
+            <FilterBar>
                 <PvDropdown
                     :options="STATUT_OPTIONS"
                     option-label="label"
@@ -355,12 +363,12 @@ function fmtTel(tel: string | null | undefined): string {
                     class="w-48 text-sm"
                     @change="(e) => (siteFiltre = e.value)"
                 />
-                <span class="text-xs text-muted-foreground"
-                    >{{ livreurs.length }} résultat{{
-                        livreurs.length !== 1 ? 's' : ''
-                    }}</span
-                >
-            </div>
+                <InputText
+                    v-model="searchVal"
+                    placeholder="Rechercher un livreur…"
+                    class="min-w-[180px] flex-1 text-sm"
+                />
+            </FilterBar>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -523,6 +531,13 @@ function fmtTel(tel: string | null | undefined): string {
                                                 Détail
                                             </Link>
                                         </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            class="cursor-pointer"
+                                            @click="openAudit(l)"
+                                        >
+                                            <History class="mr-2 h-4 w-4" />
+                                            Historique
+                                        </DropdownMenuItem>
                                         <template
                                             v-if="can_payer && l.impaye > 0"
                                         >
@@ -563,5 +578,13 @@ function fmtTel(tel: string | null | undefined): string {
         :processing="paiementProcessing"
         :errors="paiementErrors"
         @submit="handlePaiementSubmit"
+    />
+
+    <AuditDrawer
+        v-model:visible="showAudit"
+        :title="`Historique — ${auditLivreurNom}`"
+        auditable-type="App\Models\Livreur"
+        :auditable-id="auditLivreurId"
+        module="commissions_logistique"
     />
 </template>

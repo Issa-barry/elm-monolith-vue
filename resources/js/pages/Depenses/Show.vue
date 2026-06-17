@@ -17,10 +17,12 @@ import {
     CheckCircle,
     Clock,
     Edit,
+    History,
     Send,
     Trash2,
     XCircle,
 } from 'lucide-vue-next';
+import HistoriqueDialog from './partials/HistoriqueDialog.vue';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
@@ -130,6 +132,7 @@ const statut = computed(
         },
 );
 
+const showHistorique = ref(false);
 const showRejectDialog = ref(false);
 const rejectMotif = ref('');
 const rejectCommentaire = ref('');
@@ -286,6 +289,14 @@ function formatDate(iso: string | null): string {
 
                     <!-- Actions -->
                     <div class="flex shrink-0 gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            @click="showHistorique = true"
+                        >
+                            <History class="mr-1 h-3.5 w-3.5" />
+                            Historique
+                        </Button>
                         <Button
                             v-if="depense.can_edit"
                             variant="outline"
@@ -494,6 +505,12 @@ function formatDate(iso: string | null): string {
                 </div>
             </div>
         </div>
+
+        <!-- Historique dialog -->
+        <HistoriqueDialog
+            :depense-id="showHistorique ? depense.id : null"
+            @close="showHistorique = false"
+        />
 
         <!-- Reject dialog -->
         <Dialog
