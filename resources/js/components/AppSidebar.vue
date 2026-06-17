@@ -18,6 +18,7 @@ import { Link, usePage } from '@inertiajs/vue3';
 import {
     Briefcase,
     Building2,
+    Calculator,
     Car,
     Layers,
     LayoutGrid,
@@ -61,7 +62,6 @@ const rhItems = computed((): NavItem[] => {
         sub.push({ title: 'Employés', href: '/employes' });
     if (can('rh-contrats.read'))
         sub.push({ title: 'Contrats', href: '/contrats' });
-    if (can('rh-paie.read')) sub.push({ title: 'Paie', href: '/paie' });
     return sub;
 });
 
@@ -103,7 +103,6 @@ const mainNavItems = computed((): NavItem[] => {
             { title: 'Commandes', href: '/ventes' },
             { title: 'PDV', href: '/pdv' },
             { title: 'Factures', href: '/factures' },
-            { title: 'Commissions', href: '/commissions' },
         ];
         if (moduleActive('cashback')) {
             ventesSubItems.push({ title: 'Cashback', href: '/cashback' });
@@ -170,7 +169,6 @@ const mainNavItems = computed((): NavItem[] => {
                             ? transfertsAReceptionner.value
                             : undefined,
                 },
-                { title: 'Commissions', href: '/logistique/commissions' },
             ],
         });
     }
@@ -184,6 +182,31 @@ const mainNavItems = computed((): NavItem[] => {
             href: rhItems.value[0].href,
             icon: Briefcase,
             items: rhItems.value,
+        });
+    }
+
+    if (canSee('comptabilite.read', 'comptabilite')) {
+        items.push({
+            title: 'Comptabilité',
+            href: '/comptabilite',
+            icon: Calculator,
+            items: [
+                { title: 'Tableau de bord', href: '/comptabilite' },
+                {
+                    title: 'Commission livreur logistique',
+                    href: '/comptabilite/commissions/logistique',
+                },
+                {
+                    title: 'Commission livreur vente',
+                    href: '/comptabilite/commissions/vente',
+                },
+                {
+                    title: 'Commission propriétaire',
+                    href: '/comptabilite/commissions/proprietaires',
+                },
+                { title: 'Paiement salaire', href: '/comptabilite/salaires' },
+                { title: 'Journal financier', href: '/comptabilite/journal' },
+            ],
         });
     }
 

@@ -16,6 +16,15 @@ use App\Http\Controllers\CommissionLogistiqueController;
 use App\Http\Controllers\CommissionPaymentController;
 use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\CommissionVenteController;
+use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
+use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
+use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteCommissionVenteController;
+use App\Http\Controllers\Comptabilite\ComptabiliteDashboardController;
+use App\Http\Controllers\Comptabilite\JournalTresorerieController;
+use App\Http\Controllers\Comptabilite\PaiementFicheController;
+use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
+use App\Http\Controllers\Comptabilite\PaiementPeriodeController;
+use App\Http\Controllers\Comptabilite\SalaireController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\ContratController;
 use App\Http\Controllers\DashboardController;
@@ -252,16 +261,9 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::resource('employes', EmployeController::class);
         Route::resource('contrats', ContratController::class)->except(['show']);
 
-        // Paie
+        // Paie (legacy — lecture seule, gestion déplacée dans Comptabilité > Salaires)
         Route::get('paie', [PaieController::class, 'index'])->name('paie.index');
-        Route::get('paie/create', [PaieController::class, 'create'])->name('paie.create');
-        Route::post('paie', [PaieController::class, 'store'])->name('paie.store');
         Route::get('paie/{paie}', [PaieController::class, 'show'])->name('paie.show');
-        Route::delete('paie/{paie}', [PaieController::class, 'destroy'])->name('paie.destroy');
-        Route::post('paie/{paie}/calculer', [PaieController::class, 'calculer'])->name('paie.calculer');
-        Route::post('paie/{paie}/valider', [PaieController::class, 'valider'])->name('paie.valider');
-        Route::post('paie/{paie}/paye', [PaieController::class, 'marquerPaye'])->name('paie.marquer-paye');
-        Route::post('paie/{paie}/cloturer', [PaieController::class, 'cloturer'])->name('paie.cloturer');
 
         // Variables de paie
         Route::post('paie-lignes/{ligne}/variables', [PaieVariableController::class, 'store'])->name('paie-variables.store');
@@ -271,6 +273,79 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         // Paiements de paie
         Route::post('paie-lignes/{ligne}/paiements', [PaiePaiementController::class, 'store'])->name('paie-paiements.store');
         Route::delete('paie-paiements/{paiement}', [PaiePaiementController::class, 'destroy'])->name('paie-paiements.destroy');
+    });
+
+    // ── Module : Comptabilité ─────────────────────────────────────────────────
+    Route::middleware('module:'.ModuleFeature::COMPTABILITE)->prefix('comptabilite')->name('comptabilite.')->group(function () {
+        Route::get('/', [ComptabiliteDashboardController::class, 'index'])->name('dashboard');
+
+        Route::get('fiches/livreurs', [PaiementFicheController::class, 'indexLivreurs'])->name('fiches.livreurs');
+        Route::get('fiches/proprietaires', [PaiementFicheController::class, 'indexProprietaires'])->name('fiches.proprietaires');
+        Route::get('fiches/salaries', [PaiementFicheController::class, 'indexSalaries'])->name('fiches.salaries');
+        Route::get('fiches/export/excel', [PaiementFicheController::class, 'exportExcel'])->name('fiches.excel');
+        Route::get('fiches/{fiche}', [PaiementFicheController::class, 'show'])->name('fiches.show');
+        Route::get('fiches/{fiche}/pdf', [PaiementFicheController::class, 'exportPdf'])->name('fiches.pdf');
+
+        Route::post('fiches/{fiche}/paiements', [PaiementFichePaiementController::class, 'store'])->name('fiches.paiements.store');
+        Route::delete('fiches-paiements/{paiement}', [PaiementFichePaiementController::class, 'destroy'])->name('fiches.paiements.destroy');
+
+        Route::get('journal', [JournalTresorerieController::class, 'index'])->name('journal');
+
+        // ── Commission livreurs logistique ────────────────────────────────────
+        Route::get('commissions/logistique', [ComptabiliteCommissionLogistiqueController::class, 'index'])
+            ->name('commissions.logistique.index');
+        Route::get('commissions/logistique/export/excel', [ComptabiliteCommissionLogistiqueController::class, 'exportExcel'])
+            ->name('commissions.logistique.excel');
+        Route::get('commissions/logistique/export/pdf', [ComptabiliteCommissionLogistiqueController::class, 'exportPdf'])
+            ->name('commissions.logistique.pdf');
+        Route::get('commissions/logistique/livreurs/{livreurId}', [ComptabiliteCommissionLogistiqueController::class, 'showLivreur'])
+            ->name('commissions.logistique.livreur');
+        Route::post('commissions/logistique/livreurs/{livreurId}/paiements', [ComptabiliteCommissionLogistiqueController::class, 'payerLivreur'])
+            ->name('commissions.logistique.livreur.paiements');
+
+        // ── Commission livreurs vente ──────────────────────────────────────────
+        Route::get('commissions/vente', [ComptabiliteCommissionVenteController::class, 'index'])
+            ->name('commissions.vente.index');
+        Route::get('commissions/vente/export/excel', [ComptabiliteCommissionVenteController::class, 'exportExcel'])
+            ->name('commissions.vente.excel');
+        Route::get('commissions/vente/export/pdf', [ComptabiliteCommissionVenteController::class, 'exportPdf'])
+            ->name('commissions.vente.pdf');
+        Route::get('commissions/vente/livreurs/{livreurId}', [ComptabiliteCommissionVenteController::class, 'showLivreur'])
+            ->name('commissions.vente.livreur');
+        Route::post('commissions/vente/livreurs/{livreurId}/paiements', [ComptabiliteCommissionVenteController::class, 'payerLivreur'])
+            ->name('commissions.vente.livreur.paiements');
+
+        // ── Commission propriétaires ───────────────────────────────────────────
+        Route::get('commissions/proprietaires', [CommissionProprietaireController::class, 'index'])
+            ->name('commissions.proprietaires.index');
+        Route::get('commissions/proprietaires/export/excel', [CommissionProprietaireController::class, 'exportExcel'])
+            ->name('commissions.proprietaires.excel');
+        Route::get('commissions/proprietaires/export/pdf', [CommissionProprietaireController::class, 'exportPdf'])
+            ->name('commissions.proprietaires.pdf');
+        Route::get('commissions/proprietaires/{proprietaireId}', [CommissionProprietaireController::class, 'show'])
+            ->name('commissions.proprietaires.show');
+        Route::post('commissions/proprietaires/{proprietaireId}/paiements', [CommissionProprietaireController::class, 'payer'])
+            ->name('commissions.proprietaires.paiements');
+
+        // ── Périodes de paiement ──────────────────────────────────────────────
+        Route::get('periodes', [PaiementPeriodeController::class, 'index'])->name('periodes.index');
+        Route::get('periodes/create', [PaiementPeriodeController::class, 'create'])->name('periodes.create');
+        Route::post('periodes', [PaiementPeriodeController::class, 'store'])->name('periodes.store');
+        Route::get('periodes/{periode}', [PaiementPeriodeController::class, 'show'])->name('periodes.show');
+        Route::post('periodes/{periode}/calculer', [PaiementPeriodeController::class, 'calculer'])->name('periodes.calculer');
+        Route::post('periodes/{periode}/valider', [PaiementPeriodeController::class, 'valider'])->name('periodes.valider');
+        Route::post('periodes/{periode}/cloturer', [PaiementPeriodeController::class, 'cloturer'])->name('periodes.cloturer');
+        Route::delete('periodes/{periode}', [PaiementPeriodeController::class, 'destroy'])->name('periodes.destroy');
+
+        // ── Paiement salaires ─────────────────────────────────────────────────
+        Route::get('salaires', [SalaireController::class, 'index'])
+            ->name('salaires.index');
+        Route::post('salaires/{ligne}/payer', [SalaireController::class, 'payerLigne'])
+            ->name('salaires.payer');
+        Route::get('salaires/export/excel', [SalaireController::class, 'exportExcel'])
+            ->name('salaires.excel');
+        Route::get('salaires/export/pdf', [SalaireController::class, 'exportPdf'])
+            ->name('salaires.pdf');
     });
 
     // ── Module : Logistique inter-sites ───────────────────────────────────────

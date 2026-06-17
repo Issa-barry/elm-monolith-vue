@@ -54,6 +54,16 @@ class DepenseController extends Controller
             ->orderBy('nom')
             ->get(['id', 'nom']);
 
+        $statsRow = Depense::where('organization_id', $orgId)
+            ->selectRaw(
+                'COUNT(*) as total,
+                COALESCE(SUM(montant), 0) as montant_total,
+                SUM(CASE WHEN statut = ? THEN 1 ELSE 0 END) as en_attente,
+                SUM(CASE WHEN statut = ? THEN 1 ELSE 0 END) as validees',
+                [StatutDepense::SOUMIS->value, StatutDepense::VALIDE->value]
+            )
+            ->first();
+
         return Inertia::render('Depenses/Index', [
             'depenses' => $paginator->through(fn (Depense $d) => $this->transformDepense($d, $beneficiaireCache, $vehiculeInfoCache)),
             'types' => $types->map(fn ($t) => ['id' => $t->id, 'libelle' => $t->libelle, 'categorie' => $t->categorie->value]),
@@ -61,6 +71,12 @@ class DepenseController extends Controller
             'categories' => CategorieDepense::options(),
             'statuts' => StatutDepense::options(),
             'filters' => $filters,
+            'stats' => [
+                'total' => (int) $statsRow->total,
+                'montant_total' => (float) $statsRow->montant_total,
+                'en_attente' => (int) $statsRow->en_attente,
+                'validees' => (int) $statsRow->validees,
+            ],
         ]);
     }
 

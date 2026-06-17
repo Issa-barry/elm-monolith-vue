@@ -116,38 +116,6 @@ class PaieTest extends TestCase
         $this->actingAs($user)->get(route('paie.index'))->assertStatus(403);
     }
 
-    // ── store ─────────────────────────────────────────────────────────────────
-
-    public function test_store_cree_periode(): void
-    {
-        $this->actingAs($this->user)
-            ->post(route('paie.store'), ['mois' => 3, 'annee' => 2025])
-            ->assertRedirect();
-
-        $this->assertDatabaseHas('paie_periodes', [
-            'organization_id' => $this->org->id,
-            'mois' => 3,
-            'annee' => 2025,
-            'statut' => 'brouillon',
-        ]);
-    }
-
-    public function test_store_rejette_doublon(): void
-    {
-        $this->makePeriode(['mois' => 5, 'annee' => 2025]);
-
-        $this->actingAs($this->user)
-            ->post(route('paie.store'), ['mois' => 5, 'annee' => 2025])
-            ->assertSessionHasErrors('mois');
-    }
-
-    public function test_store_valide_mois_hors_plage(): void
-    {
-        $this->actingAs($this->user)
-            ->post(route('paie.store'), ['mois' => 13, 'annee' => 2025])
-            ->assertSessionHasErrors('mois');
-    }
-
     // ── show ──────────────────────────────────────────────────────────────────
 
     public function test_show_retourne_200(): void
@@ -269,61 +237,6 @@ class PaieTest extends TestCase
         $this->assertEquals(1_000_000, (float) $ligne->salaire_base);
     }
 
-    // ── transitions ───────────────────────────────────────────────────────────
-
-    public function test_transition_brouillon_vers_calcule(): void
-    {
-        $periode = $this->makePeriode();
-
-        $this->actingAs($this->user)
-            ->post(route('paie.calculer', $periode))
-            ->assertRedirect();
-
-        $this->assertEquals(StatutPeriodePaie::CALCULE, $periode->fresh()->statut);
-    }
-
-    public function test_transition_invalide_brouillon_vers_valide(): void
-    {
-        $periode = $this->makePeriode(['statut' => StatutPeriodePaie::BROUILLON]);
-
-        $this->actingAs($this->user)
-            ->post(route('paie.valider', $periode))
-            ->assertSessionHasErrors('statut');
-    }
-
-    public function test_transition_calcule_vers_valide_rh(): void
-    {
-        $periode = $this->makePeriode(['statut' => StatutPeriodePaie::CALCULE]);
-
-        $this->actingAs($this->user)
-            ->post(route('paie.valider', $periode))
-            ->assertRedirect();
-
-        $this->assertEquals(StatutPeriodePaie::VALIDE_RH, $periode->fresh()->statut);
-    }
-
-    public function test_transition_valide_vers_paye(): void
-    {
-        $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
-
-        $this->actingAs($this->user)
-            ->post(route('paie.marquer-paye', $periode))
-            ->assertRedirect();
-
-        $this->assertEquals(StatutPeriodePaie::PAYE, $periode->fresh()->statut);
-    }
-
-    public function test_transition_paye_vers_cloture(): void
-    {
-        $periode = $this->makePeriode(['statut' => StatutPeriodePaie::PAYE]);
-
-        $this->actingAs($this->user)
-            ->post(route('paie.cloturer', $periode))
-            ->assertRedirect();
-
-        $this->assertEquals(StatutPeriodePaie::CLOTURE, $periode->fresh()->statut);
-    }
-
     // ── paiements partiels ────────────────────────────────────────────────────
 
     public function test_paiement_partiel_met_a_jour_reste(): void
@@ -395,23 +308,6 @@ class PaieTest extends TestCase
             ->assertSessionHasErrors('montant');
     }
 
-    // ── isolation orgs ────────────────────────────────────────────────────────
-
-    public function test_periode_autre_org_non_visible(): void
-    {
-        $autreOrg = Organization::factory()->create();
-        $periode = PaiePeriode::create([
-            'organization_id' => $autreOrg->id,
-            'mois' => 2,
-            'annee' => 2025,
-            'statut' => StatutPeriodePaie::BROUILLON,
-        ]);
-
-        $this->actingAs($this->user)
-            ->post(route('paie.calculer', $periode))
-            ->assertStatus(403);
-    }
-
     // ── modification bloquée sur période verrouillée ──────────────────────────
 
     public function test_variable_bloquee_si_periode_verrouillee(): void
@@ -434,27 +330,5 @@ class PaieTest extends TestCase
                 'montant' => 10_000,
             ])
             ->assertSessionHasErrors('statut');
-    }
-
-    // ── destroy ───────────────────────────────────────────────────────────────
-
-    public function test_destroy_supprime_periode_brouillon(): void
-    {
-        $periode = $this->makePeriode();
-
-        $this->actingAs($this->user)
-            ->delete(route('paie.destroy', $periode))
-            ->assertRedirect(route('paie.index'));
-
-        $this->assertSoftDeleted('paie_periodes', ['id' => $periode->id]);
-    }
-
-    public function test_destroy_bloque_periode_verrouillee(): void
-    {
-        $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
-
-        $this->actingAs($this->user)
-            ->delete(route('paie.destroy', $periode))
-            ->assertStatus(403);
     }
 }

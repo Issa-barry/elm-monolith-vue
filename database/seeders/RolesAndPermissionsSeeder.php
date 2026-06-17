@@ -18,6 +18,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'vehicules', 'type-vehicules', 'equipes-livraison', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres',
         'logistique', 'depenses',
         'rh-employes', 'rh-contrats', 'rh-paie',
+        'comptabilite',
     ];
 
     private const ACTIONS = ['create', 'read', 'update', 'delete'];
@@ -42,6 +43,7 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'rh-paie.validate']);
         Permission::firstOrCreate(['name' => 'rh-paie.pay']);
         Permission::firstOrCreate(['name' => 'rh-paie.close']);
+        Permission::firstOrCreate(['name' => 'comptabilite.payer']);
 
         // ── 2. Rôles + matrices de permissions ────────────────────────────────
         $superAdmin = Role::firstOrCreate(['name' => 'super_admin']);
@@ -79,6 +81,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',     'rh-contrats.delete',
             'rh-paie.create',           'rh-paie.read',           'rh-paie.update',         'rh-paie.delete',
             'rh-paie.validate',         'rh-paie.pay',            'rh-paie.close',
+            'comptabilite.create',      'comptabilite.read',      'comptabilite.update',    'comptabilite.delete',
+            'comptabilite.payer',
         ]);
 
         $manager->syncPermissions([
@@ -105,6 +109,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',
             'rh-paie.create',           'rh-paie.read',           'rh-paie.update',
             'rh-paie.validate',         'rh-paie.pay',
+            'comptabilite.read',        'comptabilite.payer',
         ]);
 
         $commerciale->syncPermissions([
@@ -126,6 +131,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'sites.read',             'produits.read',          'packings.read',
             'ventes.read',            'logistique.read',
             'logistique.commission.verser',
+            'comptabilite.read',      'comptabilite.payer',
         ]);
 
         // ── 3. Organisation par défaut ────────────────────────────────────────

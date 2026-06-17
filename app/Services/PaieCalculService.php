@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\StatutDepense;
 use App\Enums\StatutLignePaie;
 use App\Enums\TypeVariablePaie;
 use App\Models\Contrat;
@@ -105,12 +106,12 @@ class PaieCalculService
             + $totaux[TypeVariablePaie::AUTRE_DEDUCTION->value];
 
         $net = max(0, $brut - $deductions);
-        $dejaPayé = (float) $ligne->deja_paye;
-        $resteAPayer = max(0, $net - $dejaPayé);
+        $dejaPaye = (float) $ligne->deja_paye;
+        $resteAPayer = max(0, $net - $dejaPaye);
 
         $statut = match (true) {
-            $dejaPayé >= $net && $net > 0 => StatutLignePaie::PAYE,
-            $dejaPayé > 0 => StatutLignePaie::PARTIELLEMENT_PAYE,
+            $dejaPaye >= $net && $net > 0 => StatutLignePaie::PAYE,
+            $dejaPaye > 0 => StatutLignePaie::PARTIELLEMENT_PAYE,
             default => StatutLignePaie::CALCULE,
         };
 
@@ -142,31 +143,32 @@ class PaieCalculService
         });
     }
 
-    private function importerDepenses(PaieLigne $ligne, PaiePeriode $periode): void
+    public function importerDepenses(PaieLigne $ligne, PaiePeriode $periode): void
     {
         $debut = Carbon::create($periode->annee, $periode->mois, 1)->startOfMonth();
         $fin = $debut->copy()->endOfMonth();
 
-        // Supprimer les variables auto-importées précédemment
         $ligne->variables()->whereNotNull('depense_id')->delete();
 
-        // Récupérer les dépenses approuvées pour cet employé dans la période
-        $depenses = Depense::where('employe_id', $ligne->employe_id)
-            ->where('statut', 'approuve')
+        $depenses = Depense::where('beneficiaire_type', 'employe')
+            ->where('beneficiaire_id', $ligne->employe_id)
+            ->where('statut', StatutDepense::VALIDE->value)
             ->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()])
-            ->whereHas('depenseType', fn ($q) => $q->whereNotNull('type_paie'))
             ->with('depenseType')
             ->get();
 
         foreach ($depenses as $depense) {
-            $libelle = $depense->depenseType->libelle;
+            $libelle = $depense->depenseType->libelle ?? 'Dépense';
             if ($depense->commentaire) {
                 $libelle .= ' — '.$depense->commentaire;
             }
 
+            $typePaie = TypeVariablePaie::tryFrom($depense->depenseType->type_paie ?? '')
+                ?? TypeVariablePaie::AUTRE_DEDUCTION;
+
             $ligne->variables()->create([
                 'depense_id' => $depense->id,
-                'type' => TypeVariablePaie::from($depense->depenseType->type_paie),
+                'type' => $typePaie,
                 'libelle' => $libelle,
                 'montant' => (float) $depense->montant,
                 'note' => null,
@@ -176,18 +178,18 @@ class PaieCalculService
 
     public function recalculerApresPaiement(PaieLigne $ligne): void
     {
-        $dejaPayé = (float) $ligne->paiements()->sum('montant');
+        $dejaPaye = (float) $ligne->paiements()->sum('montant');
         $net = (float) $ligne->net;
-        $resteAPayer = max(0, $net - $dejaPayé);
+        $resteAPayer = max(0, $net - $dejaPaye);
 
         $statut = match (true) {
-            $dejaPayé >= $net && $net > 0 => StatutLignePaie::PAYE,
-            $dejaPayé > 0 => StatutLignePaie::PARTIELLEMENT_PAYE,
+            $dejaPaye >= $net && $net > 0 => StatutLignePaie::PAYE,
+            $dejaPaye > 0 => StatutLignePaie::PARTIELLEMENT_PAYE,
             default => StatutLignePaie::CALCULE,
         };
 
         $ligne->update([
-            'deja_paye' => $dejaPayé,
+            'deja_paye' => $dejaPaye,
             'reste_a_payer' => $resteAPayer,
             'statut' => $statut,
         ]);

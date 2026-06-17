@@ -9,6 +9,8 @@ use App\Enums\ProduitType;
 use App\Models\AuditLog;
 use App\Models\MouvementStock;
 use App\Models\Produit;
+use App\Models\ProduitStock;
+use App\Models\Site;
 use App\Services\AuditLogService;
 use App\Services\ImageService;
 use Illuminate\Http\JsonResponse;
@@ -25,59 +27,117 @@ class ProduitController extends Controller
 {
     public function __construct(private readonly AuditLogService $auditService) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $this->authorize('viewAny', Produit::class);
 
-        $produits = Produit::where('organization_id', auth()->user()->organization_id)
-            ->orderBy('nom')
-            ->get();
+        $orgId = auth()->user()->organization_id;
+        $filters = $request->only(['search', 'type', 'statut', 'site_id']);
 
+        $query = Produit::where('organization_id', $orgId)->orderBy('nom');
+
+        if (! empty($filters['search'])) {
+            $s = $filters['search'];
+            $query->where(fn ($q) => $q->where('nom', 'like', "%{$s}%")
+                ->orWhere('code_interne', 'like', "%{$s}%"));
+        }
+        if (! empty($filters['type'])) {
+            $query->where('type', $filters['type']);
+        }
+        if (! empty($filters['statut'])) {
+            $query->where('statut', $filters['statut']);
+        }
+
+        $produits = $query->get();
         $produitIds = $produits->pluck('id')->all();
 
+        // Charger tous les stocks par site en une requête
+        $allProduitStocks = ProduitStock::whereIn('produit_id', $produitIds)
+            ->with('site:id,nom,code')
+            ->get()
+            ->groupBy('produit_id');
+
+        // Produits utilisés dans des commandes
         $usedIds = collect()
             ->merge(DB::table('commande_vente_lignes')->whereIn('produit_id', $produitIds)->pluck('produit_id'))
             ->merge(DB::table('commande_achat_lignes')->whereIn('produit_id', $produitIds)->whereNotNull('produit_id')->pluck('produit_id'))
-            ->unique()
-            ->flip()
-            ->all();
+            ->unique()->flip()->all();
 
-        $mapped = $produits->map(fn (Produit $p) => [
-            'id' => $p->id,
-            'organization_id' => $p->organization_id,
-            'nom' => $p->nom,
-            'code_interne' => $p->code_interne,
-            'code_fournisseur' => $p->code_fournisseur,
-            'type' => $p->type?->value,
-            'type_label' => $p->type?->label(),
-            'statut' => $p->statut?->value,
-            'statut_label' => $p->statut?->label(),
-            'image_url' => $p->image_url,
-            'prix_usine' => $p->prix_usine,
-            'prix_vente' => $p->prix_vente,
-            'prix_achat' => $p->prix_achat,
-            'cout' => $p->cout,
-            'qte_stock' => $p->qte_stock,
-            'seuil_alerte_stock' => $p->seuil_alerte_stock,
-            'description' => $p->description,
-            'is_alerte' => $p->is_alerte,
-            'last_stockout_notified_at' => $p->last_stockout_notified_at ? (string) $p->last_stockout_notified_at : null,
-            'archived_at' => $p->archived_at?->toISOString(),
-            'created_by' => $p->created_by,
-            'updated_by' => $p->updated_by,
-            'deleted_by' => $p->deleted_by,
-            'archived_by' => $p->archived_by,
-            'created_at' => $p->created_at?->toISOString(),
-            'updated_at' => $p->updated_at?->toISOString(),
-            'deleted_at' => $p->deleted_at?->toISOString(),
-            'in_stock' => $p->in_stock,
-            'is_low_stock' => $p->is_low_stock,
-            'has_stock' => $p->type?->hasStock() ?? true,
-            'is_used' => isset($usedIds[$p->id]),
-        ]);
+        $filteredSiteId = $filters['site_id'] ?? null;
+
+        // Dernier mouvement par produit (filtré par site si filtre actif)
+        $lastMouvements = MouvementStock::whereIn('produit_id', $produitIds)
+            ->when($filteredSiteId, fn ($q) => $q->where('site_id', $filteredSiteId))
+            ->orderByDesc('created_at')
+            ->get(['produit_id', 'type', 'quantite'])
+            ->groupBy('produit_id')
+            ->map(fn ($ms) => $ms->first());
+
+        $mapped = $produits->map(function (Produit $p) use ($allProduitStocks, $filteredSiteId, $usedIds, $lastMouvements) {
+            $siteStocks = $allProduitStocks->get($p->id, collect());
+            $hasStock = $p->type?->hasStock() ?? true;
+
+            if ($filteredSiteId) {
+                $siteStock = $siteStocks->firstWhere('site_id', $filteredSiteId);
+                $qteDisplay = $siteStock?->qte_stock ?? 0;
+                $seuilDisplay = $siteStock?->seuil_alerte_stock ?? $p->seuil_alerte_stock;
+            } else {
+                $qteDisplay = $siteStocks->isNotEmpty()
+                    ? $siteStocks->sum('qte_stock')
+                    : (int) ($p->qte_stock ?? 0);
+                $seuilDisplay = $p->seuil_alerte_stock;
+            }
+
+            $inStock = ! $hasStock || $qteDisplay > 0;
+            $isLowStock = $hasStock && $qteDisplay > 0 && $seuilDisplay !== null && $seuilDisplay > 0 && $qteDisplay <= $seuilDisplay;
+            $lastMouvement = $lastMouvements->get($p->id);
+
+            return [
+                'id' => $p->id,
+                'nom' => $p->nom,
+                'code_interne' => $p->code_interne,
+                'code_fournisseur' => $p->code_fournisseur,
+                'type' => $p->type?->value,
+                'type_label' => $p->type?->label(),
+                'statut' => $p->statut?->value,
+                'statut_label' => $p->statut?->label(),
+                'image_url' => $p->image_url,
+                'prix_usine' => $p->prix_usine,
+                'prix_vente' => $p->prix_vente,
+                'prix_achat' => $p->prix_achat,
+                'cout' => $p->cout,
+                'description' => $p->description,
+                'is_alerte' => $p->is_alerte,
+                'qte_stock' => $qteDisplay,
+                'seuil_alerte_stock' => $seuilDisplay,
+                'has_stock' => $hasStock,
+                'in_stock' => $inStock,
+                'is_low_stock' => $isLowStock,
+                'is_used' => isset($usedIds[$p->id]),
+                'last_mouvement_type' => $lastMouvement?->type,
+                'last_mouvement_quantite' => $lastMouvement?->quantite,
+                'stocks_par_site' => $siteStocks->map(fn ($s) => [
+                    'site_id' => $s->site_id,
+                    'site_code' => $s->site?->code,
+                    'site_nom' => $s->site?->nom,
+                    'qte_stock' => $s->qte_stock,
+                    'seuil_alerte_stock' => $s->seuil_alerte_stock,
+                    'is_alerte' => $s->is_alerte,
+                    'updated_at' => $s->updated_at?->toISOString(),
+                ])->values()->all(),
+            ];
+        });
+
+        $sites = Site::where('organization_id', $orgId)
+            ->orderBy('nom')
+            ->get(['id', 'nom', 'code']);
 
         return Inertia::render('Produits/Index', [
             'produits' => $mapped,
+            'sites' => $sites,
+            'types' => ProduitType::options(),
+            'statuts' => ProduitStatut::options(),
+            'filters' => $filters,
         ]);
     }
 
@@ -120,10 +180,7 @@ class ProduitController extends Controller
         $orgId = auth()->user()->organization_id;
         abort_if(! $orgId, 403, 'Votre compte n\'est associé à aucune organisation.');
 
-        $produit = Produit::create([
-            ...$data,
-            'organization_id' => $orgId,
-        ]);
+        $produit = Produit::create([...$data, 'organization_id' => $orgId]);
 
         $this->auditService->record(
             $produit,
@@ -141,8 +198,32 @@ class ProduitController extends Controller
     {
         $this->authorize('view', $produit);
 
+        $orgId = $produit->organization_id;
+
+        $sites = Site::where('organization_id', $orgId)
+            ->orderBy('nom')
+            ->get(['id', 'nom', 'code']);
+
+        $stocksParSite = ProduitStock::where('produit_id', $produit->id)
+            ->with('site:id,nom,code')
+            ->get()
+            ->map(fn ($s) => [
+                'site_id' => $s->site_id,
+                'site_code' => $s->site?->code,
+                'site_nom' => $s->site?->nom,
+                'qte_stock' => $s->qte_stock,
+                'seuil_alerte_stock' => $s->seuil_alerte_stock,
+                'is_alerte' => $s->is_alerte,
+                'updated_at' => $s->updated_at?->toISOString(),
+            ])
+            ->values();
+
+        $totalStock = $stocksParSite->isNotEmpty()
+            ? $stocksParSite->sum('qte_stock')
+            : (int) ($produit->qte_stock ?? 0);
+
         $mouvements = MouvementStock::where('produit_id', $produit->id)
-            ->with('createur:id,prenom,nom')
+            ->with(['createur:id,prenom,nom', 'site:id,nom,code'])
             ->orderByDesc('created_at')
             ->take(100)
             ->get()
@@ -153,6 +234,8 @@ class ProduitController extends Controller
                 'stock_avant' => $m->stock_avant,
                 'stock_apres' => $m->stock_apres,
                 'notes' => $m->notes,
+                'site_nom' => $m->site?->nom,
+                'site_code' => $m->site?->code,
                 'created_at' => $m->created_at?->toISOString(),
                 'createur_nom' => $m->createur
                     ? trim(($m->createur->prenom ?? '').' '.($m->createur->nom ?? ''))
@@ -175,15 +258,17 @@ class ProduitController extends Controller
                 'stock_avant' => 0,
                 'stock_apres' => (int) $creation->new_values['qte_stock'],
                 'notes' => 'Stock initial — création du produit',
+                'site_nom' => null,
+                'site_code' => null,
                 'created_at' => $creation->created_at?->toISOString(),
                 'createur_nom' => $creation->actor_name_snapshot,
                 'is_initial' => true,
             ];
         }
 
-        $mouvements = collect($mouvements);
-
-        $historiques = $this->loadHistoriques($produit);
+        $seuilDisplay = $produit->seuil_alerte_stock;
+        $hasStock = $produit->type?->hasStock() ?? true;
+        $isLowStock = $hasStock && $totalStock > 0 && $seuilDisplay !== null && $seuilDisplay > 0 && $totalStock <= $seuilDisplay;
 
         return Inertia::render('Produits/Show', [
             'produit' => [
@@ -200,18 +285,20 @@ class ProduitController extends Controller
                 'prix_vente' => $produit->prix_vente,
                 'prix_achat' => $produit->prix_achat,
                 'cout' => $produit->cout,
-                'qte_stock' => $produit->qte_stock,
-                'seuil_alerte_stock' => $produit->seuil_alerte_stock,
+                'qte_stock' => $totalStock,
+                'seuil_alerte_stock' => $seuilDisplay,
                 'description' => $produit->description,
                 'is_alerte' => $produit->is_alerte,
-                'in_stock' => $produit->in_stock,
-                'is_low_stock' => $produit->is_low_stock,
-                'has_stock' => $produit->type?->hasStock() ?? true,
+                'in_stock' => ! $hasStock || $totalStock > 0,
+                'is_low_stock' => $isLowStock,
+                'has_stock' => $hasStock,
                 'created_at' => $produit->created_at?->toISOString(),
                 'updated_at' => $produit->updated_at?->toISOString(),
+                'stocks_par_site' => $stocksParSite,
             ],
-            'mouvements' => $mouvements,
-            'historiques' => $historiques,
+            'mouvements' => collect($mouvements),
+            'historiques' => $this->loadModifications($produit),
+            'sites' => $sites,
         ]);
     }
 
@@ -219,7 +306,30 @@ class ProduitController extends Controller
     {
         $this->authorize('view', $produit);
 
-        return response()->json($this->loadHistoriques($produit));
+        $ajustements = MouvementStock::where('produit_id', $produit->id)
+            ->with(['createur:id,prenom,nom', 'site:id,nom,code'])
+            ->orderByDesc('created_at')
+            ->take(200)
+            ->get()
+            ->map(fn (MouvementStock $m) => [
+                'id' => $m->id,
+                'type' => $m->type,
+                'quantite' => $m->quantite,
+                'stock_avant' => $m->stock_avant,
+                'stock_apres' => $m->stock_apres,
+                'notes' => $m->notes,
+                'site_nom' => $m->site?->nom,
+                'site_code' => $m->site?->code,
+                'createur_nom' => $m->createur
+                    ? trim(($m->createur->prenom ?? '').' '.($m->createur->nom ?? ''))
+                    : null,
+                'created_at' => $m->created_at?->format('d/m/Y H:i'),
+            ]);
+
+        return response()->json([
+            'ajustements' => $ajustements,
+            'modifications' => $this->loadModifications($produit),
+        ]);
     }
 
     public function edit(Produit $produit): Response
@@ -284,13 +394,7 @@ class ProduitController extends Controller
 
         [$oldDiff, $newDiff] = $this->produitDiff($oldSnapshot, $newSnapshot);
         if ($oldDiff !== null || $newDiff !== null) {
-            $this->auditService->record(
-                $produit,
-                AuditEvent::UPDATED,
-                auth()->user(),
-                $oldDiff,
-                $newDiff,
-            );
+            $this->auditService->record($produit, AuditEvent::UPDATED, auth()->user(), $oldDiff, $newDiff);
         }
 
         return redirect()->route('produits.index')
@@ -318,13 +422,7 @@ class ProduitController extends Controller
     {
         $this->authorize('delete', $produit);
 
-        $this->auditService->record(
-            $produit,
-            AuditEvent::DELETED,
-            auth()->user(),
-            $this->produitSnapshot($produit),
-            null,
-        );
+        $this->auditService->record($produit, AuditEvent::DELETED, auth()->user(), $this->produitSnapshot($produit), null);
 
         if ($produit->image_url) {
             Storage::disk('public')->delete(str_replace('/storage/', '', $produit->image_url));
@@ -332,22 +430,23 @@ class ProduitController extends Controller
 
         $produit->delete();
 
-        return redirect()->route('produits.index')
-            ->with('success', 'Produit supprimé.');
+        return redirect()->route('produits.index')->with('success', 'Produit supprimé.');
     }
 
     public function ajusterStock(Request $request, Produit $produit): RedirectResponse
     {
         $this->authorize('update', $produit);
-
         abort_unless((bool) $produit->type?->hasStock(), 422, 'Ce produit ne gère pas de stock.');
 
         $data = $request->validate([
+            'site_id' => ['required', 'exists:sites,id'],
             'augmenter' => ['nullable', 'integer', 'min:1'],
             'diminuer' => ['nullable', 'integer', 'min:1'],
             'motif_type' => ['required', Rule::in(MotifAjustementStock::validValues())],
             'motif_detail' => ['required_if:motif_type,autre', 'nullable', 'string', 'max:500'],
         ], [
+            'site_id.required' => 'Le site est obligatoire.',
+            'site_id.exists' => 'Le site sélectionné est invalide.',
             'augmenter.integer' => 'La quantité doit être un nombre entier.',
             'augmenter.min' => 'La quantité doit être supérieure à 0.',
             'diminuer.integer' => 'La quantité doit être un nombre entier.',
@@ -358,54 +457,62 @@ class ProduitController extends Controller
             'motif_detail.max' => 'Le détail du motif ne peut pas dépasser 500 caractères.',
         ]);
 
+        // Vérifier que le site appartient à l'organisation du produit
+        $site = Site::where('id', $data['site_id'])
+            ->where('organization_id', $produit->organization_id)
+            ->firstOrFail();
+
+        // Non-admins ne peuvent ajuster que les sites auxquels ils sont affectés
+        $user = auth()->user();
+        if (! $user->isAdmin() && ! $user->isAssignedToSite($site->id)) {
+            abort(403, 'Vous ne pouvez ajuster que le stock de votre agence.');
+        }
+
         $hasAugmenter = ! empty($data['augmenter']);
         $hasDiminuer = ! empty($data['diminuer']);
 
         if ($hasAugmenter && $hasDiminuer) {
-            throw ValidationException::withMessages([
-                'augmenter' => 'Renseignez uniquement l\'un des deux champs.',
-            ]);
+            throw ValidationException::withMessages(['augmenter' => 'Renseignez uniquement l\'un des deux champs.']);
         }
-
         if (! $hasAugmenter && ! $hasDiminuer) {
-            throw ValidationException::withMessages([
-                'augmenter' => 'Veuillez renseigner la quantité à augmenter ou à diminuer.',
-            ]);
+            throw ValidationException::withMessages(['augmenter' => 'Veuillez renseigner la quantité à augmenter ou à diminuer.']);
         }
 
         $direction = $hasAugmenter ? 'entree' : 'sortie';
         if (! in_array($data['motif_type'], MotifAjustementStock::validValuesForDirection($direction), true)) {
-            throw ValidationException::withMessages([
-                'motif_type' => 'Ce motif n\'est pas valide pour ce type d\'ajustement.',
-            ]);
+            throw ValidationException::withMessages(['motif_type' => 'Ce motif n\'est pas valide pour ce type d\'ajustement.']);
         }
 
-        $notes = MotifAjustementStock::from($data['motif_type'])->toNotesString($data['motif_detail'] ?? '');
+        // Récupérer ou initialiser le stock pour ce site
+        $existingCount = ProduitStock::where('produit_id', $produit->id)->count();
+        $produitStock = ProduitStock::firstOrCreate(
+            ['produit_id' => $produit->id, 'site_id' => $site->id],
+            [
+                'organization_id' => $produit->organization_id,
+                // Premier enregistrement : migrer le stock global existant
+                'qte_stock' => $existingCount === 0 ? (int) ($produit->qte_stock ?? 0) : 0,
+            ]
+        );
 
-        $stockAvant = (int) ($produit->qte_stock ?? 0);
+        $stockAvant = $produitStock->qte_stock;
+        $notes = MotifAjustementStock::from($data['motif_type'])->toNotesString($data['motif_detail'] ?? '');
 
         if ($hasDiminuer && (int) $data['diminuer'] > $stockAvant) {
             throw ValidationException::withMessages([
-                'diminuer' => "La quantité à retirer ({$data['diminuer']}) est supérieure au stock disponible ({$stockAvant}).",
+                'diminuer' => "La quantité à retirer ({$data['diminuer']}) est supérieure au stock disponible sur ce site ({$stockAvant}).",
             ]);
         }
 
-        $user = auth()->user();
-        $site = $user->sites()->wherePivot('is_default', true)->first() ?? $user->sites()->first();
-        abort_if(! $site, 422, 'Aucun site associé à votre compte.');
+        $quantite = $hasAugmenter ? (int) $data['augmenter'] : (int) $data['diminuer'];
+        $type = $hasAugmenter ? 'entree' : 'sortie';
+        $stockApres = $hasAugmenter ? $stockAvant + $quantite : $stockAvant - $quantite;
 
-        if ($hasAugmenter) {
-            $stockApres = $stockAvant + (int) $data['augmenter'];
-            $type = 'entree';
-            $quantite = (int) $data['augmenter'];
-        } else {
-            $stockApres = $stockAvant - (int) $data['diminuer'];
-            $type = 'sortie';
-            $quantite = (int) $data['diminuer'];
-        }
+        DB::transaction(function () use ($produit, $produitStock, $site, $type, $quantite, $stockAvant, $stockApres, $notes, $user) {
+            $produitStock->update(['qte_stock' => $stockApres]);
 
-        DB::transaction(function () use ($produit, $type, $quantite, $stockAvant, $stockApres, $notes, $site, $user) {
-            $produit->update(['qte_stock' => $stockApres]);
+            // Mettre à jour le stock agrégé du produit
+            $totalStock = ProduitStock::where('produit_id', $produit->id)->sum('qte_stock');
+            $produit->update(['qte_stock' => $totalStock]);
 
             MouvementStock::create([
                 'organization_id' => $produit->organization_id,
@@ -423,8 +530,8 @@ class ProduitController extends Controller
                 $produit,
                 AuditEvent::STOCK_ADJUSTED,
                 $user,
-                ['qte_stock' => $stockAvant],
-                ['qte_stock' => $stockApres, 'motif' => $notes],
+                ['qte_stock' => $stockAvant, 'site' => $site->nom],
+                ['qte_stock' => $stockApres, 'site' => $site->nom, 'motif' => $notes],
             );
         });
 
@@ -433,11 +540,12 @@ class ProduitController extends Controller
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private function loadHistoriques(Produit $produit): array
+    private function loadModifications(Produit $produit): array
     {
         return AuditLog::where('organization_id', $produit->organization_id)
             ->where('auditable_type', Produit::class)
             ->where('auditable_id', $produit->id)
+            ->where('event_code', '!=', AuditEvent::STOCK_ADJUSTED->value)
             ->orderByDesc('created_at')
             ->get()
             ->map(fn (AuditLog $log) => [

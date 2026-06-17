@@ -30,6 +30,8 @@ interface Produit {
     is_alerte: boolean;
     statut: string;
     statut_label: string;
+    type: string | null;
+    type_label: string | null;
     qte_stock: number | null;
     in_stock: boolean;
     is_low_stock: boolean;
@@ -54,6 +56,16 @@ const filteredProduits = computed(() => {
         [p.nom, p.code_interne ?? ''].join(' ').toLowerCase().includes(query),
     );
 });
+
+const typeBadgeClass: Record<string, string> = {
+    materiel:
+        'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
+    fabricable:
+        'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400',
+    achat_vente:
+        'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400',
+    service: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
+};
 </script>
 
 <template>
@@ -65,7 +77,6 @@ const filteredProduits = computed(() => {
             <div
                 class="relative flex items-center justify-center px-4 pt-4 pb-3"
             >
-                <!-- Bouton retour -->
                 <Link
                     href="/dashboard"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
@@ -73,7 +84,6 @@ const filteredProduits = computed(() => {
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
 
-                <!-- Titre centré -->
                 <div class="text-center">
                     <h1 class="text-[17px] leading-tight font-semibold">
                         Produits
@@ -83,7 +93,6 @@ const filteredProduits = computed(() => {
                     </p>
                 </div>
 
-                <!-- Bouton nouveau -->
                 <Link
                     v-if="can('produits.create')"
                     href="/produits/create"
@@ -98,7 +107,6 @@ const filteredProduits = computed(() => {
                 </Link>
             </div>
 
-            <!-- Barre de recherche -->
             <div class="px-4 pb-3">
                 <div class="relative flex items-center">
                     <Search
@@ -152,11 +160,21 @@ const filteredProduits = computed(() => {
                             class="h-3.5 w-3.5 shrink-0 text-amber-500"
                         />
                     </div>
-                    <p
-                        class="mt-0.5 font-mono text-[11px] text-muted-foreground"
-                    >
-                        {{ data.code_interne || '—' }}
-                    </p>
+                    <div class="mt-0.5 flex items-center gap-1.5">
+                        <p class="font-mono text-[11px] text-muted-foreground">
+                            {{ data.code_interne || '—' }}
+                        </p>
+                        <span
+                            v-if="data.type_label"
+                            class="rounded px-1 py-0.5 text-[10px] leading-none font-medium"
+                            :class="
+                                typeBadgeClass[data.type ?? ''] ??
+                                'bg-muted text-muted-foreground'
+                            "
+                        >
+                            {{ data.type_label }}
+                        </span>
+                    </div>
                 </Link>
 
                 <!-- Actions -->
