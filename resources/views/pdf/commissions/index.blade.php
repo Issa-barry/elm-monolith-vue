@@ -143,10 +143,6 @@ tbody td.center { text-align: center; }
 }
 .total-row td.right { text-align: right; }
 
-/* ── Statut (texte, pas de couleur) ──────────────────────────────── */
-.statut-impaye  { font-weight: 700; font-size: 7.5pt; }
-.statut-partiel { font-weight: 700; font-size: 7.5pt; }
-.statut-paye    { font-size: 7.5pt; }
 
 /* ── Ligne signature ──────────────────────────────────────────────── */
 .sig-line {
@@ -212,14 +208,6 @@ tbody td.center { text-align: center; }
         </thead>
         <tbody>
             @forelse($siteData['rows'] as $row)
-            @php
-                $statut = $row['statut'] ?? '—';
-                $statutClass = match($statut) {
-                    'Payé'    => 'statut-paye',
-                    'Partiel' => 'statut-partiel',
-                    default   => 'statut-impaye',
-                };
-            @endphp
             <tr>
                 <td class="col-ben"><strong>{{ $row['beneficiaire_nom'] }}</strong></td>
                 <td class="col-tel center">{{ $row['telephone'] ?? '—' }}</td>
@@ -229,7 +217,7 @@ tbody td.center { text-align: center; }
                 <td class="col-mot">{{ $row['motifs_frais'] ?? '—' }}</td>
                 <td class="col-pay right">{{ number_format((float) $row['deja_paye'], 0, ',', "\xc2\xa0") }}</td>
                 <td class="col-res right">{{ $row['reste'] > 0 ? number_format((float) $row['reste'], 0, ',', "\xc2\xa0") : '—' }}</td>
-                <td class="col-sta center {{ $statutClass }}">{{ strtoupper($statut) }}</td>
+                <td class="col-sta center">{{ $row['statut'] ?? '—' }}</td>
                 <td class="col-sig"><span class="sig-line"></span></td>
             </tr>
             @empty

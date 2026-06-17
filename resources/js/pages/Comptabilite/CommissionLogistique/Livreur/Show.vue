@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import AuditTimeline from '@/components/AuditTimeline.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, CalendarDays, HandCoins, History } from 'lucide-vue-next';
+import { ArrowLeft, CalendarDays, HandCoins } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
@@ -184,8 +185,9 @@ function submitPaiement() {
     );
 }
 
-// Dialog historique
-const showHistoriqueDialog = ref(false);
+const activeTab = ref<'informations' | 'paiements' | 'historique'>(
+    'informations',
+);
 
 function fmt(val: number) {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
@@ -228,19 +230,6 @@ function formatMode(mode: string) {
                 </div>
                 <div class="flex items-center gap-2">
                     <Button
-                        v-if="payments.length > 0"
-                        variant="outline"
-                        size="sm"
-                        @click="showHistoriqueDialog = true"
-                    >
-                        <History class="mr-1.5 h-3.5 w-3.5" />
-                        Historique
-                        <span
-                            class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums"
-                            >{{ payments.length }}</span
-                        >
-                    </Button>
-                    <Button
                         v-if="can_payer && kpis.impaye > 0"
                         size="sm"
                         @click="openPaiement"
@@ -251,217 +240,331 @@ function formatMode(mode: string) {
                 </div>
             </div>
 
-            <!-- KPIs -->
-            <div class="grid grid-cols-3 gap-3">
-                <template v-if="periode_stats">
-                    <div
-                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+            <!-- Tabs -->
+            <div class="flex border-b">
+                <button
+                    type="button"
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="
+                        activeTab === 'informations'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="activeTab = 'informations'"
+                >
+                    Informations
+                </button>
+                <button
+                    type="button"
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="
+                        activeTab === 'paiements'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="activeTab = 'paiements'"
+                >
+                    Paiements
+                    <span
+                        v-if="payments.length > 0"
+                        class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums"
+                        >{{ payments.length }}</span
                     >
-                        <p
-                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                </button>
+                <button
+                    type="button"
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="
+                        activeTab === 'historique'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="activeTab = 'historique'"
+                >
+                    Historique
+                </button>
+            </div>
+
+            <template v-if="activeTab === 'informations'">
+                <!-- KPIs -->
+                <div class="grid grid-cols-3 gap-3">
+                    <template v-if="periode_stats">
+                        <div
+                            class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
                         >
-                            Commission période
-                        </p>
-                        <p
-                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                            <p
+                                class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                            >
+                                Commission période
+                            </p>
+                            <p
+                                class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                            >
+                                {{ fmt(periode_stats.total_commission) }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
                         >
-                            {{ fmt(periode_stats.total_commission) }}
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
-                    >
-                        <p
-                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
-                        >
-                            Déjà payé
-                        </p>
-                        <p
-                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
-                        >
-                            {{ fmt(periode_stats.total_verse) }}
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
-                        :class="
-                            periode_stats.reste > 0
-                                ? 'border-amber-200 dark:border-amber-900'
-                                : ''
-                        "
-                    >
-                        <p
-                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
-                        >
-                            Reste à payer
-                        </p>
-                        <p
-                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                            <p
+                                class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                            >
+                                Déjà payé
+                            </p>
+                            <p
+                                class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                            >
+                                {{ fmt(periode_stats.total_verse) }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
                             :class="
                                 periode_stats.reste > 0
-                                    ? 'text-amber-600 dark:text-amber-400'
+                                    ? 'border-amber-200 dark:border-amber-900'
                                     : ''
                             "
                         >
-                            {{ fmt(periode_stats.reste) }}
-                        </p>
-                    </div>
-                </template>
-                <template v-else>
-                    <div
-                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
-                    >
-                        <p
-                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                            <p
+                                class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                            >
+                                Reste à payer
+                            </p>
+                            <p
+                                class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                                :class="
+                                    periode_stats.reste > 0
+                                        ? 'text-amber-600 dark:text-amber-400'
+                                        : ''
+                                "
+                            >
+                                {{ fmt(periode_stats.reste) }}
+                            </p>
+                        </div>
+                    </template>
+                    <template v-else>
+                        <div
+                            class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
                         >
-                            Total cumulé
-                        </p>
-                        <p
-                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
-                        >
-                            {{ fmt(kpis.impaye + kpis.paye) }}
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
-                        :class="
-                            kpis.impaye > 0
-                                ? 'border-amber-200 dark:border-amber-900'
-                                : ''
-                        "
-                    >
-                        <p
-                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
-                        >
-                            Reste à payer
-                        </p>
-                        <p
-                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                            <p
+                                class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                            >
+                                Total cumulé
+                            </p>
+                            <p
+                                class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                            >
+                                {{ fmt(kpis.impaye + kpis.paye) }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
                             :class="
                                 kpis.impaye > 0
-                                    ? 'text-amber-600 dark:text-amber-400'
+                                    ? 'border-amber-200 dark:border-amber-900'
                                     : ''
                             "
                         >
-                            {{ fmt(kpis.impaye) }}
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
-                    >
-                        <p
-                            class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
-                        >
-                            Déjà payé
-                        </p>
-                        <p
-                            class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
-                        >
-                            {{ fmt(kpis.paye) }}
-                        </p>
-                    </div>
-                </template>
-            </div>
-
-            <!-- Tableau des parts -->
-            <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
-                <div
-                    class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3"
-                >
-                    <div class="flex items-center gap-2">
-                        <h2
-                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                        >
-                            Détail par transfert
-                        </h2>
-                        <span
-                            class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums"
-                            >{{ parts.length }}</span
-                        >
-                        <StatusDot
-                            v-if="periode_stats"
-                            :label="periode_stats.statut_label"
-                            :dot-class="periode_stats.statut_dot_class"
-                            class="text-xs text-muted-foreground"
-                        />
-                    </div>
-                    <Dropdown
-                        v-model="selectedPeriode"
-                        :options="periodeOptions"
-                        option-label="label"
-                        option-value="code"
-                        placeholder="Toutes les périodes"
-                        class="w-full text-sm sm:w-64"
-                        @change="onPeriodeChange(selectedPeriode)"
-                    />
-                </div>
-
-                <div v-if="parts.length > 0">
-                    <template v-for="group in partsGrouped" :key="group.code">
-                        <div
-                            v-if="!periode_stats"
-                            class="flex items-center justify-between border-b bg-muted/30 px-4 py-2"
-                        >
-                            <div class="flex items-center gap-2">
-                                <CalendarDays
-                                    class="h-3.5 w-3.5 text-muted-foreground"
-                                />
-                                <span
-                                    class="text-xs font-semibold text-muted-foreground"
-                                    >{{ group.label }}</span
-                                >
-                                <StatusDot
-                                    :label="group.statut_label"
-                                    :dot-class="group.statut_dot_class"
-                                    class="text-xs text-muted-foreground"
-                                />
-                            </div>
-                            <span class="text-xs font-semibold tabular-nums">{{
-                                fmt(group.total_net)
-                            }}</span>
+                            <p
+                                class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                            >
+                                Reste à payer
+                            </p>
+                            <p
+                                class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                                :class="
+                                    kpis.impaye > 0
+                                        ? 'text-amber-600 dark:text-amber-400'
+                                        : ''
+                                "
+                            >
+                                {{ fmt(kpis.impaye) }}
+                            </p>
                         </div>
-                        <table class="w-full text-sm">
-                            <tbody class="divide-y">
-                                <tr
-                                    v-for="part in group.parts"
-                                    :key="part.id"
-                                    class="hover:bg-muted/10"
-                                >
-                                    <td
-                                        class="px-4 py-3 font-mono text-xs text-muted-foreground"
-                                    >
-                                        {{ part.transfert_reference ?? '—' }}
-                                    </td>
-                                    <td
-                                        class="px-4 py-3 text-xs text-muted-foreground"
-                                    >
-                                        {{ part.earned_at ?? '—' }}
-                                    </td>
-                                    <td class="px-4 py-3">
-                                        <StatusDot
-                                            :label="part.statut_label"
-                                            :dot-class="part.statut_dot_class"
-                                            class="text-xs text-muted-foreground"
-                                        />
-                                    </td>
-                                    <td
-                                        class="px-4 py-3 text-right font-medium tabular-nums"
-                                    >
-                                        {{ fmt(part.montant_net) }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <div
+                            class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                        >
+                            <p
+                                class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                            >
+                                Déjà payé
+                            </p>
+                            <p
+                                class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
+                            >
+                                {{ fmt(kpis.paye) }}
+                            </p>
+                        </div>
                     </template>
                 </div>
+
+                <!-- Tableau des parts -->
                 <div
-                    v-else
-                    class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
+                    class="overflow-hidden rounded-xl border bg-card shadow-sm"
                 >
-                    <HandCoins class="h-10 w-10 opacity-30" />
-                    <p class="text-sm">Aucune commission pour cette période.</p>
+                    <div
+                        class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3"
+                    >
+                        <div class="flex items-center gap-2">
+                            <h2
+                                class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Détail par transfert
+                            </h2>
+                            <span
+                                class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums"
+                                >{{ parts.length }}</span
+                            >
+                            <StatusDot
+                                v-if="periode_stats"
+                                :label="periode_stats.statut_label"
+                                :dot-class="periode_stats.statut_dot_class"
+                                class="text-xs text-muted-foreground"
+                            />
+                        </div>
+                        <Dropdown
+                            v-model="selectedPeriode"
+                            :options="periodeOptions"
+                            option-label="label"
+                            option-value="code"
+                            placeholder="Toutes les périodes"
+                            class="w-full text-sm sm:w-64"
+                            @change="onPeriodeChange(selectedPeriode)"
+                        />
+                    </div>
+
+                    <div v-if="parts.length > 0">
+                        <template
+                            v-for="group in partsGrouped"
+                            :key="group.code"
+                        >
+                            <div
+                                v-if="!periode_stats"
+                                class="flex items-center justify-between border-b bg-muted/30 px-4 py-2"
+                            >
+                                <div class="flex items-center gap-2">
+                                    <CalendarDays
+                                        class="h-3.5 w-3.5 text-muted-foreground"
+                                    />
+                                    <span
+                                        class="text-xs font-semibold text-muted-foreground"
+                                        >{{ group.label }}</span
+                                    >
+                                    <StatusDot
+                                        :label="group.statut_label"
+                                        :dot-class="group.statut_dot_class"
+                                        class="text-xs text-muted-foreground"
+                                    />
+                                </div>
+                                <span
+                                    class="text-xs font-semibold tabular-nums"
+                                    >{{ fmt(group.total_net) }}</span
+                                >
+                            </div>
+                            <table class="w-full text-sm">
+                                <tbody class="divide-y">
+                                    <tr
+                                        v-for="part in group.parts"
+                                        :key="part.id"
+                                        class="hover:bg-muted/10"
+                                    >
+                                        <td
+                                            class="px-4 py-3 font-mono text-xs text-muted-foreground"
+                                        >
+                                            {{
+                                                part.transfert_reference ?? '—'
+                                            }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-xs text-muted-foreground"
+                                        >
+                                            {{ part.earned_at ?? '—' }}
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <StatusDot
+                                                :label="part.statut_label"
+                                                :dot-class="
+                                                    part.statut_dot_class
+                                                "
+                                                class="text-xs text-muted-foreground"
+                                            />
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right font-medium tabular-nums"
+                                        >
+                                            {{ fmt(part.montant_net) }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </template>
+                    </div>
+                    <div
+                        v-else
+                        class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
+                    >
+                        <HandCoins class="h-10 w-10 opacity-30" />
+                        <p class="text-sm">
+                            Aucune commission pour cette période.
+                        </p>
+                    </div>
                 </div>
-            </div>
+            </template>
+
+            <template v-if="activeTab === 'paiements'">
+                <div class="rounded-xl border bg-card">
+                    <div class="border-b px-4 py-3">
+                        <h2 class="text-sm font-semibold">
+                            Paiements enregistrés
+                        </h2>
+                    </div>
+                    <div v-if="payments.length > 0" class="divide-y">
+                        <div
+                            v-for="p in payments"
+                            :key="p.id"
+                            class="flex items-start justify-between gap-3 px-4 py-3"
+                        >
+                            <div>
+                                <p class="text-sm font-medium">
+                                    {{ fmt(p.montant) }}
+                                </p>
+                                <p class="text-xs text-muted-foreground">
+                                    {{ p.paid_at }} ·
+                                    {{ formatMode(p.mode_paiement) }}
+                                </p>
+                                <p
+                                    v-if="p.note"
+                                    class="text-xs text-muted-foreground"
+                                >
+                                    {{ p.note }}
+                                </p>
+                                <p
+                                    v-if="p.created_by"
+                                    class="text-xs text-muted-foreground/60"
+                                >
+                                    Par {{ p.created_by }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <p
+                        v-else
+                        class="py-8 text-center text-sm text-muted-foreground"
+                    >
+                        Aucun paiement enregistré.
+                    </p>
+                </div>
+            </template>
+
+            <template v-if="activeTab === 'historique'">
+                <div class="rounded-xl border bg-card p-5">
+                    <AuditTimeline
+                        auditable-type="App\Models\Livreur"
+                        :auditable-id="livreur.id"
+                        module="commission_logistique"
+                    />
+                </div>
+            </template>
         </div>
     </AppLayout>
 
@@ -537,40 +640,5 @@ function formatMode(mode: string) {
                 </Button>
             </div>
         </template>
-    </Dialog>
-
-    <!-- Dialog historique -->
-    <Dialog
-        v-model:visible="showHistoriqueDialog"
-        modal
-        :style="{ width: '480px' }"
-        header="Historique des paiements"
-    >
-        <div v-if="payments.length > 0" class="divide-y">
-            <div
-                v-for="p in payments"
-                :key="p.id"
-                class="flex items-start justify-between gap-3 py-3"
-            >
-                <div>
-                    <p class="text-sm font-medium">{{ fmt(p.montant) }}</p>
-                    <p class="text-xs text-muted-foreground">
-                        {{ p.paid_at }} · {{ formatMode(p.mode_paiement) }}
-                    </p>
-                    <p v-if="p.note" class="text-xs text-muted-foreground">
-                        {{ p.note }}
-                    </p>
-                    <p
-                        v-if="p.created_by"
-                        class="text-xs text-muted-foreground/60"
-                    >
-                        Par {{ p.created_by }}
-                    </p>
-                </div>
-            </div>
-        </div>
-        <p v-else class="py-8 text-center text-sm text-muted-foreground">
-            Aucun paiement enregistré.
-        </p>
     </Dialog>
 </template>

@@ -194,7 +194,7 @@ class SalaireController extends Controller
         return response()->streamDownload(function () use ($lignes, $periodeLabel) {
             $handle = fopen('php://output', 'w');
             fwrite($handle, "\xEF\xBB\xBF");
-            fputcsv($handle, ['Période', 'Salarié', 'Poste', 'Agence', 'Salaire base (GNF)', 'Brut (GNF)', 'Primes (GNF)', 'Déductions (GNF)', 'Net (GNF)', 'Déjà payé (GNF)', 'Reste (GNF)', 'Statut'], ';');
+            fputcsv($handle, ['Période', 'Salarié', 'Poste', 'Agence', 'Salaire base (GNF)', 'Brut (GNF)', 'Primes (GNF)', 'Déductions (GNF)', 'Net (GNF)', 'Déjà payé (GNF)', 'Reste (GNF)', 'Statut', 'Signature'], ';');
             foreach ($lignes as $l) {
                 fputcsv($handle, [
                     $periodeLabel,
@@ -209,6 +209,7 @@ class SalaireController extends Controller
                     number_format((float) $l->deja_paye, 0, ',', ' '),
                     number_format((float) $l->reste_a_payer, 0, ',', ' '),
                     $l->statut?->label() ?? '—',
+                    '',
                 ], ';');
             }
             fclose($handle);

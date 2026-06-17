@@ -206,7 +206,6 @@ const mainNavItems = computed((): NavItem[] => {
                 },
                 { title: 'Paiement salaire', href: '/comptabilite/salaires' },
                 { title: 'Journal financier', href: '/comptabilite/journal' },
-                { title: 'Historique', href: '/comptabilite/historique' },
             ],
         });
     }

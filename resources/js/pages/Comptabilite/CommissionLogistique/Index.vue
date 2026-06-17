@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
-import FilterBar from '@/components/FilterBar.vue';
+import ComptabiliteFilters from '@/components/ComptabiliteFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -23,9 +23,7 @@ import {
     Truck,
     User,
 } from 'lucide-vue-next';
-import PvDropdown from 'primevue/dropdown';
-import InputText from 'primevue/inputtext';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface LivreurRow {
     livreur_id: string;
@@ -76,50 +74,44 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const searchVal = ref(props.search ?? '');
-const statutFiltre = ref<string | null>(props.filtre_statut || null);
-const periodeFiltre = ref<string | null>(props.selected_periode || null);
-const siteFiltre = ref<string | null>(props.filtre_site || null);
+const statutFiltre = ref(props.filtre_statut ?? '');
+const periodeFiltre = ref(props.selected_periode ?? '');
+const siteFiltre = ref(props.filtre_site ?? '');
 
-const STATUT_OPTIONS: SelectOption[] = [
-    { value: null, label: 'Tous les statuts' },
-    { value: 'impaye', label: 'Impayé' },
-    { value: 'paye', label: 'Payé' },
-];
-
-const PERIODE_OPTIONS = computed<SelectOption[]>(() => [
-    { value: null, label: 'Toutes les périodes' },
-    ...(props.periodes_disponibles ?? []).map((p) => ({
-        value: p.code,
-        label: p.label,
-    })),
-]);
-
-const SITE_OPTIONS = computed<SelectOption[]>(() => [
-    { value: null, label: 'Toutes les agences' },
-    ...(props.sites ?? []).map((s) => ({ value: s.value, label: s.label })),
-]);
+const hasActiveFilters = computed(
+    () =>
+        !!(
+            searchVal.value ||
+            statutFiltre.value ||
+            periodeFiltre.value ||
+            siteFiltre.value
+        ),
+);
 
 function appliquerFiltres() {
     router.get(
         '/comptabilite/commissions/logistique',
         {
             search: searchVal.value || undefined,
-            statut: statutFiltre.value ?? undefined,
-            periode: periodeFiltre.value ?? undefined,
-            site: siteFiltre.value ?? undefined,
+            statut: statutFiltre.value || undefined,
+            periode: periodeFiltre.value || undefined,
+            site: siteFiltre.value || undefined,
         },
         { preserveState: true, replace: true },
     );
 }
 
-let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-watch(searchVal, () => {
-    if (searchTimeout) clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(appliquerFiltres, 300);
-});
-watch(statutFiltre, appliquerFiltres);
-watch(periodeFiltre, appliquerFiltres);
-watch(siteFiltre, appliquerFiltres);
+function resetFilters() {
+    searchVal.value = '';
+    statutFiltre.value = '';
+    periodeFiltre.value = '';
+    siteFiltre.value = '';
+    router.get(
+        '/comptabilite/commissions/logistique',
+        {},
+        { preserveState: true, replace: true },
+    );
+}
 
 const kpiTotalBrut = computed(() =>
     props.livreurs.reduce(
@@ -334,41 +326,45 @@ function fmtTel(tel: string | null | undefined): string {
             </div>
 
             <!-- Filtres -->
-            <FilterBar>
-                <PvDropdown
-                    :options="STATUT_OPTIONS"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="statutFiltre"
-                    placeholder="Tous les statuts"
-                    class="w-48 text-sm"
-                    @change="(e) => (statutFiltre = e.value)"
-                />
-                <PvDropdown
-                    :options="PERIODE_OPTIONS"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="periodeFiltre"
-                    placeholder="Toutes les périodes"
-                    class="w-64 text-sm"
-                    @change="(e) => (periodeFiltre = e.value)"
-                />
-                <PvDropdown
+            <ComptabiliteFilters
+                v-model:search="searchVal"
+                search-placeholder="Rechercher un livreur, téléphone, véhicule..."
+                :has-active-filters="hasActiveFilters"
+                @filter="appliquerFiltres"
+                @reset="resetFilters"
+            >
+                <select
+                    v-model="statutFiltre"
+                    class="h-9 w-[160px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Tous les statuts</option>
+                    <option value="impaye">Impayé</option>
+                    <option value="paye">Payé</option>
+                </select>
+                <select
+                    v-model="periodeFiltre"
+                    class="h-9 w-[200px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Toutes les périodes</option>
+                    <option
+                        v-for="p in periodes_disponibles"
+                        :key="p.code"
+                        :value="p.code"
+                    >
+                        {{ p.label }}
+                    </option>
+                </select>
+                <select
                     v-if="sites && sites.length > 0"
-                    :options="SITE_OPTIONS"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="siteFiltre"
-                    placeholder="Toutes les agences"
-                    class="w-48 text-sm"
-                    @change="(e) => (siteFiltre = e.value)"
-                />
-                <InputText
-                    v-model="searchVal"
-                    placeholder="Rechercher un livreur…"
-                    class="min-w-[180px] flex-1 text-sm"
-                />
-            </FilterBar>
+                    v-model="siteFiltre"
+                    class="h-9 w-[170px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Toutes les agences</option>
+                    <option v-for="s in sites" :key="s.value" :value="s.value">
+                        {{ s.label }}
+                    </option>
+                </select>
+            </ComptabiliteFilters>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">

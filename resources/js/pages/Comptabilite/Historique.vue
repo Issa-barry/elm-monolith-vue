@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import FilterBar from '@/components/FilterBar.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
 import { Eye, History, Search } from 'lucide-vue-next';
 import PvDialog from 'primevue/dialog';
-import PvDropdown from 'primevue/dropdown';
-import InputText from 'primevue/inputtext';
-import { ref, watch } from 'vue';
+import { ref } from 'vue';
 
 interface LogRow {
     id: string;
@@ -187,7 +184,7 @@ function formatJson(val: unknown): string {
                     option-value="value"
                     :model-value="moduleFiltre"
                     placeholder="Tous les modules"
-                    class="w-56 text-sm"
+                    class="w-[180px] text-sm"
                     @change="(e) => (moduleFiltre = e.value)"
                 />
                 <PvDropdown
@@ -196,7 +193,7 @@ function formatJson(val: unknown): string {
                     option-value="value"
                     :model-value="eventCodeFiltre"
                     placeholder="Toutes les actions"
-                    class="w-52 text-sm"
+                    class="w-[160px] text-sm"
                     @change="(e) => (eventCodeFiltre = e.value)"
                 />
                 <PvDropdown
@@ -205,7 +202,7 @@ function formatJson(val: unknown): string {
                     option-value="value"
                     :model-value="actorFiltre"
                     placeholder="Tous les utilisateurs"
-                    class="w-52 text-sm"
+                    class="w-[180px] text-sm"
                     @change="(e) => (actorFiltre = e.value)"
                 />
                 <PvDropdown
@@ -214,29 +211,29 @@ function formatJson(val: unknown): string {
                     option-value="value"
                     :model-value="siteFiltre"
                     placeholder="Tous les sites"
-                    class="w-44 text-sm"
+                    class="w-[170px] text-sm"
                     @change="(e) => (siteFiltre = e.value)"
                 />
                 <InputText
                     v-model="dateDebut"
                     type="date"
-                    class="w-40 text-sm"
+                    class="w-[140px] text-sm"
                     placeholder="Du"
                 />
                 <InputText
                     v-model="dateFin"
                     type="date"
-                    class="w-40 text-sm"
+                    class="w-[140px] text-sm"
                     placeholder="Au"
                 />
-                <div class="relative">
+                <div class="relative w-[240px]">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
                     <InputText
                         v-model="searchQuery"
                         type="text"
-                        class="w-52 pl-8 text-sm"
+                        class="w-full pl-8 text-sm"
                         placeholder="Recherche libre…"
                     />
                 </div>

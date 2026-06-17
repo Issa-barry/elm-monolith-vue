@@ -43,7 +43,6 @@ import {
 } from 'lucide-vue-next';
 import { useToast } from 'primevue/usetoast';
 import { ref } from 'vue';
-import HistoriqueDialog from './partials/HistoriqueDialog.vue';
 
 interface Option {
     value: string;
@@ -181,7 +180,6 @@ function imprimer() {
     window.open(`/depenses/imprimer?${params.toString()}`, '_blank');
 }
 
-const historiqueDepenseId = ref<string | null>(null);
 const rejectingDepenseId = ref<string | null>(null);
 const rejectMotif = ref('');
 const rejectCommentaire = ref('');
@@ -431,7 +429,7 @@ const hasActiveFilters = ref(
             <FilterBar>
                 <select
                     v-model="filterType"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    class="h-9 w-[180px] rounded-md border border-input bg-background px-2 text-sm"
                 >
                     <option value="">Tous les types</option>
                     <option v-for="t in types" :key="t.id" :value="t.id">
@@ -441,7 +439,7 @@ const hasActiveFilters = ref(
 
                 <select
                     v-model="filterCategorie"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    class="h-9 w-[180px] rounded-md border border-input bg-background px-2 text-sm"
                 >
                     <option value="">Tous les concernés</option>
                     <option
@@ -455,7 +453,7 @@ const hasActiveFilters = ref(
 
                 <select
                     v-model="filterStatut"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    class="h-9 w-[160px] rounded-md border border-input bg-background px-2 text-sm"
                 >
                     <option value="">Tous les statuts</option>
                     <option
@@ -469,7 +467,7 @@ const hasActiveFilters = ref(
 
                 <select
                     v-model="filterSite"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    class="h-9 w-[170px] rounded-md border border-input bg-background px-2 text-sm"
                 >
                     <option value="">Tous les sites</option>
                     <option v-for="s in sites" :key="s.id" :value="s.id">
@@ -480,22 +478,22 @@ const hasActiveFilters = ref(
                 <input
                     v-model="filterDebut"
                     type="date"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    class="h-9 w-[140px] rounded-md border border-input bg-background px-2 text-sm"
                 />
                 <input
                     v-model="filterFin"
                     type="date"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    class="h-9 w-[140px] rounded-md border border-input bg-background px-2 text-sm"
                 />
 
-                <div class="relative min-w-[180px] flex-1">
+                <div class="relative w-[240px]">
                     <Search
-                        class="absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
                     <input
                         v-model="filterSearch"
                         type="search"
-                        placeholder="Rechercher une dépense…"
+                        placeholder="Rechercher…"
                         class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         @keydown.enter="applyFilters"
                     />
@@ -704,17 +702,6 @@ const hasActiveFilters = ref(
                                                 Historique
                                             </DropdownMenuItem>
 
-                                            <!-- Historique -->
-                                            <DropdownMenuItem
-                                                class="cursor-pointer"
-                                                @click="
-                                                    historiqueDepenseId = d.id
-                                                "
-                                            >
-                                                <History class="h-4 w-4" />
-                                                Historique
-                                            </DropdownMenuItem>
-
                                             <!-- Modifier (brouillon, rejeté ou annulé) -->
                                             <DropdownMenuItem
                                                 v-if="
@@ -881,12 +868,6 @@ const hasActiveFilters = ref(
                 </template>
             </div>
         </div>
-        <!-- Historique dialog -->
-        <HistoriqueDialog
-            :depense-id="historiqueDepenseId"
-            @close="historiqueDepenseId = null"
-        />
-
         <!-- Reject dialog -->
         <Dialog
             :open="!!rejectingDepenseId"

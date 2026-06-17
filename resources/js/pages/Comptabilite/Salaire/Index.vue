@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
-import FilterBar from '@/components/FilterBar.vue';
+import ComptabiliteFilters from '@/components/ComptabiliteFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,9 +21,7 @@ import {
     MoreHorizontal,
     Users,
 } from 'lucide-vue-next';
-import PvDropdown from 'primevue/dropdown';
-import InputText from 'primevue/inputtext';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface LignePaie {
     id: string;
@@ -119,6 +117,17 @@ const siteOptions = computed(() => [
     ...props.sites,
 ]);
 
+const hasActiveFilters = computed(
+    () =>
+        !!(
+            searchVal.value ||
+            filtreStatut.value ||
+            filtreSite.value ||
+            selectedMois.value !== new Date().getMonth() + 1 ||
+            selectedAnnee.value !== new Date().getFullYear()
+        ),
+);
+
 function appliquerFiltres() {
     router.get(
         '/comptabilite/salaires',
@@ -133,15 +142,21 @@ function appliquerFiltres() {
     );
 }
 
-let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-watch(searchVal, () => {
-    if (searchTimeout) clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(appliquerFiltres, 300);
-});
-watch(
-    [selectedMois, selectedAnnee, filtreStatut, filtreSite],
-    appliquerFiltres,
-);
+function resetFilters() {
+    selectedMois.value = new Date().getMonth() + 1;
+    selectedAnnee.value = new Date().getFullYear();
+    filtreStatut.value = '';
+    filtreSite.value = '';
+    searchVal.value = '';
+    router.get(
+        '/comptabilite/salaires',
+        {
+            mois: new Date().getMonth() + 1,
+            annee: new Date().getFullYear(),
+        },
+        { preserveState: true, replace: true },
+    );
+}
 
 function buildParams() {
     const p = new URLSearchParams();
@@ -336,50 +351,54 @@ const periodeCourante = computed(
             </div>
 
             <!-- Filtres -->
-            <FilterBar>
-                <PvDropdown
-                    :options="MOIS_OPTIONS"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="selectedMois"
-                    placeholder="Mois"
-                    class="w-44 text-sm"
-                    @change="(e) => (selectedMois = e.value)"
-                />
-                <PvDropdown
-                    :options="ANNEES"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="selectedAnnee"
-                    placeholder="Année"
-                    class="w-32 text-sm"
-                    @change="(e) => (selectedAnnee = e.value)"
-                />
-                <PvDropdown
-                    :options="STATUT_OPTIONS"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="filtreStatut"
-                    placeholder="Tous les statuts"
-                    class="w-48 text-sm"
-                    @change="(e) => (filtreStatut = e.value)"
-                />
-                <PvDropdown
+            <ComptabiliteFilters
+                v-model:search="searchVal"
+                search-placeholder="Rechercher un salarié..."
+                :has-active-filters="hasActiveFilters"
+                @filter="appliquerFiltres"
+                @reset="resetFilters"
+            >
+                <select
+                    v-model="selectedMois"
+                    class="h-9 w-[140px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option
+                        v-for="m in MOIS_OPTIONS"
+                        :key="m.value"
+                        :value="m.value"
+                    >
+                        {{ m.label }}
+                    </option>
+                </select>
+                <select
+                    v-model="selectedAnnee"
+                    class="h-9 w-[110px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option v-for="a in ANNEES" :key="a.value" :value="a.value">
+                        {{ a.label }}
+                    </option>
+                </select>
+                <select
+                    v-model="filtreStatut"
+                    class="h-9 w-[160px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Tous les statuts</option>
+                    <option value="en_attente">En attente</option>
+                    <option value="calcule">Calculé</option>
+                    <option value="partiellement_paye">Part. payé</option>
+                    <option value="paye">Payé</option>
+                </select>
+                <select
                     v-if="sites.length > 0"
-                    :options="siteOptions"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="filtreSite"
-                    placeholder="Toutes les agences"
-                    class="w-48 text-sm"
-                    @change="(e) => (filtreSite = e.value)"
-                />
-                <InputText
-                    v-model="searchVal"
-                    placeholder="Rechercher un salarié…"
-                    class="min-w-[180px] flex-1 text-sm"
-                />
-            </FilterBar>
+                    v-model="filtreSite"
+                    class="h-9 w-[170px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Toutes les agences</option>
+                    <option v-for="s in sites" :key="s.value" :value="s.value">
+                        {{ s.label }}
+                    </option>
+                </select>
+            </ComptabiliteFilters>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">

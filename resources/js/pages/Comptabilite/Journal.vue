@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import FilterBar from '@/components/FilterBar.vue';
+import ComptabiliteFilters from '@/components/ComptabiliteFilters.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
 import { ArrowDown, ArrowUp, BookOpen } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Dropdown from 'primevue/dropdown';
 import { computed, ref } from 'vue';
 
 interface Ligne {
@@ -43,6 +42,7 @@ const props = defineProps<{
         date_from?: string;
         date_to?: string;
         site_id?: string;
+        search?: string;
     };
     kpis: { total_entrees: number; total_sorties: number; solde: number };
 }>();
@@ -58,19 +58,19 @@ const selectedCategorie = ref(props.filters.categorie ?? '');
 const selectedSite = ref(props.filters.site_id ?? '');
 const dateFrom = ref(props.filters.date_from ?? '');
 const dateTo = ref(props.filters.date_to ?? '');
+const searchVal = ref(props.filters.search ?? '');
 
-const sensOptions = computed(() => [
-    { label: 'Tous les sens', value: '' },
-    ...props.sens_options,
-]);
-const categorieOptions = computed(() => [
-    { label: 'Toutes les catégories', value: '' },
-    ...props.categories,
-]);
-const siteOptions = computed(() => [
-    { label: 'Toutes les agences', value: '' },
-    ...props.sites.map((s) => ({ label: s.nom, value: s.id })),
-]);
+const hasActiveFilters = computed(
+    () =>
+        !!(
+            selectedSens.value ||
+            selectedCategorie.value ||
+            selectedSite.value ||
+            dateFrom.value ||
+            dateTo.value ||
+            searchVal.value
+        ),
+);
 
 function applyFilters() {
     router.get(
@@ -81,7 +81,22 @@ function applyFilters() {
             site_id: selectedSite.value || undefined,
             date_from: dateFrom.value || undefined,
             date_to: dateTo.value || undefined,
+            search: searchVal.value || undefined,
         },
+        { preserveState: true, replace: true },
+    );
+}
+
+function resetFilters() {
+    selectedSens.value = '';
+    selectedCategorie.value = '';
+    selectedSite.value = '';
+    dateFrom.value = '';
+    dateTo.value = '';
+    searchVal.value = '';
+    router.get(
+        '/comptabilite/journal',
+        {},
         { preserveState: true, replace: true },
     );
 }
@@ -152,55 +167,52 @@ function fmt(n: number) {
             </div>
 
             <!-- Filtres -->
-            <FilterBar>
-                <input
-                    v-model="dateFrom"
-                    type="date"
-                    class="h-9 rounded-md border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
-                />
-                <input
-                    v-model="dateTo"
-                    type="date"
-                    class="h-9 rounded-md border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
-                />
-                <Dropdown
+            <ComptabiliteFilters
+                v-model:search="searchVal"
+                v-model:dateDebut="dateFrom"
+                v-model:dateFin="dateTo"
+                search-placeholder="Rechercher une référence, un libellé..."
+                :has-active-filters="hasActiveFilters"
+                @filter="applyFilters"
+                @reset="resetFilters"
+            >
+                <select
                     v-model="selectedSens"
-                    :options="sensOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Sens"
-                    class="min-w-[140px] text-sm"
-                    @change="applyFilters"
-                />
-                <Dropdown
-                    v-model="selectedCategorie"
-                    :options="categorieOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Catégorie"
-                    class="min-w-[180px] text-sm"
-                    @change="applyFilters"
-                />
-                <Dropdown
-                    v-if="is_admin"
-                    v-model="selectedSite"
-                    :options="siteOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Agence"
-                    class="min-w-[160px] text-sm"
-                    @change="applyFilters"
-                />
-                <template #actions>
-                    <button
-                        type="button"
-                        class="h-9 rounded-md border border-input bg-card px-3 text-sm hover:bg-muted/50"
-                        @click="applyFilters"
+                    class="h-9 w-[140px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Tous les sens</option>
+                    <option
+                        v-for="o in sens_options"
+                        :key="o.value"
+                        :value="o.value"
                     >
-                        Filtrer
-                    </button>
-                </template>
-            </FilterBar>
+                        {{ o.label }}
+                    </option>
+                </select>
+                <select
+                    v-model="selectedCategorie"
+                    class="h-9 w-[180px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Toutes les catégories</option>
+                    <option
+                        v-for="c in categories"
+                        :key="c.value"
+                        :value="c.value"
+                    >
+                        {{ c.label }}
+                    </option>
+                </select>
+                <select
+                    v-if="is_admin && sites.length > 0"
+                    v-model="selectedSite"
+                    class="h-9 w-[170px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Toutes les agences</option>
+                    <option v-for="s in sites" :key="s.id" :value="s.id">
+                        {{ s.nom }}
+                    </option>
+                </select>
+            </ComptabiliteFilters>
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">

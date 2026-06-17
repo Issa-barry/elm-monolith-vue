@@ -6,9 +6,9 @@
 <title>Impression — Liste des dépenses</title>
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #1a1a1a; background: #fff; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #000; background: #fff; }
 
-    /* Barre d'outils écran uniquement */
+    /* ── Barre d'outils (écran uniquement) ─────────────────────────── */
     .print-bar {
         display: flex;
         justify-content: flex-end;
@@ -32,93 +32,94 @@
     .btn-primary { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
     .btn-primary:hover { background: #1e40af; }
 
-    /* Page A4 */
-    .page { width: 210mm; margin: 0 auto; padding: 12mm 14mm; }
+    /* ── Conteneur page ────────────────────────────────────────────── */
+    .page { width: 277mm; margin: 0 auto; padding: 10mm 14mm 18mm; }
 
-    /* Section par site */
+    /* ── Section par site ──────────────────────────────────────────── */
     .site-section { margin-bottom: 32px; }
+    .site-section.new-page { page-break-before: always; break-before: page; }
 
-    /* Saut de page forcé avant chaque site sauf le premier */
-    .site-section.new-page {
-        page-break-before: always;
-        break-before: page;
-    }
-
-    /* En-tête */
+    /* ── En-tête ───────────────────────────────────────────────────── */
     .header {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        margin-bottom: 16px;
-        border-bottom: 2px solid #1d4ed8;
-        padding-bottom: 12px;
+        margin-bottom: 10px;
+        border-bottom: 2px solid #000;
+        padding-bottom: 8px;
     }
-    .org-name { font-size: 15px; font-weight: 700; color: #1e3a8a; }
+    .org-name  { font-size: 14px; font-weight: 700; color: #000; }
     .doc-title { text-align: right; }
-    .doc-type { font-size: 12px; font-weight: 700; color: #1e3a8a; text-transform: uppercase; }
-    .doc-date { font-size: 8.5px; color: #6b7280; margin-top: 4px; }
+    .doc-type  { font-size: 12px; font-weight: 700; color: #000; text-transform: uppercase; }
+    .doc-date  { font-size: 8px; color: #444; margin-top: 3px; }
 
-    /* Méta-infos filtres */
-    .meta { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 12px; font-size: 8.5px; color: #374151; }
-    .meta span { font-weight: 600; color: #111827; }
+    /* ── Méta-infos ────────────────────────────────────────────────── */
+    .meta { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 8px; font-size: 8px; color: #333; }
+    .meta span { font-weight: 700; color: #000; }
 
-    /* Tableau */
-    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-    thead tr { background: #1e40af; }
+    /* ── Tableau ───────────────────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
+
     thead th {
-        padding: 6px 7px;
+        background: #d0d0d0;
+        border: 1px solid #000;
+        padding: 6px 5px;
         text-align: left;
-        font-size: 7.5px;
+        font-size: 8px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: #fff;
+        letter-spacing: 0.3px;
+        color: #000;
         white-space: nowrap;
     }
-    thead th.right { text-align: right; }
-    tbody tr:nth-child(even) { background: #f8fafc; }
-    tbody tr { border-bottom: 1px solid #e5e7eb; }
-    tbody td { padding: 5px 7px; font-size: 8.5px; vertical-align: top; }
-    tbody td.right { text-align: right; font-family: 'Courier New', monospace; }
-    tbody td.mono { font-family: 'Courier New', monospace; }
+    thead th.right  { text-align: right; }
+    thead th.center { text-align: center; }
 
-    /* Badges statut */
-    .badge { display: inline-block; padding: 1px 6px; border-radius: 99px; font-size: 7px; font-weight: 700; text-transform: uppercase; }
-    .badge-brouillon { background: #f1f5f9; color: #475569; }
-    .badge-soumis    { background: #dbeafe; color: #1d4ed8; }
-    .badge-valide    { background: #d1fae5; color: #065f46; }
-    .badge-rejete    { background: #ffedd5; color: #c2410c; }
-    .badge-annule    { background: #fee2e2; color: #b91c1c; }
+    tbody tr:nth-child(even) { background: #f2f2f2; }
+    tbody td {
+        border: 1px solid #bbb;
+        padding: 5px 5px;
+        font-size: 8.5px;
+        vertical-align: top;
+        color: #000;
+    }
+    tbody td.right  { text-align: right; font-family: 'Courier New', monospace; }
+    tbody td.center { text-align: center; }
+    tbody td.mono   { font-family: 'Courier New', monospace; }
 
-    /* Colonne Signature */
-    .sig { min-width: 70px; border-bottom: 1px solid #9ca3af; height: 20px; }
 
-    /* Ligne total */
-    .total-row td { font-weight: 700; font-size: 9px; border-top: 2px solid #1d4ed8; padding-top: 6px; }
+    /* ── Ligne total ─────────────────────────────────────────────────*/
+    .total-row td {
+        background: #d0d0d0 !important;
+        font-weight: 700;
+        font-size: 9px;
+        border-top: 2px solid #000;
+        border-bottom: 2px solid #000;
+        border-left: 1px solid #000;
+        border-right: 1px solid #000;
+        padding: 5px;
+    }
+    .total-row td.right { text-align: right; }
 
-    /* Pied de page */
+    /* ── Pied de page ────────────────────────────────────────────────*/
     .footer {
         display: flex;
         justify-content: space-between;
-        font-size: 8px;
-        color: #9ca3af;
-        border-top: 1px solid #e5e7eb;
-        padding-top: 8px;
-        margin-top: 4px;
+        font-size: 7.5px;
+        color: #333;
+        border-top: 1px solid #888;
+        padding-top: 5px;
+        margin-top: 6px;
     }
 
-    /* Règles impression */
+    /* ── Règles impression ───────────────────────────────────────────*/
     @media print {
-        @page { size: A4 portrait; margin: 12mm 14mm; }
+        @page { size: A4 landscape; margin: 12mm 14mm 18mm; }
 
         body { margin: 0; background: #fff; }
         .print-bar { display: none !important; }
         .page { width: 100%; margin: 0; padding: 0; }
 
-        /* Saut de page obligatoire entre sites :
-           - page-break-after sur chaque section (sauf dernière)
-           - page-break-before sur les sections non-premières (.new-page)
-           Double mécanisme pour fiabilité maximale cross-browser */
         .site-section {
             page-break-after: always;
             break-after: page;
@@ -135,6 +136,17 @@
 
         thead { display: table-header-group; }
         tbody tr { page-break-inside: avoid; break-inside: avoid; }
+
+        /* Forcer l'impression des fonds gris ─ */
+        thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        tbody tr:nth-child(even) { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .total-row td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+        /* Numéros de page via CSS counters */
+        .footer-page::after {
+            content: "Page " counter(page) " / " counter(pages);
+        }
     }
 </style>
 </head>
@@ -181,14 +193,14 @@
         <table>
             <thead>
                 <tr>
-                    <th>Date</th>
-                    <th>Type de dépense</th>
-                    <th>Concerné</th>
-                    <th>Véhicule</th>
-                    <th class="right">Montant (GNF)</th>
-                    <th>Statut</th>
-                    <th>Saisi par</th>
-                    <th>Signature</th>
+                    <th style="width:9%">Date</th>
+                    <th style="width:20%">Type de dépense</th>
+                    <th style="width:15%">Concerné</th>
+                    <th style="width:12%">Véhicule</th>
+                    <th class="right" style="width:10%">Montant (GNF)</th>
+                    <th style="width:9%">Statut</th>
+                    <th style="width:12%">Saisi par</th>
+                    <th style="width:13%">Validé par</th>
                 </tr>
             </thead>
             <tbody>
@@ -198,22 +210,19 @@
                     <td>
                         {{ $row['type']['libelle'] ?? '—' }}
                         @if(!empty($row['type']['categorie_label']))
-                        <br><small style="color:#6b7280">{{ $row['type']['categorie_label'] }}</small>
+                        <br><small style="color:#555; font-size:7px;">{{ $row['type']['categorie_label'] }}</small>
                         @endif
                     </td>
                     <td>{{ $row['beneficiaire_label'] ?? '—' }}</td>
-                    <td>{{ $row['vehicule_nom'] ?? '' }}</td>
+                    <td>{{ $row['vehicule_nom'] ?? '—' }}</td>
                     <td class="right">{{ number_format((float)$row['montant'], 0, ',', ' ') }}</td>
-                    <td>
-                        @php $s = $row['statut'] ?? '' @endphp
-                        <span class="badge badge-{{ $s }}">{{ $row['statut_label'] ?? $s }}</span>
-                    </td>
+                    <td>{{ $row['statut_label'] ?? ($row['statut'] ?? '—') }}</td>
                     <td>{{ $row['user']['name'] ?? '—' }}</td>
-                    <td class="sig"></td>
+                    <td>{{ $row['validateur']['name'] ?? '—' }}</td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="8" style="text-align:center; color:#6b7280; padding: 20px;">
+                    <td colspan="8" style="text-align:center; color:#444; padding: 16px;">
                         Aucune dépense pour ces critères.
                     </td>
                 </tr>
@@ -221,7 +230,7 @@
 
                 @if($siteData['rows']->count() > 0)
                 <tr class="total-row">
-                    <td colspan="4" style="text-align:right; padding-right:8px; color:#374151;">Montant total :</td>
+                    <td colspan="4" style="text-align:right; padding-right:6px; font-size:8.5px;">MONTANT TOTAL :</td>
                     <td class="right">{{ number_format($siteData['total'], 0, ',', ' ') }} GNF</td>
                     <td colspan="3"></td>
                 </tr>
@@ -231,7 +240,8 @@
 
         <div class="footer">
             <span>{{ $org?->name ?? 'ELM' }} — Document confidentiel</span>
-            <span>{{ $generated_at->format('d/m/Y H:i') }}</span>
+            <span class="footer-page"></span>
+            <span>{{ $generated_at->format('d/m/Y H:i') }}{{ $siteData['site_nom'] ? ' — '.$siteData['site_nom'] : '' }}</span>
         </div>
 
     </div>

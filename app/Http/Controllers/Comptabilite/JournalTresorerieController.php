@@ -21,7 +21,7 @@ class JournalTresorerieController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['sens', 'categorie', 'date_from', 'date_to', 'site_id']);
+        $filters = $request->only(['sens', 'categorie', 'date_from', 'date_to', 'site_id', 'search']);
 
         $query = JournalTresorerie::forOrg($orgId)->with('site');
 
@@ -47,6 +47,14 @@ class JournalTresorerieController extends Controller
 
         $totalEntrees = (float) (clone $query)->where('sens', SensJournal::ENTREE->value)->sum('montant');
         $totalSorties = (float) (clone $query)->where('sens', SensJournal::SORTIE->value)->sum('montant');
+
+        if (! empty($filters['search'])) {
+            $s = mb_strtolower(trim($filters['search']));
+            $query->where(fn ($q) => $q
+                ->whereRaw('LOWER(reference) LIKE ?', ["%{$s}%"])
+                ->orWhereRaw('LOWER(libelle) LIKE ?', ["%{$s}%"])
+            );
+        }
 
         $lignes = $query
             ->orderByDesc('date_operation')

@@ -102,12 +102,18 @@ class HistoriqueActionsController extends Controller
 
     public function entite(Request $request): JsonResponse
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        $user = auth()->user();
+        $module = $request->input('module', '');
 
-        $orgId = auth()->user()->organization_id;
+        $allowed = match ($module) {
+            'depenses' => $user->can('depenses.read') || $user->can('comptabilite.read'),
+            default    => $user->can('comptabilite.read'),
+        };
+        abort_unless($allowed, 403);
+
+        $orgId = $user->organization_id;
         $auditableType = $request->input('auditable_type', '');
         $auditableId = $request->input('auditable_id', '');
-        $module = $request->input('module', '');
 
         abort_if($auditableType === '' || $auditableId === '', 400);
 

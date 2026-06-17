@@ -331,9 +331,10 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 
         // ── Périodes de paiement ──────────────────────────────────────────────
         Route::get('periodes', [PaiementPeriodeController::class, 'index'])->name('periodes.index');
-        Route::get('periodes/create', [PaiementPeriodeController::class, 'create'])->name('periodes.create');
+        Route::get('periodes/creer', [PaiementPeriodeController::class, 'create'])->name('periodes.create');
         Route::post('periodes', [PaiementPeriodeController::class, 'store'])->name('periodes.store');
         Route::get('periodes/{periode}', [PaiementPeriodeController::class, 'show'])->name('periodes.show');
+        Route::get('periodes/{periode}/pdf', [PaiementPeriodeController::class, 'exportPdf'])->name('periodes.pdf');
         Route::post('periodes/{periode}/calculer', [PaiementPeriodeController::class, 'calculer'])->name('periodes.calculer');
         Route::post('periodes/{periode}/valider', [PaiementPeriodeController::class, 'valider'])->name('periodes.valider');
         Route::post('periodes/{periode}/cloturer', [PaiementPeriodeController::class, 'cloturer'])->name('periodes.cloturer');

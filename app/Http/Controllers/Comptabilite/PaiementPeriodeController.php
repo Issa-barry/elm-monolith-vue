@@ -7,11 +7,13 @@ use App\Enums\StatutFichePaiement;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
+use App\Models\Organization;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\Site;
 use App\Services\AuditLogService;
 use App\Services\PeriodeCalculatorService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,7 +29,7 @@ class PaiementPeriodeController extends Controller
         $this->authorize('viewAny', PaiementPeriode::class);
 
         $orgId = auth()->user()->organization_id;
-        $filters = $request->only(['type', 'statut', 'date_debut', 'date_fin']);
+        $filters = $request->only(['type', 'statut', 'date_debut', 'date_fin', 'search']);
 
         $query = PaiementPeriode::forOrg($orgId)->with('site');
 
@@ -42,6 +44,10 @@ class PaiementPeriodeController extends Controller
         }
         if (! empty($filters['date_fin'])) {
             $query->whereDate('date_fin', '<=', $filters['date_fin']);
+        }
+        if (! empty($filters['search'])) {
+            $s = mb_strtolower(trim($filters['search']));
+            $query->where(fn ($q) => $q->whereRaw('LOWER(reference) LIKE ?', ["%{$s}%"]));
         }
 
         $periodes = $query->orderByDesc('date_debut')
@@ -124,36 +130,55 @@ class PaiementPeriodeController extends Controller
 
         $periode->load('site', 'createur', 'validateur');
 
-        $fiches = $periode->fiches()
-            ->with('site')
-            ->orderBy('beneficiaire_nom')
-            ->get()
-            ->map(fn (PaiementFiche $f) => [
-                'id' => $f->id,
-                'reference' => $f->reference,
-                'beneficiaire_nom' => $f->beneficiaire_nom,
-                'beneficiaire_type' => $f->beneficiaire_type,
-                'site' => $f->site ? ['id' => $f->site->id, 'nom' => $f->site->nom] : null,
-                'montant_brut' => (float) $f->montant_brut,
-                'total_deductions' => (float) $f->total_deductions,
-                'montant_net' => (float) $f->montant_net,
-                'montant_paye' => (float) $f->montant_paye,
-                'statut' => $f->statut?->value,
-                'statut_label' => $f->statut?->label(),
-            ]);
+        $allFiches = $periode->fiches()->with('site')->get();
+
+        $fiches = $allFiches->sortBy('beneficiaire_nom')->map(fn (PaiementFiche $f) => [
+            'id' => $f->id,
+            'reference' => $f->reference,
+            'beneficiaire_nom' => $f->beneficiaire_nom,
+            'beneficiaire_type' => $f->beneficiaire_type,
+            'site' => $f->site ? ['id' => $f->site->id, 'nom' => $f->site->nom] : null,
+            'montant_brut' => (float) $f->montant_brut,
+            'total_deductions' => (float) $f->total_deductions,
+            'montant_net' => (float) $f->montant_net,
+            'montant_paye' => (float) $f->montant_paye,
+            'statut' => $f->statut?->value,
+            'statut_label' => $f->statut?->label(),
+        ])->values();
+
+        $repartitionAgences = $allFiches
+            ->groupBy('site_id')
+            ->map(function ($group) {
+                $site = $group->first()->site;
+                $net = (float) $group->sum('montant_net');
+                $paye = (float) $group->sum('montant_paye');
+
+                return [
+                    'site_nom' => $site?->nom ?? 'Sans agence',
+                    'nb_beneficiaires' => $group->count(),
+                    'montant_brut' => (float) $group->sum('montant_brut'),
+                    'total_deductions' => (float) $group->sum('total_deductions'),
+                    'montant_net' => $net,
+                    'montant_paye' => $paye,
+                    'reste' => max(0.0, $net - $paye),
+                ];
+            })
+            ->sortByDesc('montant_net')
+            ->values();
 
         return Inertia::render('Comptabilite/Periodes/Show', [
             'periode' => $this->transform($periode),
             'fiches' => $fiches,
             'stats' => [
-                'total_brut' => (float) $periode->fiches()->sum('montant_brut'),
-                'total_deductions' => (float) $periode->fiches()->sum('total_deductions'),
-                'total_net' => (float) $periode->fiches()->sum('montant_net'),
-                'total_paye' => (float) $periode->fiches()->sum('montant_paye'),
-                'nb_a_payer' => $periode->fiches()->where('statut', StatutFichePaiement::A_PAYER->value)->count(),
-                'nb_partiellement_paye' => $periode->fiches()->where('statut', StatutFichePaiement::PARTIELLEMENT_PAYE->value)->count(),
-                'nb_paye' => $periode->fiches()->where('statut', StatutFichePaiement::PAYE->value)->count(),
+                'total_brut' => (float) $allFiches->sum('montant_brut'),
+                'total_deductions' => (float) $allFiches->sum('total_deductions'),
+                'total_net' => (float) $allFiches->sum('montant_net'),
+                'total_paye' => (float) $allFiches->sum('montant_paye'),
+                'nb_a_payer' => $allFiches->where('statut', StatutFichePaiement::A_PAYER->value)->count(),
+                'nb_partiellement_paye' => $allFiches->where('statut', StatutFichePaiement::PARTIELLEMENT_PAYE->value)->count(),
+                'nb_paye' => $allFiches->where('statut', StatutFichePaiement::PAYE->value)->count(),
             ],
+            'repartition_agences' => $repartitionAgences,
             'can' => [
                 'calculer' => auth()->user()->can('calculer', $periode),
                 'valider' => auth()->user()->can('valider', $periode),
@@ -167,15 +192,28 @@ class PaiementPeriodeController extends Controller
     {
         $this->authorize('calculer', $periode);
 
-        $this->calculator->calculer($periode);
+        $result = $this->calculator->calculer($periode);
 
         app(AuditLogService::class)->record($periode, AuditEvent::AUTO_GENERATED, auth()->user(), null, null, [
             'module' => 'periodes_paiement',
             'site_id' => $periode->site_id,
-            'description' => "Fiches générées automatiquement pour la période {$periode->reference}",
+            'nb_fiches' => $result['nb_fiches'],
+            'description' => "Calcul de la période {$periode->reference} : {$result['nb_fiches']} fiche(s) générée(s)",
         ]);
 
-        return back()->with('success', 'Période calculée. Les fiches ont été générées.');
+        if ($result['nb_fiches'] === 0) {
+            $periode->loadMissing('site');
+            $debut = $periode->date_debut?->format('d/m/Y') ?? '—';
+            $fin = $periode->date_fin?->format('d/m/Y') ?? '—';
+            $agence = $periode->site ? " pour l'agence {$periode->site->nom}" : '';
+            $type = $periode->type?->label() ?? '';
+
+            return back()->with('warning', "0 fiche générée : aucune commission {$type} trouvée entre le {$debut} et le {$fin}{$agence}.");
+        }
+
+        $n = $result['nb_fiches'];
+
+        return back()->with('success', "{$n} fiche".($n > 1 ? 's' : '')." générée".($n > 1 ? 's' : '')." avec succès.");
     }
 
     public function valider(PaiementPeriode $periode): RedirectResponse
@@ -212,6 +250,56 @@ class PaiementPeriodeController extends Controller
         ]);
 
         return back()->with('success', 'Période clôturée.');
+    }
+
+    public function exportPdf(PaiementPeriode $periode)
+    {
+        $this->authorize('view', $periode);
+
+        $periode->load(['site', 'createur', 'fiches.site', 'fiches.lignes']);
+        $org = Organization::find($periode->organization_id);
+        $fiches = $periode->fiches->sortBy('beneficiaire_nom');
+
+        $stats = [
+            'total_brut' => (float) $fiches->sum('montant_brut'),
+            'total_deductions' => (float) $fiches->sum('total_deductions'),
+            'total_net' => (float) $fiches->sum('montant_net'),
+            'total_paye' => (float) $fiches->sum('montant_paye'),
+            'reste' => (float) $fiches->sum('montant_net') - (float) $fiches->sum('montant_paye'),
+            'nb_beneficiaires' => $fiches->count(),
+        ];
+
+        $repartitionAgences = $fiches
+            ->groupBy('site_id')
+            ->map(function ($group) {
+                $site = $group->first()->site;
+                $net = (float) $group->sum('montant_net');
+                $paye = (float) $group->sum('montant_paye');
+
+                return [
+                    'site_nom' => $site?->nom ?? 'Sans agence',
+                    'nb_beneficiaires' => $group->count(),
+                    'montant_brut' => (float) $group->sum('montant_brut'),
+                    'total_deductions' => (float) $group->sum('total_deductions'),
+                    'montant_net' => $net,
+                    'montant_paye' => $paye,
+                    'reste' => max(0.0, $net - $paye),
+                ];
+            })
+            ->sortByDesc('montant_net')
+            ->values();
+
+        $pdf = Pdf::loadView('pdf.periode_paiement', [
+            'periode' => $periode,
+            'fiches' => $fiches,
+            'org' => $org,
+            'stats' => $stats,
+            'repartition_agences' => $repartitionAgences,
+            'generated_at' => now(),
+            'printed_by' => auth()->user()->name,
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download('periode-'.$periode->reference.'.pdf');
     }
 
     public function destroy(PaiementPeriode $periode): RedirectResponse

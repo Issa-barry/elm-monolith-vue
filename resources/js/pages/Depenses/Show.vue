@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AuditTimeline from '@/components/AuditTimeline.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,12 +18,10 @@ import {
     CheckCircle,
     Clock,
     Edit,
-    History,
     Send,
     Trash2,
     XCircle,
 } from 'lucide-vue-next';
-import HistoriqueDialog from './partials/HistoriqueDialog.vue';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
@@ -132,7 +131,7 @@ const statut = computed(
         },
 );
 
-const showHistorique = ref(false);
+const activeTab = ref<'informations' | 'historique'>('informations');
 const showRejectDialog = ref(false);
 const rejectMotif = ref('');
 const rejectCommentaire = ref('');
@@ -290,14 +289,6 @@ function formatDate(iso: string | null): string {
                     <!-- Actions -->
                     <div class="flex shrink-0 gap-2">
                         <Button
-                            variant="outline"
-                            size="sm"
-                            @click="showHistorique = true"
-                        >
-                            <History class="mr-1 h-3.5 w-3.5" />
-                            Historique
-                        </Button>
-                        <Button
                             v-if="depense.can_edit"
                             variant="outline"
                             size="sm"
@@ -349,168 +340,225 @@ function formatDate(iso: string | null): string {
                     </div>
                 </div>
 
-                <!-- Motif rejet si rejeté ou annulé avec motif -->
-                <div
-                    v-if="
-                        ['rejete', 'annule'].includes(depense.statut) &&
-                        depense.motif_rejet
-                    "
-                    class="flex items-start gap-2.5 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-700"
-                >
-                    <AlertTriangle
-                        class="mt-0.5 h-4 w-4 shrink-0 text-orange-600"
-                    />
-                    <div>
-                        <p class="font-medium">Motif du rejet</p>
-                        <p class="mt-0.5">{{ depense.motif_rejet }}</p>
-                        <p
-                            v-if="depense.commentaire_rejet"
-                            class="mt-1 italic opacity-80"
-                        >
-                            {{ depense.commentaire_rejet }}
-                        </p>
-                    </div>
+                <!-- Tabs -->
+                <div class="flex border-b">
+                    <button
+                        type="button"
+                        class="px-4 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'informations'
+                                ? 'border-b-2 border-primary text-primary'
+                                : 'text-muted-foreground hover:text-foreground'
+                        "
+                        @click="activeTab = 'informations'"
+                    >
+                        Informations
+                    </button>
+                    <button
+                        type="button"
+                        class="px-4 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'historique'
+                                ? 'border-b-2 border-primary text-primary'
+                                : 'text-muted-foreground hover:text-foreground'
+                        "
+                        @click="activeTab = 'historique'"
+                    >
+                        Historique
+                    </button>
                 </div>
 
-                <!-- Impact -->
-                <div
-                    class="flex items-start gap-2.5 rounded-lg border p-3 text-sm"
-                    :class="impactBanner[depense.categorie]"
-                >
-                    <p>{{ depense.impact_message }}</p>
-                </div>
-
-                <!-- Infos principales -->
-                <div class="rounded-xl border bg-card">
-                    <div class="border-b px-4 py-3">
-                        <h2 class="text-sm font-semibold">Informations</h2>
-                    </div>
-                    <dl class="divide-y">
-                        <div class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm">
-                            <dt class="text-muted-foreground">Montant</dt>
-                            <dd class="col-span-2 text-base font-semibold">
-                                {{ depense.montant_formatte }} GNF
-                            </dd>
-                        </div>
-                        <div class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm">
-                            <dt class="text-muted-foreground">Date</dt>
-                            <dd class="col-span-2">
-                                {{ formatDate(depense.date_depense) }}
-                            </dd>
-                        </div>
-                        <div class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm">
-                            <dt class="text-muted-foreground">Concerné</dt>
-                            <dd
-                                class="col-span-2 flex flex-wrap items-center gap-2"
+                <template v-if="activeTab === 'informations'">
+                    <!-- Motif rejet si rejeté ou annulé avec motif -->
+                    <div
+                        v-if="
+                            ['rejete', 'annule'].includes(depense.statut) &&
+                            depense.motif_rejet
+                        "
+                        class="flex items-start gap-2.5 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-700"
+                    >
+                        <AlertTriangle
+                            class="mt-0.5 h-4 w-4 shrink-0 text-orange-600"
+                        />
+                        <div>
+                            <p class="font-medium">Motif du rejet</p>
+                            <p class="mt-0.5">{{ depense.motif_rejet }}</p>
+                            <p
+                                v-if="depense.commentaire_rejet"
+                                class="mt-1 italic opacity-80"
                             >
-                                <span
-                                    class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium"
-                                    :class="categorieClass[depense.categorie]"
-                                >
-                                    {{ depense.categorie_label }}
-                                </span>
-                                <span
-                                    v-if="depense.beneficiaire_label"
-                                    class="font-medium"
-                                    >{{ depense.beneficiaire_label }}</span
-                                >
-                            </dd>
+                                {{ depense.commentaire_rejet }}
+                            </p>
                         </div>
-                        <div
-                            v-if="depense.vehicule_nom"
-                            class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm"
-                        >
-                            <dt class="text-muted-foreground">Véhicule</dt>
-                            <dd class="col-span-2">
-                                {{ depense.vehicule_nom }}
-                            </dd>
-                        </div>
-                        <div
-                            v-if="depense.site_nom"
-                            class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm"
-                        >
-                            <dt class="text-muted-foreground">Site</dt>
-                            <dd class="col-span-2">{{ depense.site_nom }}</dd>
-                        </div>
-                        <div
-                            v-if="depense.commentaire"
-                            class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm"
-                        >
-                            <dt class="text-muted-foreground">Commentaire</dt>
-                            <dd class="col-span-2 whitespace-pre-line">
-                                {{ depense.commentaire }}
-                            </dd>
-                        </div>
-                        <div
-                            v-if="depense.validateur"
-                            class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm"
-                        >
-                            <dt class="text-muted-foreground">Validé par</dt>
-                            <dd class="col-span-2">
-                                {{ depense.validateur }} —
-                                {{ formatDate(depense.date_validation) }}
-                            </dd>
-                        </div>
-                    </dl>
-                </div>
-
-                <!-- Imputations -->
-                <div
-                    v-if="depense.imputations.length > 0"
-                    class="rounded-xl border bg-card"
-                >
-                    <div class="border-b px-4 py-3">
-                        <h2 class="text-sm font-semibold">Imputations</h2>
                     </div>
-                    <div class="divide-y">
-                        <div
-                            v-for="imp in depense.imputations"
-                            :key="imp.id"
-                            class="px-4 py-3 text-sm"
-                        >
-                            <div class="flex items-start justify-between gap-2">
-                                <div>
-                                    <p class="font-medium">
-                                        {{ imp.beneficiaire_label }}
-                                    </p>
-                                    <p
-                                        class="mt-0.5 text-xs text-muted-foreground"
+
+                    <!-- Impact -->
+                    <div
+                        class="flex items-start gap-2.5 rounded-lg border p-3 text-sm"
+                        :class="impactBanner[depense.categorie]"
+                    >
+                        <p>{{ depense.impact_message }}</p>
+                    </div>
+
+                    <!-- Infos principales -->
+                    <div class="rounded-xl border bg-card">
+                        <div class="border-b px-4 py-3">
+                            <h2 class="text-sm font-semibold">Informations</h2>
+                        </div>
+                        <dl class="divide-y">
+                            <div
+                                class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm"
+                            >
+                                <dt class="text-muted-foreground">Montant</dt>
+                                <dd class="col-span-2 text-base font-semibold">
+                                    {{ depense.montant_formatte }} GNF
+                                </dd>
+                            </div>
+                            <div
+                                class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm"
+                            >
+                                <dt class="text-muted-foreground">Date</dt>
+                                <dd class="col-span-2">
+                                    {{ formatDate(depense.date_depense) }}
+                                </dd>
+                            </div>
+                            <div
+                                class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm"
+                            >
+                                <dt class="text-muted-foreground">Concerné</dt>
+                                <dd
+                                    class="col-span-2 flex flex-wrap items-center gap-2"
+                                >
+                                    <span
+                                        class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium"
+                                        :class="
+                                            categorieClass[depense.categorie]
+                                        "
                                     >
-                                        {{ imp.imputation_type }}
-                                        <template v-if="imp.periode_debut">
-                                            —
-                                            {{ formatDate(imp.periode_debut) }}
-                                            → {{ formatDate(imp.periode_fin) }}
-                                        </template>
-                                    </p>
-                                </div>
-                                <div class="text-right">
-                                    <p class="font-semibold">
-                                        {{
-                                            Number(imp.montant).toLocaleString(
-                                                'fr-GN',
-                                            )
-                                        }}
-                                        GNF
-                                    </p>
-                                    <Badge
-                                        variant="outline"
-                                        class="mt-0.5 text-xs"
-                                        >{{ imp.statut }}</Badge
+                                        {{ depense.categorie_label }}
+                                    </span>
+                                    <span
+                                        v-if="depense.beneficiaire_label"
+                                        class="font-medium"
+                                        >{{ depense.beneficiaire_label }}</span
                                     >
+                                </dd>
+                            </div>
+                            <div
+                                v-if="depense.vehicule_nom"
+                                class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm"
+                            >
+                                <dt class="text-muted-foreground">Véhicule</dt>
+                                <dd class="col-span-2">
+                                    {{ depense.vehicule_nom }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="depense.site_nom"
+                                class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm"
+                            >
+                                <dt class="text-muted-foreground">Site</dt>
+                                <dd class="col-span-2">
+                                    {{ depense.site_nom }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="depense.commentaire"
+                                class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Commentaire
+                                </dt>
+                                <dd class="col-span-2 whitespace-pre-line">
+                                    {{ depense.commentaire }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="depense.validateur"
+                                class="grid grid-cols-3 gap-1 px-4 py-2.5 text-sm"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Validé par
+                                </dt>
+                                <dd class="col-span-2">
+                                    {{ depense.validateur }} —
+                                    {{ formatDate(depense.date_validation) }}
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+
+                    <!-- Imputations -->
+                    <div
+                        v-if="depense.imputations.length > 0"
+                        class="rounded-xl border bg-card"
+                    >
+                        <div class="border-b px-4 py-3">
+                            <h2 class="text-sm font-semibold">Imputations</h2>
+                        </div>
+                        <div class="divide-y">
+                            <div
+                                v-for="imp in depense.imputations"
+                                :key="imp.id"
+                                class="px-4 py-3 text-sm"
+                            >
+                                <div
+                                    class="flex items-start justify-between gap-2"
+                                >
+                                    <div>
+                                        <p class="font-medium">
+                                            {{ imp.beneficiaire_label }}
+                                        </p>
+                                        <p
+                                            class="mt-0.5 text-xs text-muted-foreground"
+                                        >
+                                            {{ imp.imputation_type }}
+                                            <template v-if="imp.periode_debut">
+                                                —
+                                                {{
+                                                    formatDate(
+                                                        imp.periode_debut,
+                                                    )
+                                                }}
+                                                →
+                                                {{
+                                                    formatDate(imp.periode_fin)
+                                                }}
+                                            </template>
+                                        </p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="font-semibold">
+                                            {{
+                                                Number(
+                                                    imp.montant,
+                                                ).toLocaleString('fr-GN')
+                                            }}
+                                            GNF
+                                        </p>
+                                        <Badge
+                                            variant="outline"
+                                            class="mt-0.5 text-xs"
+                                            >{{ imp.statut }}</Badge
+                                        >
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </template>
+
+                <template v-if="activeTab === 'historique'">
+                    <div class="rounded-xl border bg-card p-5">
+                        <AuditTimeline
+                            auditable-type="App\Models\Depense"
+                            :auditable-id="depense.id"
+                            module="depenses"
+                        />
+                    </div>
+                </template>
             </div>
         </div>
-
-        <!-- Historique dialog -->
-        <HistoriqueDialog
-            :depense-id="showHistorique ? depense.id : null"
-            @close="showHistorique = false"
-        />
 
         <!-- Reject dialog -->
         <Dialog
