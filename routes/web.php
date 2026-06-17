@@ -20,6 +20,7 @@ use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as Comptabi
 use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
 use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteCommissionVenteController;
 use App\Http\Controllers\Comptabilite\ComptabiliteDashboardController;
+use App\Http\Controllers\Comptabilite\HistoriqueActionsController;
 use App\Http\Controllers\Comptabilite\JournalTresorerieController;
 use App\Http\Controllers\Comptabilite\PaiementFicheController;
 use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
@@ -125,6 +126,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 
     // ── Module : Ventes ───────────────────────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
+        Route::get('ventes/check-solvabilite', [CommandeVenteController::class, 'checkSolvabilite'])->name('ventes.check-solvabilite');
         Route::resource('ventes', CommandeVenteController::class)->except([]);
         Route::get('pdv', [PdvController::class, 'index'])->name('pdv.index');
         Route::post('pdv/checkout', [PdvController::class, 'checkout'])->name('pdv.checkout');
@@ -254,6 +256,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::patch('depenses/{depense}/soumettre', [DepenseController::class, 'soumettre'])->name('depenses.soumettre');
         Route::patch('depenses/{depense}/valider', [DepenseController::class, 'valider'])->name('depenses.valider');
         Route::patch('depenses/{depense}/rejeter', [DepenseController::class, 'rejeter'])->name('depenses.rejeter');
+        Route::get('depenses/{depense}/historique', [DepenseController::class, 'historique'])->name('depenses.historique');
     });
 
     // ── Module : RH (Ressources humaines) ────────────────────────────────────
@@ -329,9 +332,10 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 
         // ── Périodes de paiement ──────────────────────────────────────────────
         Route::get('periodes', [PaiementPeriodeController::class, 'index'])->name('periodes.index');
-        Route::get('periodes/create', [PaiementPeriodeController::class, 'create'])->name('periodes.create');
+        Route::get('periodes/creer', [PaiementPeriodeController::class, 'create'])->name('periodes.create');
         Route::post('periodes', [PaiementPeriodeController::class, 'store'])->name('periodes.store');
         Route::get('periodes/{periode}', [PaiementPeriodeController::class, 'show'])->name('periodes.show');
+        Route::get('periodes/{periode}/pdf', [PaiementPeriodeController::class, 'exportPdf'])->name('periodes.pdf');
         Route::post('periodes/{periode}/calculer', [PaiementPeriodeController::class, 'calculer'])->name('periodes.calculer');
         Route::post('periodes/{periode}/valider', [PaiementPeriodeController::class, 'valider'])->name('periodes.valider');
         Route::post('periodes/{periode}/cloturer', [PaiementPeriodeController::class, 'cloturer'])->name('periodes.cloturer');
@@ -346,6 +350,12 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
             ->name('salaires.excel');
         Route::get('salaires/export/pdf', [SalaireController::class, 'exportPdf'])
             ->name('salaires.pdf');
+
+        // ── Historique des actions ────────────────────────────────────────────
+        Route::get('historique', [HistoriqueActionsController::class, 'index'])
+            ->name('historique.index');
+        Route::get('historique/entite', [HistoriqueActionsController::class, 'entite'])
+            ->name('historique.entite');
     });
 
     // ── Module : Logistique inter-sites ───────────────────────────────────────

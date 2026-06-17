@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AuditDrawer from '@/components/AuditDrawer.vue';
+import FilterBar from '@/components/FilterBar.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,6 +30,7 @@ import {
     Download,
     Eye,
     FileText,
+    History,
     MoreVertical,
     Pencil,
     Plus,
@@ -182,6 +185,14 @@ const rejectMotif = ref('');
 const rejectCommentaire = ref('');
 const rejectErrors = ref<{ motif?: string; commentaire?: string }>({});
 const rejectProcessing = ref(false);
+
+const showAudit = ref(false);
+const auditDepenseId = ref('');
+
+function openAudit(id: string) {
+    auditDepenseId.value = id;
+    showAudit.value = true;
+}
 
 function soumettre(id: string) {
     router.patch(
@@ -414,90 +425,81 @@ const hasActiveFilters = ref(
                 </div>
             </div>
 
-            <!-- Recherche -->
-            <div class="relative">
-                <Search
-                    class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            <!-- Filtres -->
+            <FilterBar>
+                <select
+                    v-model="filterType"
+                    class="h-9 w-[180px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Tous les types</option>
+                    <option v-for="t in types" :key="t.id" :value="t.id">
+                        {{ t.libelle }}
+                    </option>
+                </select>
+
+                <select
+                    v-model="filterCategorie"
+                    class="h-9 w-[180px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Tous les concernés</option>
+                    <option
+                        v-for="c in categories"
+                        :key="c.value"
+                        :value="c.value"
+                    >
+                        {{ c.label }}
+                    </option>
+                </select>
+
+                <select
+                    v-model="filterStatut"
+                    class="h-9 w-[160px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Tous les statuts</option>
+                    <option
+                        v-for="s in statuts"
+                        :key="s.value"
+                        :value="s.value"
+                    >
+                        {{ s.label }}
+                    </option>
+                </select>
+
+                <select
+                    v-model="filterSite"
+                    class="h-9 w-[170px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Tous les sites</option>
+                    <option v-for="s in sites" :key="s.id" :value="s.id">
+                        {{ s.nom }}
+                    </option>
+                </select>
+
+                <input
+                    v-model="filterDebut"
+                    type="date"
+                    class="h-9 w-[140px] rounded-md border border-input bg-background px-2 text-sm"
                 />
                 <input
-                    v-model="filterSearch"
-                    type="search"
-                    placeholder="Rechercher une dépense…"
-                    class="h-10 w-full rounded-lg border border-input bg-background pr-3 pl-9 text-sm shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    @keydown.enter="applyFilters"
+                    v-model="filterFin"
+                    type="date"
+                    class="h-9 w-[140px] rounded-md border border-input bg-background px-2 text-sm"
                 />
-            </div>
 
-            <!-- Filtres -->
-            <div
-                class="flex flex-wrap items-end gap-2 rounded-xl border bg-muted/30 p-3"
-            >
-                <div class="flex flex-1 flex-wrap gap-2">
-                    <!-- Recherche (type) -->
-                    <select
-                        v-model="filterType"
-                        class="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                    >
-                        <option value="">Tous les types</option>
-                        <option v-for="t in types" :key="t.id" :value="t.id">
-                            {{ t.libelle }}
-                        </option>
-                    </select>
-
-                    <!-- Concerné (catégorie) -->
-                    <select
-                        v-model="filterCategorie"
-                        class="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                    >
-                        <option value="">Tous les concernés</option>
-                        <option
-                            v-for="c in categories"
-                            :key="c.value"
-                            :value="c.value"
-                        >
-                            {{ c.label }}
-                        </option>
-                    </select>
-
-                    <!-- Statut -->
-                    <select
-                        v-model="filterStatut"
-                        class="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                    >
-                        <option value="">Tous les statuts</option>
-                        <option
-                            v-for="s in statuts"
-                            :key="s.value"
-                            :value="s.value"
-                        >
-                            {{ s.label }}
-                        </option>
-                    </select>
-
-                    <!-- Site -->
-                    <select
-                        v-model="filterSite"
-                        class="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                    >
-                        <option value="">Tous les sites</option>
-                        <option v-for="s in sites" :key="s.id" :value="s.id">
-                            {{ s.nom }}
-                        </option>
-                    </select>
-
-                    <!-- Dates -->
-                    <input
-                        v-model="filterDebut"
-                        type="date"
-                        class="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                <div class="relative w-[240px]">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
                     <input
-                        v-model="filterFin"
-                        type="date"
-                        class="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                        v-model="filterSearch"
+                        type="search"
+                        placeholder="Rechercher…"
+                        class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        @keydown.enter="applyFilters"
                     />
                 </div>
-                <div class="flex gap-2">
+
+                <template #actions>
                     <Button size="sm" @click="applyFilters">
                         <Search class="mr-1.5 h-3.5 w-3.5" />
                         Filtrer
@@ -511,8 +513,8 @@ const hasActiveFilters = ref(
                         <X class="mr-1.5 h-3.5 w-3.5" />
                         Réinitialiser
                     </Button>
-                </div>
-            </div>
+                </template>
+            </FilterBar>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
@@ -689,6 +691,15 @@ const hasActiveFilters = ref(
                                                     <Eye class="h-4 w-4" />
                                                     Voir le détail
                                                 </Link>
+                                            </DropdownMenuItem>
+
+                                            <!-- Historique -->
+                                            <DropdownMenuItem
+                                                class="cursor-pointer"
+                                                @click="openAudit(d.id)"
+                                            >
+                                                <History class="h-4 w-4" />
+                                                Historique
                                             </DropdownMenuItem>
 
                                             <!-- Modifier (brouillon, rejeté ou annulé) -->
@@ -942,5 +953,13 @@ const hasActiveFilters = ref(
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        <AuditDrawer
+            v-model:visible="showAudit"
+            title="Historique de la dépense"
+            auditable-type="App\Models\Depense"
+            :auditable-id="auditDepenseId"
+            module="depenses"
+        />
     </AppLayout>
 </template>

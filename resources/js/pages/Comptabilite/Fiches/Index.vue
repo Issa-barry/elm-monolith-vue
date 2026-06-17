@@ -1,12 +1,11 @@
 <script setup lang="ts">
+import ComptabiliteFilters from '@/components/ComptabiliteFilters.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Download, ReceiptText } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Dropdown from 'primevue/dropdown';
-import InputText from 'primevue/inputtext';
 import { computed, ref } from 'vue';
 
 interface Fiche {
@@ -89,22 +88,15 @@ const selectedSite = ref(props.filters.site_id ?? '');
 const selectedStatut = ref(props.filters.statut ?? '');
 const selectedPeriode = ref(props.filters.periode_id ?? '');
 
-const siteOptions = computed(() => [
-    { label: 'Toutes les agences', value: '' },
-    ...props.sites.map((s) => ({ label: s.nom, value: s.id })),
-]);
-
-const periodeOptions = computed(() => [
-    { label: 'Toutes les périodes', value: '' },
-    ...props.periodes.map((p) => ({ label: p.reference, value: p.id })),
-]);
-
-const statutOptions = computed(() => [
-    { label: 'Tous les statuts', value: '' },
-    ...props.statuts,
-]);
-
-let searchTimer: ReturnType<typeof setTimeout> | null = null;
+const hasActiveFilters = computed(
+    () =>
+        !!(
+            searchInput.value ||
+            selectedSite.value ||
+            selectedStatut.value ||
+            selectedPeriode.value
+        ),
+);
 
 function applyFilters() {
     router.get(
@@ -119,9 +111,16 @@ function applyFilters() {
     );
 }
 
-function onSearch() {
-    if (searchTimer) clearTimeout(searchTimer);
-    searchTimer = setTimeout(applyFilters, 400);
+function resetFilters() {
+    searchInput.value = '';
+    selectedSite.value = '';
+    selectedStatut.value = '';
+    selectedPeriode.value = '';
+    router.get(
+        typeRoute[props.type],
+        {},
+        { preserveState: true, replace: true },
+    );
 }
 
 function fmt(n: number) {
@@ -218,41 +217,45 @@ function exportExcel() {
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-2">
-                <InputText
-                    v-model="searchInput"
-                    placeholder="Rechercher un bénéficiaire…"
-                    class="min-w-[220px] text-sm"
-                    @input="onSearch"
-                />
-                <Dropdown
+            <ComptabiliteFilters
+                v-model:search="searchInput"
+                :has-active-filters="hasActiveFilters"
+                @filter="applyFilters"
+                @reset="resetFilters"
+            >
+                <select
+                    v-if="sites.length > 0"
                     v-model="selectedSite"
-                    :options="siteOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Agence"
-                    class="min-w-[150px] text-sm"
-                    @change="applyFilters"
-                />
-                <Dropdown
+                    class="h-9 w-[170px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Toutes les agences</option>
+                    <option v-for="s in sites" :key="s.id" :value="s.id">
+                        {{ s.nom }}
+                    </option>
+                </select>
+                <select
                     v-model="selectedStatut"
-                    :options="statutOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Statut"
-                    class="min-w-[150px] text-sm"
-                    @change="applyFilters"
-                />
-                <Dropdown
+                    class="h-9 w-[160px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Tous les statuts</option>
+                    <option
+                        v-for="s in statuts"
+                        :key="s.value"
+                        :value="s.value"
+                    >
+                        {{ s.label }}
+                    </option>
+                </select>
+                <select
                     v-model="selectedPeriode"
-                    :options="periodeOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Période"
-                    class="min-w-[170px] text-sm"
-                    @change="applyFilters"
-                />
-            </div>
+                    class="h-9 w-[200px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Toutes les périodes</option>
+                    <option v-for="p in periodes" :key="p.id" :value="p.id">
+                        {{ p.reference }}
+                    </option>
+                </select>
+            </ComptabiliteFilters>
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">

@@ -15,10 +15,11 @@
     .doc-periode { font-size: 11px; font-weight: 600; color: #374151; margin-top: 3px; }
     .doc-date { font-size: 7.5px; color: #6b7280; margin-top: 3px; }
 
-    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; table-layout: fixed; }
     thead tr { background: #1e40af; }
-    thead th { padding: 5px 7px; text-align: left; font-size: 7.5px; font-weight: 700; text-transform: uppercase; color: #fff; letter-spacing: 0.04em; }
+    thead th { padding: 5px 7px; text-align: left; font-size: 7.5px; font-weight: 700; text-transform: uppercase; color: #fff; letter-spacing: 0.04em; white-space: normal; }
     thead th.right { text-align: right; }
+    thead th.center { text-align: center; }
     tbody tr { border-bottom: 1px solid #e5e7eb; }
     tbody tr:nth-child(even) { background: #f9fafb; }
     tbody td { padding: 4px 7px; font-size: 8.5px; }
@@ -28,6 +29,7 @@
     .gain { color: #047857; }
     .deduction { color: #b91c1c; }
     .amber { color: #d97706; font-weight: 700; }
+    .sig-line { display: block; border-bottom: 0.75pt solid #9ca3af; height: 16pt; width: 100%; }
 
     .totaux { margin-top: 4px; width: 55%; margin-left: auto; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
     .totaux table { margin-bottom: 0; }
@@ -60,16 +62,17 @@
     <table>
         <thead>
             <tr>
-                <th style="width:22%">Salarié</th>
-                <th style="width:13%">Poste</th>
-                <th style="width:10%">Agence</th>
-                <th class="right" style="width:11%">Brut</th>
-                <th class="right" style="width:9%">Primes</th>
-                <th class="right" style="width:9%">Déductions</th>
-                <th class="right" style="width:10%">Net</th>
-                <th class="right" style="width:9%">Déjà payé</th>
-                <th class="right" style="width:9%">Reste</th>
-                <th style="width:8%">Statut</th>
+                <th style="width:19%">Salarié</th>
+                <th style="width:11%">Poste</th>
+                <th style="width:9%">Agence</th>
+                <th class="right" style="width:9%">Brut</th>
+                <th class="right" style="width:8%">Primes</th>
+                <th class="right" style="width:8%">Déductions</th>
+                <th class="right" style="width:9%">Net</th>
+                <th class="right" style="width:8%">Déjà payé</th>
+                <th class="right" style="width:7%">Reste</th>
+                <th style="width:6%">Statut</th>
+                <th class="center" style="width:16%">Signature</th>
             </tr>
         </thead>
         <tbody>
@@ -85,6 +88,7 @@
                 <td class="right gain">{{ number_format($l['deja_paye'], 0, ',', ' ') }}</td>
                 <td class="right {{ $l['reste_a_payer'] > 0 ? 'amber' : '' }}">{{ number_format($l['reste_a_payer'], 0, ',', ' ') }}</td>
                 <td>{{ $l['statut_label'] }}</td>
+                <td><span class="sig-line"></span></td>
             </tr>
             @endforeach
         </tbody>
@@ -97,6 +101,7 @@
                 <td class="right">{{ number_format($total_net, 0, ',', ' ') }}</td>
                 <td class="right">{{ number_format($total_paye, 0, ',', ' ') }}</td>
                 <td class="right" style="color: #d97706">{{ number_format($total_reste, 0, ',', ' ') }}</td>
+                <td></td>
                 <td></td>
             </tr>
         </tfoot>
