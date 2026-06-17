@@ -104,7 +104,6 @@ const filtreStatut = ref(props.filtre_statut ?? '');
 const filtreSite = ref(props.filtre_site ?? '');
 const searchVal = ref(props.search ?? '');
 
-
 const hasActiveFilters = computed(
     () =>
         !!(

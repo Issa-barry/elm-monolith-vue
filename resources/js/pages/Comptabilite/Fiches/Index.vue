@@ -88,7 +88,6 @@ const selectedSite = ref(props.filters.site_id ?? '');
 const selectedStatut = ref(props.filters.statut ?? '');
 const selectedPeriode = ref(props.filters.periode_id ?? '');
 
-
 const hasActiveFilters = computed(
     () =>
         !!(
