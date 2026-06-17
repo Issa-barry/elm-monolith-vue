@@ -104,18 +104,6 @@ const filtreStatut = ref(props.filtre_statut ?? '');
 const filtreSite = ref(props.filtre_site ?? '');
 const searchVal = ref(props.search ?? '');
 
-const STATUT_OPTIONS = [
-    { value: '', label: 'Tous les statuts' },
-    { value: 'en_attente', label: 'En attente' },
-    { value: 'calcule', label: 'Calculé' },
-    { value: 'partiellement_paye', label: 'Part. payé' },
-    { value: 'paye', label: 'Payé' },
-];
-
-const siteOptions = computed(() => [
-    { value: '', label: 'Toutes les agences' },
-    ...props.sites,
-]);
 
 const hasActiveFilters = computed(
     () =>

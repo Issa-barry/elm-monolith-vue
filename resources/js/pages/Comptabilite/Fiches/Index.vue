@@ -88,20 +88,6 @@ const selectedSite = ref(props.filters.site_id ?? '');
 const selectedStatut = ref(props.filters.statut ?? '');
 const selectedPeriode = ref(props.filters.periode_id ?? '');
 
-const siteOptions = computed(() => [
-    { label: 'Toutes les agences', value: '' },
-    ...props.sites.map((s) => ({ label: s.nom, value: s.id })),
-]);
-
-const periodeOptions = computed(() => [
-    { label: 'Toutes les périodes', value: '' },
-    ...props.periodes.map((p) => ({ label: p.reference, value: p.id })),
-]);
-
-const statutOptions = computed(() => [
-    { label: 'Tous les statuts', value: '' },
-    ...props.statuts,
-]);
 
 const hasActiveFilters = computed(
     () =>

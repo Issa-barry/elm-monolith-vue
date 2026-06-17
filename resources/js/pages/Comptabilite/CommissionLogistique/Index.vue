@@ -42,10 +42,6 @@ interface Kpis {
     total_paye: number;
 }
 
-interface SelectOption {
-    value: string | null;
-    label: string;
-}
 
 interface PeriodeOption {
     code: string;
