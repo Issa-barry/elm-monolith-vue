@@ -4,12 +4,13 @@ import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowDown,
     ArrowLeft,
     ArrowUp,
+    Building2,
     Factory,
     History,
     Layers,
@@ -21,9 +22,19 @@ import {
     TrendingDown,
     Warehouse,
 } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
 import HistoriqueModal from './partials/HistoriqueModal.vue';
+
+interface SiteStock {
+    site_id: string;
+    site_code: string | null;
+    site_nom: string | null;
+    qte_stock: number;
+    seuil_alerte_stock: number | null;
+    is_alerte: boolean;
+    updated_at: string | null;
+}
 
 interface Produit {
     id: string;
@@ -48,15 +59,18 @@ interface Produit {
     has_stock: boolean;
     created_at: string | null;
     updated_at: string | null;
+    stocks_par_site: SiteStock[];
 }
 
-interface MouvementStock {
+interface StockMouvement {
     id: string;
     type: 'entree' | 'sortie';
     quantite: number;
     stock_avant: number | null;
     stock_apres: number | null;
     notes: string | null;
+    site_nom: string | null;
+    site_code: string | null;
     created_at: string | null;
     createur_nom: string | null;
     is_initial?: boolean;
@@ -72,13 +86,29 @@ interface AuditEntry {
     created_at: string;
 }
 
+interface Site {
+    id: string;
+    nom: string;
+    code: string;
+}
+
 const props = defineProps<{
     produit: Produit;
-    mouvements: MouvementStock[];
+    mouvements: StockMouvement[];
     historiques: AuditEntry[];
+    sites: Site[];
 }>();
 
-const { can } = usePermissions();
+const { can, hasRole } = usePermissions();
+const page = usePage();
+
+const isAdmin = computed(
+    () => hasRole('super_admin') || hasRole('admin_entreprise'),
+);
+const userDefaultSiteId = computed(
+    () => (page.props.auth?.default_site?.id as string) ?? null,
+);
+
 const showStockModal = ref(false);
 const showHistoriqueModal = ref(false);
 
@@ -124,6 +154,27 @@ function stockColorClass(produit: Produit): string {
     if (produit.is_low_stock) return 'text-amber-600';
     return 'text-emerald-600';
 }
+
+function siteStockColor(s: SiteStock): string {
+    if (s.qte_stock <= 0) return 'text-destructive';
+    if (s.seuil_alerte_stock && s.qte_stock <= s.seuil_alerte_stock)
+        return 'text-amber-600';
+    return 'text-emerald-600';
+}
+
+// Format mouvements so the date field matches what HistoriqueModal expects (string)
+const ajustements = props.mouvements.map((m) => ({
+    ...m,
+    created_at: m.created_at
+        ? new Intl.DateTimeFormat('fr-FR', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+          }).format(new Date(m.created_at))
+        : '—',
+}));
 </script>
 
 <template>
@@ -209,7 +260,6 @@ function stockColorClass(produit: Produit): string {
 
             <!-- ─── Image + infos principales ─── -->
             <div class="flex gap-5 rounded-xl border bg-card p-5">
-                <!-- Image -->
                 <div
                     class="h-24 w-24 shrink-0 overflow-hidden rounded-xl border bg-muted sm:h-32 sm:w-32"
                 >
@@ -227,9 +277,7 @@ function stockColorClass(produit: Produit): string {
                     </div>
                 </div>
 
-                <!-- Infos -->
                 <div class="flex min-w-0 flex-1 flex-col justify-between gap-3">
-                    <!-- Nom + critique (mobile seulement) -->
                     <div class="sm:hidden">
                         <div class="flex items-center gap-1.5">
                             <span class="text-lg leading-tight font-semibold">{{
@@ -245,7 +293,6 @@ function stockColorClass(produit: Produit): string {
                         }}</span>
                     </div>
 
-                    <!-- Badges -->
                     <div class="flex flex-wrap items-center gap-2">
                         <StatusDot
                             :label="produit.statut_label"
@@ -272,7 +319,6 @@ function stockColorClass(produit: Produit): string {
                         </span>
                     </div>
 
-                    <!-- Codes -->
                     <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                         <div>
                             <span class="text-xs text-muted-foreground"
@@ -294,18 +340,18 @@ function stockColorClass(produit: Produit): string {
                 </div>
             </div>
 
-            <!-- ─── Stock ─── -->
+            <!-- ─── Stock global ─── -->
             <div v-if="produit.has_stock" class="rounded-xl border bg-card p-5">
                 <h2
                     class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
                 >
                     <Warehouse class="h-4 w-4" />
-                    Stock
+                    Stock total
                 </h2>
                 <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
                     <div class="rounded-lg bg-muted/50 p-4 text-center">
                         <p class="mb-1 text-xs text-muted-foreground">
-                            Quantité actuelle
+                            Quantité totale
                         </p>
                         <p
                             class="text-3xl font-bold tabular-nums"
@@ -349,6 +395,78 @@ function stockColorClass(produit: Produit): string {
                             }}
                         </p>
                     </div>
+                </div>
+            </div>
+
+            <!-- ─── Stock par agence ─── -->
+            <div
+                v-if="produit.has_stock && produit.stocks_par_site.length > 0"
+                class="rounded-xl border bg-card p-5"
+            >
+                <h2
+                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
+                >
+                    <Building2 class="h-4 w-4" />
+                    Stock par agence
+                </h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b text-xs text-muted-foreground">
+                                <th class="pr-4 pb-2 text-left font-medium">
+                                    Site
+                                </th>
+                                <th class="pr-4 pb-2 text-right font-medium">
+                                    Stock
+                                </th>
+                                <th class="pr-4 pb-2 text-right font-medium">
+                                    Seuil alerte
+                                </th>
+                                <th class="pb-2 text-left font-medium">
+                                    Dernière mise à jour
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-border/50">
+                            <tr
+                                v-for="s in produit.stocks_par_site"
+                                :key="s.site_id"
+                            >
+                                <td class="py-2.5 pr-4">
+                                    <div class="flex items-center gap-2">
+                                        <span
+                                            class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-semibold text-muted-foreground"
+                                        >
+                                            {{ s.site_code ?? '?' }}
+                                        </span>
+                                        <span class="text-sm font-medium">{{
+                                            s.site_nom ?? '—'
+                                        }}</span>
+                                    </div>
+                                </td>
+                                <td
+                                    class="py-2.5 pr-4 text-right font-semibold tabular-nums"
+                                    :class="siteStockColor(s)"
+                                >
+                                    {{ formatQte(s.qte_stock) }}
+                                </td>
+                                <td
+                                    class="py-2.5 pr-4 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{
+                                        s.seuil_alerte_stock != null
+                                            ? formatQte(s.seuil_alerte_stock)
+                                            : '—'
+                                    }}
+                                </td>
+                                <td
+                                    class="py-2.5 text-xs text-muted-foreground"
+                                >
+                                    {{ formatDateShort(s.updated_at) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -479,13 +597,13 @@ function stockColorClass(produit: Produit): string {
                 </div>
             </div>
 
-            <!-- ─── Historique du stock ─── -->
+            <!-- ─── Mouvements de stock ─── -->
             <div v-if="produit.has_stock" class="rounded-xl border bg-card p-5">
                 <h2
                     class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
                 >
                     <History class="h-4 w-4" />
-                    Historique du stock
+                    Mouvements de stock récents
                 </h2>
 
                 <div
@@ -502,16 +620,19 @@ function stockColorClass(produit: Produit): string {
                                 <th class="w-36 pb-2 text-left font-medium">
                                     Date &amp; heure
                                 </th>
+                                <th class="w-28 pb-2 text-left font-medium">
+                                    Site
+                                </th>
                                 <th class="w-40 pb-2 text-left font-medium">
                                     Par
                                 </th>
                                 <th class="w-28 pb-2 text-center font-medium">
                                     Action
                                 </th>
-                                <th class="w-28 pb-2 text-right font-medium">
+                                <th class="w-24 pb-2 text-right font-medium">
                                     Avant
                                 </th>
-                                <th class="w-28 pb-2 text-right font-medium">
+                                <th class="w-24 pb-2 text-right font-medium">
                                     Après
                                 </th>
                                 <th class="pb-2 pl-6 text-left font-medium">
@@ -529,6 +650,17 @@ function stockColorClass(produit: Produit): string {
                                     class="w-36 py-2.5 pr-4 font-mono text-xs text-muted-foreground"
                                 >
                                     {{ formatDateShort(m.created_at) }}
+                                </td>
+                                <td class="w-28 py-2.5 pr-4">
+                                    <span
+                                        v-if="m.site_code || m.site_nom"
+                                        class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-medium text-muted-foreground"
+                                    >
+                                        {{ m.site_code ?? m.site_nom }}
+                                    </span>
+                                    <span v-else class="text-muted-foreground"
+                                        >—</span
+                                    >
                                 </td>
                                 <td class="w-40 py-2.5 pr-4">
                                     {{ m.createur_nom || '—' }}
@@ -556,12 +688,12 @@ function stockColorClass(produit: Produit): string {
                                     </span>
                                 </td>
                                 <td
-                                    class="w-28 py-2.5 pr-4 text-right text-muted-foreground tabular-nums"
+                                    class="w-24 py-2.5 pr-4 text-right text-muted-foreground tabular-nums"
                                 >
                                     {{ formatQte(m.stock_avant) }}
                                 </td>
                                 <td
-                                    class="w-28 py-2.5 pr-4 text-right font-semibold tabular-nums"
+                                    class="w-24 py-2.5 pr-4 text-right font-semibold tabular-nums"
                                 >
                                     {{ formatQte(m.stock_apres) }}
                                 </td>
@@ -576,14 +708,19 @@ function stockColorClass(produit: Produit): string {
                 </div>
             </div>
         </div>
+
         <HistoriqueModal
             v-model:visible="showHistoriqueModal"
-            :historiques="historiques"
+            :ajustements="ajustements"
+            :modifications="historiques"
             :title="`Historique — ${produit.nom}`"
         />
         <AjusterStockModal
             v-model:visible="showStockModal"
             :produit="produit"
+            :sites="sites"
+            :is-admin="isAdmin"
+            :user-default-site-id="userDefaultSiteId"
         />
     </AppLayout>
 </template>

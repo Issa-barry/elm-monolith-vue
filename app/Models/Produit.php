@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -160,6 +161,11 @@ class Produit extends Model
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────
+
+    public function stocks(): HasMany
+    {
+        return $this->hasMany(ProduitStock::class);
+    }
 
     public function organization(): BelongsTo
     {

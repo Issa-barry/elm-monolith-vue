@@ -42,17 +42,24 @@ test('ajuster stock depuis la liste — augmenter', async ({ page }) => {
     const stockText = await dialog.locator('.text-2xl').first().innerText();
     const _stockAvant = parseInt(stockText.trim(), 10);
 
+    // Select a site first (required before entering quantity)
+    const siteSelect = dialog.locator('[data-testid="stock-site-select"]');
+    await siteSelect.click();
+    await page.locator('[role="option"]').first().click();
+
     // Fill "augmenter"
-    await dialog.locator('#ajuster-augmenter').fill('5');
+    const augInput = dialog.locator('[data-testid="stock-augmenter-input"] input');
+    await augInput.pressSequentially('5');
 
     // Preview should show stockAvant + 5
     await expect(dialog.locator('text=Stock après ajustement')).toBeVisible();
 
     // Select motif
-    await dialog.locator('[data-pc-name="dropdown"]').click();
+    const motifSelect = dialog.locator('[data-testid="stock-motif-select"]');
+    await motifSelect.click();
     await page.getByRole('option', { name: 'Après production' }).click();
 
-    await dialog.locator('button', { hasText: /valider/i }).click();
+    await dialog.locator('[data-testid="stock-submit-button"]').click();
     await expect(dialog).toBeHidden({ timeout: 10_000 });
 
     // Navigate back to reload stock
@@ -85,14 +92,21 @@ test('ajuster stock depuis la liste — diminuer', async ({ page }) => {
         .filter({ hasText: /ajuster le stock/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
-    await dialog.locator('#ajuster-diminuer').fill('3');
+    // Select a site first (required before entering quantity)
+    const siteSelect = dialog.locator('[data-testid="stock-site-select"]');
+    await siteSelect.click();
+    await page.locator('[role="option"]').first().click();
+
+    const dimInput = dialog.locator('[data-testid="stock-diminuer-input"] input');
+    await dimInput.pressSequentially('3');
     await expect(dialog.locator('text=Stock après ajustement')).toBeVisible();
 
     // Select motif
-    await dialog.locator('[data-pc-name="dropdown"]').click();
+    const motifSelect = dialog.locator('[data-testid="stock-motif-select"]');
+    await motifSelect.click();
     await page.getByRole('option', { name: 'Perte' }).click();
 
-    await dialog.locator('button', { hasText: /valider/i }).click();
+    await dialog.locator('[data-testid="stock-submit-button"]').click();
     await expect(dialog).toBeHidden({ timeout: 10_000 });
 });
 
@@ -122,13 +136,20 @@ test('ajuster stock depuis la fiche produit', async ({ page }) => {
         .filter({ hasText: /ajuster le stock/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
-    await dialog.locator('#ajuster-augmenter').fill('2');
+    // Select a site first (required before entering quantity)
+    const siteSelect = dialog.locator('[data-testid="stock-site-select"]');
+    await siteSelect.click();
+    await page.locator('[role="option"]').first().click();
+
+    const augInput = dialog.locator('[data-testid="stock-augmenter-input"] input');
+    await augInput.pressSequentially('2');
 
     // Select motif
-    await dialog.locator('[data-pc-name="dropdown"]').click();
+    const motifSelect = dialog.locator('[data-testid="stock-motif-select"]');
+    await motifSelect.click();
     await page.getByRole('option', { name: 'Après production' }).click();
 
-    await dialog.locator('button', { hasText: /valider/i }).click();
+    await dialog.locator('[data-testid="stock-submit-button"]').click();
     await expect(dialog).toBeHidden({ timeout: 10_000 });
 });
 
@@ -152,18 +173,23 @@ test('ajuster stock — remplir un champ efface lautre (exclusion mutuelle)', as
         .filter({ hasText: /ajuster le stock/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
-    const augInput = dialog.locator('#ajuster-augmenter');
-    const dimInput = dialog.locator('#ajuster-diminuer');
+    // Select a site first (required before entering quantity)
+    const siteSelect = dialog.locator('[data-testid="stock-site-select"]');
+    await siteSelect.click();
+    await page.locator('[role="option"]').first().click();
 
-    // Fill augmenter → diminuer should clear
-    await augInput.fill('10');
+    const augInput = dialog.locator('[data-testid="stock-augmenter-input"] input');
+    const dimInput = dialog.locator('[data-testid="stock-diminuer-input"] input');
+
+    // Fill augmenter → diminuer should stay empty
+    await augInput.pressSequentially('10');
     await expect(augInput).toHaveValue('10');
     await expect(dimInput).toHaveValue('');
 
-    // Fill diminuer → augmenter should clear
-    await dimInput.fill('5');
+    // Fill diminuer → augmenter should be cleared by the watcher + remount
+    await dimInput.pressSequentially('5');
     await expect(dimInput).toHaveValue('5');
-    await expect(augInput).toHaveValue('');
+    await expect(augInput).toHaveValue('', { timeout: 5_000 });
 
     // Cancel without submitting
     await dialog.locator('button', { hasText: /annuler/i }).click();
@@ -190,7 +216,7 @@ test('ajuster stock — bouton Valider désactivé si aucun champ renseigne', as
         .filter({ hasText: /ajuster le stock/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
-    const validateBtn = dialog.locator('button', { hasText: /valider/i });
+    const validateBtn = dialog.locator('[data-testid="stock-submit-button"]');
     await expect(validateBtn).toBeDisabled();
 
     await dialog.locator('button', { hasText: /annuler/i }).click();

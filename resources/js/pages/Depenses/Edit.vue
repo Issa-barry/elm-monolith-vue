@@ -205,6 +205,25 @@ const concerneLabel = computed(
             ?.label ?? '',
 );
 
+// ── Montant formaté ───────────────────────────────────────────────────────────
+const montantDisplay = ref(
+    props.depense.montant
+        ? Number(props.depense.montant).toLocaleString('fr-FR', {
+              maximumFractionDigits: 0,
+          })
+        : '',
+);
+
+function handleMontantInput(e: Event) {
+    const raw = (e.target as HTMLInputElement).value.replace(/\D/g, '');
+    form.montant = raw ? parseInt(raw, 10) : '';
+    montantDisplay.value = raw
+        ? parseInt(raw, 10).toLocaleString('fr-FR', {
+              maximumFractionDigits: 0,
+          })
+        : '';
+}
+
 // ── Soumission ────────────────────────────────────────────────────────────────
 const toast = useToast();
 
@@ -562,16 +581,17 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                         Montant (GNF)
                                         <span class="text-destructive">*</span>
                                     </Label>
-                                    <Input
+                                    <input
                                         id="dep-montant"
-                                        v-model.number="form.montant"
-                                        type="number"
-                                        min="1"
-                                        step="1"
+                                        :value="montantDisplay"
+                                        type="text"
+                                        inputmode="numeric"
+                                        class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm font-bold tabular-nums shadow-sm transition-colors placeholder:font-normal placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                         :class="{
                                             'border-destructive':
                                                 form.errors.montant,
                                         }"
+                                        @input="handleMontantInput"
                                     />
                                     <p
                                         v-if="form.errors.montant"

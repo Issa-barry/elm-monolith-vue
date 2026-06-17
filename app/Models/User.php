@@ -106,7 +106,7 @@ class User extends Authenticatable
      */
     public function permissionsMap(): array
     {
-        $resources = ['clients', 'prestataires', 'livreurs', 'proprietaires', 'vehicules', 'equipes-livraison', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres', 'logistique', 'depenses', 'rh-employes', 'rh-contrats', 'rh-paie'];
+        $resources = ['clients', 'prestataires', 'livreurs', 'proprietaires', 'vehicules', 'equipes-livraison', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres', 'logistique', 'depenses', 'rh-employes', 'rh-contrats', 'rh-paie', 'comptabilite'];
         $actions = ['create', 'read', 'update', 'delete'];
 
         $map = [];
@@ -118,7 +118,7 @@ class User extends Authenticatable
         }
 
         // Permissions standalone hors matrice CRUD
-        $standalone = ['logistique.commission.verser', 'ventes.qte.update', 'ventes.prix.update', 'rh-paie.validate', 'rh-paie.pay', 'rh-paie.close'];
+        $standalone = ['logistique.commission.verser', 'ventes.qte.update', 'ventes.prix.update', 'rh-paie.validate', 'rh-paie.pay', 'rh-paie.close', 'comptabilite.payer'];
         foreach ($standalone as $perm) {
             $map[$perm] = $this->isSuperAdmin() || $this->can($perm);
         }
