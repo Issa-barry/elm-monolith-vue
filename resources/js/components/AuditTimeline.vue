@@ -48,20 +48,17 @@ async function fetchLogs() {
 onMounted(fetchLogs);
 
 const EVENT_COLOR: Record<string, string> = {
-    created:
-        'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+    created: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
     updated:
         'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
     deleted: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
     validated:
         'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
-    rejected:
-        'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    rejected: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
     submitted:
         'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
     paid: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
-    cancelled:
-        'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
     payment_cancelled:
         'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
     exported:
@@ -249,7 +246,9 @@ function toggleExpand(id: string) {
                                         >
                                             {{ key }}
                                         </dt>
-                                        <dd class="text-emerald-700 dark:text-emerald-400">
+                                        <dd
+                                            class="text-emerald-700 dark:text-emerald-400"
+                                        >
                                             {{ val ?? '—' }}
                                         </dd>
                                     </div>

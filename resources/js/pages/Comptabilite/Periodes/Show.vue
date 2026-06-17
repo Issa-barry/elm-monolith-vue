@@ -145,10 +145,20 @@ function doCalculer() {
                 const flash = (page.props as any).flash;
                 if (flash?.warning) {
                     calculerWarning.value = flash.warning;
-                    toast.add({ severity: 'warn', summary: 'Aucune donnée trouvée', detail: flash.warning, life: 8000 });
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'Aucune donnée trouvée',
+                        detail: flash.warning,
+                        life: 8000,
+                    });
                 } else {
                     calculerWarning.value = null;
-                    toast.add({ severity: 'success', summary: 'Fiches générées', detail: flash?.success ?? '', life: 4000 });
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Fiches générées',
+                        detail: flash?.success ?? '',
+                        life: 4000,
+                    });
                 }
             },
         },
@@ -353,39 +363,25 @@ function exportPdf() {
                             <tr
                                 class="border-b bg-muted/40 text-xs text-muted-foreground"
                             >
-                                <th
-                                    class="px-4 py-2.5 text-left font-medium"
-                                >
+                                <th class="px-4 py-2.5 text-left font-medium">
                                     Agence
                                 </th>
-                                <th
-                                    class="px-4 py-2.5 text-right font-medium"
-                                >
+                                <th class="px-4 py-2.5 text-right font-medium">
                                     Bénéficiaires
                                 </th>
-                                <th
-                                    class="px-4 py-2.5 text-right font-medium"
-                                >
+                                <th class="px-4 py-2.5 text-right font-medium">
                                     Montant brut
                                 </th>
-                                <th
-                                    class="px-4 py-2.5 text-right font-medium"
-                                >
+                                <th class="px-4 py-2.5 text-right font-medium">
                                     Déductions
                                 </th>
-                                <th
-                                    class="px-4 py-2.5 text-right font-medium"
-                                >
+                                <th class="px-4 py-2.5 text-right font-medium">
                                     Net à payer
                                 </th>
-                                <th
-                                    class="px-4 py-2.5 text-right font-medium"
-                                >
+                                <th class="px-4 py-2.5 text-right font-medium">
                                     Déjà payé
                                 </th>
-                                <th
-                                    class="px-4 py-2.5 text-right font-medium"
-                                >
+                                <th class="px-4 py-2.5 text-right font-medium">
                                     Reste
                                 </th>
                             </tr>
@@ -400,17 +396,15 @@ function exportPdf() {
                                     {{ agence.site_nom }}
                                 </td>
                                 <td
-                                    class="px-4 py-2.5 text-right tabular-nums text-muted-foreground"
+                                    class="px-4 py-2.5 text-right text-muted-foreground tabular-nums"
                                 >
                                     {{ agence.nb_beneficiaires }}
                                 </td>
-                                <td
-                                    class="px-4 py-2.5 text-right tabular-nums"
-                                >
+                                <td class="px-4 py-2.5 text-right tabular-nums">
                                     {{ fmt(agence.montant_brut) }}
                                 </td>
                                 <td
-                                    class="px-4 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400"
+                                    class="px-4 py-2.5 text-right text-red-600 tabular-nums dark:text-red-400"
                                 >
                                     {{
                                         agence.total_deductions > 0
@@ -419,13 +413,11 @@ function exportPdf() {
                                     }}
                                 </td>
                                 <td
-                                    class="px-4 py-2.5 text-right font-semibold tabular-nums text-emerald-600 dark:text-emerald-400"
+                                    class="px-4 py-2.5 text-right font-semibold text-emerald-600 tabular-nums dark:text-emerald-400"
                                 >
                                     {{ fmt(agence.montant_net) }}
                                 </td>
-                                <td
-                                    class="px-4 py-2.5 text-right tabular-nums"
-                                >
+                                <td class="px-4 py-2.5 text-right tabular-nums">
                                     {{ fmt(agence.montant_paye) }}
                                 </td>
                                 <td
@@ -444,21 +436,17 @@ function exportPdf() {
                             <tr
                                 class="border-t-2 bg-muted/50 text-xs font-bold"
                             >
-                                <td class="px-4 py-2.5 uppercase tracking-wide">
+                                <td class="px-4 py-2.5 tracking-wide uppercase">
                                     Total
                                 </td>
-                                <td
-                                    class="px-4 py-2.5 text-right tabular-nums"
-                                >
+                                <td class="px-4 py-2.5 text-right tabular-nums">
                                     {{ fiches.length }}
                                 </td>
-                                <td
-                                    class="px-4 py-2.5 text-right tabular-nums"
-                                >
+                                <td class="px-4 py-2.5 text-right tabular-nums">
                                     {{ fmt(stats.total_brut) }}
                                 </td>
                                 <td
-                                    class="px-4 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400"
+                                    class="px-4 py-2.5 text-right text-red-600 tabular-nums dark:text-red-400"
                                 >
                                     {{
                                         stats.total_deductions > 0
@@ -467,18 +455,14 @@ function exportPdf() {
                                     }}
                                 </td>
                                 <td
-                                    class="px-4 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400"
+                                    class="px-4 py-2.5 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
                                 >
                                     {{ fmt(stats.total_net) }}
                                 </td>
-                                <td
-                                    class="px-4 py-2.5 text-right tabular-nums"
-                                >
+                                <td class="px-4 py-2.5 text-right tabular-nums">
                                     {{ fmt(stats.total_paye) }}
                                 </td>
-                                <td
-                                    class="px-4 py-2.5 text-right tabular-nums"
-                                >
+                                <td class="px-4 py-2.5 text-right tabular-nums">
                                     {{
                                         fmt(
                                             Math.max(
