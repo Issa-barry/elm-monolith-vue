@@ -13,6 +13,15 @@ import InputNumber from 'primevue/inputnumber';
 import { computed, onMounted, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+interface SolvabiliteResult {
+    has_debt: boolean
+    status: 'aucun' | 'partiel' | 'impaye'
+    unpaid_invoices_count: number
+    total_remaining: number
+    last_invoice_reference: string | null
+    last_invoice_date: string | null
+}
+
 interface ProduitOption {
     id: number;
     nom: string;
@@ -79,6 +88,8 @@ const form = useForm({
 // ── AutoComplete : Véhicule ───────────────────────────────────────────────────
 const vehiculeSelected = ref<VehiculeOption | null>(null);
 const vehiculeSuggests = ref<VehiculeOption[]>([]);
+const vehiculeSolvabilite = ref<SolvabiliteResult | null>(null);
+const vehiculeSolvabiliteLoading = ref(false);
 
 function searchVehicule(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
@@ -92,14 +103,25 @@ function searchVehicule(event: { query: string }) {
         : [...props.vehicules];
 }
 
-function onVehiculeSelect(v: VehiculeOption | null) {
+async function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
     applyVehiculeCapacityOnSingleLine(v);
+    if (v) {
+        vehiculeSolvabiliteLoading.value = true;
+        vehiculeSolvabilite.value = null;
+        try {
+            const res = await fetch(`/ventes/check-solvabilite?vehicule_id=${v.id}`);
+            vehiculeSolvabilite.value = await res.json();
+        } finally {
+            vehiculeSolvabiliteLoading.value = false;
+        }
+    }
 }
 
 function onVehiculeClear() {
     form.vehicule_id = null;
     vehiculeSelected.value = null;
+    vehiculeSolvabilite.value = null;
 }
 
 function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
@@ -122,6 +144,8 @@ function vehiculeLabel(v: VehiculeOption): string {
 // ── AutoComplete : Client ─────────────────────────────────────────────────────
 const clientSelected = ref<ClientOption | null>(null);
 const clientSuggests = ref<ClientOption[]>([]);
+const clientSolvabilite = ref<SolvabiliteResult | null>(null);
+const clientSolvabiliteLoading = ref(false);
 
 function searchClient(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
@@ -135,17 +159,41 @@ function searchClient(event: { query: string }) {
         : [...props.clients];
 }
 
-function onClientSelect(c: ClientOption | null) {
+async function onClientSelect(c: ClientOption | null) {
     form.client_id = c?.id ?? null;
+    if (c) {
+        clientSolvabiliteLoading.value = true;
+        clientSolvabilite.value = null;
+        try {
+            const res = await fetch(`/ventes/check-solvabilite?client_id=${c.id}`);
+            clientSolvabilite.value = await res.json();
+        } finally {
+            clientSolvabiliteLoading.value = false;
+        }
+    }
 }
 
 function onClientClear() {
     form.client_id = null;
     clientSelected.value = null;
+    clientSolvabilite.value = null;
 }
 
 function clientLabel(c: ClientOption): string {
     return [c.prenom, c.nom].filter(Boolean).join(' ');
+}
+
+// ── Solvabilité helpers ───────────────────────────────────────────────────────
+function solvabiliteAlertClass(s: SolvabiliteResult): string {
+    if (!s.has_debt) return 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300';
+    if (s.status === 'impaye') return 'bg-red-50 border-red-200 text-red-800 dark:bg-red-950/40 dark:border-red-800 dark:text-red-300';
+    return 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300';
+}
+
+function formatDate(dateStr: string | null): string {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-');
+    return `${d}/${m}/${y}`;
 }
 
 // ── Dropdown : Produit ────────────────────────────────────────────────────────
@@ -408,6 +456,48 @@ function submit() {
                             >
                                 {{ form.errors.vehicule_id }}
                             </p>
+
+                            <!-- Solvabilité véhicule -->
+                            <div
+                                v-if="vehiculeSolvabiliteLoading"
+                                class="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                            >
+                                <svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                                </svg>
+                                Vérification en cours…
+                            </div>
+                            <div
+                                v-else-if="vehiculeSolvabilite"
+                                class="mt-2 rounded-lg border p-2.5 text-xs"
+                                :class="solvabiliteAlertClass(vehiculeSolvabilite)"
+                            >
+                                <template v-if="!vehiculeSolvabilite.has_debt">
+                                    <p class="font-semibold">✓ Aucun impayé détecté</p>
+                                    <p class="mt-0.5 opacity-80">Ce véhicule n'a aucune facture en attente.</p>
+                                </template>
+                                <template v-else>
+                                    <p class="font-semibold">
+                                        {{ vehiculeSolvabilite.status === 'impaye' ? '⚠ Factures impayées détectées' : '⚠ Paiement partiel' }}
+                                    </p>
+                                    <p class="mt-0.5">
+                                        {{ vehiculeSolvabilite.status === 'impaye' ? 'Total impayé' : 'Reste à payer' }} :
+                                        <span class="font-medium">{{ formatGNF(vehiculeSolvabilite.total_remaining) }}</span>
+                                        · {{ vehiculeSolvabilite.unpaid_invoices_count }} facture(s)
+                                    </p>
+                                    <p v-if="vehiculeSolvabilite.last_invoice_reference" class="mt-0.5 opacity-80">
+                                        Dernière : {{ vehiculeSolvabilite.last_invoice_reference }}
+                                        <template v-if="vehiculeSolvabilite.last_invoice_date">
+                                            · {{ formatDate(vehiculeSolvabilite.last_invoice_date) }}
+                                        </template>
+                                    </p>
+                                    <a
+                                        href="/factures"
+                                        class="mt-1.5 inline-block font-medium underline underline-offset-2"
+                                    >Voir les factures</a>
+                                </template>
+                            </div>
                         </div>
 
                         <!-- Client -->
@@ -460,6 +550,48 @@ function submit() {
                             >
                                 {{ form.errors.client_id }}
                             </p>
+
+                            <!-- Solvabilité client -->
+                            <div
+                                v-if="clientSolvabiliteLoading"
+                                class="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                            >
+                                <svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                                </svg>
+                                Vérification en cours…
+                            </div>
+                            <div
+                                v-else-if="clientSolvabilite"
+                                class="mt-2 rounded-lg border p-2.5 text-xs"
+                                :class="solvabiliteAlertClass(clientSolvabilite)"
+                            >
+                                <template v-if="!clientSolvabilite.has_debt">
+                                    <p class="font-semibold">✓ Aucun impayé détecté</p>
+                                    <p class="mt-0.5 opacity-80">Ce client n'a aucune facture en attente.</p>
+                                </template>
+                                <template v-else>
+                                    <p class="font-semibold">
+                                        {{ clientSolvabilite.status === 'impaye' ? '⚠ Factures impayées détectées' : '⚠ Paiement partiel' }}
+                                    </p>
+                                    <p class="mt-0.5">
+                                        {{ clientSolvabilite.status === 'impaye' ? 'Total impayé' : 'Reste à payer' }} :
+                                        <span class="font-medium">{{ formatGNF(clientSolvabilite.total_remaining) }}</span>
+                                        · {{ clientSolvabilite.unpaid_invoices_count }} facture(s)
+                                    </p>
+                                    <p v-if="clientSolvabilite.last_invoice_reference" class="mt-0.5 opacity-80">
+                                        Dernière : {{ clientSolvabilite.last_invoice_reference }}
+                                        <template v-if="clientSolvabilite.last_invoice_date">
+                                            · {{ formatDate(clientSolvabilite.last_invoice_date) }}
+                                        </template>
+                                    </p>
+                                    <a
+                                        href="/factures"
+                                        class="mt-1.5 inline-block font-medium underline underline-offset-2"
+                                    >Voir les factures</a>
+                                </template>
+                            </div>
                         </div>
                     </div>
 

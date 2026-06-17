@@ -126,6 +126,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
 
     // ── Module : Ventes ───────────────────────────────────────────────────────
     Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
+        Route::get('ventes/check-solvabilite', [CommandeVenteController::class, 'checkSolvabilite'])->name('ventes.check-solvabilite');
         Route::resource('ventes', CommandeVenteController::class)->except([]);
         Route::get('pdv', [PdvController::class, 'index'])->name('pdv.index');
         Route::post('pdv/checkout', [PdvController::class, 'checkout'])->name('pdv.checkout');

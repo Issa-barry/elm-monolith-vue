@@ -7,16 +7,19 @@ use App\Enums\MotifAnnulation;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutFactureVente;
 use App\Jobs\NotifierLivreursCommandeVenteJob;
 use App\Models\AuditLog;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -34,6 +37,66 @@ class CommandeVenteController extends Controller
     private const UNIT_PRICE_UPDATE_PERMISSION = 'ventes.prix.update';
 
     public function __construct(private readonly AuditLogService $auditService) {}
+
+    // ── Check solvabilité ─────────────────────────────────────────────────────
+
+    public function checkSolvabilite(Request $request): JsonResponse
+    {
+        $request->validate([
+            'vehicule_id' => 'nullable|exists:vehicules,id',
+            'client_id' => 'nullable|exists:clients,id',
+        ]);
+
+        $orgId = auth()->user()->organization_id;
+        $vehiculeId = $request->input('vehicule_id');
+        $clientId = $request->input('client_id');
+
+        if (! $vehiculeId && ! $clientId) {
+            return response()->json($this->emptySolvabilite());
+        }
+
+        $query = FactureVente::where('organization_id', $orgId)
+            ->whereIn('statut_facture', [StatutFactureVente::IMPAYEE->value, StatutFactureVente::PARTIEL->value])
+            ->with('encaissements')
+            ->orderByDesc('created_at');
+
+        if ($vehiculeId) {
+            $query->where('vehicule_id', $vehiculeId);
+        } else {
+            $query->whereHas('commande', fn ($q) => $q->where('client_id', $clientId));
+        }
+
+        $factures = $query->get();
+
+        if ($factures->isEmpty()) {
+            return response()->json($this->emptySolvabilite());
+        }
+
+        $totalRemaining = $factures->sum(fn ($f) => $f->montant_restant);
+        $hasImpayee = $factures->contains(fn ($f) => $f->statut_facture === StatutFactureVente::IMPAYEE);
+        $derniere = $factures->first();
+
+        return response()->json([
+            'has_debt' => true,
+            'status' => $hasImpayee ? 'impaye' : 'partiel',
+            'unpaid_invoices_count' => $factures->count(),
+            'total_remaining' => (int) round($totalRemaining),
+            'last_invoice_reference' => $derniere->reference,
+            'last_invoice_date' => $derniere->created_at?->format('Y-m-d'),
+        ]);
+    }
+
+    private function emptySolvabilite(): array
+    {
+        return [
+            'has_debt' => false,
+            'status' => 'aucun',
+            'unpaid_invoices_count' => 0,
+            'total_remaining' => 0,
+            'last_invoice_reference' => null,
+            'last_invoice_date' => null,
+        ];
+    }
 
     // ── Index ─────────────────────────────────────────────────────────────────
 
