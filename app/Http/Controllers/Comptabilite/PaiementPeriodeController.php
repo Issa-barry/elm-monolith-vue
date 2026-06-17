@@ -213,7 +213,7 @@ class PaiementPeriodeController extends Controller
 
         $n = $result['nb_fiches'];
 
-        return back()->with('success', "{$n} fiche".($n > 1 ? 's' : '')." générée".($n > 1 ? 's' : '')." avec succès.");
+        return back()->with('success', "{$n} fiche".($n > 1 ? 's' : '').' générée'.($n > 1 ? 's' : '').' avec succès.');
     }
 
     public function valider(PaiementPeriode $periode): RedirectResponse

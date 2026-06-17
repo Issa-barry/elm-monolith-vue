@@ -157,7 +157,7 @@ tbody td.mono   { font-family: monospace; }
                 <th class="col-mnt right">Montant (GNF)</th>
                 <th class="col-sta">Statut</th>
                 <th class="col-saisi">Saisi par</th>
-                <th class="col-valid">Validé par</th>
+                <th class="col-valid">Signature</th>
             </tr>
         </thead>
         <tbody>
@@ -175,7 +175,7 @@ tbody td.mono   { font-family: monospace; }
                 <td class="col-mnt right">{{ number_format((float)$row['montant'], 0, ',', ' ') }}</td>
                 <td class="col-sta">{{ $row['statut_label'] ?? ($row['statut'] ?? '—') }}</td>
                 <td class="col-saisi">{{ $row['user']['name'] ?? '—' }}</td>
-                <td class="col-valid">{{ $row['validateur']['name'] ?? '—' }}</td>
+                <td class="col-valid"></td>
             </tr>
             @empty
             <tr>

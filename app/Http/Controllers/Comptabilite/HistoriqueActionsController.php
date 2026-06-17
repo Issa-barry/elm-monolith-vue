@@ -107,7 +107,7 @@ class HistoriqueActionsController extends Controller
 
         $allowed = match ($module) {
             'depenses' => $user->can('depenses.read') || $user->can('comptabilite.read'),
-            default    => $user->can('comptabilite.read'),
+            default => $user->can('comptabilite.read'),
         };
         abort_unless($allowed, 403);
 

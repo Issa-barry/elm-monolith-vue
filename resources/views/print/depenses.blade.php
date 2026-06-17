@@ -158,7 +158,7 @@
 </div>
 
 <div class="page">
-    @foreach($sites as $siteData)
+    @forelse($sites as $siteData)
     <div class="site-section{{ !$loop->first ? ' new-page' : '' }}">
 
         <div class="header">
@@ -200,7 +200,7 @@
                     <th class="right" style="width:10%">Montant (GNF)</th>
                     <th style="width:9%">Statut</th>
                     <th style="width:12%">Saisi par</th>
-                    <th style="width:13%">Validé par</th>
+                    <th style="width:13%">Signature</th>
                 </tr>
             </thead>
             <tbody>
@@ -218,7 +218,7 @@
                     <td class="right">{{ number_format((float)$row['montant'], 0, ',', ' ') }}</td>
                     <td>{{ $row['statut_label'] ?? ($row['statut'] ?? '—') }}</td>
                     <td>{{ $row['user']['name'] ?? '—' }}</td>
-                    <td>{{ $row['validateur']['name'] ?? '—' }}</td>
+                    <td></td>
                 </tr>
                 @empty
                 <tr>
@@ -245,7 +245,29 @@
         </div>
 
     </div>
-    @endforeach
+    @empty
+    <table>
+        <thead>
+            <tr>
+                <th style="width:9%">Date</th>
+                <th style="width:20%">Type de dépense</th>
+                <th style="width:15%">Concerné</th>
+                <th style="width:12%">Véhicule</th>
+                <th class="right" style="width:10%">Montant (GNF)</th>
+                <th style="width:9%">Statut</th>
+                <th style="width:12%">Saisi par</th>
+                <th style="width:13%">Signature</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td colspan="8" style="text-align:center; color:#444; padding:20px;">
+                    Aucune dépense pour ces critères.
+                </td>
+            </tr>
+        </tbody>
+    </table>
+    @endforelse
 </div>
 
 <script>
