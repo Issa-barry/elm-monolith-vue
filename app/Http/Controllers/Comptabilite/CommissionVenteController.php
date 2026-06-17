@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Comptabilite;
 
+use App\Enums\AuditEvent;
 use App\Enums\ModePaiement;
 use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
@@ -11,6 +12,7 @@ use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PaiementCommissionVente;
+use App\Services\AuditLogService;
 use App\Services\CommissionVentePaiementService;
 use App\Services\PeriodeComptableService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -337,6 +339,17 @@ class CommissionVenteController extends Controller
             );
         } catch (InvalidArgumentException $e) {
             return back()->withErrors(['montant' => $e->getMessage()]);
+        }
+
+        $livreur = Livreur::find($livreurId);
+        if ($livreur) {
+            $montantFmt = number_format((float) $data['montant'], 0, ',', "\u{202F}");
+            app(AuditLogService::class)->record($livreur, AuditEvent::PAID, auth()->user(), null, null, [
+                'module' => 'commissions_vente',
+                'montant' => $data['montant'],
+                'mode_paiement' => $data['mode_paiement'],
+                'description' => "Paiement de {$montantFmt} GNF effectué pour ".trim("{$livreur->prenom} {$livreur->nom}"),
+            ]);
         }
 
         return back()->with('success', 'Paiement enregistré.');

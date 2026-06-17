@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ComptabiliteFilters from '@/components/ComptabiliteFilters.vue';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -6,7 +7,6 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Calendar, Plus } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Dropdown from 'primevue/dropdown';
 import { computed, ref } from 'vue';
 
 interface Periode {
@@ -45,6 +45,7 @@ const props = defineProps<{
         statut?: string;
         date_debut?: string;
         date_fin?: string;
+        search?: string;
     };
     kpis: Kpis;
     can_create: boolean;
@@ -58,6 +59,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const selectedType = ref(props.filters.type ?? '');
 const selectedStatut = ref(props.filters.statut ?? '');
+const searchVal = ref(props.filters.search ?? '');
 
 const typeOptions = computed(() => [
     { label: 'Tous les types', value: '' },
@@ -68,13 +70,29 @@ const statutOptions = computed(() => [
     ...props.statuts,
 ]);
 
+const hasActiveFilters = computed(
+    () => !!(selectedType.value || selectedStatut.value || searchVal.value),
+);
+
 function applyFilters() {
     router.get(
         '/comptabilite/periodes',
         {
             type: selectedType.value || undefined,
             statut: selectedStatut.value || undefined,
+            search: searchVal.value || undefined,
         },
+        { preserveState: true, replace: true },
+    );
+}
+
+function resetFilters() {
+    selectedType.value = '';
+    selectedStatut.value = '';
+    searchVal.value = '';
+    router.get(
+        '/comptabilite/periodes',
+        {},
         { preserveState: true, replace: true },
     );
 }
@@ -164,26 +182,38 @@ const statutBadge = (statut: string) =>
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-2">
-                <Dropdown
+            <ComptabiliteFilters
+                v-model:search="searchVal"
+                search-placeholder="Rechercher une référence, un type..."
+                :has-active-filters="hasActiveFilters"
+                @filter="applyFilters"
+                @reset="resetFilters"
+            >
+                <select
                     v-model="selectedType"
-                    :options="typeOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Type"
-                    class="min-w-[150px] text-sm"
-                    @change="applyFilters"
-                />
-                <Dropdown
+                    class="h-9 w-[180px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option
+                        v-for="t in typeOptions"
+                        :key="t.value"
+                        :value="t.value"
+                    >
+                        {{ t.label }}
+                    </option>
+                </select>
+                <select
                     v-model="selectedStatut"
-                    :options="statutOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Statut"
-                    class="min-w-[150px] text-sm"
-                    @change="applyFilters"
-                />
-            </div>
+                    class="h-9 w-[160px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option
+                        v-for="s in statutOptions"
+                        :key="s.value"
+                        :value="s.value"
+                    >
+                        {{ s.label }}
+                    </option>
+                </select>
+            </ComptabiliteFilters>
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">

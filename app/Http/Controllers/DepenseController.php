@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AuditEvent;
 use App\Enums\CategorieDepense;
 use App\Enums\StatutDepense;
 use App\Http\Requests\StoreDepenseRequest;
 use App\Http\Requests\UpdateDepenseRequest;
+use App\Models\AuditLog;
 use App\Models\Depense;
 use App\Models\DepenseImputation;
 use App\Models\DepenseType;
@@ -15,10 +17,12 @@ use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
+use App\Services\AuditLogService;
 use App\Services\DepenseImputationService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -30,7 +34,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DepenseController extends Controller
 {
-    public function __construct(private DepenseImputationService $imputationService) {}
+    public function __construct(
+        private DepenseImputationService $imputationService,
+        private AuditLogService $audit,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -328,7 +335,7 @@ class DepenseController extends Controller
         $orgId = auth()->user()->organization_id;
         $type = DepenseType::where('organization_id', $orgId)->findOrFail($request->depense_type_id);
 
-        Depense::create([
+        $depense = Depense::create([
             'organization_id' => $orgId,
             'user_id' => auth()->id(),
             'depense_type_id' => $request->depense_type_id,
@@ -339,6 +346,12 @@ class DepenseController extends Controller
             'date_depense' => $request->date_depense,
             'commentaire' => $request->commentaire,
             'statut' => $request->statut,
+        ]);
+
+        $this->audit->record($depense, AuditEvent::CREATED, auth()->user(), null, null, [
+            'module' => 'depenses',
+            'site_id' => $depense->site_id,
+            'description' => "Dépense créée — {$type->libelle}",
         ]);
 
         return redirect()->route('depenses.index')->with('success', 'Dépense enregistrée.');
@@ -379,6 +392,9 @@ class DepenseController extends Controller
         $orgId = auth()->user()->organization_id;
         $type = DepenseType::where('organization_id', $orgId)->findOrFail($request->depense_type_id);
 
+        $fields = ['depense_type_id', 'beneficiaire_type', 'beneficiaire_id', 'site_id', 'montant', 'date_depense', 'commentaire'];
+        $before = $depense->only($fields);
+
         $depense->update([
             'depense_type_id' => $request->depense_type_id,
             'beneficiaire_type' => $type->categorie->needsBeneficiaire() ? $type->categorie->value : null,
@@ -387,6 +403,13 @@ class DepenseController extends Controller
             'montant' => $request->montant,
             'date_depense' => $request->date_depense,
             'commentaire' => $request->commentaire,
+        ]);
+
+        [$oldDiff, $newDiff] = $this->audit->diffFields($before, $depense->fresh()->only($fields), $fields);
+        $this->audit->record($depense, AuditEvent::UPDATED, auth()->user(), $oldDiff, $newDiff, [
+            'module' => 'depenses',
+            'site_id' => $depense->site_id,
+            'description' => 'Dépense modifiée',
         ]);
 
         return redirect()->route('depenses.show', $depense)->with('success', 'Dépense mise à jour.');
@@ -401,6 +424,11 @@ class DepenseController extends Controller
         }
 
         $depense->update(['statut' => StatutDepense::SOUMIS]);
+        $this->audit->record($depense, AuditEvent::SUBMITTED, auth()->user(), null, null, [
+            'module' => 'depenses',
+            'site_id' => $depense->site_id,
+            'description' => 'Dépense soumise pour validation',
+        ]);
 
         return back()->with('success', 'Dépense soumise pour validation.');
     }
@@ -429,6 +457,13 @@ class DepenseController extends Controller
         } catch (\RuntimeException $e) {
             return back()->withErrors(['imputation' => $e->getMessage()]);
         }
+
+        $montantFmt = number_format((float) $depense->montant, 0, ',', "\u{202F}");
+        $this->audit->record($depense, AuditEvent::VALIDATED, auth()->user(), null, null, [
+            'module' => 'depenses',
+            'site_id' => $depense->site_id,
+            'description' => "Dépense \"{$depense->depenseType?->libelle}\" validée — {$montantFmt} GNF",
+        ]);
 
         return back()->with('success', 'Dépense validée et imputée.');
     }
@@ -459,6 +494,13 @@ class DepenseController extends Controller
             'commentaire_rejet' => $validated['motif_rejet'] === 'Autre' ? ($validated['commentaire_rejet'] ?? null) : null,
         ]);
 
+        $this->audit->record($depense, AuditEvent::REJECTED, auth()->user(), null, null, [
+            'module' => 'depenses',
+            'site_id' => $depense->site_id,
+            'motif_rejet' => $validated['motif_rejet'],
+            'description' => "Dépense rejetée — motif : {$validated['motif_rejet']}",
+        ]);
+
         return back()->with('success', 'Dépense rejetée.');
     }
 
@@ -466,9 +508,35 @@ class DepenseController extends Controller
     {
         $this->authorize('delete', $depense);
 
+        $this->audit->record($depense, AuditEvent::DELETED, auth()->user(), null, null, [
+            'module' => 'depenses',
+            'site_id' => $depense->site_id,
+            'description' => 'Dépense supprimée',
+        ]);
         $depense->delete();
 
         return back()->with('success', 'Dépense supprimée.');
+    }
+
+    public function historique(Depense $depense): JsonResponse
+    {
+        abort_unless(auth()->user()->organization_id === $depense->organization_id, 403);
+        abort_unless(auth()->user()->can('depenses.read'), 403);
+
+        $logs = AuditLog::where('auditable_type', $depense->getMorphClass())
+            ->where('auditable_id', $depense->id)
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (AuditLog $log) => [
+                'id' => $log->id,
+                'date' => $log->created_at->format('d/m/Y H:i'),
+                'acteur' => $log->actor_name_snapshot ?? '—',
+                'event_code' => $log->event_code,
+                'action' => $log->event_label,
+                'description' => $this->buildAuditDescription($log),
+            ]);
+
+        return response()->json(['logs' => $logs]);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
@@ -765,5 +833,46 @@ class DepenseController extends Controller
             ->wherePivot('is_default', true)
             ->select('sites.id')
             ->first()?->id;
+    }
+
+    private function buildAuditDescription(AuditLog $log): string
+    {
+        return match ($log->event_code) {
+            'created' => 'Dépense créée',
+            'updated' => $this->describeUpdate($log),
+            'submitted' => 'Soumise pour validation',
+            'validated' => 'Dépense validée et imputée',
+            'rejected' => 'Rejetée — Motif : '.($log->meta['motif_rejet'] ?? 'non précisé'),
+            'deleted' => 'Dépense supprimée',
+            'exported' => 'Export '.($log->meta['format'] ?? ''),
+            default => $log->event_label,
+        };
+    }
+
+    private function describeUpdate(AuditLog $log): string
+    {
+        $newValues = $log->new_values ?? [];
+        if (empty($newValues)) {
+            return 'Dépense modifiée';
+        }
+
+        $labels = [
+            'montant' => 'Montant',
+            'date_depense' => 'Date',
+            'commentaire' => 'Commentaire',
+            'statut' => 'Statut',
+            'site_id' => 'Site',
+            'depense_type_id' => 'Type',
+            'beneficiaire_id' => 'Bénéficiaire',
+            'motif_rejet' => 'Motif de rejet',
+        ];
+
+        $changed = array_values(array_filter(
+            array_map(fn ($k) => $labels[$k] ?? null, array_keys($newValues))
+        ));
+
+        return empty($changed)
+            ? 'Dépense modifiée'
+            : 'Modifié : '.implode(', ', $changed);
     }
 }

@@ -12,6 +12,17 @@ enum AuditEvent: string
     case ENCAISSEMENT_DELETED = 'encaissement_deleted';
     case DELETED = 'deleted';
     case STOCK_ADJUSTED = 'stock_adjusted';
+    case PAID = 'paid';
+    case REJECTED = 'rejected';
+    case SUBMITTED = 'submitted';
+    case EXPORTED = 'exported';
+    case PRINTED = 'printed';
+    case AUTO_GENERATED = 'auto_generated';
+    case AUTO_RECALCULATED = 'auto_recalculated';
+    case FRAIS_ADDED = 'frais_added';
+    case FRAIS_DELETED = 'frais_deleted';
+    case PAYMENT_CANCELLED = 'payment_cancelled';
+    case STATUS_CHANGED = 'status_changed';
 
     public function label(): string
     {
@@ -24,6 +35,17 @@ enum AuditEvent: string
             self::ENCAISSEMENT_DELETED => 'Encaissement supprimé',
             self::DELETED => 'Supprimé',
             self::STOCK_ADJUSTED => 'Stock ajusté',
+            self::PAID => 'Paiement enregistré',
+            self::REJECTED => 'Rejeté',
+            self::SUBMITTED => 'Soumis',
+            self::EXPORTED => 'Exporté',
+            self::PRINTED => 'Imprimé',
+            self::AUTO_GENERATED => 'Génération automatique',
+            self::AUTO_RECALCULATED => 'Recalcul automatique',
+            self::FRAIS_ADDED => 'Frais ajouté',
+            self::FRAIS_DELETED => 'Frais supprimé',
+            self::PAYMENT_CANCELLED => 'Paiement annulé',
+            self::STATUS_CHANGED => 'Changement de statut',
         };
     }
 
@@ -38,6 +60,17 @@ enum AuditEvent: string
             self::ENCAISSEMENT_DELETED => 'orange',
             self::DELETED => 'red',
             self::STOCK_ADJUSTED => 'teal',
+            self::PAID => 'green',
+            self::REJECTED => 'red',
+            self::SUBMITTED => 'blue',
+            self::EXPORTED => 'slate',
+            self::PRINTED => 'slate',
+            self::AUTO_GENERATED => 'cyan',
+            self::AUTO_RECALCULATED => 'cyan',
+            self::FRAIS_ADDED => 'orange',
+            self::FRAIS_DELETED => 'red',
+            self::PAYMENT_CANCELLED => 'red',
+            self::STATUS_CHANGED => 'amber',
         };
     }
 }

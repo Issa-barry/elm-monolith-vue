@@ -20,28 +20,34 @@ use Illuminate\Support\Facades\DB;
 
 class PeriodeCalculatorService
 {
-    public function calculer(PaiementPeriode $periode): void
+    public function calculer(PaiementPeriode $periode): array
     {
         if ($periode->isValidee() || $periode->isCloturee()) {
             throw new \LogicException('Impossible de recalculer une période validée ou clôturée.');
         }
 
-        DB::transaction(function () use ($periode) {
+        $nbFiches = 0;
+
+        DB::transaction(function () use ($periode, &$nbFiches) {
             $periode->fiches()
                 ->where('statut', '!=', StatutFichePaiement::PAYE->value)
                 ->delete();
 
-            match ($periode->type) {
+            $nbFiches = match ($periode->type) {
                 TypePeriodePaiement::LIVREUR => $this->calculerLivreurs($periode),
                 TypePeriodePaiement::PROPRIETAIRE => $this->calculerProprietaires($periode),
                 TypePeriodePaiement::SALARIE => $this->calculerSalaries($periode),
             };
 
-            $periode->update(['statut' => StatutPeriodePaiement::CALCULEE]);
+            if ($nbFiches > 0) {
+                $periode->update(['statut' => StatutPeriodePaiement::CALCULEE]);
+            }
         });
+
+        return ['nb_fiches' => $nbFiches];
     }
 
-    private function calculerLivreurs(PaiementPeriode $periode): void
+    private function calculerLivreurs(PaiementPeriode $periode): int
     {
         $orgId = $periode->organization_id;
 
@@ -73,6 +79,8 @@ class PeriodeCalculatorService
             ->groupBy('beneficiaire_id');
 
         $livreurIds = $commParts->keys()->merge($logParts->keys())->unique();
+
+        $count = 0;
 
         foreach ($livreurIds as $livreurId) {
             $livreur = Livreur::find($livreurId);
@@ -123,10 +131,13 @@ class PeriodeCalculatorService
             }
 
             $this->creerFiche($periode, 'livreur', $livreurId, $livreur->nom_complet, null, $lignes);
+            $count++;
         }
+
+        return $count;
     }
 
-    private function calculerProprietaires(PaiementPeriode $periode): void
+    private function calculerProprietaires(PaiementPeriode $periode): int
     {
         $orgId = $periode->organization_id;
 
@@ -167,6 +178,8 @@ class PeriodeCalculatorService
             ->groupBy(fn ($d) => $d->vehiculeBeneficiaire?->proprietaire_id);
 
         $proprietaireIds = $commParts->keys()->merge($logParts->keys())->unique();
+
+        $count = 0;
 
         foreach ($proprietaireIds as $proprietaireId) {
             $proprietaire = Proprietaire::find($proprietaireId);
@@ -228,10 +241,13 @@ class PeriodeCalculatorService
             }
 
             $this->creerFiche($periode, 'proprietaire', $proprietaireId, $proprietaire->nom_complet, null, $lignes);
+            $count++;
         }
+
+        return $count;
     }
 
-    private function calculerSalaries(PaiementPeriode $periode): void
+    private function calculerSalaries(PaiementPeriode $periode): int
     {
         $orgId = $periode->organization_id;
 
@@ -242,6 +258,8 @@ class PeriodeCalculatorService
         })
             ->with(['employe', 'variables', 'periode'])
             ->get();
+
+        $count = 0;
 
         foreach ($paieLines as $ligne) {
             if (! $ligne->employe) {
@@ -280,7 +298,10 @@ class PeriodeCalculatorService
             }
 
             $this->creerFiche($periode, 'salarie', $ligne->employe_id, $ligne->employe->nom_complet, $ligne->employe->site_id, $lignesData);
+            $count++;
         }
+
+        return $count;
     }
 
     private function creerFiche(PaiementPeriode $periode, string $type, string $beneficiaireId, string $nom, ?string $siteId, $lignes): void

@@ -2,11 +2,14 @@
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
+    AlertTriangle,
     Calculator,
     CheckCircle,
     Download,
+    ExternalLink,
+    FileText,
     Lock,
     Trash2,
 } from 'lucide-vue-next';
@@ -14,6 +17,7 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
+import { computed, ref } from 'vue';
 
 interface Fiche {
     id: string;
@@ -45,6 +49,16 @@ interface Periode {
     total_paye: number;
 }
 
+interface RepartitionAgence {
+    site_nom: string;
+    nb_beneficiaires: number;
+    montant_brut: number;
+    total_deductions: number;
+    montant_net: number;
+    montant_paye: number;
+    reste: number;
+}
+
 const props = defineProps<{
     periode: Periode;
     fiches: Fiche[];
@@ -57,6 +71,7 @@ const props = defineProps<{
         nb_partiellement_paye: number;
         nb_paye: number;
     };
+    repartition_agences: RepartitionAgence[];
     can: {
         calculer: boolean;
         valider: boolean;
@@ -77,6 +92,24 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const confirm = useConfirm();
 const toast = useToast();
+const page = usePage();
+
+const calculerWarning = ref<string | null>(null);
+
+const voirCommissionsUrl = computed(() => {
+    const d = props.periode.date_debut ?? '';
+    const f = props.periode.date_fin ?? '';
+    switch (props.periode.type) {
+        case 'livreur':
+            return `/comptabilite/commission-logistique?date_debut=${d}&date_fin=${f}`;
+        case 'proprietaire':
+            return `/comptabilite/commission-proprietaire?date_debut=${d}&date_fin=${f}`;
+        case 'salarie':
+            return `/comptabilite/salaires`;
+        default:
+            return '/comptabilite';
+    }
+});
 
 function fmt(n: number) {
     return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' GNF';
@@ -103,16 +136,31 @@ const ficheBadge = (s: string) =>
     })[s] ?? 'bg-muted text-muted-foreground';
 
 function doCalculer() {
+    calculerWarning.value = null;
     router.post(
         `/comptabilite/periodes/${props.periode.id}/calculer`,
         {},
         {
-            onSuccess: () =>
-                toast.add({
-                    severity: 'success',
-                    summary: 'Fiches générées',
-                    life: 3000,
-                }),
+            onSuccess: () => {
+                const flash = (page.props as any).flash;
+                if (flash?.warning) {
+                    calculerWarning.value = flash.warning;
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'Aucune donnée trouvée',
+                        detail: flash.warning,
+                        life: 8000,
+                    });
+                } else {
+                    calculerWarning.value = null;
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Fiches générées',
+                        detail: flash?.success ?? '',
+                        life: 4000,
+                    });
+                }
+            },
         },
     );
 }
@@ -160,6 +208,10 @@ function exportExcel() {
         '_blank',
     );
 }
+
+function exportPdf() {
+    window.open(`/comptabilite/periodes/${props.periode.id}/pdf`, '_blank');
+}
 </script>
 
 <template>
@@ -203,11 +255,7 @@ function exportExcel() {
                         @click="doCalculer"
                     >
                         <Calculator class="mr-1.5 h-4 w-4" />
-                        {{
-                            periode.statut === 'brouillon'
-                                ? 'Générer les fiches'
-                                : 'Recalculer'
-                        }}
+                        Générer / mettre à jour les fiches
                     </Button>
                     <Button v-if="can.valider" size="sm" @click="doValider">
                         <CheckCircle class="mr-1.5 h-4 w-4" />
@@ -221,6 +269,10 @@ function exportExcel() {
                     >
                         <Lock class="mr-1.5 h-4 w-4" />
                         Clôturer
+                    </Button>
+                    <Button variant="outline" size="sm" @click="exportPdf">
+                        <FileText class="mr-1.5 h-4 w-4" />
+                        PDF
                     </Button>
                     <Button variant="outline" size="sm" @click="exportExcel">
                         <Download class="mr-1.5 h-4 w-4" />
@@ -236,6 +288,25 @@ function exportExcel() {
                         <Trash2 class="h-4 w-4" />
                     </Button>
                 </div>
+            </div>
+
+            <!-- Alerte calcul vide -->
+            <div
+                v-if="calculerWarning"
+                class="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/20 dark:text-amber-300"
+            >
+                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+                <div class="flex-1">
+                    <p class="font-medium">Aucune donnée trouvée</p>
+                    <p class="mt-0.5">{{ calculerWarning }}</p>
+                </div>
+                <Link
+                    :href="voirCommissionsUrl"
+                    class="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-700 underline underline-offset-2 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200"
+                >
+                    <ExternalLink class="h-3.5 w-3.5" />
+                    Voir les commissions de cette période
+                </Link>
             </div>
 
             <!-- KPI stats -->
@@ -273,6 +344,138 @@ function exportExcel() {
                         {{ stats.nb_paye }} payé · {{ stats.nb_a_payer }} à
                         payer
                     </p>
+                </div>
+            </div>
+
+            <!-- Répartition par agence -->
+            <div
+                v-if="repartition_agences.length > 0"
+                class="overflow-hidden rounded-xl border bg-card"
+            >
+                <div class="border-b px-5 py-3">
+                    <h2 class="text-sm font-semibold">
+                        Répartition par agence
+                    </h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr
+                                class="border-b bg-muted/40 text-xs text-muted-foreground"
+                            >
+                                <th class="px-4 py-2.5 text-left font-medium">
+                                    Agence
+                                </th>
+                                <th class="px-4 py-2.5 text-right font-medium">
+                                    Bénéficiaires
+                                </th>
+                                <th class="px-4 py-2.5 text-right font-medium">
+                                    Montant brut
+                                </th>
+                                <th class="px-4 py-2.5 text-right font-medium">
+                                    Déductions
+                                </th>
+                                <th class="px-4 py-2.5 text-right font-medium">
+                                    Net à payer
+                                </th>
+                                <th class="px-4 py-2.5 text-right font-medium">
+                                    Déjà payé
+                                </th>
+                                <th class="px-4 py-2.5 text-right font-medium">
+                                    Reste
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="agence in repartition_agences"
+                                :key="agence.site_nom"
+                                class="border-b last:border-0 hover:bg-muted/30"
+                            >
+                                <td class="px-4 py-2.5 font-medium">
+                                    {{ agence.site_nom }}
+                                </td>
+                                <td
+                                    class="px-4 py-2.5 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ agence.nb_beneficiaires }}
+                                </td>
+                                <td class="px-4 py-2.5 text-right tabular-nums">
+                                    {{ fmt(agence.montant_brut) }}
+                                </td>
+                                <td
+                                    class="px-4 py-2.5 text-right text-red-600 tabular-nums dark:text-red-400"
+                                >
+                                    {{
+                                        agence.total_deductions > 0
+                                            ? '-' + fmt(agence.total_deductions)
+                                            : '—'
+                                    }}
+                                </td>
+                                <td
+                                    class="px-4 py-2.5 text-right font-semibold text-emerald-600 tabular-nums dark:text-emerald-400"
+                                >
+                                    {{ fmt(agence.montant_net) }}
+                                </td>
+                                <td class="px-4 py-2.5 text-right tabular-nums">
+                                    {{ fmt(agence.montant_paye) }}
+                                </td>
+                                <td
+                                    class="px-4 py-2.5 text-right font-semibold tabular-nums"
+                                    :class="
+                                        agence.reste > 0
+                                            ? 'text-amber-600 dark:text-amber-400'
+                                            : 'text-muted-foreground'
+                                    "
+                                >
+                                    {{ fmt(agence.reste) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr
+                                class="border-t-2 bg-muted/50 text-xs font-bold"
+                            >
+                                <td class="px-4 py-2.5 tracking-wide uppercase">
+                                    Total
+                                </td>
+                                <td class="px-4 py-2.5 text-right tabular-nums">
+                                    {{ fiches.length }}
+                                </td>
+                                <td class="px-4 py-2.5 text-right tabular-nums">
+                                    {{ fmt(stats.total_brut) }}
+                                </td>
+                                <td
+                                    class="px-4 py-2.5 text-right text-red-600 tabular-nums dark:text-red-400"
+                                >
+                                    {{
+                                        stats.total_deductions > 0
+                                            ? '-' + fmt(stats.total_deductions)
+                                            : '—'
+                                    }}
+                                </td>
+                                <td
+                                    class="px-4 py-2.5 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
+                                >
+                                    {{ fmt(stats.total_net) }}
+                                </td>
+                                <td class="px-4 py-2.5 text-right tabular-nums">
+                                    {{ fmt(stats.total_paye) }}
+                                </td>
+                                <td class="px-4 py-2.5 text-right tabular-nums">
+                                    {{
+                                        fmt(
+                                            Math.max(
+                                                0,
+                                                stats.total_net -
+                                                    stats.total_paye,
+                                            ),
+                                        )
+                                    }}
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
             </div>
 

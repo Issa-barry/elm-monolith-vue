@@ -4,69 +4,120 @@
 <meta charset="UTF-8" />
 <title>Liste des dépenses</title>
 <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: DejaVu Sans, sans-serif; font-size: 9px; color: #1a1a1a; background: #fff; }
+@page {
+    size: A4 landscape;
+    margin: 14mm 15mm 22mm 15mm;
+}
 
-    /* Saut de page entre sites — chaque site commence sur une nouvelle page */
-    .page-break {
-        page-break-before: always;
-        break-before: page;
-        display: block;
-        height: 0;
-        line-height: 0;
-        font-size: 0;
-    }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: DejaVu Sans, sans-serif; font-size: 9pt; color: #000; background: #fff; }
 
-    .site-page { padding: 24px 28px; }
+/* ── Pied de page fixe (répété sur toutes les pages) ──────────────── */
+.page-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 16pt;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 7pt;
+    color: #333;
+    border-top: 0.75pt solid #888;
+    padding-top: 3pt;
+}
+.footer-center { text-align: center; flex: 1; }
+.page-num:before   { content: counter(page); }
+.page-total:before { content: counter(pages); }
 
-    /* Header */
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; border-bottom: 2px solid #1d4ed8; padding-bottom: 14px; }
-    .org-name { font-size: 16px; font-weight: 700; color: #1e3a8a; }
-    .doc-title { text-align: right; }
-    .doc-type  { font-size: 13px; font-weight: 700; color: #1e3a8a; text-transform: uppercase; }
-    .doc-date  { font-size: 8px; color: #6b7280; margin-top: 4px; }
+/* ── Saut de page entre sites ─────────────────────────────────────── */
+.site-page { page-break-before: always; }
+.site-page:first-child { page-break-before: auto; }
 
-    /* Meta row */
-    .meta { display: flex; gap: 24px; margin-bottom: 14px; font-size: 8px; color: #374151; }
-    .meta span { font-weight: 600; color: #111827; }
+/* ── En-tête ──────────────────────────────────────────────────────── */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10pt;
+    border-bottom: 2pt solid #000;
+    padding-bottom: 8pt;
+}
+.org-name  { font-size: 14pt; font-weight: 700; color: #000; }
+.doc-title { text-align: right; }
+.doc-type  { font-size: 11pt; font-weight: 700; color: #000; text-transform: uppercase; }
+.doc-date  { font-size: 7.5pt; color: #444; margin-top: 3pt; }
 
-    /* Table */
-    table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
-    thead tr { background: #1e40af; }
-    thead th { padding: 6px 8px; text-align: left; font-size: 7.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #fff; white-space: nowrap; }
-    thead th.right { text-align: right; }
-    tbody tr:nth-child(even) { background: #f8fafc; }
-    tbody tr { border-bottom: 1px solid #e5e7eb; }
-    tbody td { padding: 5px 8px; font-size: 8px; vertical-align: top; }
-    tbody td.right { text-align: right; font-family: monospace; }
-    tbody td.mono { font-family: monospace; }
+/* ── Méta-infos ───────────────────────────────────────────────────── */
+.meta { display: flex; flex-wrap: wrap; gap: 16pt; margin-bottom: 8pt; font-size: 8pt; color: #333; }
+.meta span { font-weight: 700; color: #000; }
 
-    /* Statut badges */
-    .badge { display: inline-block; padding: 1px 6px; border-radius: 99px; font-size: 7px; font-weight: 700; text-transform: uppercase; }
-    .badge-brouillon { background: #f1f5f9; color: #475569; }
-    .badge-soumis    { background: #dbeafe; color: #1d4ed8; }
-    .badge-valide    { background: #d1fae5; color: #065f46; }
-    .badge-rejete    { background: #ffedd5; color: #c2410c; }
-    .badge-annule    { background: #fee2e2; color: #b91c1c; }
+/* ── Tableau ──────────────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; margin-bottom: 10pt; table-layout: fixed; }
+thead { display: table-header-group; }
 
-    /* Signature column */
-    .sig { min-width: 80px; border-bottom: 1px solid #9ca3af; height: 18px; }
+thead th {
+    background: #d0d0d0;
+    border: 0.75pt solid #000;
+    padding: 5pt 4pt;
+    font-size: 8pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.2pt;
+    color: #000;
+    white-space: nowrap;
+}
+thead th.right  { text-align: right; }
+thead th.center { text-align: center; }
 
-    /* Total row */
-    .total-row td { font-weight: 700; font-size: 9px; border-top: 2px solid #1d4ed8; padding-top: 6px; }
+tbody td {
+    border: 0.75pt solid #bbb;
+    padding: 4pt 4pt;
+    font-size: 8.5pt;
+    vertical-align: top;
+    color: #000;
+}
+tbody tr:nth-child(even) { background: #f2f2f2; }
+tbody td.right  { text-align: right; font-family: monospace; }
+tbody td.center { text-align: center; }
+tbody td.mono   { font-family: monospace; }
 
-    /* Footer */
-    .footer { display: flex; justify-content: space-between; font-size: 7.5px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-top: 4px; }
+/* Largeurs colonnes (A4 paysage ≈ 267mm utilisables) */
+.col-date  { width: 9%;  }
+.col-type  { width: 20%; }
+.col-conc  { width: 15%; }
+.col-veh   { width: 12%; }
+.col-mnt   { width: 10%; }
+.col-sta   { width: 9%;  }
+.col-saisi { width: 12%; }
+.col-valid { width: 13%; }
+
+
+/* ── Ligne total ──────────────────────────────────────────────────── */
+.total-row td {
+    background: #d0d0d0 !important;
+    font-weight: 700;
+    font-size: 9pt;
+    border-top: 1.5pt solid #000;
+    border-bottom: 1.5pt solid #000;
+    border-left: 0.75pt solid #000;
+    border-right: 0.75pt solid #000;
+    padding: 4pt 4pt;
+}
+.total-row td.right { text-align: right; }
 </style>
 </head>
 <body>
 
-@foreach($sites as $siteData)
+{{-- Pied de page global fixe --}}
+<div class="page-footer">
+    <span>{{ $org?->name ?? 'ELM' }} — Document confidentiel</span>
+    <span class="footer-center">Page <span class="page-num"></span> / <span class="page-total"></span></span>
+    <span>{{ count($sites) === 1 && $sites[0]['site_nom'] ? 'Agence : '.$sites[0]['site_nom'] : ($org?->name ?? 'ELM') }}</span>
+</div>
 
-{{-- Saut de page avant chaque site sauf le premier --}}
-@if(!$loop->first)
-<div class="page-break"></div>
-@endif
+@foreach($sites as $siteData)
 
 <div class="site-page">
 
@@ -102,56 +153,48 @@
     <table>
         <thead>
             <tr>
-                <th>Date</th>
-                <th>Type de dépense</th>
-                <th>Concerné</th>
-                <th>Véhicule</th>
-                <th class="right">Montant (GNF)</th>
-                <th>Statut</th>
-                <th>Saisi par</th>
-                <th>Signature</th>
+                <th class="col-date">Date</th>
+                <th class="col-type">Type de dépense</th>
+                <th class="col-conc">Concerné</th>
+                <th class="col-veh">Véhicule</th>
+                <th class="col-mnt right">Montant (GNF)</th>
+                <th class="col-sta">Statut</th>
+                <th class="col-saisi">Saisi par</th>
+                <th class="col-valid">Signature</th>
             </tr>
         </thead>
         <tbody>
             @forelse($siteData['rows'] as $row)
             <tr>
-                <td class="mono">{{ \Carbon\Carbon::parse($row['date_depense'])->format('d/m/Y') }}</td>
-                <td>
+                <td class="col-date mono">{{ \Carbon\Carbon::parse($row['date_depense'])->format('d/m/Y') }}</td>
+                <td class="col-type">
                     {{ $row['type']['libelle'] ?? '—' }}
                     @if(!empty($row['type']['categorie_label']))
-                    <br><small style="color:#6b7280">{{ $row['type']['categorie_label'] }}</small>
+                    <br><small style="color:#555; font-size:7pt;">{{ $row['type']['categorie_label'] }}</small>
                     @endif
                 </td>
-                <td>{{ $row['beneficiaire_label'] ?? '—' }}</td>
-                <td>{{ $row['vehicule_nom'] ?? '' }}</td>
-                <td class="right">{{ number_format((float)$row['montant'], 0, ',', ' ') }}</td>
-                <td>
-                    @php $s = $row['statut'] ?? '' @endphp
-                    <span class="badge badge-{{ $s }}">{{ $row['statut_label'] ?? $s }}</span>
-                </td>
-                <td>{{ $row['user']['name'] ?? '—' }}</td>
-                <td class="sig"></td>
+                <td class="col-conc">{{ $row['beneficiaire_label'] ?? '—' }}</td>
+                <td class="col-veh">{{ $row['vehicule_nom'] ?? '—' }}</td>
+                <td class="col-mnt right">{{ number_format((float)$row['montant'], 0, ',', ' ') }}</td>
+                <td class="col-sta">{{ $row['statut_label'] ?? ($row['statut'] ?? '—') }}</td>
+                <td class="col-saisi">{{ $row['user']['name'] ?? '—' }}</td>
+                <td class="col-valid"></td>
             </tr>
             @empty
             <tr>
-                <td colspan="8" style="text-align:center; color:#6b7280; padding: 20px;">Aucune dépense pour ces critères.</td>
+                <td colspan="8" style="text-align:center; color:#444; padding: 14pt;">Aucune dépense pour ces critères.</td>
             </tr>
             @endforelse
 
             @if($siteData['rows']->count() > 0)
             <tr class="total-row">
-                <td colspan="4" style="text-align:right; padding-right:8px; color:#374151;">Montant total :</td>
+                <td colspan="4" style="text-align:right; padding-right:5pt; font-size:8.5pt;">MONTANT TOTAL :</td>
                 <td class="right">{{ number_format($siteData['total'], 0, ',', ' ') }} GNF</td>
                 <td colspan="3"></td>
             </tr>
             @endif
         </tbody>
     </table>
-
-    <div class="footer">
-        <span>{{ $org?->name ?? 'ELM' }} — Document confidentiel</span>
-        <span>{{ $generated_at->format('d/m/Y H:i') }}</span>
-    </div>
 
 </div>
 

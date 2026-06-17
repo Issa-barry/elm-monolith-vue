@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AuditDrawer from '@/components/AuditDrawer.vue';
+import ComptabiliteFilters from '@/components/ComptabiliteFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -16,13 +18,12 @@ import {
     Download,
     FileText,
     HandCoins,
+    History,
     MoreHorizontal,
     Truck,
     User,
 } from 'lucide-vue-next';
-import PvDropdown from 'primevue/dropdown';
-import InputText from 'primevue/inputtext';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface LivreurRow {
     livreur_id: string;
@@ -39,11 +40,6 @@ interface Kpis {
     nb_livreurs: number;
     total_impaye: number;
     total_paye: number;
-}
-
-interface SelectOption {
-    value: string | null;
-    label: string;
 }
 
 interface PeriodeOption {
@@ -73,50 +69,44 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const searchVal = ref(props.search ?? '');
-const statutFiltre = ref<string | null>(props.filtre_statut || null);
-const periodeFiltre = ref<string | null>(props.selected_periode || null);
-const siteFiltre = ref<string | null>(props.filtre_site || null);
+const statutFiltre = ref(props.filtre_statut ?? '');
+const periodeFiltre = ref(props.selected_periode ?? '');
+const siteFiltre = ref(props.filtre_site ?? '');
 
-const STATUT_OPTIONS: SelectOption[] = [
-    { value: null, label: 'Tous les statuts' },
-    { value: 'impaye', label: 'Impayé' },
-    { value: 'paye', label: 'Payé' },
-];
-
-const PERIODE_OPTIONS = computed<SelectOption[]>(() => [
-    { value: null, label: 'Toutes les périodes' },
-    ...(props.periodes_disponibles ?? []).map((p) => ({
-        value: p.code,
-        label: p.label,
-    })),
-]);
-
-const SITE_OPTIONS = computed<SelectOption[]>(() => [
-    { value: null, label: 'Toutes les agences' },
-    ...(props.sites ?? []).map((s) => ({ value: s.value, label: s.label })),
-]);
+const hasActiveFilters = computed(
+    () =>
+        !!(
+            searchVal.value ||
+            statutFiltre.value ||
+            periodeFiltre.value ||
+            siteFiltre.value
+        ),
+);
 
 function appliquerFiltres() {
     router.get(
         '/comptabilite/commissions/logistique',
         {
             search: searchVal.value || undefined,
-            statut: statutFiltre.value ?? undefined,
-            periode: periodeFiltre.value ?? undefined,
-            site: siteFiltre.value ?? undefined,
+            statut: statutFiltre.value || undefined,
+            periode: periodeFiltre.value || undefined,
+            site: siteFiltre.value || undefined,
         },
         { preserveState: true, replace: true },
     );
 }
 
-let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-watch(searchVal, () => {
-    if (searchTimeout) clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(appliquerFiltres, 300);
-});
-watch(statutFiltre, appliquerFiltres);
-watch(periodeFiltre, appliquerFiltres);
-watch(siteFiltre, appliquerFiltres);
+function resetFilters() {
+    searchVal.value = '';
+    statutFiltre.value = '';
+    periodeFiltre.value = '';
+    siteFiltre.value = '';
+    router.get(
+        '/comptabilite/commissions/logistique',
+        {},
+        { preserveState: true, replace: true },
+    );
+}
 
 const kpiTotalBrut = computed(() =>
     props.livreurs.reduce(
@@ -141,6 +131,16 @@ const showPaiementDialog = ref(false);
 const selectedLivreur = ref<LivreurRow | null>(null);
 const paiementProcessing = ref(false);
 const paiementErrors = ref<Record<string, string>>({});
+
+const showAudit = ref(false);
+const auditLivreurId = ref('');
+const auditLivreurNom = ref('');
+
+function openAudit(l: LivreurRow) {
+    auditLivreurId.value = l.livreur_id;
+    auditLivreurNom.value = l.nom;
+    showAudit.value = true;
+}
 
 function openPaiement(livreur: LivreurRow) {
     selectedLivreur.value = livreur;
@@ -321,46 +321,45 @@ function fmtTel(tel: string | null | undefined): string {
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <InputText
-                    v-model="searchVal"
-                    placeholder="Nom, téléphone, véhicule…"
-                    class="w-64 text-sm"
-                />
-                <PvDropdown
-                    :options="STATUT_OPTIONS"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="statutFiltre"
-                    placeholder="Tous les statuts"
-                    class="w-48 text-sm"
-                    @change="(e) => (statutFiltre = e.value)"
-                />
-                <PvDropdown
-                    :options="PERIODE_OPTIONS"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="periodeFiltre"
-                    placeholder="Toutes les périodes"
-                    class="w-64 text-sm"
-                    @change="(e) => (periodeFiltre = e.value)"
-                />
-                <PvDropdown
-                    v-if="sites && sites.length > 0"
-                    :options="SITE_OPTIONS"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="siteFiltre"
-                    placeholder="Toutes les agences"
-                    class="w-48 text-sm"
-                    @change="(e) => (siteFiltre = e.value)"
-                />
-                <span class="text-xs text-muted-foreground"
-                    >{{ livreurs.length }} résultat{{
-                        livreurs.length !== 1 ? 's' : ''
-                    }}</span
+            <ComptabiliteFilters
+                v-model:search="searchVal"
+                search-placeholder="Rechercher un livreur, téléphone, véhicule..."
+                :has-active-filters="hasActiveFilters"
+                @filter="appliquerFiltres"
+                @reset="resetFilters"
+            >
+                <select
+                    v-model="statutFiltre"
+                    class="h-9 w-[160px] rounded-md border border-input bg-background px-2 text-sm"
                 >
-            </div>
+                    <option value="">Tous les statuts</option>
+                    <option value="impaye">Impayé</option>
+                    <option value="paye">Payé</option>
+                </select>
+                <select
+                    v-model="periodeFiltre"
+                    class="h-9 w-[200px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Toutes les périodes</option>
+                    <option
+                        v-for="p in periodes_disponibles"
+                        :key="p.code"
+                        :value="p.code"
+                    >
+                        {{ p.label }}
+                    </option>
+                </select>
+                <select
+                    v-if="sites && sites.length > 0"
+                    v-model="siteFiltre"
+                    class="h-9 w-[170px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Toutes les agences</option>
+                    <option v-for="s in sites" :key="s.value" :value="s.value">
+                        {{ s.label }}
+                    </option>
+                </select>
+            </ComptabiliteFilters>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -523,6 +522,13 @@ function fmtTel(tel: string | null | undefined): string {
                                                 Détail
                                             </Link>
                                         </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            class="cursor-pointer"
+                                            @click="openAudit(l)"
+                                        >
+                                            <History class="mr-2 h-4 w-4" />
+                                            Historique
+                                        </DropdownMenuItem>
                                         <template
                                             v-if="can_payer && l.impaye > 0"
                                         >
@@ -563,5 +569,13 @@ function fmtTel(tel: string | null | undefined): string {
         :processing="paiementProcessing"
         :errors="paiementErrors"
         @submit="handlePaiementSubmit"
+    />
+
+    <AuditDrawer
+        v-model:visible="showAudit"
+        :title="`Historique — ${auditLivreurNom}`"
+        auditable-type="App\Models\Livreur"
+        :auditable-id="auditLivreurId"
+        module="commissions_logistique"
     />
 </template>

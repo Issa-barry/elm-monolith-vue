@@ -171,7 +171,7 @@ class PaiementFicheController extends Controller
             fputcsv($handle, [
                 'Agence', 'Période', 'Référence', 'Type bénéficiaire', 'Nom bénéficiaire',
                 'Montant brut', 'Déductions', 'Net à payer', 'Statut',
-                'Date paiement', 'Mode paiement', 'Payé par',
+                'Date paiement', 'Mode paiement', 'Payé par', 'Signature',
             ], ';');
 
             foreach ($fiches as $f) {
@@ -188,6 +188,7 @@ class PaiementFicheController extends Controller
                     $f->date_paiement?->format('d/m/Y') ?? '',
                     $f->mode_paiement ?? '',
                     $f->payeur?->name ?? '',
+                    '',
                 ], ';');
             }
 

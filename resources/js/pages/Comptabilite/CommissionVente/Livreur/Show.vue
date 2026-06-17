@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import AuditTimeline from '@/components/AuditTimeline.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, HandCoins, History } from 'lucide-vue-next';
+import { ArrowLeft, HandCoins } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
@@ -139,7 +140,9 @@ function submitPaiement() {
     );
 }
 
-const showHistoriqueDialog = ref(false);
+const activeTab = ref<'informations' | 'paiements' | 'historique'>(
+    'informations',
+);
 
 function fmt(val: number | null | undefined) {
     return (
@@ -185,19 +188,6 @@ function formatMode(mode: string) {
                 </div>
                 <div class="flex items-center gap-2">
                     <Button
-                        v-if="historique_paiements.length > 0"
-                        variant="outline"
-                        size="sm"
-                        @click="showHistoriqueDialog = true"
-                    >
-                        <History class="mr-1.5 h-3.5 w-3.5" />
-                        Historique
-                        <span
-                            class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums"
-                            >{{ historique_paiements.length }}</span
-                        >
-                    </Button>
-                    <Button
                         v-if="can_payer && resume_global.solde_global > 0"
                         size="sm"
                         @click="openPaiement"
@@ -208,173 +198,290 @@ function formatMode(mode: string) {
                 </div>
             </div>
 
-            <!-- KPIs globaux -->
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div class="rounded-lg border bg-card p-4 text-center">
-                    <p class="text-base font-bold tabular-nums">
-                        {{ fmt(resume_global.total_brut_cumule) }}
-                    </p>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        Brut cumulé
-                    </p>
-                </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
-                    <p class="text-base font-bold tabular-nums">
-                        {{ fmt(resume_global.total_net_cumule) }}
-                    </p>
-                    <p class="mt-1 text-xs text-muted-foreground">Net cumulé</p>
-                </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
-                    <p
-                        class="text-base font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
-                    >
-                        {{ fmt(resume_global.total_verse) }}
-                    </p>
-                    <p class="mt-1 text-xs text-muted-foreground">Déjà payé</p>
-                </div>
-                <div
-                    class="rounded-lg border bg-card p-4 text-center"
+            <!-- Tabs -->
+            <div class="flex border-b">
+                <button
+                    type="button"
+                    class="px-4 py-2 text-sm font-medium transition-colors"
                     :class="
-                        resume_global.solde_global > 0
-                            ? 'border-amber-200 dark:border-amber-900'
-                            : ''
+                        activeTab === 'informations'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
                     "
+                    @click="activeTab = 'informations'"
                 >
-                    <p
-                        class="text-base font-bold tabular-nums"
+                    Informations
+                </button>
+                <button
+                    type="button"
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="
+                        activeTab === 'paiements'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="activeTab = 'paiements'"
+                >
+                    Paiements
+                    <span
+                        v-if="historique_paiements.length > 0"
+                        class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums"
+                        >{{ historique_paiements.length }}</span
+                    >
+                </button>
+                <button
+                    type="button"
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="
+                        activeTab === 'historique'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="activeTab = 'historique'"
+                >
+                    Historique
+                </button>
+            </div>
+
+            <template v-if="activeTab === 'informations'">
+                <!-- KPIs globaux -->
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div class="rounded-lg border bg-card p-4 text-center">
+                        <p class="text-base font-bold tabular-nums">
+                            {{ fmt(resume_global.total_brut_cumule) }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Brut cumulé
+                        </p>
+                    </div>
+                    <div class="rounded-lg border bg-card p-4 text-center">
+                        <p class="text-base font-bold tabular-nums">
+                            {{ fmt(resume_global.total_net_cumule) }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Net cumulé
+                        </p>
+                    </div>
+                    <div class="rounded-lg border bg-card p-4 text-center">
+                        <p
+                            class="text-base font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
+                        >
+                            {{ fmt(resume_global.total_verse) }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Déjà payé
+                        </p>
+                    </div>
+                    <div
+                        class="rounded-lg border bg-card p-4 text-center"
                         :class="
                             resume_global.solde_global > 0
-                                ? 'text-amber-600 dark:text-amber-400'
+                                ? 'border-amber-200 dark:border-amber-900'
                                 : ''
                         "
                     >
-                        {{ fmt(resume_global.solde_global) }}
-                    </p>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        Reste à payer
-                    </p>
-                </div>
-            </div>
-
-            <!-- Tableau commandes avec filtre période -->
-            <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
-                <div
-                    class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3"
-                >
-                    <div class="flex items-center gap-2">
-                        <h2
-                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                        >
-                            Détail par commande
-                        </h2>
-                        <span
-                            class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                            >{{ historique_commandes.length }}</span
-                        >
-                    </div>
-                    <Dropdown
-                        v-model="periodeFiltre"
-                        :options="PERIODE_OPTIONS"
-                        option-label="label"
-                        option-value="code"
-                        placeholder="Toutes les périodes"
-                        class="w-full text-sm sm:w-64"
-                        @change="changePeriode(periodeFiltre)"
-                    />
-                </div>
-
-                <div
-                    v-if="periode_stats"
-                    class="border-b bg-blue-50/50 px-4 py-2 dark:bg-blue-950/20"
-                >
-                    <p class="text-xs text-muted-foreground">
-                        {{ periode_stats.label }} — Net :
-                        <strong>{{
-                            fmt(periode_stats.total_commission)
-                        }}</strong>
-                        · Payé :
-                        <strong>{{ fmt(periode_stats.total_verse) }}</strong> ·
-                        Reste :
-                        <strong
+                        <p
+                            class="text-base font-bold tabular-nums"
                             :class="
-                                periode_stats.reste > 0
+                                resume_global.solde_global > 0
                                     ? 'text-amber-600 dark:text-amber-400'
                                     : ''
                             "
-                            >{{ fmt(periode_stats.reste) }}</strong
                         >
-                    </p>
+                            {{ fmt(resume_global.solde_global) }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Reste à payer
+                        </p>
+                    </div>
                 </div>
 
-                <table
-                    v-if="historique_commandes.length > 0"
-                    class="w-full text-sm"
-                >
-                    <thead>
-                        <tr class="border-b bg-muted/40">
-                            <th
-                                class="px-4 py-3 text-left font-medium text-muted-foreground"
-                            >
-                                Commande
-                            </th>
-                            <th
-                                class="px-4 py-3 text-left font-medium text-muted-foreground"
-                            >
-                                Date
-                            </th>
-                            <th
-                                class="px-4 py-3 text-left font-medium text-muted-foreground"
-                            >
-                                Période
-                            </th>
-                            <th
-                                class="px-4 py-3 text-right font-medium text-muted-foreground"
-                            >
-                                Net
-                            </th>
-                            <th
-                                class="px-4 py-3 text-right font-medium text-muted-foreground"
-                            >
-                                Payé
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        <tr
-                            v-for="c in historique_commandes"
-                            :key="c.commission_id"
-                            class="hover:bg-muted/10"
-                        >
-                            <td class="px-4 py-3 font-mono text-xs">
-                                {{ c.commande_reference ?? '—' }}
-                            </td>
-                            <td class="px-4 py-3 text-xs text-muted-foreground">
-                                {{ c.date_commande ?? '—' }}
-                            </td>
-                            <td class="px-4 py-3 text-xs text-muted-foreground">
-                                {{ c.periode_label ?? '—' }}
-                            </td>
-                            <td
-                                class="px-4 py-3 text-right font-medium tabular-nums"
-                            >
-                                {{ fmt(c.montant_net) }}
-                            </td>
-                            <td
-                                class="px-4 py-3 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
-                            >
-                                {{ fmt(c.montant_verse) }}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                <!-- Tableau commandes avec filtre période -->
                 <div
-                    v-else
-                    class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
+                    class="overflow-hidden rounded-xl border bg-card shadow-sm"
                 >
-                    <HandCoins class="h-10 w-10 opacity-30" />
-                    <p class="text-sm">Aucune commande pour cette période.</p>
+                    <div
+                        class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3"
+                    >
+                        <div class="flex items-center gap-2">
+                            <h2
+                                class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Détail par commande
+                            </h2>
+                            <span
+                                class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                                >{{ historique_commandes.length }}</span
+                            >
+                        </div>
+                        <Dropdown
+                            v-model="periodeFiltre"
+                            :options="PERIODE_OPTIONS"
+                            option-label="label"
+                            option-value="code"
+                            placeholder="Toutes les périodes"
+                            class="w-full text-sm sm:w-64"
+                            @change="changePeriode(periodeFiltre)"
+                        />
+                    </div>
+
+                    <div
+                        v-if="periode_stats"
+                        class="border-b bg-blue-50/50 px-4 py-2 dark:bg-blue-950/20"
+                    >
+                        <p class="text-xs text-muted-foreground">
+                            {{ periode_stats.label }} — Net :
+                            <strong>{{
+                                fmt(periode_stats.total_commission)
+                            }}</strong>
+                            · Payé :
+                            <strong>{{
+                                fmt(periode_stats.total_verse)
+                            }}</strong>
+                            · Reste :
+                            <strong
+                                :class="
+                                    periode_stats.reste > 0
+                                        ? 'text-amber-600 dark:text-amber-400'
+                                        : ''
+                                "
+                                >{{ fmt(periode_stats.reste) }}</strong
+                            >
+                        </p>
+                    </div>
+
+                    <table
+                        v-if="historique_commandes.length > 0"
+                        class="w-full text-sm"
+                    >
+                        <thead>
+                            <tr class="border-b bg-muted/40">
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Commande
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Date
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Période
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Net
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Payé
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr
+                                v-for="c in historique_commandes"
+                                :key="c.commission_id"
+                                class="hover:bg-muted/10"
+                            >
+                                <td class="px-4 py-3 font-mono text-xs">
+                                    {{ c.commande_reference ?? '—' }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-xs text-muted-foreground"
+                                >
+                                    {{ c.date_commande ?? '—' }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-xs text-muted-foreground"
+                                >
+                                    {{ c.periode_label ?? '—' }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right font-medium tabular-nums"
+                                >
+                                    {{ fmt(c.montant_net) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
+                                >
+                                    {{ fmt(c.montant_verse) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div
+                        v-else
+                        class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
+                    >
+                        <HandCoins class="h-10 w-10 opacity-30" />
+                        <p class="text-sm">
+                            Aucune commande pour cette période.
+                        </p>
+                    </div>
                 </div>
-            </div>
+            </template>
+
+            <template v-if="activeTab === 'paiements'">
+                <div class="rounded-xl border bg-card">
+                    <div class="border-b px-4 py-3">
+                        <h2 class="text-sm font-semibold">
+                            Paiements enregistrés
+                        </h2>
+                    </div>
+                    <div
+                        v-if="historique_paiements.length > 0"
+                        class="divide-y"
+                    >
+                        <div
+                            v-for="p in historique_paiements"
+                            :key="p.id"
+                            class="px-4 py-3"
+                        >
+                            <p class="text-sm font-medium">
+                                {{ fmt(p.montant) }}
+                            </p>
+                            <p class="text-xs text-muted-foreground">
+                                {{ p.paid_at }} ·
+                                {{ formatMode(p.mode_paiement) }}
+                            </p>
+                            <p
+                                v-if="p.note"
+                                class="text-xs text-muted-foreground"
+                            >
+                                {{ p.note }}
+                            </p>
+                            <p
+                                v-if="p.created_by"
+                                class="text-xs text-muted-foreground/60"
+                            >
+                                Par {{ p.created_by }}
+                            </p>
+                        </div>
+                    </div>
+                    <p
+                        v-else
+                        class="py-8 text-center text-sm text-muted-foreground"
+                    >
+                        Aucun paiement enregistré.
+                    </p>
+                </div>
+            </template>
+
+            <template v-if="activeTab === 'historique'">
+                <div class="rounded-xl border bg-card p-5">
+                    <AuditTimeline
+                        auditable-type="App\Models\Livreur"
+                        :auditable-id="livreur.id"
+                        module="commission_vente"
+                    />
+                </div>
+            </template>
         </div>
     </AppLayout>
 
@@ -449,31 +556,5 @@ function formatMode(mode: string) {
                 </Button>
             </div>
         </template>
-    </Dialog>
-
-    <!-- Dialog historique -->
-    <Dialog
-        v-model:visible="showHistoriqueDialog"
-        modal
-        :style="{ width: '480px' }"
-        header="Historique des paiements"
-    >
-        <div v-if="historique_paiements.length > 0" class="divide-y">
-            <div v-for="p in historique_paiements" :key="p.id" class="py-3">
-                <p class="text-sm font-medium">{{ fmt(p.montant) }}</p>
-                <p class="text-xs text-muted-foreground">
-                    {{ p.paid_at }} · {{ formatMode(p.mode_paiement) }}
-                </p>
-                <p v-if="p.note" class="text-xs text-muted-foreground">
-                    {{ p.note }}
-                </p>
-                <p v-if="p.created_by" class="text-xs text-muted-foreground/60">
-                    Par {{ p.created_by }}
-                </p>
-            </div>
-        </div>
-        <p v-else class="py-8 text-center text-sm text-muted-foreground">
-            Aucun paiement enregistré.
-        </p>
     </Dialog>
 </template>

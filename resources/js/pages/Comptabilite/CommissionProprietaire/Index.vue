@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AuditDrawer from '@/components/AuditDrawer.vue';
+import ComptabiliteFilters from '@/components/ComptabiliteFilters.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -16,6 +18,7 @@ import {
     Download,
     FileText,
     HandCoins,
+    History,
     MoreHorizontal,
     Truck,
     User,
@@ -23,8 +26,7 @@ import {
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
-import InputText from 'primevue/inputtext';
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref } from 'vue';
 
 interface BeneficiaireRow {
     beneficiaire_id: string;
@@ -77,17 +79,14 @@ const searchVal = ref(props.search ?? '');
 const statutFiltre = ref(props.filtre_statut || '');
 const periodeFiltre = ref(props.selected_periode || '');
 
-const STATUT_OPTIONS = [
-    { value: '', label: 'Tous les statuts' },
-    { value: 'impaye', label: 'Impayé' },
-    { value: 'partiel', label: 'Partiel' },
-    { value: 'paye', label: 'Payé' },
-];
-
-const PERIODE_OPTIONS = computed(() => [
+const periodeOptions = computed(() => [
     { code: '', label: 'Toutes les périodes' },
     ...props.periodes_disponibles,
 ]);
+
+const hasActiveFilters = computed(
+    () => !!(searchVal.value || statutFiltre.value || periodeFiltre.value),
+);
 
 function appliquerFiltres() {
     router.get(
@@ -101,13 +100,16 @@ function appliquerFiltres() {
     );
 }
 
-let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-watch(searchVal, () => {
-    if (searchTimeout) clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(appliquerFiltres, 300);
-});
-watch(statutFiltre, appliquerFiltres);
-watch(periodeFiltre, appliquerFiltres);
+function resetFilters() {
+    searchVal.value = '';
+    statutFiltre.value = '';
+    periodeFiltre.value = '';
+    router.get(
+        '/comptabilite/commissions/proprietaires',
+        {},
+        { preserveState: true, replace: true },
+    );
+}
 
 function statutClass(s: string) {
     return (
@@ -141,6 +143,16 @@ const MODES = [
     { value: 'cheque', label: 'Chèque' },
     { value: 'mobile_money', label: 'Mobile Money' },
 ];
+
+const showAudit = ref(false);
+const auditBenefId = ref('');
+const auditBenefNom = ref('');
+
+function openAudit(b: BeneficiaireRow) {
+    auditBenefId.value = b.beneficiaire_id;
+    auditBenefNom.value = b.beneficiaire_nom;
+    showAudit.value = true;
+}
 
 function openPaiement(b: BeneficiaireRow) {
     selectedBenef.value = b;
@@ -318,34 +330,36 @@ function fmtTel(tel: string | null | undefined): string {
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <InputText
-                    v-model="searchVal"
-                    placeholder="Nom, téléphone…"
-                    class="w-56 text-sm"
-                />
-                <Dropdown
+            <ComptabiliteFilters
+                v-model:search="searchVal"
+                search-placeholder="Rechercher un propriétaire, téléphone..."
+                :has-active-filters="hasActiveFilters"
+                @filter="appliquerFiltres"
+                @reset="resetFilters"
+            >
+                <select
                     v-model="statutFiltre"
-                    :options="STATUT_OPTIONS"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Tous les statuts"
-                    class="w-48 text-sm"
-                />
-                <Dropdown
-                    v-model="periodeFiltre"
-                    :options="PERIODE_OPTIONS"
-                    option-label="label"
-                    option-value="code"
-                    placeholder="Toutes les périodes"
-                    class="w-56 text-sm"
-                />
-                <span class="text-xs text-muted-foreground"
-                    >{{ beneficiaires.length }} résultat{{
-                        beneficiaires.length !== 1 ? 's' : ''
-                    }}</span
+                    class="h-9 w-[160px] rounded-md border border-input bg-background px-2 text-sm"
                 >
-            </div>
+                    <option value="">Tous les statuts</option>
+                    <option value="impaye">Impayé</option>
+                    <option value="partiel">Partiel</option>
+                    <option value="paye">Payé</option>
+                </select>
+                <select
+                    v-model="periodeFiltre"
+                    class="h-9 w-[200px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Toutes les périodes</option>
+                    <option
+                        v-for="p in periodeOptions"
+                        :key="p.code"
+                        :value="p.code"
+                    >
+                        {{ p.label }}
+                    </option>
+                </select>
+            </ComptabiliteFilters>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -515,6 +529,13 @@ function fmtTel(tel: string | null | undefined): string {
                                                 Détail
                                             </Link>
                                         </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            class="cursor-pointer"
+                                            @click="openAudit(b)"
+                                        >
+                                            <History class="mr-2 h-4 w-4" />
+                                            Historique
+                                        </DropdownMenuItem>
                                         <template
                                             v-if="
                                                 can_payer && b.solde_restant > 0
@@ -622,4 +643,12 @@ function fmtTel(tel: string | null | undefined): string {
             </div>
         </template>
     </Dialog>
+
+    <AuditDrawer
+        v-model:visible="showAudit"
+        :title="`Historique — ${auditBenefNom}`"
+        auditable-type="App\Models\Proprietaire"
+        :auditable-id="auditBenefId"
+        module="commissions_proprietaires"
+    />
 </template>
