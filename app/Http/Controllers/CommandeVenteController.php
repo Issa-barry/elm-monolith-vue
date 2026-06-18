@@ -73,6 +73,7 @@ class CommandeVenteController extends Controller
         }
 
         $totalRemaining = $factures->sum(fn ($f) => $f->montant_restant);
+        $totalEncaisse = $factures->sum(fn ($f) => $f->montant_encaisse);
         $hasImpayee = $factures->contains(fn ($f) => $f->statut_facture === StatutFactureVente::IMPAYEE);
         $derniere = $factures->first();
 
@@ -81,8 +82,18 @@ class CommandeVenteController extends Controller
             'status' => $hasImpayee ? 'impaye' : 'partiel',
             'unpaid_invoices_count' => $factures->count(),
             'total_remaining' => (int) round($totalRemaining),
+            'total_encaisse' => (int) round($totalEncaisse),
             'last_invoice_reference' => $derniere->reference,
             'last_invoice_date' => $derniere->created_at?->format('Y-m-d'),
+            'factures' => $factures->map(fn ($f) => [
+                'reference' => $f->reference,
+                'date' => $f->created_at?->format('Y-m-d'),
+                'montant' => (int) round((float) $f->montant_net),
+                'encaisse' => (int) round($f->montant_encaisse),
+                'restant' => (int) round($f->montant_restant),
+                'statut' => $f->statut_facture->value,
+                'statut_label' => $f->statut_facture->label(),
+            ])->values(),
         ]);
     }
 
@@ -93,8 +104,10 @@ class CommandeVenteController extends Controller
             'status' => 'aucun',
             'unpaid_invoices_count' => 0,
             'total_remaining' => 0,
+            'total_encaisse' => 0,
             'last_invoice_reference' => null,
             'last_invoice_date' => null,
+            'factures' => [],
         ];
     }
 
