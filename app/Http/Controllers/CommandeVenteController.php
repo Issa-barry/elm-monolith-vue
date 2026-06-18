@@ -217,9 +217,17 @@ class CommandeVenteController extends Controller
 
         $commande->load(['lignes.produit', 'vehicule', 'client']);
         $this->auditService->record($commande, AuditEvent::CREATED, auth()->user(), null, $this->commandeSnapshot($commande));
+
+        if ($commande->vehicule_id && $commande->lignes->isNotEmpty()) {
+            CommandeVenteService::confirmer($commande);
+            CommandeVenteActiviteService::log($commande, 'creation_confirmee');
+
+            return redirect()->route('ventes.show', $commande)->with('success', 'Commande créée et confirmée.');
+        }
+
         CommandeVenteActiviteService::log($commande, 'creation');
 
-        return redirect()->route('ventes.show', $commande)->with('success', 'Commande créée en brouillon.');
+        return redirect()->route('ventes.show', $commande)->with('success', 'Commande créée.');
     }
 
     // ── Show ──────────────────────────────────────────────────────────────────
@@ -738,7 +746,10 @@ class CommandeVenteController extends Controller
 
     private function vehiculesActifs(string $orgId): Collection
     {
-        return Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur')])
+        return Vehicule::with([
+            'equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur'),
+            'equipe.membres.livreur',
+        ])
             ->where('organization_id', $orgId)
             ->where('is_active', true)
             ->where('categorie', 'externe')
@@ -752,6 +763,9 @@ class CommandeVenteController extends Controller
                 'livreur_nom' => ($l = $v->equipe?->livreurs->first())
                     ? trim($l->prenom.' '.$l->nom)
                     : null,
+                'livreur_telephone' => $v->equipe?->membres
+                    ->firstWhere('role', 'chauffeur')
+                    ?->livreur?->telephone,
             ]);
     }
 

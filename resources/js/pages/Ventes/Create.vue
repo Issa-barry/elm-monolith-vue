@@ -6,7 +6,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Lock, Plus, Save, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Lock, Phone, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
@@ -48,6 +48,7 @@ interface VehiculeOption {
     immatriculation: string;
     capacite_packs: number | null;
     livreur_nom: string | null;
+    livreur_telephone: string | null;
 }
 
 interface ClientOption {
@@ -365,7 +366,22 @@ const canSubmit = computed(
 );
 
 // ── Soumission ────────────────────────────────────────────────────────────────
+const showConfirmDialog = ref(false);
+
+const lignesVisibles = computed(() =>
+    form.lignes.filter((l) => l.produit_id !== null),
+);
+
+function nomProduit(produitId: number | null): string {
+    if (!produitId) return '—';
+    return props.produits.find((p) => p.id === produitId)?.nom ?? '—';
+}
+
 function submit() {
+    showConfirmDialog.value = true;
+}
+
+function confirmerEtCreer() {
     form.post('/ventes');
 }
 </script>
@@ -533,19 +549,7 @@ function submit() {
                                     <div>
                                         <p
                                             class="text-sm font-semibold text-emerald-800 dark:text-emerald-300"
-                                        >
-                                            Aucune facture impayée
-                                        </p>
-                                        <p
-                                            class="mt-0.5 text-xs font-bold text-emerald-800 dark:text-emerald-300"
-                                        >
-                                            0 GNF
-                                        </p>
-                                        <p
-                                            class="mt-0.5 text-xs text-emerald-700/70 dark:text-emerald-400/70"
-                                        >
-                                            Ce véhicule est à jour de ses
-                                            paiements.
+                                        > Ce véhicule est à jour de ses paiements.                                     
                                         </p>
                                     </div>
                                 </div>
@@ -772,29 +776,16 @@ function submit() {
                                 "
                                 class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30"
                             >
-                                <div class="flex items-start gap-2.5">
+                                <div class="flex items-center gap-2.5">
                                     <span
-                                        class="mt-0.5 text-base text-emerald-600 dark:text-emerald-400"
+                                        class="text-base text-emerald-600 dark:text-emerald-400"
                                         >✓</span
                                     >
-                                    <div>
-                                        <p
-                                            class="text-sm font-semibold text-emerald-800 dark:text-emerald-300"
-                                        >
-                                            Aucune facture impayée
-                                        </p>
-                                        <p
-                                            class="mt-0.5 text-xs font-bold text-emerald-800 dark:text-emerald-300"
-                                        >
-                                            0 GNF
-                                        </p>
-                                        <p
-                                            class="mt-0.5 text-xs text-emerald-700/70 dark:text-emerald-400/70"
-                                        >
-                                            Ce client est à jour de ses
-                                            paiements.
-                                        </p>
-                                    </div>
+                                    <p
+                                        class="text-sm font-semibold text-emerald-800 dark:text-emerald-300"
+                                    >
+                                        Ce client est à jour de ses paiements.
+                                    </p> 
                                 </div>
                             </div>
 
@@ -1319,11 +1310,7 @@ function submit() {
                         <Button type="button" variant="outline">Retour</Button>
                     </Link>
                     <Button type="submit" :disabled="!canSubmit">
-                        {{
-                            form.processing
-                                ? 'Enregistrement…'
-                                : 'Enregistrer la commande'
-                        }}
+                        Créer la commande
                     </Button>
                 </div>
             </form>
@@ -1335,11 +1322,227 @@ function submit() {
         >
             <Button class="w-full" :disabled="!canSubmit" @click="submit">
                 <Save class="mr-2 h-4 w-4" />
-                {{
-                    form.processing ? 'Enregistrement…' : 'Enregistrer la vente'
-                }}
+                Créer la commande
             </Button>
         </div>
+
+        <!-- Dialog Confirmation création -->
+        <Dialog
+            v-model:visible="showConfirmDialog"
+            modal
+            :closable="true"
+            :style="{ width: '720px', maxWidth: '95vw' }"
+            :pt="{
+                root: { class: 'rounded-2xl shadow-2xl' },
+                header: {
+                    class: 'rounded-t-2xl border-b border-border px-6 py-4',
+                },
+                content: { class: 'p-0' },
+            }"
+        >
+            <template #header>
+                <div>
+                    <h2 class="text-lg font-semibold">
+                        Confirmer la création de la commande
+                    </h2>
+                    <p class="mt-0.5 text-sm text-muted-foreground">
+                        Vérifiez le récapitulatif avant de valider.
+                    </p>
+                </div>
+            </template>
+
+            <!-- Informations générales -->
+            <div
+                class="grid grid-cols-2 gap-x-8 gap-y-4 border-b border-border p-5"
+            >
+                <div>
+                    <p class="text-xs text-muted-foreground">Site</p>
+                    <p class="mt-0.5 font-medium">{{ user_site.label }}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-muted-foreground">Véhicule</p>
+                    <p class="mt-0.5 font-medium">
+                        {{
+                            vehiculeSelected
+                                ? vehiculeLabel(vehiculeSelected)
+                                : '—'
+                        }}
+                    </p>
+                </div>
+                <div>
+                    <p class="text-xs text-muted-foreground">Client</p>
+                    <p class="mt-0.5 font-medium">
+                        {{ clientSelected ? clientLabel(clientSelected) : '—' }}
+                    </p>
+                </div>
+                <div>
+                    <p class="text-xs text-muted-foreground">Chauffeur</p>
+                    <template v-if="vehiculeSelected?.livreur_nom">
+                        <p class="mt-0.5 font-medium">
+                            {{ vehiculeSelected.livreur_nom }}
+                        </p>
+                        <p
+                            class="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"
+                        >
+                            <Phone class="h-3 w-3 shrink-0" />
+                            {{
+                                vehiculeSelected.livreur_telephone
+                                    ? formatPhoneDisplay(
+                                          vehiculeSelected.livreur_telephone,
+                                      )
+                                    : 'Non renseigné'
+                            }}
+                        </p>
+                    </template>
+                    <p v-else class="mt-0.5 text-sm text-muted-foreground">
+                        Non affecté
+                    </p>
+                </div>
+            </div>
+
+            <!-- Produits -->
+            <div class="border-b border-border">
+                <table class="w-full text-sm">
+                    <thead class="bg-muted/50">
+                        <tr class="border-b border-border">
+                            <th
+                                class="px-5 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                Produit
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                Demandée
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                Prix unit.
+                            </th>
+                            <th
+                                class="px-5 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                Total
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border">
+                        <tr
+                            v-for="(ligne, i) in lignesVisibles"
+                            :key="i"
+                            class="hover:bg-muted/30"
+                        >
+                            <td class="px-5 py-3 font-medium">
+                                {{ nomProduit(ligne.produit_id) }}
+                            </td>
+                            <td class="px-4 py-3 text-right tabular-nums">
+                                {{ ligne.qte }}
+                            </td>
+                            <td
+                                class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                            >
+                                {{ formatGNF(ligne.prix_vente) }}
+                            </td>
+                            <td
+                                class="px-5 py-3 text-right font-semibold tabular-nums"
+                            >
+                                {{ formatGNF(ligne.total) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tfoot class="border-t border-border">
+                        <tr>
+                            <td colspan="2"></td>
+                            <td
+                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                Qté totale
+                            </td>
+                            <td
+                                class="px-5 py-2.5 text-right font-semibold tabular-nums"
+                            >
+                                {{ quantiteTotale }} packs
+                            </td>
+                        </tr>
+                        <tr class="border-t border-border">
+                            <td colspan="2"></td>
+                            <td
+                                class="px-4 py-3 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                Total
+                            </td>
+                            <td
+                                class="px-5 py-3 text-right text-xl font-bold tabular-nums"
+                            >
+                                {{ formatGNF(totalGeneral) }}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <!-- Alertes -->
+            <div
+                v-if="
+                    vehiculeSolvabilite?.has_debt || clientSolvabilite?.has_debt
+                "
+                class="space-y-2 border-b border-border bg-amber-50 px-5 py-3 dark:bg-amber-950/20"
+            >
+                <p
+                    class="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400"
+                >
+                    Alertes
+                </p>
+                <div
+                    v-if="vehiculeSolvabilite?.has_debt"
+                    class="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"
+                >
+                    <span>⚠</span>
+                    <span
+                        >Véhicule : factures impayées —
+                        <strong>{{
+                            formatGNF(vehiculeSolvabilite.total_remaining)
+                        }}</strong></span
+                    >
+                </div>
+                <div
+                    v-if="clientSolvabilite?.has_debt"
+                    class="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"
+                >
+                    <span>⚠</span>
+                    <span
+                        >Client : factures impayées —
+                        <strong>{{
+                            formatGNF(clientSolvabilite.total_remaining)
+                        }}</strong></span
+                    >
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center justify-between px-5 py-4">
+                <button
+                    type="button"
+                    class="rounded-lg border bg-card px-4 py-2 text-sm font-medium hover:bg-muted/50"
+                    @click="showConfirmDialog = false"
+                >
+                    Retour à la saisie
+                </button>
+                <button
+                    type="button"
+                    class="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                    :disabled="form.processing"
+                    @click="confirmerEtCreer"
+                >
+                    {{
+                        form.processing
+                            ? 'Création en cours…'
+                            : 'Confirmer et créer'
+                    }}
+                </button>
+            </div>
+        </Dialog>
 
         <!-- Dialog Factures impayées -->
         <Dialog
