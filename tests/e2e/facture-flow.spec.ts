@@ -42,7 +42,17 @@ test('commande -> confirmation -> chargement -> encaissement facture -> visible 
     await expect(submitCreate).toBeEnabled({ timeout: 10_000 });
     await submitCreate.click();
 
-    await expect(page).toHaveURL(/\/ventes\/[a-z0-9]+$/, { timeout: 30_000 });
+    // La soumission ouvre un dialog de confirmation — cliquer "Confirmer et créer"
+    const confirmerEtCreerBtn = page.getByRole('button', {
+        name: /confirmer et créer/i,
+    });
+    await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
+    await confirmerEtCreerBtn.click();
+
+    // "create" est alphanumérique et matcherait le regex — exclure explicitement
+    await expect(page).toHaveURL(/\/ventes\/(?!create)[a-z0-9]+$/, {
+        timeout: 30_000,
+    });
 
     // ── 2. Confirmer si BROUILLON (sinon auto-confirmée à la création) ─────────
     // Quand vehicule + lignes sont présents, le controller auto-confirme la commande
