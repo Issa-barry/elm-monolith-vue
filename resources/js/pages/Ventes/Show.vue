@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TicketCommandeVente from '@/components/print/TicketCommandeVente.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -8,9 +9,10 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
+import { useTicketPrint } from '@/composables/useTicketPrint';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     CheckCircle,
@@ -21,6 +23,7 @@ import {
     Package,
     PackageOpen,
     Pencil,
+    Printer,
     Receipt,
     Truck,
     XCircle,
@@ -397,6 +400,31 @@ const showChargeeCol = computed(
     () => !props.commande.is_brouillon && !props.commande.is_a_charger,
 );
 
+// ── Ticket impression ─────────────────────────────────────────────────────────
+const page = usePage();
+const orgNom = computed(
+    () =>
+        (
+            page.props as Record<string, unknown> & {
+                auth?: { user?: { organization?: { nom?: string } } };
+            }
+        ).auth?.user?.organization?.nom ?? 'Eau la maman',
+);
+const currentUserName = computed(
+    () =>
+        (
+            page.props as Record<string, unknown> & {
+                auth?: { user?: { name?: string } };
+            }
+        ).auth?.user?.name ?? '',
+);
+const ticketDialogVisible = ref(false);
+const { printFromElement } = useTicketPrint();
+
+function printTicketCommande(): void {
+    printFromElement('ticket-commande-print');
+}
+
 // ── Timeline de progression ────────────────────────────────────────────────────
 const STEPS = [
     { key: 'a_charger', shortLabel: 'À charger', icon: Package },
@@ -478,6 +506,14 @@ function connectorIsActive(idx: number): boolean {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" class="w-52">
+                            <DropdownMenuItem
+                                class="cursor-pointer"
+                                @click="ticketDialogVisible = true"
+                            >
+                                <Printer class="h-4 w-4" />
+                                Imprimer ticket
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem
                                 v-if="commande.can_modifier"
                                 as-child
@@ -585,6 +621,16 @@ function connectorIsActive(idx: number): boolean {
                         @click="historiquesDialogVisible = true"
                     >
                         <History class="h-4 w-4" />
+                    </Button>
+
+                    <!-- Imprimer ticket -->
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        @click="ticketDialogVisible = true"
+                    >
+                        <Printer class="mr-2 h-4 w-4" />
+                        Ticket
                     </Button>
 
                     <!-- Modifier (brouillon) -->
@@ -1369,6 +1415,37 @@ function connectorIsActive(idx: number): boolean {
                                 ? 'Annulation…'
                                 : "Confirmer l'annulation"
                         }}
+                    </Button>
+                </div>
+            </template>
+        </Dialog>
+
+        <!-- Dialog Ticket -->
+        <Dialog
+            v-model:visible="ticketDialogVisible"
+            modal
+            header="Ticket commande"
+            :style="{ width: '380px' }"
+        >
+            <div class="flex justify-center py-2">
+                <div id="ticket-commande-print">
+                    <TicketCommandeVente
+                        :commande="commande"
+                        :org-nom="orgNom"
+                        :current-user="currentUserName"
+                    />
+                </div>
+            </div>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <Button
+                        variant="outline"
+                        @click="ticketDialogVisible = false"
+                        >Fermer</Button
+                    >
+                    <Button @click="printTicketCommande">
+                        <Printer class="mr-2 h-4 w-4" />
+                        Imprimer
                     </Button>
                 </div>
             </template>
