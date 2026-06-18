@@ -109,11 +109,11 @@ function searchVehicule(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
     vehiculeSuggests.value = q
         ? props.vehicules.filter(
-              (v) =>
-                  v.nom_vehicule.toLowerCase().includes(q) ||
-                  v.immatriculation.toLowerCase().includes(q) ||
-                  (v.livreur_nom && v.livreur_nom.toLowerCase().includes(q)),
-          )
+            (v) =>
+                v.nom_vehicule.toLowerCase().includes(q) ||
+                v.immatriculation.toLowerCase().includes(q) ||
+                (v.livreur_nom && v.livreur_nom.toLowerCase().includes(q)),
+        )
         : [...props.vehicules];
 }
 
@@ -167,11 +167,11 @@ function searchClient(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
     clientSuggests.value = q
         ? props.clients.filter(
-              (c) =>
-                  c.nom.toLowerCase().includes(q) ||
-                  (c.prenom && c.prenom.toLowerCase().includes(q)) ||
-                  (c.telephone && c.telephone.includes(q)),
-          )
+            (c) =>
+                c.nom.toLowerCase().includes(q) ||
+                (c.prenom && c.prenom.toLowerCase().includes(q)) ||
+                (c.telephone && c.telephone.includes(q)),
+        )
         : [...props.clients];
 }
 
@@ -387,18 +387,15 @@ function confirmerEtCreer() {
 </script>
 
 <template>
+
     <Head title="Nouvelle commande" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- Mobile sticky header -->
-        <div
-            class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
-        >
+        <div class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden">
             <div class="relative flex items-center justify-center px-4 py-3">
-                <Link
-                    href="/ventes"
-                    class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
-                >
+                <Link href="/ventes"
+                    class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95">
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
                 <div class="text-center">
@@ -423,21 +420,15 @@ function confirmerEtCreer() {
             <form id="vente-form" class="space-y-6" @submit.prevent="submit">
                 <!-- En-tête commande -->
                 <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-                    <h2
-                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                    >
+                    <h2 class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase">
                         Informations générales
                     </h2>
                     <!-- Site rattaché (lecture seule) -->
-                    <div
-                        class="mb-4 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2.5"
-                    >
-                        <span class="text-xs text-muted-foreground"
-                            >Site :</span
-                        >
+                    <div class="mb-4 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2.5">
+                        <span class="text-xs text-muted-foreground">Site :</span>
                         <span class="text-sm font-medium">{{
                             user_site.label
-                        }}</span>
+                            }}</span>
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-2">
@@ -446,211 +437,134 @@ function confirmerEtCreer() {
                             <Label class="mb-1.5 block text-sm">
                                 Véhicule
                             </Label>
-                            <AutoComplete
-                                v-model="vehiculeSelected"
-                                :suggestions="vehiculeSuggests"
-                                :option-label="vehiculeLabel"
-                                @complete="searchVehicule"
-                                @item-select="
+                            <AutoComplete v-model="vehiculeSelected" :suggestions="vehiculeSuggests"
+                                :option-label="vehiculeLabel" @complete="searchVehicule" @item-select="
                                     onVehiculeSelect(vehiculeSelected)
-                                "
-                                @clear="onVehiculeClear"
-                                placeholder="Nom, immatriculation, livreur…"
-                                class="w-full"
-                                input-class="w-full"
-                                :class="{
+                                    " @clear="onVehiculeClear" placeholder="Nom, immatriculation, livreur…" class="w-full"
+                                input-class="w-full" :class="{
                                     'p-invalid': form.errors.vehicule_id,
-                                }"
-                                dropdown
-                                force-selection
-                            >
+                                }" dropdown force-selection>
                                 <template #option="{ option }">
                                     <div class="py-0.5">
                                         <div class="leading-tight font-medium">
                                             {{ option.nom_vehicule }}
                                         </div>
-                                        <div
-                                            class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground"
-                                        >
+                                        <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                                             <span class="font-mono">{{
                                                 option.immatriculation
-                                            }}</span>
-                                            <span
-                                                v-if="
-                                                    option.capacite_packs !==
-                                                    null
-                                                "
-                                                class="before:mr-2 before:content-['·']"
-                                            >
+                                                }}</span>
+                                            <span v-if="
+                                                option.capacite_packs !==
+                                                null
+                                            " class="before:mr-2 before:content-['·']">
                                                 {{ option.capacite_packs }}
                                                 packs
                                             </span>
-                                            <span
-                                                v-if="option.livreur_nom"
-                                                class="before:mr-2 before:content-['·']"
-                                                >{{ option.livreur_nom }}</span
-                                            >
+                                            <span v-if="option.livreur_nom" class="before:mr-2 before:content-['·']">{{
+                                                option.livreur_nom }}</span>
                                         </div>
                                     </div>
                                 </template>
                                 <template #empty>
-                                    <span class="text-sm text-muted-foreground"
-                                        >Aucun véhicule trouvé.</span
-                                    >
+                                    <span class="text-sm text-muted-foreground">Aucun véhicule trouvé.</span>
                                 </template>
                             </AutoComplete>
-                            <p
-                                v-if="form.errors.vehicule_id"
-                                class="mt-1 text-xs text-destructive"
-                            >
+                            <p v-if="form.errors.vehicule_id" class="mt-1 text-xs text-destructive">
                                 {{ form.errors.vehicule_id }}
                             </p>
 
                             <!-- Solvabilité véhicule -->
-                            <div
-                                v-if="vehiculeSolvabiliteLoading"
-                                class="mt-3 flex items-center gap-2 text-xs text-muted-foreground"
-                            >
-                                <svg
-                                    class="h-3.5 w-3.5 animate-spin"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                >
-                                    <circle
-                                        class="opacity-25"
-                                        cx="12"
-                                        cy="12"
-                                        r="10"
-                                        stroke="currentColor"
-                                        stroke-width="4"
-                                    />
-                                    <path
-                                        class="opacity-75"
-                                        fill="currentColor"
-                                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                                    />
+                            <div v-if="vehiculeSolvabiliteLoading"
+                                class="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                                <svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                        stroke-width="4" />
+                                    <path class="opacity-75" fill="currentColor"
+                                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                                 </svg>
                                 Vérification en cours…
                             </div>
 
                             <!-- ✅ Aucun impayé -->
-                            <div
-                                v-else-if="
-                                    vehiculeSolvabilite &&
-                                    !vehiculeSolvabilite.has_debt
-                                "
-                                class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30"
-                            >
+                            <div v-else-if="
+                                vehiculeSolvabilite &&
+                                !vehiculeSolvabilite.has_debt
+                            "
+                                class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30">
                                 <div class="flex items-start gap-2.5">
-                                    <span
-                                        class="mt-0.5 text-base text-emerald-600 dark:text-emerald-400"
-                                        >✓</span
-                                    >
+                                    <span class="mt-0.5 text-base text-emerald-600 dark:text-emerald-400">✓</span>
                                     <div>
-                                        <p
-                                            class="text-sm font-semibold text-emerald-800 dark:text-emerald-300"
-                                        > Ce véhicule est à jour de ses paiements.                                     
+                                        <p class="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                                            Ce véhicule est à jour de ses
+                                            paiements.
                                         </p>
                                     </div>
                                 </div>
                             </div>
 
                             <!-- ⚠ Dettes -->
-                            <div
-                                v-else-if="
-                                    vehiculeSolvabilite &&
-                                    vehiculeSolvabilite.has_debt
-                                "
-                                class="mt-3 rounded-xl border p-3"
-                                :class="
-                                    vehiculeSolvabilite.status === 'impaye'
+                            <div v-else-if="
+                                vehiculeSolvabilite &&
+                                vehiculeSolvabilite.has_debt
+                            " class="mt-3 rounded-xl border p-3" :class="vehiculeSolvabilite.status === 'impaye'
                                         ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30'
                                         : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30'
-                                "
-                            >
-                                <div
-                                    class="flex items-start justify-between gap-3"
-                                >
+                                    ">
+                                <div class="flex items-start justify-between gap-3">
                                     <div class="flex items-start gap-2.5">
-                                        <span
-                                            class="mt-0.5 text-base"
-                                            :class="
-                                                vehiculeSolvabilite.status ===
+                                        <span class="mt-0.5 text-base" :class="vehiculeSolvabilite.status ===
                                                 'impaye'
-                                                    ? 'text-red-500'
-                                                    : 'text-amber-500'
-                                            "
-                                            >⚠</span
-                                        >
+                                                ? 'text-red-500'
+                                                : 'text-amber-500'
+                                            ">⚠</span>
                                         <div>
-                                            <p
-                                                class="text-sm font-semibold"
-                                                :class="
-                                                    vehiculeSolvabilite.status ===
+                                            <p class="text-sm font-semibold" :class="vehiculeSolvabilite.status ===
                                                     'impaye'
-                                                        ? 'text-red-800 dark:text-red-300'
-                                                        : 'text-amber-800 dark:text-amber-300'
-                                                "
-                                            >
+                                                    ? 'text-red-800 dark:text-red-300'
+                                                    : 'text-amber-800 dark:text-amber-300'
+                                                ">
                                                 {{
                                                     vehiculeSolvabilite.status ===
-                                                    'impaye'
+                                                        'impaye'
                                                         ? 'Factures impayées détectées'
                                                         : 'Paiement partiel'
                                                 }}
                                             </p>
-                                            <p
-                                                class="mt-1.5 text-xs font-medium opacity-70"
-                                                :class="
-                                                    vehiculeSolvabilite.status ===
+                                            <p class="mt-1.5 text-xs font-medium opacity-70" :class="vehiculeSolvabilite.status ===
                                                     'impaye'
-                                                        ? 'text-red-800 dark:text-red-300'
-                                                        : 'text-amber-800 dark:text-amber-300'
-                                                "
-                                            >
+                                                    ? 'text-red-800 dark:text-red-300'
+                                                    : 'text-amber-800 dark:text-amber-300'
+                                                ">
                                                 Montant total impayé
                                             </p>
-                                            <p
-                                                class="text-xl font-bold"
-                                                :class="
-                                                    vehiculeSolvabilite.status ===
+                                            <p class="text-xl font-bold" :class="vehiculeSolvabilite.status ===
                                                     'impaye'
-                                                        ? 'text-red-800 dark:text-red-300'
-                                                        : 'text-amber-800 dark:text-amber-300'
-                                                "
-                                            >
+                                                    ? 'text-red-800 dark:text-red-300'
+                                                    : 'text-amber-800 dark:text-amber-300'
+                                                ">
                                                 {{
                                                     formatGNF(
                                                         vehiculeSolvabilite.total_remaining,
                                                     )
                                                 }}
                                             </p>
-                                            <p
-                                                class="mt-1 text-xs opacity-70"
-                                                :class="
-                                                    vehiculeSolvabilite.status ===
+                                            <p class="mt-1 text-xs opacity-70" :class="vehiculeSolvabilite.status ===
                                                     'impaye'
-                                                        ? 'text-red-800 dark:text-red-300'
-                                                        : 'text-amber-800 dark:text-amber-300'
-                                                "
-                                            >
+                                                    ? 'text-red-800 dark:text-red-300'
+                                                    : 'text-amber-800 dark:text-amber-300'
+                                                ">
                                                 Nombre de factures :
                                                 {{
                                                     vehiculeSolvabilite.unpaid_invoices_count
                                                 }}
                                             </p>
-                                            <p
-                                                v-if="
-                                                    vehiculeSolvabilite.last_invoice_reference
-                                                "
-                                                class="mt-1 text-xs opacity-60"
-                                                :class="
-                                                    vehiculeSolvabilite.status ===
-                                                    'impaye'
+                                            <p v-if="
+                                                vehiculeSolvabilite.last_invoice_reference
+                                            " class="mt-1 text-xs opacity-60" :class="vehiculeSolvabilite.status ===
+                                                        'impaye'
                                                         ? 'text-red-800 dark:text-red-300'
                                                         : 'text-amber-800 dark:text-amber-300'
-                                                "
-                                            >
+                                                    ">
                                                 Dernière :
                                                 {{
                                                     vehiculeSolvabilite.last_invoice_reference
@@ -664,26 +578,22 @@ function confirmerEtCreer() {
                                             </p>
                                         </div>
                                     </div>
-                                    <button
-                                        type="button"
+                                    <button type="button"
                                         class="shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
-                                        :class="
-                                            vehiculeSolvabilite.status ===
-                                            'impaye'
+                                        :class="vehiculeSolvabilite.status ===
+                                                'impaye'
                                                 ? 'border-red-300 bg-white text-red-700 hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60'
                                                 : 'border-amber-300 bg-white text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60'
-                                        "
-                                        @click="
+                                            " @click="
                                             ouvrirDialogFactures(
                                                 vehiculeSolvabilite,
                                                 vehiculeSelected
                                                     ? vehiculeLabel(
-                                                          vehiculeSelected,
-                                                      )
+                                                        vehiculeSelected,
+                                                    )
                                                     : 'Véhicule',
                                             )
-                                        "
-                                    >
+                                            ">
                                         Voir les factures
                                     </button>
                                 </div>
@@ -693,20 +603,11 @@ function confirmerEtCreer() {
                         <!-- Client -->
                         <div>
                             <Label class="mb-1.5 block text-sm"> Client </Label>
-                            <AutoComplete
-                                v-model="clientSelected"
-                                :suggestions="clientSuggests"
-                                :option-label="clientLabel"
-                                @complete="searchClient"
-                                @item-select="onClientSelect(clientSelected)"
-                                @clear="onClientClear"
-                                placeholder="Nom, prénom, téléphone…"
-                                class="w-full"
-                                input-class="w-full"
-                                :class="{ 'p-invalid': form.errors.client_id }"
-                                dropdown
-                                force-selection
-                            >
+                            <AutoComplete v-model="clientSelected" :suggestions="clientSuggests"
+                                :option-label="clientLabel" @complete="searchClient"
+                                @item-select="onClientSelect(clientSelected)" @clear="onClientClear"
+                                placeholder="Nom, prénom, téléphone…" class="w-full" input-class="w-full"
+                                :class="{ 'p-invalid': form.errors.client_id }" dropdown force-selection>
                                 <template #option="{ option }">
                                     <div class="py-0.5">
                                         <div class="leading-tight font-medium">
@@ -716,10 +617,7 @@ function confirmerEtCreer() {
                                                     .join(' ')
                                             }}
                                         </div>
-                                        <div
-                                            v-if="option.telephone"
-                                            class="mt-0.5 text-xs text-muted-foreground"
-                                        >
+                                        <div v-if="option.telephone" class="mt-0.5 text-xs text-muted-foreground">
                                             {{
                                                 formatPhoneDisplay(
                                                     option.telephone,
@@ -729,162 +627,102 @@ function confirmerEtCreer() {
                                     </div>
                                 </template>
                                 <template #empty>
-                                    <span class="text-sm text-muted-foreground"
-                                        >Aucun client trouvé.</span
-                                    >
+                                    <span class="text-sm text-muted-foreground">Aucun client trouvé.</span>
                                 </template>
                             </AutoComplete>
-                            <p
-                                v-if="form.errors.client_id"
-                                class="mt-1 text-xs text-destructive"
-                            >
+                            <p v-if="form.errors.client_id" class="mt-1 text-xs text-destructive">
                                 {{ form.errors.client_id }}
                             </p>
 
                             <!-- Solvabilité client -->
-                            <div
-                                v-if="clientSolvabiliteLoading"
-                                class="mt-3 flex items-center gap-2 text-xs text-muted-foreground"
-                            >
-                                <svg
-                                    class="h-3.5 w-3.5 animate-spin"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                >
-                                    <circle
-                                        class="opacity-25"
-                                        cx="12"
-                                        cy="12"
-                                        r="10"
-                                        stroke="currentColor"
-                                        stroke-width="4"
-                                    />
-                                    <path
-                                        class="opacity-75"
-                                        fill="currentColor"
-                                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                                    />
+                            <div v-if="clientSolvabiliteLoading"
+                                class="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                                <svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                        stroke-width="4" />
+                                    <path class="opacity-75" fill="currentColor"
+                                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                                 </svg>
                                 Vérification en cours…
                             </div>
 
                             <!-- ✅ Aucun impayé -->
-                            <div
-                                v-else-if="
-                                    clientSolvabilite &&
-                                    !clientSolvabilite.has_debt
-                                "
-                                class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30"
-                            >
+                            <div v-else-if="
+                                clientSolvabilite &&
+                                !clientSolvabilite.has_debt
+                            "
+                                class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30">
                                 <div class="flex items-center gap-2.5">
-                                    <span
-                                        class="text-base text-emerald-600 dark:text-emerald-400"
-                                        >✓</span
-                                    >
-                                    <p
-                                        class="text-sm font-semibold text-emerald-800 dark:text-emerald-300"
-                                    >
+                                    <span class="text-base text-emerald-600 dark:text-emerald-400">✓</span>
+                                    <p class="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
                                         Ce client est à jour de ses paiements.
-                                    </p> 
+                                    </p>
                                 </div>
                             </div>
 
                             <!-- ⚠ Dettes -->
-                            <div
-                                v-else-if="
-                                    clientSolvabilite &&
-                                    clientSolvabilite.has_debt
-                                "
-                                class="mt-3 rounded-xl border p-3"
-                                :class="
-                                    clientSolvabilite.status === 'impaye'
+                            <div v-else-if="
+                                clientSolvabilite &&
+                                clientSolvabilite.has_debt
+                            " class="mt-3 rounded-xl border p-3" :class="clientSolvabilite.status === 'impaye'
                                         ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30'
                                         : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30'
-                                "
-                            >
-                                <div
-                                    class="flex items-start justify-between gap-3"
-                                >
+                                    ">
+                                <div class="flex items-start justify-between gap-3">
                                     <div class="flex items-start gap-2.5">
-                                        <span
-                                            class="mt-0.5 text-base"
-                                            :class="
-                                                clientSolvabilite.status ===
+                                        <span class="mt-0.5 text-base" :class="clientSolvabilite.status ===
                                                 'impaye'
-                                                    ? 'text-red-500'
-                                                    : 'text-amber-500'
-                                            "
-                                            >⚠</span
-                                        >
+                                                ? 'text-red-500'
+                                                : 'text-amber-500'
+                                            ">⚠</span>
                                         <div>
-                                            <p
-                                                class="text-sm font-semibold"
-                                                :class="
-                                                    clientSolvabilite.status ===
+                                            <p class="text-sm font-semibold" :class="clientSolvabilite.status ===
                                                     'impaye'
-                                                        ? 'text-red-800 dark:text-red-300'
-                                                        : 'text-amber-800 dark:text-amber-300'
-                                                "
-                                            >
+                                                    ? 'text-red-800 dark:text-red-300'
+                                                    : 'text-amber-800 dark:text-amber-300'
+                                                ">
                                                 {{
                                                     clientSolvabilite.status ===
-                                                    'impaye'
+                                                        'impaye'
                                                         ? 'Factures impayées détectées'
                                                         : 'Paiement partiel'
                                                 }}
                                             </p>
-                                            <p
-                                                class="mt-1.5 text-xs font-medium opacity-70"
-                                                :class="
-                                                    clientSolvabilite.status ===
+                                            <p class="mt-1.5 text-xs font-medium opacity-70" :class="clientSolvabilite.status ===
                                                     'impaye'
-                                                        ? 'text-red-800 dark:text-red-300'
-                                                        : 'text-amber-800 dark:text-amber-300'
-                                                "
-                                            >
+                                                    ? 'text-red-800 dark:text-red-300'
+                                                    : 'text-amber-800 dark:text-amber-300'
+                                                ">
                                                 Montant total impayé
                                             </p>
-                                            <p
-                                                class="text-xl font-bold"
-                                                :class="
-                                                    clientSolvabilite.status ===
+                                            <p class="text-xl font-bold" :class="clientSolvabilite.status ===
                                                     'impaye'
-                                                        ? 'text-red-800 dark:text-red-300'
-                                                        : 'text-amber-800 dark:text-amber-300'
-                                                "
-                                            >
+                                                    ? 'text-red-800 dark:text-red-300'
+                                                    : 'text-amber-800 dark:text-amber-300'
+                                                ">
                                                 {{
                                                     formatGNF(
                                                         clientSolvabilite.total_remaining,
                                                     )
                                                 }}
                                             </p>
-                                            <p
-                                                class="mt-1 text-xs opacity-70"
-                                                :class="
-                                                    clientSolvabilite.status ===
+                                            <p class="mt-1 text-xs opacity-70" :class="clientSolvabilite.status ===
                                                     'impaye'
-                                                        ? 'text-red-800 dark:text-red-300'
-                                                        : 'text-amber-800 dark:text-amber-300'
-                                                "
-                                            >
+                                                    ? 'text-red-800 dark:text-red-300'
+                                                    : 'text-amber-800 dark:text-amber-300'
+                                                ">
                                                 Nombre de factures :
                                                 {{
                                                     clientSolvabilite.unpaid_invoices_count
                                                 }}
                                             </p>
-                                            <p
-                                                v-if="
-                                                    clientSolvabilite.last_invoice_reference
-                                                "
-                                                class="mt-1 text-xs opacity-60"
-                                                :class="
-                                                    clientSolvabilite.status ===
-                                                    'impaye'
+                                            <p v-if="
+                                                clientSolvabilite.last_invoice_reference
+                                            " class="mt-1 text-xs opacity-60" :class="clientSolvabilite.status ===
+                                                        'impaye'
                                                         ? 'text-red-800 dark:text-red-300'
                                                         : 'text-amber-800 dark:text-amber-300'
-                                                "
-                                            >
+                                                    ">
                                                 Dernière :
                                                 {{
                                                     clientSolvabilite.last_invoice_reference
@@ -898,24 +736,20 @@ function confirmerEtCreer() {
                                             </p>
                                         </div>
                                     </div>
-                                    <button
-                                        type="button"
+                                    <button type="button"
                                         class="shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
-                                        :class="
-                                            clientSolvabilite.status ===
-                                            'impaye'
+                                        :class="clientSolvabilite.status ===
+                                                'impaye'
                                                 ? 'border-red-300 bg-white text-red-700 hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60'
                                                 : 'border-amber-300 bg-white text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60'
-                                        "
-                                        @click="
+                                            " @click="
                                             ouvrirDialogFactures(
                                                 clientSolvabilite,
                                                 clientSelected
                                                     ? clientSelected.nom
                                                     : 'Client',
                                             )
-                                        "
-                                    >
+                                            ">
                                         Voir les factures
                                     </button>
                                 </div>
@@ -924,48 +758,33 @@ function confirmerEtCreer() {
                     </div>
 
                     <!-- Hint véhicule ou client -->
-                    <p
-                        v-if="!form.vehicule_id && !form.client_id"
-                        class="mt-3 text-xs text-amber-600 dark:text-amber-400"
-                    >
+                    <p v-if="!form.vehicule_id && !form.client_id"
+                        class="mt-3 text-xs text-amber-600 dark:text-amber-400">
                         Sélectionnez au moins un véhicule ou un client.
                     </p>
                 </div>
 
                 <!-- Lignes de commande -->
                 <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-                    <h2
-                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                    >
+                    <h2 class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase">
                         Lignes de commande
                     </h2>
 
-                    <p
-                        v-if="form.errors.lignes"
-                        class="mb-3 text-xs text-destructive"
-                    >
+                    <p v-if="form.errors.lignes" class="mb-3 text-xs text-destructive">
                         {{ form.errors.lignes }}
                     </p>
 
-                    <p
-                        v-if="!canUpdateUnitPrice"
-                        class="mb-3 flex items-center gap-1 text-xs text-muted-foreground"
-                    >
+                    <p v-if="!canUpdateUnitPrice" class="mb-3 flex items-center gap-1 text-xs text-muted-foreground">
                         <Lock class="h-3.5 w-3.5" />
                         Prix unitaire verrouille pour votre profil.
                     </p>
 
-                    <p
-                        v-if="form.vehicule_id !== null"
-                        class="mb-3 text-xs"
-                        :class="
-                            capaciteVehiculeConforme
-                                ? quantiteTotale === capaciteVehiculeSelectionne
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : 'text-amber-600 dark:text-amber-400'
-                                : 'text-destructive'
-                        "
-                    >
+                    <p v-if="form.vehicule_id !== null" class="mb-3 text-xs" :class="capaciteVehiculeConforme
+                            ? quantiteTotale === capaciteVehiculeSelectionne
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-amber-600 dark:text-amber-400'
+                            : 'text-destructive'
+                        ">
                         Capacité véhicule:
                         {{
                             capaciteVehiculeSelectionne === null
@@ -974,19 +793,14 @@ function confirmerEtCreer() {
                         }}
                         · Quantité saisie: {{ quantiteTotale }} packs
                         <template v-if="capaciteVehiculeSelectionne !== null">
-                            <span
-                                v-if="
-                                    quantiteTotale ===
-                                    capaciteVehiculeSelectionne
-                                "
-                            >
-                                — capacité atteinte ✓</span
-                            >
-                            <span
-                                v-else-if="
-                                    quantiteTotale < capaciteVehiculeSelectionne
-                                "
-                            >
+                            <span v-if="
+                                quantiteTotale ===
+                                capaciteVehiculeSelectionne
+                            ">
+                                — capacité atteinte ✓</span>
+                            <span v-else-if="
+                                quantiteTotale < capaciteVehiculeSelectionne
+                            ">
                                 —
                                 {{
                                     capaciteVehiculeSelectionne - quantiteTotale
@@ -995,144 +809,84 @@ function confirmerEtCreer() {
                                     !autoriser_saisie_dessous_qte_max
                                         ? ' — chargement complet requis'
                                         : ''
-                                }}</span
-                            >
+                                }}</span>
                             <span v-else>
                                 —
                                 {{
                                     quantiteTotale - capaciteVehiculeSelectionne
                                 }}
-                                pack(s) en trop</span
-                            >
+                                pack(s) en trop</span>
                         </template>
                     </p>
 
                     <!-- ── Tableau desktop ── -->
-                    <div
-                        class="hidden overflow-hidden rounded-lg border sm:block"
-                    >
+                    <div class="hidden overflow-hidden rounded-lg border sm:block">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b bg-muted/40">
-                                    <th
-                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                    >
+                                    <th class="px-4 py-2.5 text-left font-medium text-muted-foreground">
                                         Produit
                                     </th>
-                                    <th
-                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                                        style="width: 110px"
-                                    >
-                                        <span
-                                            class="inline-flex items-center justify-center gap-1"
-                                        >
+                                    <th class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 110px">
+                                        <span class="inline-flex items-center justify-center gap-1">
                                             Qté
-                                            <Lock
-                                                v-if="!can_modifier_qte"
-                                                class="h-3.5 w-3.5"
-                                            />
+                                            <Lock v-if="!can_modifier_qte" class="h-3.5 w-3.5" />
                                         </span>
                                     </th>
-                                    <th
-                                        class="px-4 py-2.5 text-right font-medium text-muted-foreground"
-                                        style="width: 180px"
-                                    >
-                                        <span
-                                            class="inline-flex items-center justify-end gap-1"
-                                        >
+                                    <th class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                        style="width: 180px">
+                                        <span class="inline-flex items-center justify-end gap-1">
                                             Prix unit.
-                                            <Lock
-                                                v-if="!canUpdateUnitPrice"
-                                                class="h-3.5 w-3.5"
-                                            />
+                                            <Lock v-if="!canUpdateUnitPrice" class="h-3.5 w-3.5" />
                                         </span>
                                     </th>
-                                    <th
-                                        class="px-4 py-2.5 text-right font-medium text-muted-foreground"
-                                        style="width: 160px"
-                                    >
+                                    <th class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                        style="width: 160px">
                                         Total
                                     </th>
-                                    <th
-                                        class="px-4 py-2.5"
-                                        style="width: 48px"
-                                    ></th>
+                                    <th class="px-4 py-2.5" style="width: 48px"></th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
-                                <tr
-                                    v-for="(ligne, index) in form.lignes"
-                                    :key="index"
-                                    class="hover:bg-muted/10"
-                                >
+                                <tr v-for="(ligne, index) in form.lignes" :key="index" class="hover:bg-muted/10">
                                     <td class="px-4 py-3">
-                                        <Dropdown
-                                            :model-value="ligne.produit_id"
-                                            @update:model-value="
-                                                onProduitChange(index, $event)
-                                            "
-                                            :options="produitOptions"
-                                            option-label="label"
-                                            option-value="value"
-                                            placeholder="Choisir un produit..."
-                                            filter
-                                            class="w-full"
-                                            :class="{
+                                        <Dropdown :model-value="ligne.produit_id" @update:model-value="
+                                            onProduitChange(index, $event)
+                                            " :options="produitOptions" option-label="label" option-value="value"
+                                            placeholder="Choisir un produit..." filter class="w-full" :class="{
                                                 'p-invalid': (
                                                     form.errors as any
                                                 )[`lignes.${index}.produit_id`],
-                                            }"
-                                        />
-                                        <p
-                                            v-if="
-                                                (form.errors as any)[
-                                                    `lignes.${index}.produit_id`
-                                                ]
-                                            "
-                                            class="mt-1 text-xs text-destructive"
-                                        >
+                                            }" />
+                                        <p v-if="
+                                            (form.errors as any)[
+                                            `lignes.${index}.produit_id`
+                                            ]
+                                        " class="mt-1 text-xs text-destructive">
                                             {{
                                                 (form.errors as any)[
-                                                    `lignes.${index}.produit_id`
+                                                `lignes.${index}.produit_id`
                                                 ]
                                             }}
                                         </p>
                                     </td>
                                     <td class="px-4 py-3">
-                                        <InputNumber
-                                            :model-value="ligne.qte"
-                                            @update:model-value="
-                                                onQteChange(index, $event)
-                                            "
-                                            :min="1"
-                                            :max="
-                                                can_modifier_qte
+                                        <InputNumber :model-value="ligne.qte" @update:model-value="
+                                            onQteChange(index, $event)
+                                            " :min="1" :max="can_modifier_qte
                                                     ? undefined
                                                     : (capaciteVehiculeSelectionne ??
-                                                      undefined)
-                                            "
-                                            :use-grouping="false"
-                                            class="w-full"
-                                            input-class="w-full text-center"
-                                        />
+                                                        undefined)
+                                                " :use-grouping="false" class="w-full" input-class="w-full text-center" />
                                     </td>
                                     <td class="px-4 py-3">
-                                        <InputNumber
-                                            :model-value="ligne.prix_vente"
-                                            @update:model-value="
-                                                onPrixChange(index, $event)
-                                            "
-                                            :min="0"
-                                            :disabled="!canUpdateUnitPrice"
-                                            :use-grouping="false"
-                                            suffix=" GNF"
-                                            class="w-full"
-                                            input-class="w-full text-right"
-                                        />
+                                        <InputNumber :model-value="ligne.prix_vente" @update:model-value="
+                                            onPrixChange(index, $event)
+                                            " :min="0" :disabled="!canUpdateUnitPrice" :use-grouping="false"
+                                            suffix=" GNF" class="w-full" input-class="w-full text-right" />
                                     </td>
-                                    <td
-                                        class="px-4 py-3 text-right font-medium tabular-nums"
-                                    >
+                                    <td class="px-4 py-3 text-right font-medium tabular-nums">
                                         {{
                                             ligne.total > 0
                                                 ? formatGNF(ligne.total)
@@ -1140,14 +894,9 @@ function confirmerEtCreer() {
                                         }}
                                     </td>
                                     <td class="px-4 py-3 text-center">
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
+                                        <Button type="button" variant="ghost" size="icon"
                                             class="h-7 w-7 text-destructive hover:text-destructive"
-                                            :disabled="form.lignes.length <= 1"
-                                            @click="removeLigne(index)"
-                                        >
+                                            :disabled="form.lignes.length <= 1" @click="removeLigne(index)">
                                             <Trash2 class="h-4 w-4" />
                                         </Button>
                                     </td>
@@ -1158,104 +907,56 @@ function confirmerEtCreer() {
 
                     <!-- ── Cards mobile ── -->
                     <div class="space-y-3 sm:hidden">
-                        <div
-                            v-for="(ligne, index) in form.lignes"
-                            :key="index"
-                            class="rounded-xl border bg-muted/20 p-3"
-                        >
+                        <div v-for="(ligne, index) in form.lignes" :key="index"
+                            class="rounded-xl border bg-muted/20 p-3">
                             <!-- Produit -->
-                            <Dropdown
-                                :model-value="ligne.produit_id"
-                                @update:model-value="
-                                    onProduitChange(index, $event)
-                                "
-                                :options="produitOptions"
-                                option-label="label"
-                                option-value="value"
-                                placeholder="Choisir un produit..."
-                                filter
-                                class="w-full"
-                                :class="{
+                            <Dropdown :model-value="ligne.produit_id" @update:model-value="
+                                onProduitChange(index, $event)
+                                " :options="produitOptions" option-label="label" option-value="value"
+                                placeholder="Choisir un produit..." filter class="w-full" :class="{
                                     'p-invalid': (form.errors as any)[
                                         `lignes.${index}.produit_id`
                                     ],
-                                }"
-                            />
+                                }" />
 
                             <!-- Qté + Prix -->
                             <div class="mt-2.5 grid grid-cols-2 gap-2.5">
                                 <div>
-                                    <p
-                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
-                                    >
-                                        <span
-                                            class="inline-flex items-center gap-1"
-                                        >
+                                    <p class="mb-1 text-[11px] font-medium text-muted-foreground">
+                                        <span class="inline-flex items-center gap-1">
                                             Quantité
-                                            <Lock
-                                                v-if="!can_modifier_qte"
-                                                class="h-3.5 w-3.5"
-                                            />
+                                            <Lock v-if="!can_modifier_qte" class="h-3.5 w-3.5" />
                                         </span>
                                     </p>
-                                    <InputNumber
-                                        :model-value="ligne.qte"
-                                        @update:model-value="
-                                            onQteChange(index, $event)
-                                        "
-                                        :min="1"
-                                        :max="
-                                            can_modifier_qte
+                                    <InputNumber :model-value="ligne.qte" @update:model-value="
+                                        onQteChange(index, $event)
+                                        " :min="1" :max="can_modifier_qte
                                                 ? undefined
                                                 : (capaciteVehiculeSelectionne ??
-                                                  undefined)
-                                        "
-                                        :use-grouping="false"
-                                        class="w-full"
-                                        input-class="w-full text-center"
-                                    />
+                                                    undefined)
+                                            " :use-grouping="false" class="w-full" input-class="w-full text-center" />
                                 </div>
                                 <div>
-                                    <p
-                                        class="mb-1 text-[11px] font-medium text-muted-foreground"
-                                    >
-                                        <span
-                                            class="inline-flex items-center gap-1"
-                                        >
+                                    <p class="mb-1 text-[11px] font-medium text-muted-foreground">
+                                        <span class="inline-flex items-center gap-1">
                                             Prix unit. (GNF)
-                                            <Lock
-                                                v-if="!canUpdateUnitPrice"
-                                                class="h-3.5 w-3.5"
-                                            />
+                                            <Lock v-if="!canUpdateUnitPrice" class="h-3.5 w-3.5" />
                                         </span>
                                     </p>
-                                    <InputNumber
-                                        :model-value="ligne.prix_vente"
-                                        @update:model-value="
-                                            onPrixChange(index, $event)
-                                        "
-                                        :min="0"
-                                        :disabled="!canUpdateUnitPrice"
-                                        :use-grouping="false"
-                                        class="w-full"
-                                        input-class="w-full"
-                                    />
+                                    <InputNumber :model-value="ligne.prix_vente" @update:model-value="
+                                        onPrixChange(index, $event)
+                                        " :min="0" :disabled="!canUpdateUnitPrice" :use-grouping="false" class="w-full"
+                                        input-class="w-full" />
                                 </div>
                             </div>
 
                             <!-- Total + Supprimer -->
-                            <div
-                                class="mt-2.5 flex items-center justify-between"
-                            >
+                            <div class="mt-2.5 flex items-center justify-between">
                                 <div>
-                                    <p
-                                        class="text-[11px] text-muted-foreground"
-                                    >
+                                    <p class="text-[11px] text-muted-foreground">
                                         Total ligne
                                     </p>
-                                    <p
-                                        class="text-sm font-semibold tabular-nums"
-                                    >
+                                    <p class="text-sm font-semibold tabular-nums">
                                         {{
                                             ligne.total > 0
                                                 ? formatGNF(ligne.total)
@@ -1263,14 +964,9 @@ function confirmerEtCreer() {
                                         }}
                                     </p>
                                 </div>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
+                                <Button type="button" variant="ghost" size="icon"
                                     class="h-8 w-8 text-destructive hover:text-destructive"
-                                    :disabled="form.lignes.length <= 1"
-                                    @click="removeLigne(index)"
-                                >
+                                    :disabled="form.lignes.length <= 1" @click="removeLigne(index)">
                                     <Trash2 class="h-4 w-4" />
                                 </Button>
                             </div>
@@ -1279,19 +975,12 @@ function confirmerEtCreer() {
 
                     <!-- Ajouter + Total -->
                     <div class="mt-4 flex items-center justify-between">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            @click="addLigne"
-                        >
+                        <Button type="button" variant="outline" size="sm" @click="addLigne">
                             <Plus class="mr-2 h-4 w-4" />
                             Ajouter une ligne
                         </Button>
                         <div class="text-right">
-                            <p
-                                class="text-xs tracking-wider text-muted-foreground uppercase"
-                            >
+                            <p class="text-xs tracking-wider text-muted-foreground uppercase">
                                 Total commande
                             </p>
                             <p class="text-2xl font-bold tabular-nums">
@@ -1318,8 +1007,7 @@ function confirmerEtCreer() {
 
         <!-- Mobile sticky footer -->
         <div
-            class="fixed right-0 bottom-0 left-0 z-20 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden"
-        >
+            class="fixed right-0 bottom-0 left-0 z-20 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden">
             <Button class="w-full" :disabled="!canSubmit" @click="submit">
                 <Save class="mr-2 h-4 w-4" />
                 Créer la commande
@@ -1327,19 +1015,14 @@ function confirmerEtCreer() {
         </div>
 
         <!-- Dialog Confirmation création -->
-        <Dialog
-            v-model:visible="showConfirmDialog"
-            modal
-            :closable="true"
-            :style="{ width: '720px', maxWidth: '95vw' }"
+        <Dialog v-model:visible="showConfirmDialog" modal :closable="true" :style="{ width: '720px', maxWidth: '95vw' }"
             :pt="{
                 root: { class: 'rounded-2xl shadow-2xl' },
                 header: {
                     class: 'rounded-t-2xl border-b border-border px-6 py-4',
                 },
                 content: { class: 'p-0' },
-            }"
-        >
+            }">
             <template #header>
                 <div>
                     <h2 class="text-lg font-semibold">
@@ -1352,9 +1035,7 @@ function confirmerEtCreer() {
             </template>
 
             <!-- Informations générales -->
-            <div
-                class="grid grid-cols-2 gap-x-8 gap-y-4 border-b border-border p-5"
-            >
+            <div class="grid grid-cols-2 gap-x-8 gap-y-4 border-b border-border p-5">
                 <div>
                     <p class="text-xs text-muted-foreground">Site</p>
                     <p class="mt-0.5 font-medium">{{ user_site.label }}</p>
@@ -1381,15 +1062,13 @@ function confirmerEtCreer() {
                         <p class="mt-0.5 font-medium">
                             {{ vehiculeSelected.livreur_nom }}
                         </p>
-                        <p
-                            class="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"
-                        >
+                        <p class="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
                             <Phone class="h-3 w-3 shrink-0" />
                             {{
                                 vehiculeSelected.livreur_telephone
                                     ? formatPhoneDisplay(
-                                          vehiculeSelected.livreur_telephone,
-                                      )
+                                        vehiculeSelected.livreur_telephone,
+                                    )
                                     : 'Non renseigné'
                             }}
                         </p>
@@ -1406,47 +1085,35 @@ function confirmerEtCreer() {
                     <thead class="bg-muted/50">
                         <tr class="border-b border-border">
                             <th
-                                class="px-5 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                            >
+                                class="px-5 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                 Produit
                             </th>
                             <th
-                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                            >
+                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                 Demandée
                             </th>
                             <th
-                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                            >
+                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                 Prix unit.
                             </th>
                             <th
-                                class="px-5 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                            >
+                                class="px-5 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                 Total
                             </th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-border">
-                        <tr
-                            v-for="(ligne, i) in lignesVisibles"
-                            :key="i"
-                            class="hover:bg-muted/30"
-                        >
+                        <tr v-for="(ligne, i) in lignesVisibles" :key="i" class="hover:bg-muted/30">
                             <td class="px-5 py-3 font-medium">
                                 {{ nomProduit(ligne.produit_id) }}
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{ ligne.qte }}
                             </td>
-                            <td
-                                class="px-4 py-3 text-right text-muted-foreground tabular-nums"
-                            >
+                            <td class="px-4 py-3 text-right text-muted-foreground tabular-nums">
                                 {{ formatGNF(ligne.prix_vente) }}
                             </td>
-                            <td
-                                class="px-5 py-3 text-right font-semibold tabular-nums"
-                            >
+                            <td class="px-5 py-3 text-right font-semibold tabular-nums">
                                 {{ formatGNF(ligne.total) }}
                             </td>
                         </tr>
@@ -1455,26 +1122,20 @@ function confirmerEtCreer() {
                         <tr>
                             <td colspan="2"></td>
                             <td
-                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                            >
+                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                 Qté totale
                             </td>
-                            <td
-                                class="px-5 py-2.5 text-right font-semibold tabular-nums"
-                            >
+                            <td class="px-5 py-2.5 text-right font-semibold tabular-nums">
                                 {{ quantiteTotale }} packs
                             </td>
                         </tr>
                         <tr class="border-t border-border">
                             <td colspan="2"></td>
                             <td
-                                class="px-4 py-3 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                            >
+                                class="px-4 py-3 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                 Total
                             </td>
-                            <td
-                                class="px-5 py-3 text-right text-xl font-bold tabular-nums"
-                            >
+                            <td class="px-5 py-3 text-right text-xl font-bold tabular-nums">
                                 {{ formatGNF(totalGeneral) }}
                             </td>
                         </tr>
@@ -1483,58 +1144,39 @@ function confirmerEtCreer() {
             </div>
 
             <!-- Alertes -->
-            <div
-                v-if="
-                    vehiculeSolvabilite?.has_debt || clientSolvabilite?.has_debt
-                "
-                class="space-y-2 border-b border-border bg-amber-50 px-5 py-3 dark:bg-amber-950/20"
-            >
-                <p
-                    class="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400"
-                >
+            <div v-if="
+                vehiculeSolvabilite?.has_debt || clientSolvabilite?.has_debt
+            " class="space-y-2 border-b border-border bg-amber-50 px-5 py-3 dark:bg-amber-950/20">
+                <p class="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400">
                     Alertes
                 </p>
-                <div
-                    v-if="vehiculeSolvabilite?.has_debt"
-                    class="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"
-                >
+                <div v-if="vehiculeSolvabilite?.has_debt"
+                    class="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300">
                     <span>⚠</span>
-                    <span
-                        >Véhicule : factures impayées —
+                    <span>Véhicule : factures impayées —
                         <strong>{{
                             formatGNF(vehiculeSolvabilite.total_remaining)
-                        }}</strong></span
-                    >
+                            }}</strong></span>
                 </div>
-                <div
-                    v-if="clientSolvabilite?.has_debt"
-                    class="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"
-                >
+                <div v-if="clientSolvabilite?.has_debt"
+                    class="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300">
                     <span>⚠</span>
-                    <span
-                        >Client : factures impayées —
+                    <span>Client : factures impayées —
                         <strong>{{
                             formatGNF(clientSolvabilite.total_remaining)
-                        }}</strong></span
-                    >
+                            }}</strong></span>
                 </div>
             </div>
 
             <!-- Actions -->
             <div class="flex items-center justify-between px-5 py-4">
-                <button
-                    type="button"
-                    class="rounded-lg border bg-card px-4 py-2 text-sm font-medium hover:bg-muted/50"
-                    @click="showConfirmDialog = false"
-                >
+                <button type="button" class="rounded-lg border bg-card px-4 py-2 text-sm font-medium hover:bg-muted/50"
+                    @click="showConfirmDialog = false">
                     Retour à la saisie
                 </button>
-                <button
-                    type="button"
+                <button type="button"
                     class="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-                    :disabled="form.processing"
-                    @click="confirmerEtCreer"
-                >
+                    :disabled="form.processing" @click="confirmerEtCreer">
                     {{
                         form.processing
                             ? 'Création en cours…'
@@ -1545,26 +1187,18 @@ function confirmerEtCreer() {
         </Dialog>
 
         <!-- Dialog Factures impayées -->
-        <Dialog
-            v-model:visible="showFacturesDialog"
-            modal
-            :closable="true"
-            :style="{ width: '960px', maxWidth: '95vw' }"
-            :pt="{
+        <Dialog v-model:visible="showFacturesDialog" modal :closable="true"
+            :style="{ width: '960px', maxWidth: '95vw' }" :pt="{
                 root: { class: 'rounded-2xl shadow-2xl' },
                 header: {
                     class: 'rounded-t-2xl border-b border-border px-6 py-4',
                 },
                 content: { class: 'p-0' },
-            }"
-        >
+            }">
             <template #header>
                 <div>
                     <h2 class="text-lg font-semibold">Factures impayées</h2>
-                    <p
-                        v-if="dialogContextLabel"
-                        class="mt-0.5 text-sm text-muted-foreground"
-                    >
+                    <p v-if="dialogContextLabel" class="mt-0.5 text-sm text-muted-foreground">
                         {{ dialogContextLabel }}
                     </p>
                 </div>
@@ -1572,13 +1206,9 @@ function confirmerEtCreer() {
 
             <template v-if="dialogSolvabilite">
                 <!-- KPI cards -->
-                <div
-                    class="grid grid-cols-2 gap-3 border-b border-border p-5 sm:grid-cols-4"
-                >
+                <div class="grid grid-cols-2 gap-3 border-b border-border p-5 sm:grid-cols-4">
                     <div class="rounded-xl border bg-card p-3 text-center">
-                        <p
-                            class="text-2xl font-bold text-red-600 dark:text-red-400"
-                        >
+                        <p class="text-2xl font-bold text-red-600 dark:text-red-400">
                             {{ dialogSolvabilite.unpaid_invoices_count }}
                         </p>
                         <p class="mt-1 text-xs text-muted-foreground">
@@ -1586,9 +1216,7 @@ function confirmerEtCreer() {
                         </p>
                     </div>
                     <div class="rounded-xl border bg-card p-3 text-center">
-                        <p
-                            class="text-lg font-bold text-red-600 tabular-nums dark:text-red-400"
-                        >
+                        <p class="text-lg font-bold text-red-600 tabular-nums dark:text-red-400">
                             {{ formatGNF(dialogSolvabilite.total_remaining) }}
                         </p>
                         <p class="mt-1 text-xs text-muted-foreground">
@@ -1596,9 +1224,7 @@ function confirmerEtCreer() {
                         </p>
                     </div>
                     <div class="rounded-xl border bg-card p-3 text-center">
-                        <p
-                            class="text-lg font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
-                        >
+                        <p class="text-lg font-bold text-emerald-600 tabular-nums dark:text-emerald-400">
                             {{ formatGNF(dialogSolvabilite.total_encaisse) }}
                         </p>
                         <p class="mt-1 text-xs text-muted-foreground">
@@ -1606,13 +1232,11 @@ function confirmerEtCreer() {
                         </p>
                     </div>
                     <div class="rounded-xl border bg-card p-3 text-center">
-                        <p
-                            class="text-lg font-bold text-amber-600 tabular-nums dark:text-amber-400"
-                        >
+                        <p class="text-lg font-bold text-amber-600 tabular-nums dark:text-amber-400">
                             {{
                                 formatGNF(
                                     dialogSolvabilite.total_remaining +
-                                        dialogSolvabilite.total_encaisse,
+                                    dialogSolvabilite.total_encaisse,
                                 )
                             }}
                         </p>
@@ -1625,51 +1249,37 @@ function confirmerEtCreer() {
                 <!-- Table -->
                 <div class="max-h-[420px] overflow-y-auto">
                     <table class="w-full text-sm">
-                        <thead
-                            class="sticky top-0 bg-muted/60 backdrop-blur-sm"
-                        >
+                        <thead class="sticky top-0 bg-muted/60 backdrop-blur-sm">
                             <tr class="border-b border-border">
                                 <th
-                                    class="px-4 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                                >
+                                    class="px-4 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                     Référence
                                 </th>
                                 <th
-                                    class="px-4 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                                >
+                                    class="px-4 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                     Date
                                 </th>
                                 <th
-                                    class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                                >
+                                    class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                     Montant
                                 </th>
                                 <th
-                                    class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                                >
+                                    class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                     Encaissé
                                 </th>
                                 <th
-                                    class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                                >
+                                    class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                     Reste
                                 </th>
                                 <th
-                                    class="px-4 py-2.5 text-center text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                                >
+                                    class="px-4 py-2.5 text-center text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                     Statut
                                 </th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-border">
-                            <tr
-                                v-for="f in dialogSolvabilite.factures"
-                                :key="f.reference"
-                                class="hover:bg-muted/30"
-                            >
-                                <td
-                                    class="px-4 py-3 font-mono text-xs text-muted-foreground"
-                                >
+                            <tr v-for="f in dialogSolvabilite.factures" :key="f.reference" class="hover:bg-muted/30">
+                                <td class="px-4 py-3 font-mono text-xs text-muted-foreground">
                                     {{ f.reference }}
                                 </td>
                                 <td class="px-4 py-3 text-xs">
@@ -1678,21 +1288,16 @@ function confirmerEtCreer() {
                                 <td class="px-4 py-3 text-right tabular-nums">
                                     {{ formatGNF(f.montant) }}
                                 </td>
-                                <td
-                                    class="px-4 py-3 text-right text-emerald-700 tabular-nums dark:text-emerald-400"
-                                >
+                                <td class="px-4 py-3 text-right text-emerald-700 tabular-nums dark:text-emerald-400">
                                     {{ formatGNF(f.encaisse) }}
                                 </td>
                                 <td
-                                    class="px-4 py-3 text-right font-semibold text-red-700 tabular-nums dark:text-red-400"
-                                >
+                                    class="px-4 py-3 text-right font-semibold text-red-700 tabular-nums dark:text-red-400">
                                     {{ formatGNF(f.restant) }}
                                 </td>
                                 <td class="px-4 py-3 text-center">
-                                    <span
-                                        class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                                        :class="statutBadgeClass(f.statut)"
-                                    >
+                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                                        :class="statutBadgeClass(f.statut)">
                                         {{ f.statut_label }}
                                     </span>
                                 </td>
@@ -1703,11 +1308,9 @@ function confirmerEtCreer() {
 
                 <!-- Footer -->
                 <div class="flex justify-end border-t border-border px-5 py-3">
-                    <button
-                        type="button"
+                    <button type="button"
                         class="rounded-lg border bg-card px-4 py-2 text-sm font-medium hover:bg-muted/50"
-                        @click="showFacturesDialog = false"
-                    >
+                        @click="showFacturesDialog = false">
                         Fermer
                     </button>
                 </div>
