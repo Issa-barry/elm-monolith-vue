@@ -98,10 +98,10 @@ class CommandeVenteAuditTest extends TestCase
 
     public function test_update_creates_audit_log_when_ligne_qty_changes(): void
     {
-        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        ['produit' => $produit, 'client' => $client] = $this->makeContext($this->org);
 
         $this->actingAs($this->user)->post(route('ventes.store'), [
-            'vehicule_id' => $vehicule->id,
+            'client_id' => $client->id,
             'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 2000]],
         ]);
 
@@ -109,7 +109,7 @@ class CommandeVenteAuditTest extends TestCase
         $ligne = $commande->lignes->first();
 
         $this->actingAs($this->user)->put(route('ventes.update', $commande), [
-            'vehicule_id' => $vehicule->id,
+            'client_id' => $client->id,
             'lignes' => [['id' => $ligne->id, 'produit_id' => $produit->id, 'qte' => 3, 'prix_vente' => 2000]],
         ]);
 

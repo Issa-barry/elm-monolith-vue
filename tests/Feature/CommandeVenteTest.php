@@ -129,7 +129,7 @@ class CommandeVenteTest extends TestCase
         $this->assertDatabaseHas('commandes_ventes', [
             'organization_id' => $this->org->id,
             'vehicule_id' => $vehicule->id,
-            'statut' => 'brouillon',
+            'statut' => 'a_charger',
         ]);
     }
 
