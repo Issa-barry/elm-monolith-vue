@@ -14,10 +14,14 @@ import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     CheckCircle,
+    CheckCircle2,
     HandCoins,
     History,
     MoreVertical,
+    Package,
+    PackageOpen,
     Pencil,
+    Receipt,
     Truck,
     XCircle,
 } from 'lucide-vue-next';
@@ -392,6 +396,44 @@ function submitEncaisser() {
 const showChargeeCol = computed(
     () => !props.commande.is_brouillon && !props.commande.is_a_charger,
 );
+
+// ── Timeline de progression ────────────────────────────────────────────────────
+const STEPS = [
+    { key: 'a_charger', shortLabel: 'À charger', icon: Package },
+    { key: 'chargement', shortLabel: 'Chargement en cours', icon: PackageOpen },
+    { key: 'livraison', shortLabel: 'Livraison en cours', icon: Truck },
+    { key: 'facturation', shortLabel: 'Facturation', icon: Receipt },
+    { key: 'commissions', shortLabel: 'Commissions', icon: HandCoins },
+    { key: 'cloturee', shortLabel: 'Clôturée', icon: CheckCircle2 },
+];
+
+const currentStepIdx = computed(() => {
+    if (props.commande.is_annulee) return -1;
+    if (props.commande.is_livree) {
+        return props.facture?.statut === 'payee' ? 4 : 3;
+    }
+    const map: Record<string, number> = {
+        brouillon: 0,
+        a_charger: 0,
+        chargement_en_cours: 1,
+        livraison_en_cours: 2,
+        cloturee: 5,
+    };
+    return map[props.commande.statut] ?? 0;
+});
+
+function stepState(idx: number): 'done' | 'current' | 'future' {
+    const cur = currentStepIdx.value;
+    if (cur === -1) return 'future';
+    if (idx < cur) return 'done';
+    if (idx === cur) return 'current';
+    return 'future';
+}
+
+function connectorIsActive(idx: number): boolean {
+    if (currentStepIdx.value === -1) return false;
+    return idx < currentStepIdx.value;
+}
 </script>
 
 <template>
@@ -498,7 +540,7 @@ const showChargeeCol = computed(
             </div>
         </div>
 
-        <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
+        <div class="space-y-6 p-4 sm:p-6">
             <!-- En-tête commande ─────────────────────────────────────────────── -->
             <div class="hidden items-start justify-between gap-4 sm:flex">
                 <div class="flex items-start gap-4">
@@ -611,6 +653,74 @@ const showChargeeCol = computed(
                             <XCircle class="mr-2 h-4 w-4" />
                             Annuler
                         </Button>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Timeline de progression ─────────────────────────────────────── -->
+            <div class="rounded-xl border bg-card px-6 py-4 shadow-sm">
+                <!-- Annulée -->
+                <div
+                    v-if="commande.is_annulee"
+                    class="flex items-center gap-2 text-red-600 dark:text-red-400"
+                >
+                    <XCircle class="h-5 w-5" />
+                    <span class="font-semibold"
+                        >Cette commande a été annulée.</span
+                    >
+                </div>
+
+                <!-- Progression normale -->
+                <div v-else class="flex items-center">
+                    <template v-for="(step, idx) in STEPS" :key="step.key">
+                        <!-- Étape -->
+                        <div
+                            class="flex flex-col items-center"
+                            style="min-width: 80px"
+                        >
+                            <div
+                                :class="[
+                                    'flex h-9 w-9 items-center justify-center rounded-full transition-all',
+                                    stepState(idx) === 'done'
+                                        ? 'bg-emerald-500 text-white shadow-sm'
+                                        : '',
+                                    stepState(idx) === 'current'
+                                        ? 'bg-blue-600 text-white shadow-md ring-4 ring-blue-100 dark:ring-blue-900/50'
+                                        : '',
+                                    stepState(idx) === 'future'
+                                        ? 'bg-muted text-muted-foreground'
+                                        : '',
+                                ]"
+                            >
+                                <component :is="step.icon" class="h-4 w-4" />
+                            </div>
+                            <span
+                                :class="[
+                                    'mt-1.5 text-center text-[11px] leading-tight font-medium',
+                                    stepState(idx) === 'current'
+                                        ? 'text-blue-600 dark:text-blue-400'
+                                        : '',
+                                    stepState(idx) === 'done'
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : '',
+                                    stepState(idx) === 'future'
+                                        ? 'text-muted-foreground'
+                                        : '',
+                                ]"
+                            >
+                                {{ step.shortLabel }}
+                            </span>
+                        </div>
+                        <!-- Connecteur -->
+                        <div
+                            v-if="idx < STEPS.length - 1"
+                            :class="[
+                                'mb-5 h-0.5 flex-1 transition-all',
+                                connectorIsActive(idx)
+                                    ? 'bg-emerald-400'
+                                    : 'bg-border',
+                            ]"
+                        />
                     </template>
                 </div>
             </div>
