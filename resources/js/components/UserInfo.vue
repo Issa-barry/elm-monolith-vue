@@ -42,6 +42,11 @@ const subtitle = computed(() => {
 
     return roleLabel.value;
 });
+
+const siteLabel = computed(() => {
+    const site = page.props.auth.default_site;
+    return site ? `Site : ${site.nom}` : 'Site : Non défini';
+});
 </script>
 
 <template>
@@ -62,6 +67,9 @@ const subtitle = computed(() => {
         >
         <span class="truncate text-xs text-muted-foreground">{{
             subtitle
+        }}</span>
+        <span class="truncate text-xs text-muted-foreground/70">{{
+            siteLabel
         }}</span>
     </div>
 </template>

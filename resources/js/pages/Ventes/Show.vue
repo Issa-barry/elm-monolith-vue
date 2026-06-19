@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TicketCommandeVente from '@/components/print/TicketCommandeVente.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -8,16 +9,22 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
+import { useTicketPrint } from '@/composables/useTicketPrint';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     CheckCircle,
+    CheckCircle2,
     HandCoins,
     History,
     MoreVertical,
+    Package,
+    PackageOpen,
     Pencil,
+    Printer,
+    Receipt,
     Truck,
     XCircle,
 } from 'lucide-vue-next';
@@ -392,6 +399,69 @@ function submitEncaisser() {
 const showChargeeCol = computed(
     () => !props.commande.is_brouillon && !props.commande.is_a_charger,
 );
+
+// ── Ticket impression ─────────────────────────────────────────────────────────
+const page = usePage();
+const orgNom = computed(
+    () =>
+        (
+            page.props as Record<string, unknown> & {
+                auth?: { user?: { organization?: { nom?: string } } };
+            }
+        ).auth?.user?.organization?.nom ?? 'Eau la maman',
+);
+const currentUserName = computed(
+    () =>
+        (
+            page.props as Record<string, unknown> & {
+                auth?: { user?: { name?: string } };
+            }
+        ).auth?.user?.name ?? '',
+);
+const ticketDialogVisible = ref(false);
+const { printFromElement } = useTicketPrint();
+
+function printTicketCommande(): void {
+    printFromElement('ticket-commande-print');
+}
+
+// ── Timeline de progression ────────────────────────────────────────────────────
+const STEPS = [
+    { key: 'a_charger', shortLabel: 'À charger', icon: Package },
+    { key: 'chargement', shortLabel: 'Chargement en cours', icon: PackageOpen },
+    { key: 'livraison', shortLabel: 'Livraison en cours', icon: Truck },
+    { key: 'facturation', shortLabel: 'Facturation', icon: Receipt },
+    { key: 'commissions', shortLabel: 'Commissions', icon: HandCoins },
+    { key: 'cloturee', shortLabel: 'Clôturée', icon: CheckCircle2 },
+];
+
+const currentStepIdx = computed(() => {
+    if (props.commande.is_annulee) return -1;
+    if (props.commande.is_livree) {
+        return props.facture?.statut === 'payee' ? 4 : 3;
+    }
+    const map: Record<string, number> = {
+        brouillon: 0,
+        a_charger: 0,
+        chargement_en_cours: 1,
+        livraison_en_cours: 2,
+        cloturee: 5,
+    };
+    return map[props.commande.statut] ?? 0;
+});
+
+function stepState(idx: number): 'done' | 'current' | 'future' {
+    const cur = currentStepIdx.value;
+    if (cur === -1) return 'future';
+    if (idx < cur) return 'done';
+    if (idx === cur) return 'current';
+    return 'future';
+}
+
+function connectorIsActive(idx: number): boolean {
+    if (currentStepIdx.value === -1) return false;
+    return idx < currentStepIdx.value;
+}
 </script>
 
 <template>
@@ -436,6 +506,14 @@ const showChargeeCol = computed(
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" class="w-52">
+                            <DropdownMenuItem
+                                class="cursor-pointer"
+                                @click="ticketDialogVisible = true"
+                            >
+                                <Printer class="h-4 w-4" />
+                                Imprimer ticket
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem
                                 v-if="commande.can_modifier"
                                 as-child
@@ -498,7 +576,7 @@ const showChargeeCol = computed(
             </div>
         </div>
 
-        <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
+        <div class="space-y-6 p-4 sm:p-6">
             <!-- En-tête commande ─────────────────────────────────────────────── -->
             <div class="hidden items-start justify-between gap-4 sm:flex">
                 <div class="flex items-start gap-4">
@@ -543,6 +621,16 @@ const showChargeeCol = computed(
                         @click="historiquesDialogVisible = true"
                     >
                         <History class="h-4 w-4" />
+                    </Button>
+
+                    <!-- Imprimer ticket -->
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        @click="ticketDialogVisible = true"
+                    >
+                        <Printer class="mr-2 h-4 w-4" />
+                        Ticket
                     </Button>
 
                     <!-- Modifier (brouillon) -->
@@ -611,6 +699,74 @@ const showChargeeCol = computed(
                             <XCircle class="mr-2 h-4 w-4" />
                             Annuler
                         </Button>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Timeline de progression ─────────────────────────────────────── -->
+            <div class="rounded-xl border bg-card px-6 py-4 shadow-sm">
+                <!-- Annulée -->
+                <div
+                    v-if="commande.is_annulee"
+                    class="flex items-center gap-2 text-red-600 dark:text-red-400"
+                >
+                    <XCircle class="h-5 w-5" />
+                    <span class="font-semibold"
+                        >Cette commande a été annulée.</span
+                    >
+                </div>
+
+                <!-- Progression normale -->
+                <div v-else class="flex items-center">
+                    <template v-for="(step, idx) in STEPS" :key="step.key">
+                        <!-- Étape -->
+                        <div
+                            class="flex flex-col items-center"
+                            style="min-width: 80px"
+                        >
+                            <div
+                                :class="[
+                                    'flex h-9 w-9 items-center justify-center rounded-full transition-all',
+                                    stepState(idx) === 'done'
+                                        ? 'bg-emerald-500 text-white shadow-sm'
+                                        : '',
+                                    stepState(idx) === 'current'
+                                        ? 'bg-blue-600 text-white shadow-md ring-4 ring-blue-100 dark:ring-blue-900/50'
+                                        : '',
+                                    stepState(idx) === 'future'
+                                        ? 'bg-muted text-muted-foreground'
+                                        : '',
+                                ]"
+                            >
+                                <component :is="step.icon" class="h-4 w-4" />
+                            </div>
+                            <span
+                                :class="[
+                                    'mt-1.5 text-center text-[11px] leading-tight font-medium',
+                                    stepState(idx) === 'current'
+                                        ? 'text-blue-600 dark:text-blue-400'
+                                        : '',
+                                    stepState(idx) === 'done'
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : '',
+                                    stepState(idx) === 'future'
+                                        ? 'text-muted-foreground'
+                                        : '',
+                                ]"
+                            >
+                                {{ step.shortLabel }}
+                            </span>
+                        </div>
+                        <!-- Connecteur -->
+                        <div
+                            v-if="idx < STEPS.length - 1"
+                            :class="[
+                                'mb-5 h-0.5 flex-1 transition-all',
+                                connectorIsActive(idx)
+                                    ? 'bg-emerald-400'
+                                    : 'bg-border',
+                            ]"
+                        />
                     </template>
                 </div>
             </div>
@@ -1259,6 +1415,37 @@ const showChargeeCol = computed(
                                 ? 'Annulation…'
                                 : "Confirmer l'annulation"
                         }}
+                    </Button>
+                </div>
+            </template>
+        </Dialog>
+
+        <!-- Dialog Ticket -->
+        <Dialog
+            v-model:visible="ticketDialogVisible"
+            modal
+            header="Ticket commande"
+            :style="{ width: '380px' }"
+        >
+            <div class="flex justify-center py-2">
+                <div id="ticket-commande-print">
+                    <TicketCommandeVente
+                        :commande="commande"
+                        :org-nom="orgNom"
+                        :current-user="currentUserName"
+                    />
+                </div>
+            </div>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <Button
+                        variant="outline"
+                        @click="ticketDialogVisible = false"
+                        >Fermer</Button
+                    >
+                    <Button @click="printTicketCommande">
+                        <Printer class="mr-2 h-4 w-4" />
+                        Imprimer
                     </Button>
                 </div>
             </template>

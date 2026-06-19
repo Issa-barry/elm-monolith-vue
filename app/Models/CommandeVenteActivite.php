@@ -39,6 +39,7 @@ class CommandeVenteActivite extends Model
 
     private static array $labels = [
         'creation' => 'a créé la commande',
+        'creation_confirmee' => 'a créé et confirmé la commande',
         'confirmee' => 'a confirmé la commande',
         'chargement_demarre' => 'a démarré le chargement',
         'chargement_valide' => 'a validé le chargement',

@@ -6,20 +6,33 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Lock, Plus, Save, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Lock, Phone, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
+import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import { computed, onMounted, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+interface FactureDetail {
+    reference: string;
+    date: string | null;
+    montant: number;
+    encaisse: number;
+    restant: number;
+    statut: string;
+    statut_label: string;
+}
+
 interface SolvabiliteResult {
     has_debt: boolean;
     status: 'aucun' | 'partiel' | 'impaye';
     unpaid_invoices_count: number;
     total_remaining: number;
+    total_encaisse: number;
     last_invoice_reference: string | null;
     last_invoice_date: string | null;
+    factures: FactureDetail[];
 }
 
 interface ProduitOption {
@@ -35,6 +48,7 @@ interface VehiculeOption {
     immatriculation: string;
     capacite_packs: number | null;
     livreur_nom: string | null;
+    livreur_telephone: string | null;
 }
 
 interface ClientOption {
@@ -187,19 +201,33 @@ function clientLabel(c: ClientOption): string {
     return [c.prenom, c.nom].filter(Boolean).join(' ');
 }
 
-// ── Solvabilité helpers ───────────────────────────────────────────────────────
-function solvabiliteAlertClass(s: SolvabiliteResult): string {
-    if (!s.has_debt)
-        return 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300';
-    if (s.status === 'impaye')
-        return 'bg-red-50 border-red-200 text-red-800 dark:bg-red-950/40 dark:border-red-800 dark:text-red-300';
-    return 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300';
+// ── Solvabilité — dialog ──────────────────────────────────────────────────────
+const showFacturesDialog = ref(false);
+const dialogSolvabilite = ref<SolvabiliteResult | null>(null);
+const dialogContextLabel = ref('');
+
+function ouvrirDialogFactures(solv: SolvabiliteResult, label: string) {
+    dialogSolvabilite.value = solv;
+    dialogContextLabel.value = label;
+    showFacturesDialog.value = true;
 }
 
+// ── Solvabilité helpers ───────────────────────────────────────────────────────
 function formatDate(dateStr: string | null): string {
-    if (!dateStr) return '';
+    if (!dateStr) return '—';
     const [y, m, d] = dateStr.split('-');
     return `${d}/${m}/${y}`;
+}
+
+function statutBadgeClass(statut: string): string {
+    const map: Record<string, string> = {
+        impayee: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300',
+        partiel:
+            'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+        payee: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+        annulee: 'bg-muted text-muted-foreground',
+    };
+    return map[statut] ?? 'bg-muted text-muted-foreground';
 }
 
 // ── Dropdown : Produit ────────────────────────────────────────────────────────
@@ -338,7 +366,22 @@ const canSubmit = computed(
 );
 
 // ── Soumission ────────────────────────────────────────────────────────────────
+const showConfirmDialog = ref(false);
+
+const lignesVisibles = computed(() =>
+    form.lignes.filter((l) => l.produit_id !== null),
+);
+
+function nomProduit(produitId: number | null): string {
+    if (!produitId) return '—';
+    return props.produits.find((p) => p.id === produitId)?.nom ?? '—';
+}
+
 function submit() {
+    showConfirmDialog.value = true;
+}
+
+function confirmerEtCreer() {
     form.post('/ventes');
 }
 </script>
@@ -466,7 +509,7 @@ function submit() {
                             <!-- Solvabilité véhicule -->
                             <div
                                 v-if="vehiculeSolvabiliteLoading"
-                                class="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                                class="mt-3 flex items-center gap-2 text-xs text-muted-foreground"
                             >
                                 <svg
                                     class="h-3.5 w-3.5 animate-spin"
@@ -489,79 +532,163 @@ function submit() {
                                 </svg>
                                 Vérification en cours…
                             </div>
+
+                            <!-- ✅ Aucun impayé -->
                             <div
-                                v-else-if="vehiculeSolvabilite"
-                                class="mt-2 rounded-lg border p-2.5 text-xs"
+                                v-else-if="
+                                    vehiculeSolvabilite &&
+                                    !vehiculeSolvabilite.has_debt
+                                "
+                                class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30"
+                            >
+                                <div class="flex items-start gap-2.5">
+                                    <span
+                                        class="mt-0.5 text-base text-emerald-600 dark:text-emerald-400"
+                                        >✓</span
+                                    >
+                                    <div>
+                                        <p
+                                            class="text-sm font-semibold text-emerald-800 dark:text-emerald-300"
+                                        >
+                                            Ce véhicule est à jour de ses
+                                            paiements.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ⚠ Dettes -->
+                            <div
+                                v-else-if="
+                                    vehiculeSolvabilite &&
+                                    vehiculeSolvabilite.has_debt
+                                "
+                                class="mt-3 rounded-xl border p-3"
                                 :class="
-                                    solvabiliteAlertClass(vehiculeSolvabilite)
+                                    vehiculeSolvabilite.status === 'impaye'
+                                        ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30'
+                                        : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30'
                                 "
                             >
-                                <template v-if="!vehiculeSolvabilite.has_debt">
-                                    <p class="font-semibold">
-                                        ✓ Aucun impayé détecté
-                                    </p>
-                                    <p class="mt-0.5 opacity-80">
-                                        Ce véhicule n'a aucune facture en
-                                        attente.
-                                    </p>
-                                </template>
-                                <template v-else>
-                                    <p class="font-semibold">
-                                        {{
-                                            vehiculeSolvabilite.status ===
-                                            'impaye'
-                                                ? '⚠ Factures impayées détectées'
-                                                : '⚠ Paiement partiel'
-                                        }}
-                                    </p>
-                                    <p class="mt-0.5">
-                                        {{
-                                            vehiculeSolvabilite.status ===
-                                            'impaye'
-                                                ? 'Total impayé'
-                                                : 'Reste à payer'
-                                        }}
-                                        :
-                                        <span class="font-medium">{{
-                                            formatGNF(
-                                                vehiculeSolvabilite.total_remaining,
-                                            )
-                                        }}</span>
-                                        ·
-                                        {{
-                                            vehiculeSolvabilite.unpaid_invoices_count
-                                        }}
-                                        facture(s)
-                                    </p>
-                                    <p
-                                        v-if="
-                                            vehiculeSolvabilite.last_invoice_reference
-                                        "
-                                        class="mt-0.5 opacity-80"
-                                    >
-                                        Dernière :
-                                        {{
-                                            vehiculeSolvabilite.last_invoice_reference
-                                        }}
-                                        <template
-                                            v-if="
-                                                vehiculeSolvabilite.last_invoice_date
+                                <div
+                                    class="flex items-start justify-between gap-3"
+                                >
+                                    <div class="flex items-start gap-2.5">
+                                        <span
+                                            class="mt-0.5 text-base"
+                                            :class="
+                                                vehiculeSolvabilite.status ===
+                                                'impaye'
+                                                    ? 'text-red-500'
+                                                    : 'text-amber-500'
                                             "
+                                            >⚠</span
                                         >
-                                            ·
-                                            {{
-                                                formatDate(
-                                                    vehiculeSolvabilite.last_invoice_date,
-                                                )
-                                            }}
-                                        </template>
-                                    </p>
-                                    <a
-                                        href="/factures"
-                                        class="mt-1.5 inline-block font-medium underline underline-offset-2"
-                                        >Voir les factures</a
+                                        <div>
+                                            <p
+                                                class="text-sm font-semibold"
+                                                :class="
+                                                    vehiculeSolvabilite.status ===
+                                                    'impaye'
+                                                        ? 'text-red-800 dark:text-red-300'
+                                                        : 'text-amber-800 dark:text-amber-300'
+                                                "
+                                            >
+                                                {{
+                                                    vehiculeSolvabilite.status ===
+                                                    'impaye'
+                                                        ? 'Factures impayées détectées'
+                                                        : 'Paiement partiel'
+                                                }}
+                                            </p>
+                                            <p
+                                                class="mt-1.5 text-xs font-medium opacity-70"
+                                                :class="
+                                                    vehiculeSolvabilite.status ===
+                                                    'impaye'
+                                                        ? 'text-red-800 dark:text-red-300'
+                                                        : 'text-amber-800 dark:text-amber-300'
+                                                "
+                                            >
+                                                Montant total impayé
+                                            </p>
+                                            <p
+                                                class="text-xl font-bold"
+                                                :class="
+                                                    vehiculeSolvabilite.status ===
+                                                    'impaye'
+                                                        ? 'text-red-800 dark:text-red-300'
+                                                        : 'text-amber-800 dark:text-amber-300'
+                                                "
+                                            >
+                                                {{
+                                                    formatGNF(
+                                                        vehiculeSolvabilite.total_remaining,
+                                                    )
+                                                }}
+                                            </p>
+                                            <p
+                                                class="mt-1 text-xs opacity-70"
+                                                :class="
+                                                    vehiculeSolvabilite.status ===
+                                                    'impaye'
+                                                        ? 'text-red-800 dark:text-red-300'
+                                                        : 'text-amber-800 dark:text-amber-300'
+                                                "
+                                            >
+                                                Nombre de factures :
+                                                {{
+                                                    vehiculeSolvabilite.unpaid_invoices_count
+                                                }}
+                                            </p>
+                                            <p
+                                                v-if="
+                                                    vehiculeSolvabilite.last_invoice_reference
+                                                "
+                                                class="mt-1 text-xs opacity-60"
+                                                :class="
+                                                    vehiculeSolvabilite.status ===
+                                                    'impaye'
+                                                        ? 'text-red-800 dark:text-red-300'
+                                                        : 'text-amber-800 dark:text-amber-300'
+                                                "
+                                            >
+                                                Dernière :
+                                                {{
+                                                    vehiculeSolvabilite.last_invoice_reference
+                                                }}
+                                                ·
+                                                {{
+                                                    formatDate(
+                                                        vehiculeSolvabilite.last_invoice_date,
+                                                    )
+                                                }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
+                                        :class="
+                                            vehiculeSolvabilite.status ===
+                                            'impaye'
+                                                ? 'border-red-300 bg-white text-red-700 hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60'
+                                                : 'border-amber-300 bg-white text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60'
+                                        "
+                                        @click="
+                                            ouvrirDialogFactures(
+                                                vehiculeSolvabilite,
+                                                vehiculeSelected
+                                                    ? vehiculeLabel(
+                                                          vehiculeSelected,
+                                                      )
+                                                    : 'Véhicule',
+                                            )
+                                        "
                                     >
-                                </template>
+                                        Voir les factures
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -619,7 +746,7 @@ function submit() {
                             <!-- Solvabilité client -->
                             <div
                                 v-if="clientSolvabiliteLoading"
-                                class="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                                class="mt-3 flex items-center gap-2 text-xs text-muted-foreground"
                             >
                                 <svg
                                     class="h-3.5 w-3.5 animate-spin"
@@ -642,78 +769,158 @@ function submit() {
                                 </svg>
                                 Vérification en cours…
                             </div>
+
+                            <!-- ✅ Aucun impayé -->
                             <div
-                                v-else-if="clientSolvabilite"
-                                class="mt-2 rounded-lg border p-2.5 text-xs"
+                                v-else-if="
+                                    clientSolvabilite &&
+                                    !clientSolvabilite.has_debt
+                                "
+                                class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30"
+                            >
+                                <div class="flex items-center gap-2.5">
+                                    <span
+                                        class="text-base text-emerald-600 dark:text-emerald-400"
+                                        >✓</span
+                                    >
+                                    <p
+                                        class="text-sm font-semibold text-emerald-800 dark:text-emerald-300"
+                                    >
+                                        Ce client est à jour de ses paiements.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- ⚠ Dettes -->
+                            <div
+                                v-else-if="
+                                    clientSolvabilite &&
+                                    clientSolvabilite.has_debt
+                                "
+                                class="mt-3 rounded-xl border p-3"
                                 :class="
-                                    solvabiliteAlertClass(clientSolvabilite)
+                                    clientSolvabilite.status === 'impaye'
+                                        ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30'
+                                        : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30'
                                 "
                             >
-                                <template v-if="!clientSolvabilite.has_debt">
-                                    <p class="font-semibold">
-                                        ✓ Aucun impayé détecté
-                                    </p>
-                                    <p class="mt-0.5 opacity-80">
-                                        Ce client n'a aucune facture en attente.
-                                    </p>
-                                </template>
-                                <template v-else>
-                                    <p class="font-semibold">
-                                        {{
-                                            clientSolvabilite.status ===
-                                            'impaye'
-                                                ? '⚠ Factures impayées détectées'
-                                                : '⚠ Paiement partiel'
-                                        }}
-                                    </p>
-                                    <p class="mt-0.5">
-                                        {{
-                                            clientSolvabilite.status ===
-                                            'impaye'
-                                                ? 'Total impayé'
-                                                : 'Reste à payer'
-                                        }}
-                                        :
-                                        <span class="font-medium">{{
-                                            formatGNF(
-                                                clientSolvabilite.total_remaining,
-                                            )
-                                        }}</span>
-                                        ·
-                                        {{
-                                            clientSolvabilite.unpaid_invoices_count
-                                        }}
-                                        facture(s)
-                                    </p>
-                                    <p
-                                        v-if="
-                                            clientSolvabilite.last_invoice_reference
-                                        "
-                                        class="mt-0.5 opacity-80"
-                                    >
-                                        Dernière :
-                                        {{
-                                            clientSolvabilite.last_invoice_reference
-                                        }}
-                                        <template
-                                            v-if="
-                                                clientSolvabilite.last_invoice_date
+                                <div
+                                    class="flex items-start justify-between gap-3"
+                                >
+                                    <div class="flex items-start gap-2.5">
+                                        <span
+                                            class="mt-0.5 text-base"
+                                            :class="
+                                                clientSolvabilite.status ===
+                                                'impaye'
+                                                    ? 'text-red-500'
+                                                    : 'text-amber-500'
                                             "
+                                            >⚠</span
                                         >
-                                            ·
-                                            {{
-                                                formatDate(
-                                                    clientSolvabilite.last_invoice_date,
-                                                )
-                                            }}
-                                        </template>
-                                    </p>
-                                    <a
-                                        href="/factures"
-                                        class="mt-1.5 inline-block font-medium underline underline-offset-2"
-                                        >Voir les factures</a
+                                        <div>
+                                            <p
+                                                class="text-sm font-semibold"
+                                                :class="
+                                                    clientSolvabilite.status ===
+                                                    'impaye'
+                                                        ? 'text-red-800 dark:text-red-300'
+                                                        : 'text-amber-800 dark:text-amber-300'
+                                                "
+                                            >
+                                                {{
+                                                    clientSolvabilite.status ===
+                                                    'impaye'
+                                                        ? 'Factures impayées détectées'
+                                                        : 'Paiement partiel'
+                                                }}
+                                            </p>
+                                            <p
+                                                class="mt-1.5 text-xs font-medium opacity-70"
+                                                :class="
+                                                    clientSolvabilite.status ===
+                                                    'impaye'
+                                                        ? 'text-red-800 dark:text-red-300'
+                                                        : 'text-amber-800 dark:text-amber-300'
+                                                "
+                                            >
+                                                Montant total impayé
+                                            </p>
+                                            <p
+                                                class="text-xl font-bold"
+                                                :class="
+                                                    clientSolvabilite.status ===
+                                                    'impaye'
+                                                        ? 'text-red-800 dark:text-red-300'
+                                                        : 'text-amber-800 dark:text-amber-300'
+                                                "
+                                            >
+                                                {{
+                                                    formatGNF(
+                                                        clientSolvabilite.total_remaining,
+                                                    )
+                                                }}
+                                            </p>
+                                            <p
+                                                class="mt-1 text-xs opacity-70"
+                                                :class="
+                                                    clientSolvabilite.status ===
+                                                    'impaye'
+                                                        ? 'text-red-800 dark:text-red-300'
+                                                        : 'text-amber-800 dark:text-amber-300'
+                                                "
+                                            >
+                                                Nombre de factures :
+                                                {{
+                                                    clientSolvabilite.unpaid_invoices_count
+                                                }}
+                                            </p>
+                                            <p
+                                                v-if="
+                                                    clientSolvabilite.last_invoice_reference
+                                                "
+                                                class="mt-1 text-xs opacity-60"
+                                                :class="
+                                                    clientSolvabilite.status ===
+                                                    'impaye'
+                                                        ? 'text-red-800 dark:text-red-300'
+                                                        : 'text-amber-800 dark:text-amber-300'
+                                                "
+                                            >
+                                                Dernière :
+                                                {{
+                                                    clientSolvabilite.last_invoice_reference
+                                                }}
+                                                ·
+                                                {{
+                                                    formatDate(
+                                                        clientSolvabilite.last_invoice_date,
+                                                    )
+                                                }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
+                                        :class="
+                                            clientSolvabilite.status ===
+                                            'impaye'
+                                                ? 'border-red-300 bg-white text-red-700 hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60'
+                                                : 'border-amber-300 bg-white text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60'
+                                        "
+                                        @click="
+                                            ouvrirDialogFactures(
+                                                clientSolvabilite,
+                                                clientSelected
+                                                    ? clientSelected.nom
+                                                    : 'Client',
+                                            )
+                                        "
                                     >
-                                </template>
+                                        Voir les factures
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1105,11 +1312,7 @@ function submit() {
                         <Button type="button" variant="outline">Retour</Button>
                     </Link>
                     <Button type="submit" :disabled="!canSubmit">
-                        {{
-                            form.processing
-                                ? 'Enregistrement…'
-                                : 'Enregistrer la commande'
-                        }}
+                        Créer la commande
                     </Button>
                 </div>
             </form>
@@ -1121,10 +1324,396 @@ function submit() {
         >
             <Button class="w-full" :disabled="!canSubmit" @click="submit">
                 <Save class="mr-2 h-4 w-4" />
-                {{
-                    form.processing ? 'Enregistrement…' : 'Enregistrer la vente'
-                }}
+                Créer la commande
             </Button>
         </div>
+
+        <!-- Dialog Confirmation création -->
+        <Dialog
+            v-model:visible="showConfirmDialog"
+            modal
+            :closable="true"
+            :style="{ width: '720px', maxWidth: '95vw' }"
+            :pt="{
+                root: { class: 'rounded-2xl shadow-2xl' },
+                header: {
+                    class: 'rounded-t-2xl border-b border-border px-6 py-4',
+                },
+                content: { class: 'p-0' },
+            }"
+        >
+            <template #header>
+                <div>
+                    <h2 class="text-lg font-semibold">
+                        Confirmer la création de la commande
+                    </h2>
+                    <p class="mt-0.5 text-sm text-muted-foreground">
+                        Vérifiez le récapitulatif avant de valider.
+                    </p>
+                </div>
+            </template>
+
+            <!-- Informations générales -->
+            <div
+                class="grid grid-cols-2 gap-x-8 gap-y-4 border-b border-border p-5"
+            >
+                <div>
+                    <p class="text-xs text-muted-foreground">Site</p>
+                    <p class="mt-0.5 font-medium">{{ user_site.label }}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-muted-foreground">Véhicule</p>
+                    <p class="mt-0.5 font-medium">
+                        {{
+                            vehiculeSelected
+                                ? vehiculeLabel(vehiculeSelected)
+                                : '—'
+                        }}
+                    </p>
+                </div>
+                <div>
+                    <p class="text-xs text-muted-foreground">Client</p>
+                    <p class="mt-0.5 font-medium">
+                        {{ clientSelected ? clientLabel(clientSelected) : '—' }}
+                    </p>
+                </div>
+                <div>
+                    <p class="text-xs text-muted-foreground">Chauffeur</p>
+                    <template v-if="vehiculeSelected?.livreur_nom">
+                        <p class="mt-0.5 font-medium">
+                            {{ vehiculeSelected.livreur_nom }}
+                        </p>
+                        <p
+                            class="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"
+                        >
+                            <Phone class="h-3 w-3 shrink-0" />
+                            {{
+                                vehiculeSelected.livreur_telephone
+                                    ? formatPhoneDisplay(
+                                          vehiculeSelected.livreur_telephone,
+                                      )
+                                    : 'Non renseigné'
+                            }}
+                        </p>
+                    </template>
+                    <p v-else class="mt-0.5 text-sm text-muted-foreground">
+                        Non affecté
+                    </p>
+                </div>
+            </div>
+
+            <!-- Produits -->
+            <div class="border-b border-border">
+                <table class="w-full text-sm">
+                    <thead class="bg-muted/50">
+                        <tr class="border-b border-border">
+                            <th
+                                class="px-5 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                Produit
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                Demandée
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                Prix unit.
+                            </th>
+                            <th
+                                class="px-5 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                Total
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border">
+                        <tr
+                            v-for="(ligne, i) in lignesVisibles"
+                            :key="i"
+                            class="hover:bg-muted/30"
+                        >
+                            <td class="px-5 py-3 font-medium">
+                                {{ nomProduit(ligne.produit_id) }}
+                            </td>
+                            <td class="px-4 py-3 text-right tabular-nums">
+                                {{ ligne.qte }}
+                            </td>
+                            <td
+                                class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                            >
+                                {{ formatGNF(ligne.prix_vente) }}
+                            </td>
+                            <td
+                                class="px-5 py-3 text-right font-semibold tabular-nums"
+                            >
+                                {{ formatGNF(ligne.total) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tfoot class="border-t border-border">
+                        <tr>
+                            <td colspan="2"></td>
+                            <td
+                                class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                Qté totale
+                            </td>
+                            <td
+                                class="px-5 py-2.5 text-right font-semibold tabular-nums"
+                            >
+                                {{ quantiteTotale }} packs
+                            </td>
+                        </tr>
+                        <tr class="border-t border-border">
+                            <td colspan="2"></td>
+                            <td
+                                class="px-4 py-3 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                Total
+                            </td>
+                            <td
+                                class="px-5 py-3 text-right text-xl font-bold tabular-nums"
+                            >
+                                {{ formatGNF(totalGeneral) }}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <!-- Alertes -->
+            <div
+                v-if="
+                    vehiculeSolvabilite?.has_debt || clientSolvabilite?.has_debt
+                "
+                class="space-y-2 border-b border-border bg-amber-50 px-5 py-3 dark:bg-amber-950/20"
+            >
+                <p
+                    class="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400"
+                >
+                    Alertes
+                </p>
+                <div
+                    v-if="vehiculeSolvabilite?.has_debt"
+                    class="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"
+                >
+                    <span>⚠</span>
+                    <span
+                        >Véhicule : factures impayées —
+                        <strong>{{
+                            formatGNF(vehiculeSolvabilite.total_remaining)
+                        }}</strong></span
+                    >
+                </div>
+                <div
+                    v-if="clientSolvabilite?.has_debt"
+                    class="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"
+                >
+                    <span>⚠</span>
+                    <span
+                        >Client : factures impayées —
+                        <strong>{{
+                            formatGNF(clientSolvabilite.total_remaining)
+                        }}</strong></span
+                    >
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center justify-between px-5 py-4">
+                <button
+                    type="button"
+                    class="rounded-lg border bg-card px-4 py-2 text-sm font-medium hover:bg-muted/50"
+                    @click="showConfirmDialog = false"
+                >
+                    Retour à la saisie
+                </button>
+                <button
+                    type="button"
+                    class="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                    :disabled="form.processing"
+                    @click="confirmerEtCreer"
+                >
+                    {{
+                        form.processing
+                            ? 'Création en cours…'
+                            : 'Confirmer et créer'
+                    }}
+                </button>
+            </div>
+        </Dialog>
+
+        <!-- Dialog Factures impayées -->
+        <Dialog
+            v-model:visible="showFacturesDialog"
+            modal
+            :closable="true"
+            :style="{ width: '960px', maxWidth: '95vw' }"
+            :pt="{
+                root: { class: 'rounded-2xl shadow-2xl' },
+                header: {
+                    class: 'rounded-t-2xl border-b border-border px-6 py-4',
+                },
+                content: { class: 'p-0' },
+            }"
+        >
+            <template #header>
+                <div>
+                    <h2 class="text-lg font-semibold">Factures impayées</h2>
+                    <p
+                        v-if="dialogContextLabel"
+                        class="mt-0.5 text-sm text-muted-foreground"
+                    >
+                        {{ dialogContextLabel }}
+                    </p>
+                </div>
+            </template>
+
+            <template v-if="dialogSolvabilite">
+                <!-- KPI cards -->
+                <div
+                    class="grid grid-cols-2 gap-3 border-b border-border p-5 sm:grid-cols-4"
+                >
+                    <div class="rounded-xl border bg-card p-3 text-center">
+                        <p
+                            class="text-2xl font-bold text-red-600 dark:text-red-400"
+                        >
+                            {{ dialogSolvabilite.unpaid_invoices_count }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Facture(s)
+                        </p>
+                    </div>
+                    <div class="rounded-xl border bg-card p-3 text-center">
+                        <p
+                            class="text-lg font-bold text-red-600 tabular-nums dark:text-red-400"
+                        >
+                            {{ formatGNF(dialogSolvabilite.total_remaining) }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Total impayé
+                        </p>
+                    </div>
+                    <div class="rounded-xl border bg-card p-3 text-center">
+                        <p
+                            class="text-lg font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
+                        >
+                            {{ formatGNF(dialogSolvabilite.total_encaisse) }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Encaissé
+                        </p>
+                    </div>
+                    <div class="rounded-xl border bg-card p-3 text-center">
+                        <p
+                            class="text-lg font-bold text-amber-600 tabular-nums dark:text-amber-400"
+                        >
+                            {{
+                                formatGNF(
+                                    dialogSolvabilite.total_remaining +
+                                        dialogSolvabilite.total_encaisse,
+                                )
+                            }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Montant total
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Table -->
+                <div class="max-h-[420px] overflow-y-auto">
+                    <table class="w-full text-sm">
+                        <thead
+                            class="sticky top-0 bg-muted/60 backdrop-blur-sm"
+                        >
+                            <tr class="border-b border-border">
+                                <th
+                                    class="px-4 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                                >
+                                    Référence
+                                </th>
+                                <th
+                                    class="px-4 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                                >
+                                    Date
+                                </th>
+                                <th
+                                    class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                                >
+                                    Montant
+                                </th>
+                                <th
+                                    class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                                >
+                                    Encaissé
+                                </th>
+                                <th
+                                    class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                                >
+                                    Reste
+                                </th>
+                                <th
+                                    class="px-4 py-2.5 text-center text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                                >
+                                    Statut
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-border">
+                            <tr
+                                v-for="f in dialogSolvabilite.factures"
+                                :key="f.reference"
+                                class="hover:bg-muted/30"
+                            >
+                                <td
+                                    class="px-4 py-3 font-mono text-xs text-muted-foreground"
+                                >
+                                    {{ f.reference }}
+                                </td>
+                                <td class="px-4 py-3 text-xs">
+                                    {{ formatDate(f.date) }}
+                                </td>
+                                <td class="px-4 py-3 text-right tabular-nums">
+                                    {{ formatGNF(f.montant) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right text-emerald-700 tabular-nums dark:text-emerald-400"
+                                >
+                                    {{ formatGNF(f.encaisse) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right font-semibold text-red-700 tabular-nums dark:text-red-400"
+                                >
+                                    {{ formatGNF(f.restant) }}
+                                </td>
+                                <td class="px-4 py-3 text-center">
+                                    <span
+                                        class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                                        :class="statutBadgeClass(f.statut)"
+                                    >
+                                        {{ f.statut_label }}
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Footer -->
+                <div class="flex justify-end border-t border-border px-5 py-3">
+                    <button
+                        type="button"
+                        class="rounded-lg border bg-card px-4 py-2 text-sm font-medium hover:bg-muted/50"
+                        @click="showFacturesDialog = false"
+                    >
+                        Fermer
+                    </button>
+                </div>
+            </template>
+        </Dialog>
     </AppLayout>
 </template>
