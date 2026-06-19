@@ -17,7 +17,9 @@ import { computed } from 'vue';
 
 const { can, hasRole } = usePermissions();
 
-const isAdmin = computed(() => hasRole('super_admin') || hasRole('admin_entreprise'));
+const isAdmin = computed(
+    () => hasRole('super_admin') || hasRole('admin_entreprise'),
+);
 
 const sidebarNavItems = computed((): NavItem[] => {
     const items: NavItem[] = [

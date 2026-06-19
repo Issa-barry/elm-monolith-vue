@@ -475,7 +475,11 @@ const hasActiveFilters = computed(
                             class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                         >
                             <option value="">Tous les types</option>
-                            <option v-for="t in types" :key="t.id" :value="t.id">
+                            <option
+                                v-for="t in types"
+                                :key="t.id"
+                                :value="t.id"
+                            >
                                 {{ t.libelle }}
                             </option>
                         </select>
@@ -522,7 +526,11 @@ const hasActiveFilters = computed(
                             class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                         >
                             <option value="">Tous les sites</option>
-                            <option v-for="s in sites" :key="s.id" :value="s.id">
+                            <option
+                                v-for="s in sites"
+                                :key="s.id"
+                                :value="s.id"
+                            >
                                 {{ s.nom }}
                             </option>
                         </select>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button';
 import HeadingSmall from '@/components/HeadingSmall.vue';
+import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { Head, router } from '@inertiajs/vue3';
@@ -115,7 +115,8 @@ function toggleColumn(action: Action) {
 const expandedPortee = ref<Set<string>>(new Set());
 
 function togglePortee(roleName: string) {
-    if (expandedPortee.value.has(roleName)) expandedPortee.value.delete(roleName);
+    if (expandedPortee.value.has(roleName))
+        expandedPortee.value.delete(roleName);
     else expandedPortee.value.add(roleName);
 }
 
@@ -175,7 +176,9 @@ function save() {
                     description="Configuration des droits et des périmètres agences pour le module Produits."
                 />
 
-                <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+                <div
+                    class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                >
                     <!-- En-tête -->
                     <div
                         class="flex items-center justify-between border-b bg-muted/30 px-6 py-3"
@@ -196,11 +199,7 @@ function save() {
                                     Sauvegardé
                                 </span>
                             </transition>
-                            <Button
-                                size="sm"
-                                :disabled="saving"
-                                @click="save"
-                            >
+                            <Button size="sm" :disabled="saving" @click="save">
                                 <Save class="mr-2 h-4 w-4" />
                                 {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
                             </Button>
@@ -440,13 +439,13 @@ function save() {
                                                 Toutes les agences
                                             </div>
                                             <button
-                                                v-else-if="
-                                                    hasAnyAction(entry)
-                                                "
+                                                v-else-if="hasAnyAction(entry)"
                                                 type="button"
                                                 class="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
                                                 @click="
-                                                    togglePortee(entry.role_name)
+                                                    togglePortee(
+                                                        entry.role_name,
+                                                    )
                                                 "
                                             >
                                                 <span class="font-medium">{{

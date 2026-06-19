@@ -138,8 +138,8 @@ function resetFilters() {
     );
 }
 
-const activeFilterCount = computed(
-    () => (localStatut.value !== 'tous' ? 1 : 0),
+const activeFilterCount = computed(() =>
+    localStatut.value !== 'tous' ? 1 : 0,
 );
 
 const hasActiveFilters = computed(
@@ -162,7 +162,8 @@ const commandesFiltrees = computed(() => {
             (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
             (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
             (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
-            (c.facture_statut_label && c.facture_statut_label.toLowerCase().includes(q)) ||
+            (c.facture_statut_label &&
+                c.facture_statut_label.toLowerCase().includes(q)) ||
             (c.created_at && c.created_at.toLowerCase().includes(q)),
     );
 });
@@ -180,7 +181,8 @@ const mobileFiltered = computed(() => {
             (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
             (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
             (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
-            (c.facture_statut_label && c.facture_statut_label.toLowerCase().includes(q)) ||
+            (c.facture_statut_label &&
+                c.facture_statut_label.toLowerCase().includes(q)) ||
             (c.created_at && c.created_at.toLowerCase().includes(q)),
     );
 });

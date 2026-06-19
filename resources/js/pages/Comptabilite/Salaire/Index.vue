@@ -390,11 +390,7 @@ const periodeCourante = computed(
                     v-model="selectedAnnee"
                     class="h-9 rounded-md border border-input bg-background px-2 text-sm"
                 >
-                    <option
-                        v-for="a in ANNEES"
-                        :key="a.value"
-                        :value="a.value"
-                    >
+                    <option v-for="a in ANNEES" :key="a.value" :value="a.value">
                         {{ a.label }}
                     </option>
                 </select>
@@ -405,11 +401,7 @@ const periodeCourante = computed(
                     class="h-9 rounded-md border border-input bg-background px-2 text-sm"
                 >
                     <option value="">Toutes les agences</option>
-                    <option
-                        v-for="s in sites"
-                        :key="s.value"
-                        :value="s.value"
-                    >
+                    <option v-for="s in sites" :key="s.value" :value="s.value">
                         {{ s.label }}
                     </option>
                 </select>
@@ -469,175 +461,184 @@ const periodeCourante = computed(
                 </div>
 
                 <div v-else-if="lignes.length > 0" class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b bg-muted/40">
-                            <th
-                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
-                            >
-                                Salarié
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
-                            >
-                                Agence
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Salaire brut
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Primes
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Déductions
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Net à payer
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Déjà payé
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Reste à payer
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
-                            >
-                                Statut
-                            </th>
-                            <th class="w-10 px-4 py-3.5" />
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        <tr
-                            v-for="l in lignes"
-                            :key="l.id"
-                            class="transition-colors hover:bg-muted/10 even:bg-muted/20"
-                        >
-                            <td class="px-5 py-3">
-                                <p class="font-semibold">{{ l.employe_nom }}</p>
-                                <p class="mt-0.5 text-xs text-muted-foreground">
-                                    {{ l.poste }}
-                                </p>
-                            </td>
-                            <td class="px-5 py-3 text-sm text-muted-foreground">
-                                {{ l.site }}
-                            </td>
-                            <td
-                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
-                            >
-                                {{ fmt(l.brut) }}
-                            </td>
-                            <td
-                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
-                            >
-                                {{
-                                    l.total_primes > 0
-                                        ? '+' + fmt(l.total_primes)
-                                        : '—'
-                                }}
-                            </td>
-                            <td
-                                class="px-5 py-3 text-right font-semibold text-red-600 tabular-nums dark:text-red-400"
-                            >
-                                {{
-                                    l.deductions > 0
-                                        ? '-' + fmt(l.deductions)
-                                        : '—'
-                                }}
-                            </td>
-                            <td
-                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
-                            >
-                                {{ fmt(l.net) }}
-                            </td>
-                            <td
-                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
-                            >
-                                {{ fmt(l.deja_paye) }}
-                            </td>
-                            <td
-                                class="px-5 py-3 text-right font-bold tabular-nums"
-                            >
-                                {{ fmt(l.reste_a_payer) }}
-                            </td>
-                            <td class="px-5 py-3">
-                                <span
-                                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap"
-                                    :class="statutClass(l.statut)"
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b bg-muted/40">
+                                <th
+                                    class="px-5 py-3.5 text-left font-medium text-muted-foreground"
                                 >
-                                    {{ l.statut_label }}
-                                </span>
-                            </td>
-                            <td class="px-4 py-3 text-right">
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger as-child>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            class="h-7 w-7"
-                                        >
-                                            <MoreHorizontal class="h-4 w-4" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                        align="end"
-                                        class="w-48"
+                                    Salarié
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-left font-medium text-muted-foreground"
+                                >
+                                    Agence
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Salaire brut
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Primes
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Déductions
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Net à payer
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Déjà payé
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Reste à payer
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-left font-medium text-muted-foreground"
+                                >
+                                    Statut
+                                </th>
+                                <th class="w-10 px-4 py-3.5" />
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr
+                                v-for="l in lignes"
+                                :key="l.id"
+                                class="transition-colors even:bg-muted/20 hover:bg-muted/10"
+                            >
+                                <td class="px-5 py-3">
+                                    <p class="font-semibold">
+                                        {{ l.employe_nom }}
+                                    </p>
+                                    <p
+                                        class="mt-0.5 text-xs text-muted-foreground"
                                     >
-                                        <template
-                                            v-if="
-                                                can_payer && l.reste_a_payer > 0
-                                            "
+                                        {{ l.poste }}
+                                    </p>
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-sm text-muted-foreground"
+                                >
+                                    {{ l.site }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ fmt(l.brut) }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{
+                                        l.total_primes > 0
+                                            ? '+' + fmt(l.total_primes)
+                                            : '—'
+                                    }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right font-semibold text-red-600 tabular-nums dark:text-red-400"
+                                >
+                                    {{
+                                        l.deductions > 0
+                                            ? '-' + fmt(l.deductions)
+                                            : '—'
+                                    }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ fmt(l.net) }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ fmt(l.deja_paye) }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right font-bold tabular-nums"
+                                >
+                                    {{ fmt(l.reste_a_payer) }}
+                                </td>
+                                <td class="px-5 py-3">
+                                    <span
+                                        class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap"
+                                        :class="statutClass(l.statut)"
+                                    >
+                                        {{ l.statut_label }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-right">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger as-child>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                class="h-7 w-7"
+                                            >
+                                                <MoreHorizontal
+                                                    class="h-4 w-4"
+                                                />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent
+                                            align="end"
+                                            class="w-48"
                                         >
+                                            <template
+                                                v-if="
+                                                    can_payer &&
+                                                    l.reste_a_payer > 0
+                                                "
+                                            >
+                                                <DropdownMenuItem
+                                                    class="cursor-pointer"
+                                                    @click="openPaiement(l)"
+                                                >
+                                                    <HandCoins
+                                                        class="mr-2 h-4 w-4"
+                                                    />
+                                                    Payer
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                            </template>
                                             <DropdownMenuItem
                                                 class="cursor-pointer"
-                                                @click="openPaiement(l)"
+                                                @click="openAudit(l)"
                                             >
-                                                <HandCoins
-                                                    class="mr-2 h-4 w-4"
-                                                />
-                                                Payer
+                                                <History class="mr-2 h-4 w-4" />
+                                                Historique
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
-                                        </template>
-                                        <DropdownMenuItem
-                                            class="cursor-pointer"
-                                            @click="openAudit(l)"
-                                        >
-                                            <History class="mr-2 h-4 w-4" />
-                                            Historique
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem as-child>
-                                            <a
-                                                :href="`/comptabilite/salaires/export/pdf?mois=${selectedMois}&annee=${selectedAnnee}`"
-                                                target="_blank"
-                                                class="flex w-full cursor-pointer items-center"
-                                            >
-                                                <FileText
-                                                    class="mr-2 h-4 w-4"
-                                                />
-                                                Exporter PDF
-                                            </a>
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                            <DropdownMenuItem as-child>
+                                                <a
+                                                    :href="`/comptabilite/salaires/export/pdf?mois=${selectedMois}&annee=${selectedAnnee}`"
+                                                    target="_blank"
+                                                    class="flex w-full cursor-pointer items-center"
+                                                >
+                                                    <FileText
+                                                        class="mr-2 h-4 w-4"
+                                                    />
+                                                    Exporter PDF
+                                                </a>
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>

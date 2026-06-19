@@ -361,11 +361,7 @@ function fmtTel(tel: string | null | undefined): string {
                     class="h-9 rounded-md border border-input bg-background px-2 text-sm"
                 >
                     <option value="">Toutes les agences</option>
-                    <option
-                        v-for="s in sites"
-                        :key="s.value"
-                        :value="s.value"
-                    >
+                    <option v-for="s in sites" :key="s.value" :value="s.value">
                         {{ s.label }}
                     </option>
                 </select>
@@ -428,192 +424,202 @@ function fmtTel(tel: string | null | undefined): string {
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
                 <div v-if="livreurs.length > 0" class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b bg-muted/40">
-                            <th
-                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
-                            >
-                                Livreur
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
-                            >
-                                Véhicule(s)
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
-                            >
-                                Agence
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Total cumulé
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Frais
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Net à payer
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Déjà payé
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Reste à payer
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
-                            >
-                                Statut
-                            </th>
-                            <th class="w-10 px-4 py-3.5" />
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        <tr
-                            v-for="l in livreurs"
-                            :key="l.livreur_id"
-                            class="cursor-pointer transition-colors hover:bg-muted/10 even:bg-muted/20"
-                            @click="
-                                router.visit(
-                                    '/comptabilite/commissions/logistique/livreurs/' +
-                                        l.livreur_id,
-                                )
-                            "
-                        >
-                            <td class="px-5 py-3">
-                                <div class="flex items-center gap-2.5">
-                                    <User
-                                        class="h-4 w-4 shrink-0 text-muted-foreground"
-                                    />
-                                    <div>
-                                        <p class="font-semibold">{{ l.nom }}</p>
-                                        <p
-                                            v-if="l.telephone"
-                                            class="mt-0.5 text-xs text-muted-foreground"
-                                        >
-                                            {{ fmtTel(l.telephone) }}
-                                        </p>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="px-5 py-3">
-                                <div
-                                    v-if="l.vehicules"
-                                    class="flex items-center gap-1.5 text-sm text-muted-foreground"
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b bg-muted/40">
+                                <th
+                                    class="px-5 py-3.5 text-left font-medium text-muted-foreground"
                                 >
-                                    <Truck class="h-3.5 w-3.5 shrink-0" />
-                                    <span>{{ l.vehicules }}</span>
-                                </div>
-                                <span
-                                    v-else
-                                    class="text-xs text-muted-foreground"
-                                    >—</span
+                                    Livreur
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-left font-medium text-muted-foreground"
                                 >
-                            </td>
-                            <td class="px-5 py-3 text-sm">
-                                <span v-if="l.agence">{{ l.agence }}</span>
-                                <span v-else class="text-muted-foreground"
-                                    >—</span
+                                    Véhicule(s)
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-left font-medium text-muted-foreground"
                                 >
-                            </td>
-                            <td
-                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
+                                    Agence
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Total cumulé
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Frais
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Net à payer
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Déjà payé
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Reste à payer
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-left font-medium text-muted-foreground"
+                                >
+                                    Statut
+                                </th>
+                                <th class="w-10 px-4 py-3.5" />
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr
+                                v-for="l in livreurs"
+                                :key="l.livreur_id"
+                                class="cursor-pointer transition-colors even:bg-muted/20 hover:bg-muted/10"
+                                @click="
+                                    router.visit(
+                                        '/comptabilite/commissions/logistique/livreurs/' +
+                                            l.livreur_id,
+                                    )
+                                "
                             >
-                                {{ fmt(l.impaye + l.paye + l.frais_depenses) }}
-                            </td>
-                            <td
-                                class="px-5 py-3 text-right text-red-600 tabular-nums dark:text-red-400"
-                            >
-                                {{
-                                    l.frais_depenses > 0
-                                        ? '-' + fmt(l.frais_depenses)
-                                        : '—'
-                                }}
-                            </td>
-                            <td
-                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
-                            >
-                                {{ fmt(l.impaye + l.paye) }}
-                            </td>
-                            <td
-                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
-                            >
-                                {{ fmt(l.paye) }}
-                            </td>
-                            <td
-                                class="px-5 py-3 text-right font-bold tabular-nums"
-                            >
-                                {{ fmt(l.impaye) }}
-                            </td>
-                            <td class="px-5 py-3">
-                                <div class="flex flex-col gap-1">
-                                    <StatusDot
-                                        v-for="s in livreurStatuts(l)"
-                                        :key="s.label"
-                                        :label="s.label"
-                                        :dot-class="s.dotClass"
-                                        class="text-xs text-muted-foreground"
-                                    />
-                                </div>
-                            </td>
-                            <td class="px-4 py-3 text-right" @click.stop>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger as-child>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            class="h-7 w-7"
-                                        >
-                                            <MoreHorizontal class="h-4 w-4" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <DropdownMenuItem as-child>
-                                            <Link
-                                                :href="`/comptabilite/commissions/logistique/livreurs/${l.livreur_id}`"
-                                                class="flex w-full cursor-pointer items-center"
+                                <td class="px-5 py-3">
+                                    <div class="flex items-center gap-2.5">
+                                        <User
+                                            class="h-4 w-4 shrink-0 text-muted-foreground"
+                                        />
+                                        <div>
+                                            <p class="font-semibold">
+                                                {{ l.nom }}
+                                            </p>
+                                            <p
+                                                v-if="l.telephone"
+                                                class="mt-0.5 text-xs text-muted-foreground"
                                             >
-                                                Détail
-                                            </Link>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            class="cursor-pointer"
-                                            @click="openAudit(l)"
-                                        >
-                                            <History class="mr-2 h-4 w-4" />
-                                            Historique
-                                        </DropdownMenuItem>
-                                        <template
-                                            v-if="can_payer && l.impaye > 0"
-                                        >
-                                            <DropdownMenuSeparator />
+                                                {{ fmtTel(l.telephone) }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-5 py-3">
+                                    <div
+                                        v-if="l.vehicules"
+                                        class="flex items-center gap-1.5 text-sm text-muted-foreground"
+                                    >
+                                        <Truck class="h-3.5 w-3.5 shrink-0" />
+                                        <span>{{ l.vehicules }}</span>
+                                    </div>
+                                    <span
+                                        v-else
+                                        class="text-xs text-muted-foreground"
+                                        >—</span
+                                    >
+                                </td>
+                                <td class="px-5 py-3 text-sm">
+                                    <span v-if="l.agence">{{ l.agence }}</span>
+                                    <span v-else class="text-muted-foreground"
+                                        >—</span
+                                    >
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{
+                                        fmt(
+                                            l.impaye +
+                                                l.paye +
+                                                l.frais_depenses,
+                                        )
+                                    }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right text-red-600 tabular-nums dark:text-red-400"
+                                >
+                                    {{
+                                        l.frais_depenses > 0
+                                            ? '-' + fmt(l.frais_depenses)
+                                            : '—'
+                                    }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ fmt(l.impaye + l.paye) }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ fmt(l.paye) }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right font-bold tabular-nums"
+                                >
+                                    {{ fmt(l.impaye) }}
+                                </td>
+                                <td class="px-5 py-3">
+                                    <div class="flex flex-col gap-1">
+                                        <StatusDot
+                                            v-for="s in livreurStatuts(l)"
+                                            :key="s.label"
+                                            :label="s.label"
+                                            :dot-class="s.dotClass"
+                                            class="text-xs text-muted-foreground"
+                                        />
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-right" @click.stop>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger as-child>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                class="h-7 w-7"
+                                            >
+                                                <MoreHorizontal
+                                                    class="h-4 w-4"
+                                                />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem as-child>
+                                                <Link
+                                                    :href="`/comptabilite/commissions/logistique/livreurs/${l.livreur_id}`"
+                                                    class="flex w-full cursor-pointer items-center"
+                                                >
+                                                    Détail
+                                                </Link>
+                                            </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 class="cursor-pointer"
-                                                @click="openPaiement(l)"
+                                                @click="openAudit(l)"
                                             >
-                                                <HandCoins
-                                                    class="mr-2 h-4 w-4"
-                                                />
-                                                Payer
+                                                <History class="mr-2 h-4 w-4" />
+                                                Historique
                                             </DropdownMenuItem>
-                                        </template>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                            <template
+                                                v-if="can_payer && l.impaye > 0"
+                                            >
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                    class="cursor-pointer"
+                                                    @click="openPaiement(l)"
+                                                >
+                                                    <HandCoins
+                                                        class="mr-2 h-4 w-4"
+                                                    />
+                                                    Payer
+                                                </DropdownMenuItem>
+                                            </template>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
                 <div
                     v-else

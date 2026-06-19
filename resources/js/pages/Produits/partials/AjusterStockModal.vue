@@ -257,7 +257,11 @@ function submit() {
             <!-- Augmenter + Diminuer (affichés selon les droits) -->
             <div
                 class="gap-3"
-                :class="canAugmenter && canDiminuer ? 'grid grid-cols-2' : 'flex flex-col'"
+                :class="
+                    canAugmenter && canDiminuer
+                        ? 'grid grid-cols-2'
+                        : 'flex flex-col'
+                "
             >
                 <div
                     v-if="canAugmenter"

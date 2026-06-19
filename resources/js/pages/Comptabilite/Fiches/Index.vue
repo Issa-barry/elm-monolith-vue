@@ -92,8 +92,11 @@ const selectedPeriode = ref(props.filters.periode_id ?? '');
 
 const activeFilterCount = computed(
     () =>
-        [!!selectedSite.value, !!selectedStatut.value, !!selectedPeriode.value]
-            .filter(Boolean).length,
+        [
+            !!selectedSite.value,
+            !!selectedStatut.value,
+            !!selectedPeriode.value,
+        ].filter(Boolean).length,
 );
 
 const hasActiveFilters = computed(
@@ -260,7 +263,11 @@ function exportExcel() {
                             class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                         >
                             <option value="">Toutes les agences</option>
-                            <option v-for="s in sites" :key="s.id" :value="s.id">
+                            <option
+                                v-for="s in sites"
+                                :key="s.id"
+                                :value="s.id"
+                            >
                                 {{ s.nom }}
                             </option>
                         </select>

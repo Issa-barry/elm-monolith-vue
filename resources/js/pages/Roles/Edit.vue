@@ -377,7 +377,8 @@ const breadcrumbs: BreadcrumbItem[] = [
                                         >
                                             <CheckSquare
                                                 v-if="
-                                                    columnState(action) === 'all'
+                                                    columnState(action) ===
+                                                    'all'
                                                 "
                                                 class="h-4 w-4"
                                             />
@@ -426,7 +427,8 @@ const breadcrumbs: BreadcrumbItem[] = [
                                         >
                                             <Minus
                                                 v-if="
-                                                    rowState(resource) !== 'none'
+                                                    rowState(resource) !==
+                                                    'none'
                                                 "
                                                 class="h-3.5 w-3.5"
                                                 :class="
