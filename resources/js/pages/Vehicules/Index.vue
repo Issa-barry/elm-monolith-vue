@@ -23,14 +23,13 @@ import {
     Trash2,
     X,
 } from 'lucide-vue-next';
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 interface EquipeMembre {
     livreur_nom: string;
@@ -64,35 +63,77 @@ const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
 
-const search = ref('');
-const filterType = ref('');
-const filterStatut = ref('');
-const filterCategorie = ref('');
-const filterAgence = ref('');
+// Mobile — filtrage immédiat
+const mobileSearch = ref('');
+const mobileFilterType = ref('');
+const mobileFilterStatut = ref('');
+const mobileFilterCategorie = ref('');
+const mobileFilterAgence = ref('');
 
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
+// Desktop — pending / active
+const pendingSearch = ref('');
+const pendingFilterType = ref<string | null>(null);
+const pendingFilterStatut = ref<string | null>(null);
+const pendingFilterCategorie = ref<string | null>(null);
+const pendingFilterAgence = ref<string | null>(null);
+const activeSearch = ref('');
+const activeFilterType = ref<string | null>(null);
+const activeFilterStatut = ref<string | null>(null);
+const activeFilterCategorie = ref<string | null>(null);
+const activeFilterAgence = ref<string | null>(null);
 
-const typeOptions = computed(() => {
-    const types = [...new Set(props.vehicules.map((v) => v.type_label))].sort();
-    return types;
-});
+function applyFilters() {
+    activeSearch.value = pendingSearch.value;
+    activeFilterType.value = pendingFilterType.value;
+    activeFilterStatut.value = pendingFilterStatut.value;
+    activeFilterCategorie.value = pendingFilterCategorie.value;
+    activeFilterAgence.value = pendingFilterAgence.value;
+}
 
-const agenceOptions = computed(() => {
-    return [
+function resetFilters() {
+    pendingSearch.value = '';
+    pendingFilterType.value = null;
+    pendingFilterStatut.value = null;
+    pendingFilterCategorie.value = null;
+    pendingFilterAgence.value = null;
+    activeSearch.value = '';
+    activeFilterType.value = null;
+    activeFilterStatut.value = null;
+    activeFilterCategorie.value = null;
+    activeFilterAgence.value = null;
+}
+
+const hasActiveFilters = computed(
+    () =>
+        !!activeSearch.value ||
+        !!activeFilterType.value ||
+        !!activeFilterStatut.value ||
+        !!activeFilterCategorie.value ||
+        !!activeFilterAgence.value,
+);
+
+const typeOptions = computed(() =>
+    [...new Set(props.vehicules.map((v) => v.type_label))].sort(),
+);
+
+const agenceOptions = computed(() =>
+    [
         ...new Set(
             props.vehicules
                 .map((v) => v.agence_nom)
-                .filter((agence): agence is string => Boolean(agence)),
+                .filter((a): a is string => Boolean(a)),
         ),
-    ].sort((a, b) => a.localeCompare(b));
-});
+    ].sort((a, b) => a.localeCompare(b)),
+);
 
-const filteredVehicules = computed(() => {
-    return props.vehicules.filter((v) => {
-        const q = search.value.trim().toLowerCase();
+const desktopAgenceOptions = computed(() => [
+    ...agenceOptions.value.map((a) => ({ value: a, label: a })),
+    { value: '__none__', label: 'Non rattachée' },
+]);
+
+const filteredVehicules = computed(() =>
+    props.vehicules.filter((v) => {
+        const q = activeSearch.value.trim().toLowerCase();
         const matchSearch =
             !q ||
             v.nom_vehicule.toLowerCase().includes(q) ||
@@ -106,20 +147,21 @@ const filteredVehicules = computed(() => {
             (v.equipe_nom ?? '').toLowerCase().includes(q) ||
             (v.capacite_packs != null && String(v.capacite_packs).includes(q));
         const matchType =
-            !filterType.value || v.type_label === filterType.value;
+            !activeFilterType.value || v.type_label === activeFilterType.value;
         const matchStatut =
-            filterStatut.value === ''
+            !activeFilterStatut.value
                 ? true
-                : filterStatut.value === 'actif'
+                : activeFilterStatut.value === 'actif'
                   ? v.is_active
                   : !v.is_active;
         const matchCategorie =
-            !filterCategorie.value || v.categorie === filterCategorie.value;
+            !activeFilterCategorie.value ||
+            v.categorie === activeFilterCategorie.value;
         const matchAgence =
-            !filterAgence.value ||
-            (filterAgence.value === '__none__'
+            !activeFilterAgence.value ||
+            (activeFilterAgence.value === '__none__'
                 ? !v.agence_nom
-                : v.agence_nom === filterAgence.value);
+                : v.agence_nom === activeFilterAgence.value);
         return (
             matchSearch &&
             matchType &&
@@ -127,10 +169,49 @@ const filteredVehicules = computed(() => {
             matchCategorie &&
             matchAgence
         );
-    });
-});
+    }),
+);
 
-const mobileFiltered = filteredVehicules;
+const mobileFiltered = computed(() =>
+    props.vehicules.filter((v) => {
+        const q = mobileSearch.value.trim().toLowerCase();
+        const matchSearch =
+            !q ||
+            v.nom_vehicule.toLowerCase().includes(q) ||
+            v.immatriculation.toLowerCase().includes(q) ||
+            v.type_label.toLowerCase().includes(q) ||
+            (v.proprietaire_nom ?? '').toLowerCase().includes(q) ||
+            (v.proprietaire_telephone ?? '')
+                .replace(/\D/g, '')
+                .includes(q.replace(/\D/g, '')) ||
+            (v.agence_nom ?? '').toLowerCase().includes(q) ||
+            (v.equipe_nom ?? '').toLowerCase().includes(q) ||
+            (v.capacite_packs != null && String(v.capacite_packs).includes(q));
+        const matchType =
+            !mobileFilterType.value || v.type_label === mobileFilterType.value;
+        const matchStatut =
+            !mobileFilterStatut.value
+                ? true
+                : mobileFilterStatut.value === 'actif'
+                  ? v.is_active
+                  : !v.is_active;
+        const matchCategorie =
+            !mobileFilterCategorie.value ||
+            v.categorie === mobileFilterCategorie.value;
+        const matchAgence =
+            !mobileFilterAgence.value ||
+            (mobileFilterAgence.value === '__none__'
+                ? !v.agence_nom
+                : v.agence_nom === mobileFilterAgence.value);
+        return (
+            matchSearch &&
+            matchType &&
+            matchStatut &&
+            matchCategorie &&
+            matchAgence
+        );
+    }),
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -209,7 +290,7 @@ function confirmDelete(v: Vehicule) {
                         class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
                     <input
-                        v-model="search"
+                        v-model="mobileSearch"
                         type="search"
                         placeholder="Rechercher..."
                         class="w-full rounded-lg border bg-background py-2 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -217,7 +298,7 @@ function confirmDelete(v: Vehicule) {
                 </div>
                 <div class="flex gap-2">
                     <select
-                        v-model="filterType"
+                        v-model="mobileFilterType"
                         class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                     >
                         <option value="">Tous les types</option>
@@ -226,7 +307,7 @@ function confirmDelete(v: Vehicule) {
                         </option>
                     </select>
                     <select
-                        v-model="filterCategorie"
+                        v-model="mobileFilterCategorie"
                         class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                     >
                         <option value="">Toutes catégories</option>
@@ -234,7 +315,7 @@ function confirmDelete(v: Vehicule) {
                         <option value="externe">Externe</option>
                     </select>
                     <select
-                        v-model="filterStatut"
+                        v-model="mobileFilterStatut"
                         class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                     >
                         <option value="">Tous les statuts</option>
@@ -242,7 +323,7 @@ function confirmDelete(v: Vehicule) {
                         <option value="inactif">Inactif</option>
                     </select>
                     <select
-                        v-model="filterAgence"
+                        v-model="mobileFilterAgence"
                         class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                     >
                         <option value="">Toutes agences</option>
@@ -384,6 +465,56 @@ function confirmDelete(v: Vehicule) {
                 </div>
             </div>
 
+            <!-- Filtres -->
+            <DataTableFilters
+                v-model:search="pendingSearch"
+                search-placeholder="Nom, immatriculation, propriétaire…"
+                :has-active-filters="hasActiveFilters"
+                @filter="applyFilters"
+                @reset="resetFilters"
+            >
+                <Select
+                    v-model="pendingFilterType"
+                    :options="typeOptions"
+                    placeholder="Tous les types"
+                    show-clear
+                    class="w-40"
+                />
+                <Select
+                    v-model="pendingFilterCategorie"
+                    :options="[
+                        { value: 'interne', label: 'Interne' },
+                        { value: 'externe', label: 'Externe' },
+                    ]"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Toutes catégories"
+                    show-clear
+                    class="w-44"
+                />
+                <Select
+                    v-model="pendingFilterStatut"
+                    :options="[
+                        { value: 'actif', label: 'Actif' },
+                        { value: 'inactif', label: 'Inactif' },
+                    ]"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Tous les statuts"
+                    show-clear
+                    class="w-40"
+                />
+                <Select
+                    v-model="pendingFilterAgence"
+                    :options="desktopAgenceOptions"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Toutes agences"
+                    show-clear
+                    class="w-44"
+                />
+            </DataTableFilters>
+
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
@@ -395,85 +526,7 @@ function confirmDelete(v: Vehicule) {
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
-                    :pt="{
-                        root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
-                        tbody: { class: 'divide-y' },
-                    }"
                 >
-                    <template #header>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Rechercher..."
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-
-                            <!-- Filtre Type -->
-                            <select
-                                v-model="filterType"
-                                class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm focus:ring-2 focus:ring-ring focus:outline-none"
-                            >
-                                <option value="">Tous les types</option>
-                                <option
-                                    v-for="t in typeOptions"
-                                    :key="t"
-                                    :value="t"
-                                >
-                                    {{ t }}
-                                </option>
-                            </select>
-
-                            <!-- Filtre Catégorie -->
-                            <select
-                                v-model="filterCategorie"
-                                class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm focus:ring-2 focus:ring-ring focus:outline-none"
-                            >
-                                <option value="">Toutes catégories</option>
-                                <option value="interne">Interne</option>
-                                <option value="externe">Externe</option>
-                            </select>
-
-                            <!-- Filtre Statut -->
-                            <select
-                                v-model="filterStatut"
-                                class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm focus:ring-2 focus:ring-ring focus:outline-none"
-                            >
-                                <option value="">Tous les statuts</option>
-                                <option value="actif">Actif</option>
-                                <option value="inactif">Inactif</option>
-                            </select>
-
-                            <select
-                                v-model="filterAgence"
-                                class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm focus:ring-2 focus:ring-ring focus:outline-none"
-                            >
-                                <option value="">Toutes agences</option>
-                                <option
-                                    v-for="agence in agenceOptions"
-                                    :key="agence"
-                                    :value="agence"
-                                >
-                                    {{ agence }}
-                                </option>
-                                <option value="__none__">Non rattachée</option>
-                            </select>
-
-                            <span class="text-xs text-muted-foreground"
-                                >{{ filteredVehicules.length }} résultat{{
-                                    filteredVehicules.length !== 1 ? 's' : ''
-                                }}</span
-                            >
-                        </div>
-                    </template>
-
                     <!-- Photo -->
                     <Column header="Photo" style="width: 72px">
                         <template #body="{ data }">

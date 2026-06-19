@@ -127,6 +127,7 @@ const localStatut = ref(props.statut);
 const localSiteId = ref(props.site_id);
 
 function applyFilters() {
+    activeSearch.value = pendingSearch.value;
     const params: Record<string, string> = { ...baseParams(), periode: localPeriode.value };
     if (localStatut.value !== 'tous') params.statut = localStatut.value;
     if (localSiteId.value !== 'tous') params.site_id = localSiteId.value;
@@ -137,7 +138,8 @@ function resetFilters() {
     localPeriode.value = 'today';
     localStatut.value = 'tous';
     localSiteId.value = 'tous';
-    search.value = '';
+    pendingSearch.value = '';
+    activeSearch.value = '';
     router.get('/factures', { ...baseParams() }, { preserveScroll: true, replace: true });
 }
 
@@ -146,7 +148,7 @@ const hasActiveFilters = computed(
         localPeriode.value !== 'today' ||
         localStatut.value !== 'tous' ||
         localSiteId.value !== 'tous' ||
-        !!search.value,
+        !!activeSearch.value,
 );
 
 const filtres = [
@@ -157,12 +159,12 @@ const filtres = [
     { value: 'annulee', label: 'Annulées' },
 ];
 
-// ── Recherche locale (client-side) ────────────────────────────────────────────
-const search = ref('');
+// ── Recherche locale (client-side, pending/active) ────────────────────────────
+const pendingSearch = ref('');
+const activeSearch = ref('');
 
-// Applique uniquement la recherche (statut déjà filtré côté serveur)
 const facturesFiltrees = computed(() => {
-    const q = search.value.toLowerCase().trim();
+    const q = activeSearch.value.toLowerCase().trim();
     if (!q) return props.factures;
     return props.factures.filter(
         (f) =>
@@ -548,7 +550,7 @@ function _progressPercent(f: FactureItem): number {
 
             <!-- Filtres -->
             <DataTableFilters
-                v-model:search="search"
+                v-model:search="pendingSearch"
                 :search-placeholder="'Référence, véhicule, client…'"
                 :has-active-filters="hasActiveFilters"
                 @filter="applyFilters"

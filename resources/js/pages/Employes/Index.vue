@@ -12,22 +12,21 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import {
     Briefcase,
     MoreVertical,
     Pencil,
     Plus,
-    Search,
     Trash2,
     UserRound,
-    X,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface ContratActif {
     id: string;
@@ -82,22 +81,20 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Employés', href: '/employes' },
 ];
 
-// ── Filtres (URL-persistent) ──────────────────────────────────────────────────
-const search = ref(props.filters.search ?? '');
-const statut = ref(props.filters.statut ?? '');
-const typeEmploye = ref(props.filters.type_employe ?? '');
-const typeContrat = ref(props.filters.type_contrat ?? '');
-
-let debounceTimer: ReturnType<typeof setTimeout>;
+// ── Filtres ───────────────────────────────────────────────────────────────────
+const pendingSearch = ref(props.filters.search ?? '');
+const pendingStatut = ref(props.filters.statut ?? '');
+const pendingTypeEmploye = ref(props.filters.type_employe ?? '');
+const pendingTypeContrat = ref(props.filters.type_contrat ?? '');
 
 function applyFilters() {
     router.visit('/employes', {
         method: 'get',
         data: {
-            search: search.value || undefined,
-            statut: statut.value || undefined,
-            type_employe: typeEmploye.value || undefined,
-            type_contrat: typeContrat.value || undefined,
+            search: pendingSearch.value || undefined,
+            statut: pendingStatut.value || undefined,
+            type_employe: pendingTypeEmploye.value || undefined,
+            type_contrat: pendingTypeContrat.value || undefined,
         },
         preserveState: true,
         preserveScroll: true,
@@ -105,23 +102,26 @@ function applyFilters() {
     });
 }
 
-watch(search, () => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(applyFilters, 350);
-});
-
-watch([statut, typeEmploye, typeContrat], applyFilters);
-
 function resetFilters() {
-    search.value = '';
-    statut.value = '';
-    typeEmploye.value = '';
-    typeContrat.value = '';
+    pendingSearch.value = '';
+    pendingStatut.value = '';
+    pendingTypeEmploye.value = '';
+    pendingTypeContrat.value = '';
+    router.visit('/employes', {
+        method: 'get',
+        data: {},
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
 }
 
 const hasActiveFilters = computed(
     () =>
-        search.value || statut.value || typeEmploye.value || typeContrat.value,
+        !!pendingSearch.value ||
+        !!pendingStatut.value ||
+        !!pendingTypeEmploye.value ||
+        !!pendingTypeContrat.value,
 );
 
 // ── Options avec "Tous" ───────────────────────────────────────────────────────
@@ -224,63 +224,38 @@ function confirmDelete(e: Employe) {
             </div>
 
             <!-- Filtres -->
-            <div class="rounded-xl border bg-card px-4 py-3">
-                <div class="flex flex-wrap items-center gap-3">
-                    <!-- Recherche -->
-                    <div class="relative min-w-[200px] flex-1">
-                        <Search
-                            class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                        />
-                        <input
-                            v-model="search"
-                            type="text"
-                            placeholder="Matricule, nom, téléphone, email…"
-                            class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-9 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        />
-                    </div>
-
-                    <!-- Filtre statut -->
-                    <Select
-                        v-model="statut"
-                        :options="statutOptions"
-                        option-label="label"
-                        option-value="value"
-                        class="w-44"
-                        placeholder="Statut"
-                    />
-
-                    <!-- Filtre type employé -->
-                    <Select
-                        v-model="typeEmploye"
-                        :options="typeEmployeOptions"
-                        option-label="label"
-                        option-value="value"
-                        class="w-40"
-                        placeholder="Type"
-                    />
-
-                    <!-- Filtre type contrat -->
-                    <Select
-                        v-model="typeContrat"
-                        :options="typeContratOptions"
-                        option-label="label"
-                        option-value="value"
-                        class="w-40"
-                        placeholder="Contrat"
-                    />
-
-                    <!-- Reset -->
-                    <button
-                        v-if="hasActiveFilters"
-                        type="button"
-                        class="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted"
-                        @click="resetFilters"
-                    >
-                        <X class="h-3.5 w-3.5" />
-                        Réinitialiser
-                    </button>
-                </div>
-            </div>
+            <DataTableFilters
+                v-model:search="pendingSearch"
+                search-placeholder="Matricule, nom, téléphone, email…"
+                :has-active-filters="hasActiveFilters"
+                @filter="applyFilters"
+                @reset="resetFilters"
+            >
+                <Select
+                    v-model="pendingStatut"
+                    :options="statutOptions"
+                    option-label="label"
+                    option-value="value"
+                    class="w-44"
+                    placeholder="Statut"
+                />
+                <Select
+                    v-model="pendingTypeEmploye"
+                    :options="typeEmployeOptions"
+                    option-label="label"
+                    option-value="value"
+                    class="w-40"
+                    placeholder="Type"
+                />
+                <Select
+                    v-model="pendingTypeContrat"
+                    :options="typeContratOptions"
+                    option-label="label"
+                    option-value="value"
+                    class="w-40"
+                    placeholder="Contrat"
+                />
+            </DataTableFilters>
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">

@@ -118,6 +118,7 @@ const localPeriode = ref(props.periode);
 const localStatut = ref(props.statut);
 
 function applyFilters() {
+    activeSearch.value = pendingSearch.value;
     const params: Record<string, string> = { periode: localPeriode.value };
     if (localStatut.value !== 'tous') params.statut = localStatut.value;
     router.get('/ventes', params, { preserveScroll: true, replace: true });
@@ -126,7 +127,8 @@ function applyFilters() {
 function resetFilters() {
     localPeriode.value = 'today';
     localStatut.value = 'tous';
-    search.value = '';
+    pendingSearch.value = '';
+    activeSearch.value = '';
     router.get('/ventes', {}, { preserveScroll: true, replace: true });
 }
 
@@ -134,14 +136,15 @@ const hasActiveFilters = computed(
     () =>
         localPeriode.value !== 'today' ||
         localStatut.value !== 'tous' ||
-        !!search.value,
+        !!activeSearch.value,
 );
 
-// ── Recherche locale (client-side) ────────────────────────────────────────────
-const search = ref('');
+// ── Recherche locale (client-side, pending/active) ────────────────────────────
+const pendingSearch = ref('');
+const activeSearch = ref('');
 
 const commandesFiltrees = computed(() => {
-    const q = search.value.toLowerCase().trim();
+    const q = activeSearch.value.toLowerCase().trim();
     if (!q) return props.commandes;
     return props.commandes.filter(
         (c) =>
@@ -519,7 +522,7 @@ function confirmDelete(c: Commande) {
 
             <!-- Filtres -->
             <DataTableFilters
-                v-model:search="search"
+                v-model:search="pendingSearch"
                 :search-placeholder="'Référence, véhicule, client…'"
                 :has-active-filters="hasActiveFilters"
                 @filter="applyFilters"

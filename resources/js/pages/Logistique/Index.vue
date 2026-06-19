@@ -23,14 +23,12 @@ import {
     Truck,
     XCircle,
 } from 'lucide-vue-next';
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Dropdown from 'primevue/dropdown';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -129,31 +127,20 @@ const breadcrumbs = computed((): BreadcrumbItem[] => [
 
 // ── Filtres desktop ───────────────────────────────────────────────────────────
 
-const search = ref('');
-const statutFiltre = ref(props.filtre_statut ?? null);
+const pendingSearch = ref('');
+const activeSearch = ref('');
+const statutFiltre = ref<string | null>(props.filtre_statut ?? null);
 const siteSourceFiltre = ref<number | null>(
     props.filtre_site_source_id ?? null,
 );
 const siteDestinationFiltre = ref<number | null>(
     props.filtre_site_destination_id ?? null,
 );
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-const statutOptions = computed<FilterOption[]>(() => [
-    { value: null, label: 'Tous les statuts' },
-    ...props.statuts,
-]);
-const siteSourceOptions = computed<FilterOption[]>(() => [
-    { value: null, label: 'Tous les sites depart' },
-    ...props.sites.map((site) => ({ value: site.id, label: site.nom })),
-]);
-const siteDestinationOptions = computed<FilterOption[]>(() => [
-    { value: null, label: 'Tous les sites arrivee' },
-    ...props.sites.map((site) => ({ value: site.id, label: site.nom })),
-]);
 
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
+const statutOptions = computed(() => props.statuts);
+const siteOptions = computed(() =>
+    props.sites.map((s) => ({ value: s.id, label: s.nom })),
+);
 
 function indexUrl(): string {
     return props.vue === 'receptions'
@@ -161,7 +148,8 @@ function indexUrl(): string {
         : '/logistique/transferts';
 }
 
-function appliquerFiltresServeur() {
+function applyFilters() {
+    activeSearch.value = pendingSearch.value;
     router.get(
         indexUrl(),
         {
@@ -173,20 +161,34 @@ function appliquerFiltresServeur() {
     );
 }
 
-function appliquerFiltreStatut(val: string | null) {
-    statutFiltre.value = val;
-    appliquerFiltresServeur();
+function resetFilters() {
+    pendingSearch.value = '';
+    activeSearch.value = '';
+    statutFiltre.value = null;
+    siteSourceFiltre.value = null;
+    siteDestinationFiltre.value = null;
+    router.get(indexUrl(), {}, { preserveState: true, replace: true });
 }
 
-function appliquerFiltreSiteSource(val: number | null) {
-    siteSourceFiltre.value = val;
-    appliquerFiltresServeur();
-}
+const hasActiveFilters = computed(
+    () =>
+        !!activeSearch.value ||
+        !!props.filtre_statut ||
+        !!props.filtre_site_source_id ||
+        !!props.filtre_site_destination_id,
+);
 
-function appliquerFiltreSiteDestination(val: number | null) {
-    siteDestinationFiltre.value = val;
-    appliquerFiltresServeur();
-}
+const filteredTransferts = computed(() => {
+    const q = activeSearch.value.toLowerCase().trim();
+    if (!q) return props.transferts;
+    return props.transferts.filter(
+        (t) =>
+            t.reference.toLowerCase().includes(q) ||
+            (t.site_source_nom ?? '').toLowerCase().includes(q) ||
+            (t.site_destination_nom ?? '').toLowerCase().includes(q) ||
+            (t.vehicule_nom ?? '').toLowerCase().includes(q),
+    );
+});
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
 
@@ -511,85 +513,55 @@ const commStatutDot: Record<string, string> = {
                 </div>
             </div>
 
+            <!-- Filtres -->
+            <DataTableFilters
+                v-model:search="pendingSearch"
+                search-placeholder="Référence, site, véhicule…"
+                :has-active-filters="hasActiveFilters"
+                @filter="applyFilters"
+                @reset="resetFilters"
+            >
+                <Select
+                    v-model="statutFiltre"
+                    :options="statutOptions"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Tous les statuts"
+                    show-clear
+                    class="w-48"
+                />
+                <Select
+                    v-model="siteSourceFiltre"
+                    :options="siteOptions"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Tous les sites départ"
+                    show-clear
+                    class="w-52"
+                />
+                <Select
+                    v-model="siteDestinationFiltre"
+                    :options="siteOptions"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Tous les sites arrivée"
+                    show-clear
+                    class="w-52"
+                />
+            </DataTableFilters>
+
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="transferts"
-                    :paginator="transferts.length > 20"
+                    :value="filteredTransferts"
+                    :paginator="filteredTransferts.length > 20"
                     :rows="20"
-                    :global-filter-fields="[
-                        'reference',
-                        'site_source_nom',
-                        'site_destination_nom',
-                        'vehicule_nom',
-                        'statut_label',
-                    ]"
-                    v-model:filters="filters"
                     data-key="id"
                     striped-rows
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
-                    :pt="{
-                        root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
-                        tbody: { class: 'divide-y' },
-                    }"
                 >
-                    <template #header>
-                        <div class="flex items-center gap-3">
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Rechercher..."
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Dropdown
-                                :options="statutOptions"
-                                option-label="label"
-                                option-value="value"
-                                :model-value="statutFiltre"
-                                placeholder="Tous les statuts"
-                                class="w-48 text-sm"
-                                @change="(e) => appliquerFiltreStatut(e.value)"
-                            />
-                            <Dropdown
-                                :options="siteSourceOptions"
-                                option-label="label"
-                                option-value="value"
-                                :model-value="siteSourceFiltre"
-                                placeholder="Tous les sites depart"
-                                class="w-56 text-sm"
-                                @change="
-                                    (e) => appliquerFiltreSiteSource(e.value)
-                                "
-                            />
-                            <Dropdown
-                                :options="siteDestinationOptions"
-                                option-label="label"
-                                option-value="value"
-                                :model-value="siteDestinationFiltre"
-                                placeholder="Tous les sites arrivee"
-                                class="w-56 text-sm"
-                                @change="
-                                    (e) =>
-                                        appliquerFiltreSiteDestination(e.value)
-                                "
-                            />
-                            <span class="text-xs text-muted-foreground">
-                                {{ transferts.length }} résultat{{
-                                    transferts.length !== 1 ? 's' : ''
-                                }}
-                            </span>
-                        </div>
-                    </template>
-
                     <!-- Référence -->
                     <Column
                         field="reference"

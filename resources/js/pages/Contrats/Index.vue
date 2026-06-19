@@ -11,21 +11,20 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { FilterMatchMode } from '@primevue/core/api';
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import {
     Briefcase,
     MoreVertical,
     Pencil,
     Plus,
     Trash2,
-    X,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Contrat {
     id: string;
@@ -66,16 +65,19 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Contrats', href: '/contrats' },
 ];
 
-// ── Filtres serveur (type + statut) ──────────────────────────────────────────
-const statutContrat = ref<string | null>(props.filters.statut_contrat ?? null);
-const typeContrat = ref<string | null>(props.filters.type_contrat ?? null);
+// ── Filtres ───────────────────────────────────────────────────────────────────
+const pendingSearch = ref('');
+const pendingStatut = ref<string | null>(props.filters.statut_contrat ?? null);
+const pendingType = ref<string | null>(props.filters.type_contrat ?? null);
+const activeSearch = ref('');
 
 function applyFilters() {
+    activeSearch.value = pendingSearch.value;
     router.visit('/contrats', {
         method: 'get',
         data: {
-            statut_contrat: statutContrat.value || undefined,
-            type_contrat: typeContrat.value || undefined,
+            statut_contrat: pendingStatut.value || undefined,
+            type_contrat: pendingType.value || undefined,
         },
         preserveState: true,
         preserveScroll: true,
@@ -83,28 +85,40 @@ function applyFilters() {
     });
 }
 
-watch([statutContrat, typeContrat], applyFilters);
+function resetFilters() {
+    pendingSearch.value = '';
+    pendingStatut.value = null;
+    pendingType.value = null;
+    activeSearch.value = '';
+    router.visit('/contrats', {
+        method: 'get',
+        data: {},
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
 
-// ── Filtre global DataTable (client-side, toutes colonnes) ────────────────────
-const tableFilters = ref({
-    global: {
-        value: null as string | null,
-        matchMode: FilterMatchMode.CONTAINS,
-    },
-});
-
-const hasFilters = computed(
+const hasActiveFilters = computed(
     () =>
-        tableFilters.value.global.value ||
-        statutContrat.value ||
-        typeContrat.value,
+        !!activeSearch.value ||
+        !!props.filters.statut_contrat ||
+        !!props.filters.type_contrat,
 );
 
-function reset() {
-    tableFilters.value.global.value = null;
-    statutContrat.value = null;
-    typeContrat.value = null;
-}
+const filteredContrats = computed(() => {
+    const q = activeSearch.value.toLowerCase().trim();
+    if (!q) return props.contrats;
+    return props.contrats.filter(
+        (c) =>
+            (c.employe_nom_complet ?? '').toLowerCase().includes(q) ||
+            (c.employe_matricule ?? '').toLowerCase().includes(q) ||
+            c.type_contrat_label.toLowerCase().includes(q) ||
+            c.statut_contrat_label.toLowerCase().includes(q) ||
+            (c.date_debut ?? '').includes(q) ||
+            (c.date_fin ?? '').includes(q),
+    );
+});
 
 // ── Styles badges ─────────────────────────────────────────────────────────────
 const TYPE_CONTRAT_CLASS: Record<string, string> = {
@@ -162,65 +176,38 @@ function confirmDelete(c: Contrat) {
             </div>
 
             <!-- Filtres -->
-            <div class="rounded-xl border bg-card px-4 py-3">
-                <div class="flex flex-wrap items-center gap-3">
-                    <!-- Recherche toutes colonnes -->
-                    <div class="relative min-w-[200px] flex-1">
-                        <span
-                            class="pi pi-search pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-xs text-muted-foreground"
-                        />
-                        <input
-                            v-model="tableFilters.global.value"
-                            type="text"
-                            placeholder="Rechercher (nom, matricule, type, statut, date…)"
-                            class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        />
-                    </div>
-                    <!-- Type contrat -->
-                    <Select
-                        v-model="typeContrat"
-                        :options="type_contrat_options"
-                        option-label="label"
-                        option-value="value"
-                        placeholder="Tous types"
-                        show-clear
-                        class="w-44"
-                    />
-                    <!-- Statut contrat -->
-                    <Select
-                        v-model="statutContrat"
-                        :options="statut_contrat_options"
-                        option-label="label"
-                        option-value="value"
-                        placeholder="Tous statuts"
-                        show-clear
-                        class="w-44"
-                    />
-                    <button
-                        v-if="hasFilters"
-                        type="button"
-                        class="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted"
-                        @click="reset"
-                    >
-                        <X class="h-3.5 w-3.5" />Réinitialiser
-                    </button>
-                </div>
-            </div>
+            <DataTableFilters
+                v-model:search="pendingSearch"
+                search-placeholder="Nom, matricule, type, statut, date…"
+                :has-active-filters="hasActiveFilters"
+                @filter="applyFilters"
+                @reset="resetFilters"
+            >
+                <Select
+                    v-model="pendingType"
+                    :options="type_contrat_options"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Tous types"
+                    show-clear
+                    class="w-44"
+                />
+                <Select
+                    v-model="pendingStatut"
+                    :options="statut_contrat_options"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Tous statuts"
+                    show-clear
+                    class="w-44"
+                />
+            </DataTableFilters>
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="contrats"
-                    v-model:filters="tableFilters"
-                    :global-filter-fields="[
-                        'employe_nom_complet',
-                        'employe_matricule',
-                        'type_contrat_label',
-                        'statut_contrat_label',
-                        'date_debut',
-                        'date_fin',
-                    ]"
-                    :paginator="contrats.length > 25"
+                    :value="filteredContrats"
+                    :paginator="filteredContrats.length > 25"
                     :rows="25"
                     data-key="id"
                     striped-rows

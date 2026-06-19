@@ -22,6 +22,22 @@ const dateFin = defineModel<string>('dateFin');
 
 <template>
     <FilterBar>
+        <div
+            v-if="search !== undefined && withSearch !== false"
+            class="relative w-[220px]"
+        >
+            <Search
+                class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+                v-model="search"
+                type="search"
+                :placeholder="searchPlaceholder ?? 'Rechercher…'"
+                class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                @keydown.enter="emit('filter')"
+            />
+        </div>
+
         <slot />
 
         <template
@@ -44,27 +60,8 @@ const dateFin = defineModel<string>('dateFin');
             />
         </template>
 
-        <div
-            v-if="search !== undefined && withSearch !== false"
-            class="relative w-[240px]"
-        >
-            <Search
-                class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-                v-model="search"
-                type="search"
-                :placeholder="searchPlaceholder ?? 'Rechercher…'"
-                class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                @keydown.enter="emit('filter')"
-            />
-        </div>
-
         <template #actions>
-            <Button size="sm" @click="emit('filter')">
-                <Search class="mr-1.5 h-3.5 w-3.5" />
-                Appliquer les filtres
-            </Button>
+            <Button size="sm" @click="emit('filter')">Appliquer les filtres</Button>
             <Button
                 v-if="hasActiveFilters"
                 size="sm"
