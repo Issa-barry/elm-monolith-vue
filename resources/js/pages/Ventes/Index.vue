@@ -159,7 +159,11 @@ const commandesFiltrees = computed(() => {
         (c) =>
             c.reference.toLowerCase().includes(q) ||
             (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
-            (c.client_nom && c.client_nom.toLowerCase().includes(q)),
+            (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
+            (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
+            (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
+            (c.facture_statut_label && c.facture_statut_label.toLowerCase().includes(q)) ||
+            (c.created_at && c.created_at.toLowerCase().includes(q)),
     );
 });
 
@@ -172,7 +176,12 @@ const mobileFiltered = computed(() => {
     return props.commandes.filter(
         (c) =>
             c.reference.toLowerCase().includes(q) ||
-            (c.client_nom && c.client_nom.toLowerCase().includes(q)),
+            (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
+            (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
+            (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
+            (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
+            (c.facture_statut_label && c.facture_statut_label.toLowerCase().includes(q)) ||
+            (c.created_at && c.created_at.toLowerCase().includes(q)),
     );
 });
 

@@ -282,6 +282,11 @@ function fmtTel(tel: string | null | undefined): string {
                     >
                         {{ fmt(kpiTotalBrut) }}
                     </p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ livreurs.length }} livreur{{
+                            livreurs.length !== 1 ? 's' : ''
+                        }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Frais</p>
@@ -317,6 +322,14 @@ function fmtTel(tel: string | null | undefined): string {
                         class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
                         {{ fmt(kpiTotalReste) }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ livreurs.filter((l) => l.impaye > 0).length }}
+                        impayé{{
+                            livreurs.filter((l) => l.impaye > 0).length !== 1
+                                ? 's'
+                                : ''
+                        }}
                     </p>
                 </div>
             </div>
@@ -414,7 +427,8 @@ function fmtTel(tel: string | null | undefined): string {
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
-                <table v-if="livreurs.length > 0" class="w-full text-sm">
+                <div v-if="livreurs.length > 0" class="overflow-x-auto">
+                <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
                             <th
@@ -469,7 +483,7 @@ function fmtTel(tel: string | null | undefined): string {
                         <tr
                             v-for="l in livreurs"
                             :key="l.livreur_id"
-                            class="cursor-pointer transition-colors hover:bg-muted/10"
+                            class="cursor-pointer transition-colors hover:bg-muted/10 even:bg-muted/20"
                             @click="
                                 router.visit(
                                     '/comptabilite/commissions/logistique/livreurs/' +
@@ -477,7 +491,7 @@ function fmtTel(tel: string | null | undefined): string {
                                 )
                             "
                         >
-                            <td class="px-5 py-4">
+                            <td class="px-5 py-3">
                                 <div class="flex items-center gap-2.5">
                                     <User
                                         class="h-4 w-4 shrink-0 text-muted-foreground"
@@ -493,7 +507,7 @@ function fmtTel(tel: string | null | undefined): string {
                                     </div>
                                 </div>
                             </td>
-                            <td class="px-5 py-4">
+                            <td class="px-5 py-3">
                                 <div
                                     v-if="l.vehicules"
                                     class="flex items-center gap-1.5 text-sm text-muted-foreground"
@@ -507,19 +521,19 @@ function fmtTel(tel: string | null | undefined): string {
                                     >—</span
                                 >
                             </td>
-                            <td class="px-5 py-4 text-sm">
+                            <td class="px-5 py-3 text-sm">
                                 <span v-if="l.agence">{{ l.agence }}</span>
                                 <span v-else class="text-muted-foreground"
                                     >—</span
                                 >
                             </td>
                             <td
-                                class="px-5 py-4 text-right font-semibold tabular-nums"
+                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
                             >
                                 {{ fmt(l.impaye + l.paye + l.frais_depenses) }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right text-red-600 tabular-nums dark:text-red-400"
+                                class="px-5 py-3 text-right text-red-600 tabular-nums dark:text-red-400"
                             >
                                 {{
                                     l.frais_depenses > 0
@@ -528,21 +542,21 @@ function fmtTel(tel: string | null | undefined): string {
                                 }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right font-semibold tabular-nums"
+                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
                             >
                                 {{ fmt(l.impaye + l.paye) }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right font-semibold tabular-nums"
+                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
                             >
                                 {{ fmt(l.paye) }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right text-lg font-bold tabular-nums"
+                                class="px-5 py-3 text-right font-bold tabular-nums"
                             >
                                 {{ fmt(l.impaye) }}
                             </td>
-                            <td class="px-5 py-4">
+                            <td class="px-5 py-3">
                                 <div class="flex flex-col gap-1">
                                     <StatusDot
                                         v-for="s in livreurStatuts(l)"
@@ -600,6 +614,7 @@ function fmtTel(tel: string | null | undefined): string {
                         </tr>
                     </tbody>
                 </table>
+                </div>
                 <div
                     v-else
                     class="flex flex-col items-center gap-3 py-16 text-muted-foreground"

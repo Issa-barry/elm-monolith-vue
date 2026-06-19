@@ -299,6 +299,11 @@ const periodeCourante = computed(
                     >
                         {{ fmt(kpis.total_brut) }}
                     </p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ lignes.length }} salarié{{
+                            lignes.length !== 1 ? 's' : ''
+                        }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Déductions</p>
@@ -334,6 +339,15 @@ const periodeCourante = computed(
                         class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
                         {{ fmt(kpis.total_reste) }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ lignes.filter((l) => l.reste_a_payer > 0).length }}
+                        impayé{{
+                            lignes.filter((l) => l.reste_a_payer > 0).length !==
+                            1
+                                ? 's'
+                                : ''
+                        }}
                     </p>
                 </div>
             </div>
@@ -458,7 +472,8 @@ const periodeCourante = computed(
                     <p class="text-sm">Aucune fiche de paie pour ce filtre.</p>
                 </div>
 
-                <table v-else-if="lignes.length > 0" class="w-full text-sm">
+                <div v-else-if="lignes.length > 0" class="overflow-x-auto">
+                <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
                             <th
@@ -513,24 +528,24 @@ const periodeCourante = computed(
                         <tr
                             v-for="l in lignes"
                             :key="l.id"
-                            class="transition-colors hover:bg-muted/10"
+                            class="transition-colors hover:bg-muted/10 even:bg-muted/20"
                         >
-                            <td class="px-5 py-4">
+                            <td class="px-5 py-3">
                                 <p class="font-semibold">{{ l.employe_nom }}</p>
                                 <p class="mt-0.5 text-xs text-muted-foreground">
                                     {{ l.poste }}
                                 </p>
                             </td>
-                            <td class="px-5 py-4 text-sm text-muted-foreground">
+                            <td class="px-5 py-3 text-sm text-muted-foreground">
                                 {{ l.site }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right text-base font-semibold tabular-nums"
+                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
                             >
                                 {{ fmt(l.brut) }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right text-base font-semibold tabular-nums"
+                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
                             >
                                 {{
                                     l.total_primes > 0
@@ -539,7 +554,7 @@ const periodeCourante = computed(
                                 }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right text-base font-semibold text-red-600 tabular-nums dark:text-red-400"
+                                class="px-5 py-3 text-right font-semibold text-red-600 tabular-nums dark:text-red-400"
                             >
                                 {{
                                     l.deductions > 0
@@ -548,21 +563,21 @@ const periodeCourante = computed(
                                 }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right text-base font-semibold tabular-nums"
+                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
                             >
                                 {{ fmt(l.net) }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right text-base font-semibold tabular-nums"
+                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
                             >
                                 {{ fmt(l.deja_paye) }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right text-lg font-bold tabular-nums"
+                                class="px-5 py-3 text-right font-bold tabular-nums"
                             >
                                 {{ fmt(l.reste_a_payer) }}
                             </td>
-                            <td class="px-5 py-4">
+                            <td class="px-5 py-3">
                                 <span
                                     class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap"
                                     :class="statutClass(l.statut)"
@@ -627,6 +642,7 @@ const periodeCourante = computed(
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     </AppLayout>

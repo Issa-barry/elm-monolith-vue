@@ -297,6 +297,11 @@ function fmtTel(tel: string | null | undefined): string {
                     >
                         {{ fmt(kpis.total_brut) }}
                     </p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ beneficiaires.length }} livreur{{
+                            beneficiaires.length !== 1 ? 's' : ''
+                        }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <p class="text-sm text-muted-foreground">Frais</p>
@@ -332,6 +337,18 @@ function fmtTel(tel: string | null | undefined): string {
                         class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
                         {{ fmt(kpis.solde_total) }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{
+                            beneficiaires.filter((b) => b.solde_restant > 0)
+                                .length
+                        }}
+                        impayé{{
+                            beneficiaires.filter((b) => b.solde_restant > 0)
+                                .length !== 1
+                                ? 's'
+                                : ''
+                        }}
                     </p>
                 </div>
             </div>
@@ -414,7 +431,8 @@ function fmtTel(tel: string | null | undefined): string {
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
-                <table v-if="beneficiaires.length > 0" class="w-full text-sm">
+                <div v-if="beneficiaires.length > 0" class="overflow-x-auto">
+                <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
                             <th
@@ -469,7 +487,7 @@ function fmtTel(tel: string | null | undefined): string {
                         <tr
                             v-for="b in beneficiaires"
                             :key="b.beneficiaire_id"
-                            class="cursor-pointer transition-colors hover:bg-muted/10"
+                            class="cursor-pointer transition-colors hover:bg-muted/10 even:bg-muted/20"
                             @click="
                                 router.visit(
                                     '/comptabilite/commissions/vente/livreurs/' +
@@ -477,7 +495,7 @@ function fmtTel(tel: string | null | undefined): string {
                                 )
                             "
                         >
-                            <td class="px-5 py-4">
+                            <td class="px-5 py-3">
                                 <div class="flex items-center gap-2.5">
                                     <User
                                         class="h-4 w-4 shrink-0 text-muted-foreground"
@@ -495,7 +513,7 @@ function fmtTel(tel: string | null | undefined): string {
                                     </div>
                                 </div>
                             </td>
-                            <td class="px-5 py-4">
+                            <td class="px-5 py-3">
                                 <div
                                     v-if="b.vehicules"
                                     class="flex items-center gap-1.5 text-sm text-muted-foreground"
@@ -509,7 +527,7 @@ function fmtTel(tel: string | null | undefined): string {
                                     >—</span
                                 >
                             </td>
-                            <td class="px-5 py-4 text-sm">
+                            <td class="px-5 py-3 text-sm">
                                 <div
                                     v-if="b.agence"
                                     class="flex items-center gap-1.5 text-muted-foreground"
@@ -524,12 +542,12 @@ function fmtTel(tel: string | null | undefined): string {
                                 >
                             </td>
                             <td
-                                class="px-5 py-4 text-right font-semibold tabular-nums"
+                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
                             >
                                 {{ fmt(b.total_brut_cumule) }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right text-red-600 tabular-nums dark:text-red-400"
+                                class="px-5 py-3 text-right text-red-600 tabular-nums dark:text-red-400"
                             >
                                 {{
                                     b.total_frais > 0
@@ -538,21 +556,21 @@ function fmtTel(tel: string | null | undefined): string {
                                 }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right font-semibold tabular-nums"
+                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
                             >
                                 {{ fmt(b.total_net_cumule) }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right font-semibold tabular-nums"
+                                class="px-5 py-3 text-right text-muted-foreground tabular-nums"
                             >
                                 {{ fmt(b.total_verse) }}
                             </td>
                             <td
-                                class="px-5 py-4 text-right text-lg font-bold tabular-nums"
+                                class="px-5 py-3 text-right font-bold tabular-nums"
                             >
                                 {{ fmt(b.solde_restant) }}
                             </td>
-                            <td class="px-5 py-4">
+                            <td class="px-5 py-3">
                                 <span
                                     class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
                                     :class="statutClass(b.statut_global)"
@@ -609,6 +627,7 @@ function fmtTel(tel: string | null | undefined): string {
                         </tr>
                     </tbody>
                 </table>
+                </div>
                 <div
                     v-else
                     class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
