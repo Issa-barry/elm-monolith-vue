@@ -16,6 +16,7 @@ use App\Services\AuditLogService;
 use App\Services\CommissionPaymentService;
 use App\Services\CommissionSearchService;
 use App\Services\PeriodeComptableService;
+use App\Services\SiteScopeService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,20 +33,30 @@ class CommissionLogistiqueController extends Controller
 
     private const MODES_PAIEMENT = ['especes', 'virement', 'cheque', 'mobile_money'];
 
+    public function __construct(private SiteScopeService $siteScope) {}
+
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         $search = trim((string) $request->input('search', ''));
         $filtreStatut = (string) $request->input('statut', '');
         $filtrePeriode = trim((string) $request->input('periode', ''));
-        $filtreSite = trim((string) $request->input('site', ''));
+        if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
+            $filtrePeriode = '';
+        }
+
+        $siteProps = $this->siteScope->inertiaProps($user, $orgId, $request->input('site', ''));
+        $filtreSite = $siteProps['filtre_site'];
+        $isAdmin = $siteProps['is_admin'];
+        $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
 
         $rows = CommissionPaymentService::soldesParLivreur(
             $orgId,
             $filtrePeriode !== '' ? $filtrePeriode : null,
-            $filtreSite !== '' ? $filtreSite : null
+            $isAdmin && $filtreSite !== '' ? $filtreSite : null
         );
 
         $periodesDisponibles = CommissionLogistiquePart::query()
@@ -90,9 +101,13 @@ class CommissionLogistiqueController extends Controller
             ->where('type_beneficiaire', 'livreur')
             ->whereNotNull('livreur_id')
             ->when($filtrePeriode !== '', fn ($q) => $q->where('periode', $filtrePeriode))
-            ->when($filtreSite !== '', fn ($q) => $q->whereHas(
+            ->when($isAdmin && $filtreSite !== '', fn ($q) => $q->whereHas(
                 'commission.transfert',
                 fn ($t) => $t->where('site_source_id', $filtreSite)->orWhere('site_destination_id', $filtreSite)
+            ))
+            ->when(! $isAdmin && ! empty($siteIds), fn ($q) => $q->whereHas(
+                'commission.transfert',
+                fn ($t) => $t->whereIn('site_source_id', $siteIds)->orWhereIn('site_destination_id', $siteIds)
             ))
             ->get()
             ->groupBy('livreur_id');
@@ -125,6 +140,11 @@ class CommissionLogistiqueController extends Controller
             ];
         });
 
+        if (! $isAdmin) {
+            $allowedIds = $partsParLivreur->keys()->all();
+            $livreurs = $livreurs->filter(fn ($r) => in_array($r['livreur_id'], $allowedIds));
+        }
+
         if ($filtreStatut !== '') {
             $livreurs = match ($filtreStatut) {
                 'impaye' => $livreurs->filter(fn ($r) => $r['impaye'] > 0),
@@ -141,12 +161,6 @@ class CommissionLogistiqueController extends Controller
             'total_paye' => (float) $livreurs->sum('paye'),
         ];
 
-        $sites = Site::where('organization_id', $orgId)
-            ->orderBy('nom')
-            ->get(['id', 'nom'])
-            ->map(fn ($s) => ['value' => $s->id, 'label' => $s->nom])
-            ->values();
-
         return Inertia::render('Comptabilite/CommissionLogistique/Index', [
             'livreurs' => $livreurs,
             'kpis' => $kpis,
@@ -155,7 +169,8 @@ class CommissionLogistiqueController extends Controller
             'filtre_site' => $filtreSite,
             'selected_periode' => $filtrePeriode,
             'periodes_disponibles' => $periodesDisponibles,
-            'sites' => $sites,
+            'is_admin' => $isAdmin,
+            'sites' => $siteProps['sites'],
             'can_payer' => auth()->user()->can('comptabilite.payer'),
         ]);
     }

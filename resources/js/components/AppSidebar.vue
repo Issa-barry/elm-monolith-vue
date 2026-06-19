@@ -193,11 +193,11 @@ const mainNavItems = computed((): NavItem[] => {
             items: [
                 { title: 'Tableau de bord', href: '/comptabilite' },
                 {
-                    title: 'Commission livreur logistique',
+                    title: 'Commission logistique',
                     href: '/comptabilite/commissions/logistique',
                 },
                 {
-                    title: 'Commission livreur vente',
+                    title: 'Commission vente',
                     href: '/comptabilite/commissions/vente',
                 },
                 {

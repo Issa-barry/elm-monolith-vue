@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
-import FilterDrawer from '@/components/FilterDrawer.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,11 +9,11 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
 import {
+    Building2,
     Download,
     FileText,
     HandCoins,
@@ -67,6 +66,7 @@ const props = defineProps<{
     filtre_statut: string;
     filtre_site: string;
     search: string;
+    is_admin: boolean;
     sites: { value: string; label: string }[];
     can_payer: boolean;
 }>();
@@ -101,7 +101,6 @@ const ANNEES = Array.from({ length: 5 }, (_, i) => {
     return { value: y, label: String(y) };
 });
 
-const filterDrawerOpen = ref(false);
 const selectedMois = ref(props.filtre_mois);
 const selectedAnnee = ref(props.filtre_annee);
 const filtreStatut = ref(props.filtre_statut ?? '');
@@ -374,75 +373,72 @@ const periodeCourante = computed(
                     </button>
                 </div>
 
-                <FilterDrawer
-                    v-model:open="filterDrawerOpen"
-                    title="Filtres"
-                    :active-count="activeFilterCount"
-                    @apply="appliquerFiltres"
-                    @reset="resetFilters"
+                <select
+                    v-model="selectedMois"
+                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
                 >
-                    <div class="space-y-1.5">
-                        <Label>Mois</Label>
-                        <select
-                            v-model="selectedMois"
-                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                            <option
-                                v-for="m in MOIS_OPTIONS"
-                                :key="m.value"
-                                :value="m.value"
-                            >
-                                {{ m.label }}
-                            </option>
-                        </select>
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Année</Label>
-                        <select
-                            v-model="selectedAnnee"
-                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                            <option
-                                v-for="a in ANNEES"
-                                :key="a.value"
-                                :value="a.value"
-                            >
-                                {{ a.label }}
-                            </option>
-                        </select>
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Statut</Label>
-                        <select
-                            v-model="filtreStatut"
-                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                            <option value="">Tous les statuts</option>
-                            <option value="en_attente">En attente</option>
-                            <option value="calcule">Calculé</option>
-                            <option value="partiellement_paye">
-                                Part. payé
-                            </option>
-                            <option value="paye">Payé</option>
-                        </select>
-                    </div>
-                    <div v-if="sites.length > 0" class="space-y-1.5">
-                        <Label>Agence</Label>
-                        <select
-                            v-model="filtreSite"
-                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                            <option value="">Toutes les agences</option>
-                            <option
-                                v-for="s in sites"
-                                :key="s.value"
-                                :value="s.value"
-                            >
-                                {{ s.label }}
-                            </option>
-                        </select>
-                    </div>
-                </FilterDrawer>
+                    <option
+                        v-for="m in MOIS_OPTIONS"
+                        :key="m.value"
+                        :value="m.value"
+                    >
+                        {{ m.label }}
+                    </option>
+                </select>
+
+                <select
+                    v-model="selectedAnnee"
+                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option
+                        v-for="a in ANNEES"
+                        :key="a.value"
+                        :value="a.value"
+                    >
+                        {{ a.label }}
+                    </option>
+                </select>
+
+                <select
+                    v-if="is_admin && sites.length > 1"
+                    v-model="filtreSite"
+                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Toutes les agences</option>
+                    <option
+                        v-for="s in sites"
+                        :key="s.value"
+                        :value="s.value"
+                    >
+                        {{ s.label }}
+                    </option>
+                </select>
+                <span
+                    v-else-if="!is_admin && sites.length >= 1"
+                    class="inline-flex h-9 items-center gap-1.5 rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground"
+                >
+                    <Building2 class="h-3.5 w-3.5" />
+                    {{ sites[0]?.label }}
+                </span>
+
+                <select
+                    v-model="filtreStatut"
+                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Tous les statuts</option>
+                    <option value="en_attente">En attente</option>
+                    <option value="calcule">Calculé</option>
+                    <option value="partiellement_paye">Part. payé</option>
+                    <option value="paye">Payé</option>
+                </select>
+
+                <button
+                    type="button"
+                    class="h-9 rounded-md bg-primary px-3 text-sm text-primary-foreground hover:bg-primary/90"
+                    @click="appliquerFiltres"
+                >
+                    Appliquer
+                </button>
 
                 <span
                     class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
