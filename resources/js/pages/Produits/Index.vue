@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilterDrawer from '@/components/FilterDrawer.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,6 +9,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -24,17 +26,17 @@ import {
     Package,
     Pencil,
     Plus,
+    Search,
     Sliders,
     Trash2,
     X,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import DataTableFilters from '@/components/DataTableFilters.vue';
 import Dropdown from 'primevue/dropdown';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
 import HistoriqueModal from './partials/HistoriqueModal.vue';
 import ProduitsMobile from './partials/ProduitsMobile.vue';
@@ -128,6 +130,7 @@ const toast = useToast();
 
 // ── Filtres serveur ───────────────────────────────────────────────────────────
 
+const filterDrawerOpen = ref(false);
 const searchInput = ref(props.filters.search ?? '');
 const selectedType = ref(props.filters.type ?? '');
 const selectedStatut = ref(props.filters.statut ?? '');
@@ -147,12 +150,19 @@ function applyFilters(overrides: Partial<Filters> = {}) {
     });
 }
 
+const activeFilterCount = computed(
+    () =>
+        [
+            !!selectedType.value,
+            !!selectedStatut.value,
+            !!selectedSite.value,
+        ].filter(Boolean).length,
+);
+
 const hasActiveFilters = computed(
     () =>
         !!searchInput.value ||
-        !!selectedType.value ||
-        !!selectedStatut.value ||
-        !!selectedSite.value ||
+        activeFilterCount.value > 0 ||
         showOnlyRuptures.value ||
         showOnlyFaibles.value,
 );
@@ -171,6 +181,12 @@ function clearFilters() {
         site_id: undefined,
     });
 }
+
+let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
+watch(searchInput, () => {
+    if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
+    searchDebounceTimeout = setTimeout(() => applyFilters(), 400);
+});
 
 const siteOptions = computed(() => [
     { label: 'Toutes les agences', value: '' },
@@ -576,37 +592,85 @@ function confirmArchive(produit: Produit) {
             </div>
 
             <!-- Barre de filtres -->
-            <DataTableFilters
-                v-model:search="searchInput"
-                :has-active-filters="hasActiveFilters"
-                @filter="applyFilters"
-                @reset="clearFilters"
-            >
-                <Dropdown
-                    v-model="selectedSite"
-                    :options="siteOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Agence"
-                    class="min-w-[160px] text-sm"
-                />
-                <Dropdown
-                    v-model="selectedType"
-                    :options="typeOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Type"
-                    class="min-w-[140px] text-sm"
-                />
-                <Dropdown
-                    v-model="selectedStatut"
-                    :options="statutOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Statut"
-                    class="min-w-[140px] text-sm"
-                />
-            </DataTableFilters>
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-[260px] shrink-0">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                        v-model="searchInput"
+                        type="search"
+                        placeholder="Rechercher…"
+                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    />
+                    <button
+                        v-if="searchInput"
+                        type="button"
+                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        @click="searchInput = ''"
+                    >
+                        <X class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+
+                <FilterDrawer
+                    v-model:open="filterDrawerOpen"
+                    title="Filtres"
+                    :active-count="activeFilterCount"
+                    @apply="applyFilters()"
+                    @reset="clearFilters"
+                >
+                    <div class="space-y-1.5">
+                        <Label>Agence</Label>
+                        <Dropdown
+                            v-model="selectedSite"
+                            :options="siteOptions"
+                            option-label="label"
+                            option-value="value"
+                            placeholder="Agence"
+                            class="w-full text-sm"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Type</Label>
+                        <Dropdown
+                            v-model="selectedType"
+                            :options="typeOptions"
+                            option-label="label"
+                            option-value="value"
+                            placeholder="Type"
+                            class="w-full text-sm"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Statut</Label>
+                        <Dropdown
+                            v-model="selectedStatut"
+                            :options="statutOptions"
+                            option-label="label"
+                            option-value="value"
+                            placeholder="Statut"
+                            class="w-full text-sm"
+                        />
+                    </div>
+                </FilterDrawer>
+
+                <span
+                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                >
+                    {{ filteredProduits.length }} résultat{{
+                        filteredProduits.length !== 1 ? 's' : ''
+                    }}
+                </span>
+                <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    @click="clearFilters"
+                >
+                    Réinitialiser
+                </button>
+            </div>
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,16 +10,13 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { Pencil, Plus, Power, Search, Tags, Trash2 } from 'lucide-vue-next';
+import { Pencil, Plus, Power, Tags, Trash2 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Option {
     value: string;
@@ -52,10 +50,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 // ── Filtres ───────────────────────────────────────────────────────────────────
 
 const search = ref('');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
 
 const ALL = '__all__';
 const selectedCategorie = ref<string>(ALL);
@@ -72,6 +66,19 @@ const statutOptions = [
     { value: 'inactif', label: 'Inactif' },
 ];
 
+const hasActiveFilters = computed(
+    () =>
+        !!search.value ||
+        selectedCategorie.value !== ALL ||
+        selectedStatut.value !== ALL,
+);
+
+function resetFilters() {
+    search.value = '';
+    selectedCategorie.value = ALL;
+    selectedStatut.value = ALL;
+}
+
 const filtered = computed(() => {
     let data = props.types;
     if (selectedCategorie.value !== ALL) {
@@ -82,7 +89,14 @@ const filtered = computed(() => {
             selectedStatut.value === 'actif' ? t.is_active : !t.is_active,
         );
     }
-    return data;
+    const q = search.value.trim().toLowerCase();
+    if (!q) return data;
+    return data.filter(
+        (t) =>
+            t.libelle.toLowerCase().includes(q) ||
+            t.categorie_label.toLowerCase().includes(q) ||
+            (t.description ?? '').toLowerCase().includes(q),
+    );
 });
 
 // ── Dialog Create / Edit ──────────────────────────────────────────────────────
@@ -207,64 +221,45 @@ const categorieColors: Record<string, string> = {
                     </Button>
                 </div>
 
+                <!-- Filtres -->
+                <DataTableFilters
+                    v-model:search="search"
+                    search-placeholder="Rechercher…"
+                    :has-active-filters="hasActiveFilters"
+                    :result-count="filtered.length"
+                    @reset="resetFilters"
+                >
+                    <Select
+                        v-model="selectedCategorie"
+                        :options="categorieOptions"
+                        option-label="label"
+                        option-value="value"
+                        class="w-56"
+                    />
+                    <Select
+                        v-model="selectedStatut"
+                        :options="statutOptions"
+                        option-label="label"
+                        option-value="value"
+                        class="w-40"
+                    />
+                </DataTableFilters>
+
                 <!-- DataTable -->
                 <div class="overflow-hidden rounded-xl border bg-card">
                     <DataTable
                         :value="filtered"
                         :paginator="filtered.length > 15"
                         :rows="15"
-                        :global-filter-fields="[
-                            'libelle',
-                            'categorie_label',
-                            'description',
-                        ]"
-                        v-model:filters="filters"
                         data-key="id"
                         striped-rows
                         removable-sort
                         class="text-sm"
                         :pt="{
                             root: { class: 'w-full' },
-                            header: { class: 'border-b bg-muted/30 px-4 py-3' },
                             tbody: { class: 'divide-y' },
                         }"
                     >
-                        <template #header>
-                            <div class="flex flex-wrap items-center gap-3">
-                                <IconField class="max-w-xs flex-1">
-                                    <InputIcon class="pointer-events-none">
-                                        <Search
-                                            class="h-4 w-4 text-muted-foreground"
-                                        />
-                                    </InputIcon>
-                                    <InputText
-                                        v-model="search"
-                                        placeholder="Rechercher…"
-                                        class="w-full text-sm"
-                                    />
-                                </IconField>
-                                <Select
-                                    v-model="selectedCategorie"
-                                    :options="categorieOptions"
-                                    option-label="label"
-                                    option-value="value"
-                                    class="w-64"
-                                />
-                                <Select
-                                    v-model="selectedStatut"
-                                    :options="statutOptions"
-                                    option-label="label"
-                                    option-value="value"
-                                    class="w-44"
-                                />
-                                <span class="text-xs text-muted-foreground">
-                                    {{ filtered.length }} type{{
-                                        filtered.length !== 1 ? 's' : ''
-                                    }}
-                                </span>
-                            </div>
-                        </template>
-
                         <!-- Libellé -->
                         <Column
                             field="libelle"

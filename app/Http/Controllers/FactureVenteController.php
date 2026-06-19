@@ -21,6 +21,10 @@ class FactureVenteController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
+        $isAdmin = $user->isAdmin();
+
+        // Sites auxquels l'utilisateur a accès (vide = tous, pour un admin)
+        $authorizedSiteIds = $isAdmin ? collect() : $user->sites()->pluck('sites.id');
 
         // Site par défaut = premier site de l'utilisateur
         $userSiteId = $user->sites()->first(['sites.id'])?->id;
@@ -29,6 +33,12 @@ class FactureVenteController extends Controller
         $statut = $request->input('statut', 'tous');
         $siteId = $request->input('site_id', $userSiteId ? (string) $userSiteId : 'tous');
         $livreurId = $request->input('livreur_id');
+        $vehiculeRecherche = $request->input('vehicule');
+        $chauffeurRecherche = $request->input('chauffeur');
+        $convoyeurRecherche = $request->input('convoyeur');
+        $proprietaireRecherche = $request->input('proprietaire');
+        $clientRecherche = $request->input('client');
+        $referenceRecherche = $request->input('reference');
         $livreurData = null;
         if ($livreurId) {
             $livreurModel = Livreur::where('organization_id', $orgId)->find($livreurId);
@@ -43,21 +53,30 @@ class FactureVenteController extends Controller
             }
         }
 
-        // Liste de tous les sites de l'org pour le filtre
-        $sites = Site::where('organization_id', $orgId)
-            ->orderBy('nom')
+        // Liste des sites accessibles à l'utilisateur pour le filtre
+        $sitesQuery = Site::where('organization_id', $orgId);
+        if (! $isAdmin && $authorizedSiteIds->isNotEmpty()) {
+            $sitesQuery->whereIn('id', $authorizedSiteIds);
+        }
+        $sites = $sitesQuery->orderBy('nom')
             ->get(['id', 'nom'])
             ->map(fn ($s) => ['value' => (string) $s->id, 'label' => $s->nom])
             ->prepend(['value' => 'tous', 'label' => 'Tous les sites'])
             ->values();
 
         $query = FactureVente::with([
-            'commande.vehicule',
+            'commande.vehicule.proprietaire',
+            'commande.vehicule.equipe.membres.livreur',
             'commande.client',
             'commande.site',
             'encaissements.creator',
         ])
             ->where('organization_id', $orgId);
+
+        // Un utilisateur non-admin ne voit que les factures des sites auxquels il est affecté
+        if (! $isAdmin && $authorizedSiteIds->isNotEmpty()) {
+            $query->whereHas('commande', fn ($q) => $q->whereIn('site_id', $authorizedSiteIds));
+        }
 
         match ($periode) {
             'today' => $query->whereDate('created_at', Carbon::today()),
@@ -77,6 +96,47 @@ class FactureVenteController extends Controller
 
         if ($livreurId) {
             $query->whereHas('commande.vehicule.equipe.membres', fn ($q) => $q->where('livreur_id', $livreurId));
+        }
+
+        if ($referenceRecherche) {
+            $query->where('reference', 'like', "%{$referenceRecherche}%");
+        }
+
+        if ($vehiculeRecherche) {
+            $query->whereHas('commande.vehicule', fn ($q) => $q
+                ->where('nom_vehicule', 'like', "%{$vehiculeRecherche}%")
+                ->orWhere('immatriculation', 'like', "%{$vehiculeRecherche}%"));
+        }
+
+        if ($chauffeurRecherche) {
+            $query->whereHas('commande.vehicule.equipe.membres', fn ($q) => $q
+                ->where('role', 'chauffeur')
+                ->whereHas('livreur', fn ($l) => $l
+                    ->where('nom', 'like', "%{$chauffeurRecherche}%")
+                    ->orWhere('prenom', 'like', "%{$chauffeurRecherche}%")
+                    ->orWhere('telephone', 'like', "%{$chauffeurRecherche}%")));
+        }
+
+        if ($convoyeurRecherche) {
+            $query->whereHas('commande.vehicule.equipe.membres', fn ($q) => $q
+                ->where('role', 'convoyeur')
+                ->whereHas('livreur', fn ($l) => $l
+                    ->where('nom', 'like', "%{$convoyeurRecherche}%")
+                    ->orWhere('prenom', 'like', "%{$convoyeurRecherche}%")
+                    ->orWhere('telephone', 'like', "%{$convoyeurRecherche}%")));
+        }
+
+        if ($proprietaireRecherche) {
+            $query->whereHas('commande.vehicule.proprietaire', fn ($q) => $q
+                ->where('nom', 'like', "%{$proprietaireRecherche}%")
+                ->orWhere('prenom', 'like', "%{$proprietaireRecherche}%"));
+        }
+
+        if ($clientRecherche) {
+            $query->whereHas('commande.client', fn ($q) => $q
+                ->where('nom', 'like', "%{$clientRecherche}%")
+                ->orWhere('prenom', 'like', "%{$clientRecherche}%")
+                ->orWhere('telephone', 'like', "%{$clientRecherche}%"));
         }
 
         $factures = $query->orderByDesc('created_at')
@@ -142,6 +202,12 @@ class FactureVenteController extends Controller
             'sites' => $sites,
             'livreur_id' => $livreurId,
             'livreur' => $livreurData,
+            'vehicule' => $vehiculeRecherche,
+            'chauffeur' => $chauffeurRecherche,
+            'convoyeur' => $convoyeurRecherche,
+            'proprietaire' => $proprietaireRecherche,
+            'client' => $clientRecherche,
+            'reference' => $referenceRecherche,
         ]);
     }
 }

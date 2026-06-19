@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilterDrawer from '@/components/FilterDrawer.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,9 +26,9 @@ import {
     Search,
     ShoppingCart,
     Trash2,
+    X,
     XCircle,
 } from 'lucide-vue-next';
-import DataTableFilters from '@/components/DataTableFilters.vue';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
@@ -114,37 +115,45 @@ const filtresStatut = [
     { value: 'annulee', label: 'Annulées' },
 ];
 
+const filterDrawerOpen = ref(false);
 const localPeriode = ref(props.periode);
 const localStatut = ref(props.statut);
 
 function applyFilters() {
-    activeSearch.value = pendingSearch.value;
-    const params: Record<string, string> = { periode: localPeriode.value };
-    if (localStatut.value !== 'tous') params.statut = localStatut.value;
-    router.get('/ventes', params, { preserveScroll: true, replace: true });
+    router.get(
+        '/ventes',
+        { periode: localPeriode.value, statut: localStatut.value },
+        { preserveScroll: true, replace: true },
+    );
 }
 
 function resetFilters() {
     localPeriode.value = 'today';
     localStatut.value = 'tous';
-    pendingSearch.value = '';
-    activeSearch.value = '';
-    router.get('/ventes', {}, { preserveScroll: true, replace: true });
+    search.value = '';
+    router.get(
+        '/ventes',
+        { periode: 'today', statut: 'tous' },
+        { preserveScroll: true, replace: true },
+    );
 }
+
+const activeFilterCount = computed(
+    () => (localStatut.value !== 'tous' ? 1 : 0),
+);
 
 const hasActiveFilters = computed(
     () =>
         localPeriode.value !== 'today' ||
-        localStatut.value !== 'tous' ||
-        !!activeSearch.value,
+        activeFilterCount.value > 0 ||
+        !!search.value,
 );
 
-// ── Recherche locale (client-side, pending/active) ────────────────────────────
-const pendingSearch = ref('');
-const activeSearch = ref('');
+// ── Recherche locale (client-side, immédiate) ─────────────────────────────────
+const search = ref('');
 
 const commandesFiltrees = computed(() => {
-    const q = activeSearch.value.toLowerCase().trim();
+    const q = search.value.toLowerCase().trim();
     if (!q) return props.commandes;
     return props.commandes.filter(
         (c) =>
@@ -521,28 +530,72 @@ function confirmDelete(c: Commande) {
             </div>
 
             <!-- Filtres -->
-            <DataTableFilters
-                v-model:search="pendingSearch"
-                :search-placeholder="'Référence, véhicule, client…'"
-                :has-active-filters="hasActiveFilters"
-                @filter="applyFilters"
-                @reset="resetFilters"
-            >
-                <Select
-                    v-model="localStatut"
-                    :options="filtresStatut"
-                    option-label="label"
-                    option-value="value"
-                    class="w-36"
-                />
-                <Select
-                    v-model="localPeriode"
-                    :options="periodes"
-                    option-label="label"
-                    option-value="value"
-                    class="w-40"
-                />
-            </DataTableFilters>
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-[260px] shrink-0">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                        v-model="search"
+                        type="search"
+                        placeholder="Référence, véhicule, client…"
+                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    />
+                    <button
+                        v-if="search"
+                        type="button"
+                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        @click="search = ''"
+                    >
+                        <X class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+
+                <FilterDrawer
+                    v-model:open="filterDrawerOpen"
+                    title="Filtres"
+                    :active-count="activeFilterCount"
+                    @apply="applyFilters"
+                    @reset="resetFilters"
+                >
+                    <div class="space-y-1.5">
+                        <Label>Statut</Label>
+                        <Select
+                            v-model="localStatut"
+                            :options="filtresStatut"
+                            option-label="label"
+                            option-value="value"
+                            class="w-full"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Période</Label>
+                        <Select
+                            v-model="localPeriode"
+                            :options="periodes"
+                            option-label="label"
+                            option-value="value"
+                            class="w-full"
+                        />
+                    </div>
+                </FilterDrawer>
+
+                <span
+                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                >
+                    {{ commandesFiltrees.length }} résultat{{
+                        commandesFiltrees.length !== 1 ? 's' : ''
+                    }}
+                </span>
+                <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    @click="resetFilters"
+                >
+                    Réinitialiser
+                </button>
+            </div>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
@@ -559,7 +612,6 @@ function confirmDelete(c: Commande) {
                         tbody: { class: 'divide-y' },
                     }"
                 >
-
                     <!-- Référence -->
                     <Column
                         field="reference"

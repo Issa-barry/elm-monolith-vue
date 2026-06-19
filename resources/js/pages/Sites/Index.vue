@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,7 +25,6 @@ import {
     Search,
     Trash2,
 } from 'lucide-vue-next';
-import DataTableFilters from '@/components/DataTableFilters.vue';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Select from 'primevue/select';
@@ -59,10 +59,8 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const mobileSearch = ref('');
-const pendingSearch = ref('');
-const pendingType = ref<string>('');
-const activeSearch = ref('');
-const activeType = ref<string>('');
+const search = ref('');
+const type = ref<string>('');
 
 const typeOptions = computed(() => {
     const map = new Map<string, string>();
@@ -77,26 +75,17 @@ const typeOptions = computed(() => {
     ];
 });
 
-function applyFilters() {
-    activeSearch.value = pendingSearch.value;
-    activeType.value = pendingType.value;
-}
-
 function resetFilters() {
-    pendingSearch.value = '';
-    pendingType.value = '';
-    activeSearch.value = '';
-    activeType.value = '';
+    search.value = '';
+    type.value = '';
 }
 
-const hasActiveFilters = computed(
-    () => !!activeSearch.value || !!activeType.value,
-);
+const hasActiveFilters = computed(() => !!search.value || !!type.value);
 
 const desktopTypeFiltered = computed(() => {
     let list = props.sites;
-    if (activeType.value) list = list.filter((s) => s.type === activeType.value);
-    const q = activeSearch.value.trim().toLowerCase();
+    if (type.value) list = list.filter((s) => s.type === type.value);
+    const q = search.value.trim().toLowerCase();
     if (!q) return list;
     return list.filter(
         (s) =>
@@ -437,14 +426,14 @@ function confirmDelete(s: Site) {
 
             <!-- Tableau -->
             <DataTableFilters
-                v-model:search="pendingSearch"
+                v-model:search="search"
                 search-placeholder="Rechercher…"
                 :has-active-filters="hasActiveFilters"
-                @filter="applyFilters"
+                :result-count="desktopTypeFiltered.length"
                 @reset="resetFilters"
             >
                 <Select
-                    v-model="pendingType"
+                    v-model="type"
                     :options="typeOptions"
                     option-label="label"
                     option-value="value"
@@ -463,7 +452,6 @@ function confirmDelete(s: Site) {
                     class="text-sm"
                     table-class="w-full"
                 >
-
                     <!-- Nom + code -->
                     <Column
                         field="nom"

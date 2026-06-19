@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
-import ComptabiliteFilters from '@/components/ComptabiliteFilters.vue';
+import FilterDrawer from '@/components/FilterDrawer.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,6 +10,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
@@ -19,9 +20,11 @@ import {
     HandCoins,
     History,
     MoreHorizontal,
+    Search,
     Users,
+    X,
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface LignePaie {
     id: string;
@@ -98,21 +101,25 @@ const ANNEES = Array.from({ length: 5 }, (_, i) => {
     return { value: y, label: String(y) };
 });
 
+const filterDrawerOpen = ref(false);
 const selectedMois = ref(props.filtre_mois);
 const selectedAnnee = ref(props.filtre_annee);
 const filtreStatut = ref(props.filtre_statut ?? '');
 const filtreSite = ref(props.filtre_site ?? '');
 const searchVal = ref(props.search ?? '');
 
-const hasActiveFilters = computed(
+const activeFilterCount = computed(
     () =>
-        !!(
-            searchVal.value ||
-            filtreStatut.value ||
-            filtreSite.value ||
-            selectedMois.value !== new Date().getMonth() + 1 ||
-            selectedAnnee.value !== new Date().getFullYear()
-        ),
+        [
+            !!filtreStatut.value,
+            !!filtreSite.value,
+            selectedMois.value !== new Date().getMonth() + 1,
+            selectedAnnee.value !== new Date().getFullYear(),
+        ].filter(Boolean).length,
+);
+
+const hasActiveFilters = computed(
+    () => !!searchVal.value || activeFilterCount.value > 0,
 );
 
 function appliquerFiltres() {
@@ -144,6 +151,12 @@ function resetFilters() {
         { preserveState: true, replace: true },
     );
 }
+
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+watch(searchVal, () => {
+    if (searchDebounce) clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(appliquerFiltres, 400);
+});
 
 function buildParams() {
     const p = new URLSearchParams();
@@ -278,25 +291,19 @@ const periodeCourante = computed(
             </div>
 
             <!-- KPIs -->
-            <div class="grid grid-cols-3 gap-3 sm:grid-cols-5">
-                <div class="rounded-lg border bg-card p-4 text-center">
+            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Salaire brut</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        Salaire brut
-                    </p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">
                         {{ fmt(kpis.total_brut) }}
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Déductions</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-red-600 uppercase dark:text-red-400"
-                    >
-                        Déductions
-                    </p>
-                    <p
-                        class="mt-1 text-lg font-semibold text-red-600 tabular-nums dark:text-red-400"
+                        class="mt-2 text-2xl font-bold text-red-600 tabular-nums dark:text-red-400"
                     >
                         {{
                             kpiDeductions > 0
@@ -305,87 +312,140 @@ const periodeCourante = computed(
                         }}
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Net à payer</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        Net à payer
-                    </p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">
                         {{ fmt(kpis.total_net) }}
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Déjà payé</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        Déjà payé
-                    </p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">
                         {{ fmt(kpis.total_paye) }}
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Reste à payer</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        Reste à payer
-                    </p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">
                         {{ fmt(kpis.total_reste) }}
                     </p>
                 </div>
             </div>
 
             <!-- Filtres -->
-            <ComptabiliteFilters
-                v-model:search="searchVal"
-                search-placeholder="Rechercher un salarié..."
-                :has-active-filters="hasActiveFilters"
-                @filter="appliquerFiltres"
-                @reset="resetFilters"
-            >
-                <select
-                    v-model="selectedMois"
-                    class="h-9 w-[140px] rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option
-                        v-for="m in MOIS_OPTIONS"
-                        :key="m.value"
-                        :value="m.value"
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-[260px] shrink-0">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                        v-model="searchVal"
+                        type="search"
+                        placeholder="Rechercher un salarié..."
+                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    />
+                    <button
+                        v-if="searchVal"
+                        type="button"
+                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        @click="searchVal = ''"
                     >
-                        {{ m.label }}
-                    </option>
-                </select>
-                <select
-                    v-model="selectedAnnee"
-                    class="h-9 w-[110px] rounded-md border border-input bg-background px-2 text-sm"
+                        <X class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+
+                <FilterDrawer
+                    v-model:open="filterDrawerOpen"
+                    title="Filtres"
+                    :active-count="activeFilterCount"
+                    @apply="appliquerFiltres"
+                    @reset="resetFilters"
                 >
-                    <option v-for="a in ANNEES" :key="a.value" :value="a.value">
-                        {{ a.label }}
-                    </option>
-                </select>
-                <select
-                    v-model="filtreStatut"
-                    class="h-9 w-[160px] rounded-md border border-input bg-background px-2 text-sm"
+                    <div class="space-y-1.5">
+                        <Label>Mois</Label>
+                        <select
+                            v-model="selectedMois"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option
+                                v-for="m in MOIS_OPTIONS"
+                                :key="m.value"
+                                :value="m.value"
+                            >
+                                {{ m.label }}
+                            </option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Année</Label>
+                        <select
+                            v-model="selectedAnnee"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option
+                                v-for="a in ANNEES"
+                                :key="a.value"
+                                :value="a.value"
+                            >
+                                {{ a.label }}
+                            </option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Statut</Label>
+                        <select
+                            v-model="filtreStatut"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Tous les statuts</option>
+                            <option value="en_attente">En attente</option>
+                            <option value="calcule">Calculé</option>
+                            <option value="partiellement_paye">
+                                Part. payé
+                            </option>
+                            <option value="paye">Payé</option>
+                        </select>
+                    </div>
+                    <div v-if="sites.length > 0" class="space-y-1.5">
+                        <Label>Agence</Label>
+                        <select
+                            v-model="filtreSite"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Toutes les agences</option>
+                            <option
+                                v-for="s in sites"
+                                :key="s.value"
+                                :value="s.value"
+                            >
+                                {{ s.label }}
+                            </option>
+                        </select>
+                    </div>
+                </FilterDrawer>
+
+                <span
+                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
                 >
-                    <option value="">Tous les statuts</option>
-                    <option value="en_attente">En attente</option>
-                    <option value="calcule">Calculé</option>
-                    <option value="partiellement_paye">Part. payé</option>
-                    <option value="paye">Payé</option>
-                </select>
-                <select
-                    v-if="sites.length > 0"
-                    v-model="filtreSite"
-                    class="h-9 w-[170px] rounded-md border border-input bg-background px-2 text-sm"
+                    {{ lignes.length }} résultat{{
+                        lignes.length !== 1 ? 's' : ''
+                    }}
+                </span>
+                <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    @click="resetFilters"
                 >
-                    <option value="">Toutes les agences</option>
-                    <option v-for="s in sites" :key="s.value" :value="s.value">
-                        {{ s.label }}
-                    </option>
-                </select>
-            </ComptabiliteFilters>
+                    Réinitialiser
+                </button>
+            </div>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">

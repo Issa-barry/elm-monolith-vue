@@ -25,7 +25,6 @@ import {
     Trash2,
 } from 'lucide-vue-next';
 
-
 import DataTableFilters from '@/components/DataTableFilters.vue';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
@@ -67,10 +66,8 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const mobileSearch = ref('');
-const pendingSearch = ref('');
-const pendingStatut = ref<string>('tous');
-const activeSearch = ref('');
-const activeStatut = ref<string>('tous');
+const search = ref('');
+const statut = ref<string>('tous');
 
 const totalProprietaires = computed(() => props.proprietaires.length);
 const activeProprietaires = computed(
@@ -80,28 +77,21 @@ const inactiveProprietaires = computed(
     () => props.proprietaires.filter((p) => !p.is_active).length,
 );
 
-function applyFilters() {
-    activeSearch.value = pendingSearch.value;
-    activeStatut.value = pendingStatut.value;
-}
-
 function resetFilters() {
-    pendingSearch.value = '';
-    pendingStatut.value = 'tous';
-    activeSearch.value = '';
-    activeStatut.value = 'tous';
+    search.value = '';
+    statut.value = 'tous';
 }
 
 const hasActiveFilters = computed(
-    () => !!activeSearch.value || activeStatut.value !== 'tous',
+    () => !!search.value || statut.value !== 'tous',
 );
 
 const filteredProprietaires = computed(() => {
     let list = props.proprietaires;
-    if (activeStatut.value !== 'tous') {
-        list = list.filter((p) => p.is_active === (activeStatut.value === 'actif'));
+    if (statut.value !== 'tous') {
+        list = list.filter((p) => p.is_active === (statut.value === 'actif'));
     }
-    const q = activeSearch.value.trim().toLowerCase();
+    const q = search.value.trim().toLowerCase();
     if (!q) return list;
     return list.filter(
         (p) =>
@@ -409,14 +399,14 @@ function confirmDelete(p: Proprietaire) {
 
             <!-- Tableau -->
             <DataTableFilters
-                v-model:search="pendingSearch"
+                v-model:search="search"
                 search-placeholder="Rechercher…"
                 :has-active-filters="hasActiveFilters"
-                @filter="applyFilters"
+                :result-count="filteredProprietaires.length"
                 @reset="resetFilters"
             >
                 <Select
-                    v-model="pendingStatut"
+                    v-model="statut"
                     :options="[
                         { value: 'tous', label: 'Tous' },
                         { value: 'actif', label: 'Actif' },
@@ -439,7 +429,6 @@ function confirmDelete(p: Proprietaire) {
                     class="text-sm"
                     table-class="w-full"
                 >
-
                     <!-- Nom -->
                     <Column
                         field="nom_complet"

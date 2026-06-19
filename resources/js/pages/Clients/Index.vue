@@ -23,10 +23,11 @@ import {
     Search,
     Trash2,
     Users,
+    X,
 } from 'lucide-vue-next';
 
-
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import FilterDrawer from '@/components/FilterDrawer.vue';
+import { Label } from '@/components/ui/label';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Select from 'primevue/select';
@@ -68,10 +69,9 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const mobileSearch = ref('');
-const pendingSearch = ref('');
-const pendingStatut = ref<string>('tous');
-const activeSearch = ref('');
-const activeStatut = ref<string>('tous');
+const filterDrawerOpen = ref(false);
+const search = ref('');
+const statut = ref<string>('tous');
 
 const totalClients = computed(() => props.clients.length);
 const activeClients = computed(
@@ -81,28 +81,23 @@ const inactiveClients = computed(
     () => props.clients.filter((c) => !c.is_active).length,
 );
 
-function applyFilters() {
-    activeSearch.value = pendingSearch.value;
-    activeStatut.value = pendingStatut.value;
+function resetFilters() {
+    search.value = '';
+    statut.value = 'tous';
 }
 
-function resetFilters() {
-    pendingSearch.value = '';
-    pendingStatut.value = 'tous';
-    activeSearch.value = '';
-    activeStatut.value = 'tous';
-}
+const activeFilterCount = computed(() => (statut.value !== 'tous' ? 1 : 0));
 
 const hasActiveFilters = computed(
-    () => !!activeSearch.value || activeStatut.value !== 'tous',
+    () => !!search.value || activeFilterCount.value > 0,
 );
 
 const filteredClients = computed(() => {
     let list = props.clients;
-    if (activeStatut.value !== 'tous') {
-        list = list.filter((c) => c.is_active === (activeStatut.value === 'actif'));
+    if (statut.value !== 'tous') {
+        list = list.filter((c) => c.is_active === (statut.value === 'actif'));
     }
-    const q = activeSearch.value.trim().toLowerCase();
+    const q = search.value.trim().toLowerCase();
     if (!q) return list;
     return list.filter(
         (c) =>
@@ -387,25 +382,65 @@ function confirmDelete(c: Client) {
             </div>
 
             <!-- Tableau -->
-            <DataTableFilters
-                v-model:search="pendingSearch"
-                search-placeholder="Rechercher…"
-                :has-active-filters="hasActiveFilters"
-                @filter="applyFilters"
-                @reset="resetFilters"
-            >
-                <Select
-                    v-model="pendingStatut"
-                    :options="[
-                        { value: 'tous', label: 'Tous' },
-                        { value: 'actif', label: 'Actif' },
-                        { value: 'inactif', label: 'Inactif' },
-                    ]"
-                    option-label="label"
-                    option-value="value"
-                    class="w-32"
-                />
-            </DataTableFilters>
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-[260px] shrink-0">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                        v-model="search"
+                        type="search"
+                        placeholder="Rechercher…"
+                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    />
+                    <button
+                        v-if="search"
+                        type="button"
+                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        @click="search = ''"
+                    >
+                        <X class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+
+                <FilterDrawer
+                    v-model:open="filterDrawerOpen"
+                    title="Filtres"
+                    :active-count="activeFilterCount"
+                    @reset="resetFilters"
+                >
+                    <div class="space-y-1.5">
+                        <Label>Statut</Label>
+                        <Select
+                            v-model="statut"
+                            :options="[
+                                { value: 'tous', label: 'Tous' },
+                                { value: 'actif', label: 'Actif' },
+                                { value: 'inactif', label: 'Inactif' },
+                            ]"
+                            option-label="label"
+                            option-value="value"
+                            class="w-full"
+                        />
+                    </div>
+                </FilterDrawer>
+
+                <span
+                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                >
+                    {{ filteredClients.length }} résultat{{
+                        filteredClients.length !== 1 ? 's' : ''
+                    }}
+                </span>
+                <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    @click="resetFilters"
+                >
+                    Réinitialiser
+                </button>
+            </div>
 
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
@@ -418,7 +453,6 @@ function confirmDelete(c: Client) {
                     class="text-sm"
                     table-class="w-full"
                 >
-
                     <!-- Nom -->
                     <Column
                         field="nom_complet"

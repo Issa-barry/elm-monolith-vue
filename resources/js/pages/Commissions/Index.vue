@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -23,9 +24,6 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
@@ -113,6 +111,15 @@ const periodes = [
 const filtreStatut = ref(props.filtre_statut || 'all');
 const search = ref(props.search ?? '');
 const mobileSearch = ref('');
+
+const hasActiveFilters = computed(
+    () => !!search.value || filtreStatut.value !== 'all',
+);
+
+function resetFilters() {
+    search.value = '';
+    filtreStatut.value = 'all';
+}
 
 // ── Filtrage client ───────────────────────────────────────────────────────────
 
@@ -471,6 +478,31 @@ function detailUrl(b: BeneficiaireRow): string {
                 </div>
             </div>
 
+            <!-- Filtres -->
+            <DataTableFilters
+                v-model:search="search"
+                search-placeholder="Nom, téléphone, véhicule, montant…"
+                :has-active-filters="hasActiveFilters"
+                :result-count="listeFiltree.length"
+                @reset="resetFilters"
+            >
+                <Select
+                    v-model="filtreStatut"
+                    :options="filtresStatut"
+                    option-label="label"
+                    option-value="value"
+                    class="w-40"
+                />
+                <Select
+                    :model-value="periode"
+                    :options="periodes"
+                    option-label="label"
+                    option-value="value"
+                    class="w-44"
+                    @update:model-value="setPeriode($event)"
+                />
+            </DataTableFilters>
+
             <!-- Tableau Grand Livre -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
@@ -483,50 +515,12 @@ function detailUrl(b: BeneficiaireRow): string {
                     class="text-sm"
                     :pt="{
                         root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
                         tbody: { class: 'divide-y' },
                         table: {
                             style: 'table-layout: fixed; min-width: 960px',
                         },
                     }"
                 >
-                    <template #header>
-                        <div class="flex items-center gap-3">
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Nom, téléphone, véhicule, montant…"
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Select
-                                v-model="filtreStatut"
-                                :options="filtresStatut"
-                                option-label="label"
-                                option-value="value"
-                                class="w-40"
-                            />
-                            <Select
-                                :model-value="periode"
-                                :options="periodes"
-                                option-label="label"
-                                option-value="value"
-                                class="w-44"
-                                @update:model-value="setPeriode($event)"
-                            />
-                            <span class="text-xs text-muted-foreground">
-                                {{ listeFiltree.length }} bénéficiaire{{
-                                    listeFiltree.length !== 1 ? 's' : ''
-                                }}
-                            </span>
-                        </div>
-                    </template>
-
                     <!-- Bénéficiaire (26%) -->
                     <Column
                         field="beneficiaire_nom"

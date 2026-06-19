@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,7 +13,6 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import DataTableFilters from '@/components/DataTableFilters.vue';
 import {
     Briefcase,
     MoreVertical,
@@ -26,7 +26,7 @@ import DataTable from 'primevue/datatable';
 import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface ContratActif {
     id: string;
@@ -82,7 +82,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 // ── Filtres ───────────────────────────────────────────────────────────────────
-const pendingSearch = ref(props.filters.search ?? '');
+const search = ref(props.filters.search ?? '');
 const pendingStatut = ref(props.filters.statut ?? '');
 const pendingTypeEmploye = ref(props.filters.type_employe ?? '');
 const pendingTypeContrat = ref(props.filters.type_contrat ?? '');
@@ -91,7 +91,7 @@ function applyFilters() {
     router.visit('/employes', {
         method: 'get',
         data: {
-            search: pendingSearch.value || undefined,
+            search: search.value || undefined,
             statut: pendingStatut.value || undefined,
             type_employe: pendingTypeEmploye.value || undefined,
             type_contrat: pendingTypeContrat.value || undefined,
@@ -103,7 +103,7 @@ function applyFilters() {
 }
 
 function resetFilters() {
-    pendingSearch.value = '';
+    search.value = '';
     pendingStatut.value = '';
     pendingTypeEmploye.value = '';
     pendingTypeContrat.value = '';
@@ -116,9 +116,15 @@ function resetFilters() {
     });
 }
 
+let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
+watch(search, () => {
+    if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
+    searchDebounceTimeout = setTimeout(applyFilters, 400);
+});
+
 const hasActiveFilters = computed(
     () =>
-        !!pendingSearch.value ||
+        !!search.value ||
         !!pendingStatut.value ||
         !!pendingTypeEmploye.value ||
         !!pendingTypeContrat.value,
@@ -225,10 +231,10 @@ function confirmDelete(e: Employe) {
 
             <!-- Filtres -->
             <DataTableFilters
-                v-model:search="pendingSearch"
+                v-model:search="search"
                 search-placeholder="Matricule, nom, téléphone, email…"
                 :has-active-filters="hasActiveFilters"
-                @filter="applyFilters"
+                :result-count="employes.length"
                 @reset="resetFilters"
             >
                 <Select
@@ -238,6 +244,7 @@ function confirmDelete(e: Employe) {
                     option-value="value"
                     class="w-44"
                     placeholder="Statut"
+                    @update:model-value="applyFilters"
                 />
                 <Select
                     v-model="pendingTypeEmploye"
@@ -246,6 +253,7 @@ function confirmDelete(e: Employe) {
                     option-value="value"
                     class="w-40"
                     placeholder="Type"
+                    @update:model-value="applyFilters"
                 />
                 <Select
                     v-model="pendingTypeContrat"
@@ -254,6 +262,7 @@ function confirmDelete(e: Employe) {
                     option-value="value"
                     class="w-40"
                     placeholder="Contrat"
+                    @update:model-value="applyFilters"
                 />
             </DataTableFilters>
 

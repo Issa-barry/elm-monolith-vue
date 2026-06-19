@@ -19,16 +19,17 @@ class DatabaseSeeder extends Seeder
             PrestatairesSeeder::class,          // Prestataires de service
             SitesSeeder::class,                 // Sites (siège, usine, agences, dépôts)
             UserSitesSeeder::class,             // Rattachement utilisateurs → sites
+            AdminEntrepriseSeeder::class,       // Comptes admin_entreprise additionnels (Matoto)
             ProduitsSeeder::class,              // Catalogue produits
             ParametreSeeder::class,             // Paramètres applicatifs
 
             // ── Module Véhicules ──────────────────────────────────────────────
             TypeVehiculesSeeder::class,         // 3 types par défaut (Camion, Minibus, Tricycle)
-            LivreursSeeder::class,              // 16 livreurs (10 externes + 6 internes)
+            LivreursSeeder::class,              // 22 livreurs (10 externes + 12 internes)
             LivreurComptesSeeder::class,        // Comptes livreurs : 2 actifs + 1 pending
             ProprietairesSeeder::class,         // 4 propriétaires
-            EquipesLivraisonSeeder::class,      // 9 equipes : 5 externes + 4 internes (elm)
-            VehiculesSeeder::class,             // 9 vehicules : 5 externes + 4 internes
+            EquipesLivraisonSeeder::class,      // 10 equipes : 5 externes + 5 internes (elm)
+            VehiculesSeeder::class,             // 10 vehicules : 5 externes + 5 internes
 
             // ── Module RH ─────────────────────────────────────────────────────
             EmployesSeeder::class,                  // 2 employés (Matoto + Lansanaya) avec contrats CDI

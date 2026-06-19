@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,7 +21,6 @@ import {
     Search,
     ShieldCheck,
 } from 'lucide-vue-next';
-import DataTableFilters from '@/components/DataTableFilters.vue';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
@@ -93,26 +93,27 @@ const pendingClientId = ref<number | ''>(
     props.filters.client_id ? Number(props.filters.client_id) : '',
 );
 const mobileSearch = ref('');
-const pendingSearch = ref('');
-const activeSearch = ref('');
+const search = ref('');
 
 function applyFilters() {
-    activeSearch.value = pendingSearch.value;
     router.get(
         '/cashback',
         {
             statut:
-                pendingStatut.value !== 'tous' ? pendingStatut.value : undefined,
+                pendingStatut.value !== 'tous'
+                    ? pendingStatut.value
+                    : undefined,
             client_id:
-                pendingClientId.value !== '' ? pendingClientId.value : undefined,
+                pendingClientId.value !== ''
+                    ? pendingClientId.value
+                    : undefined,
         },
         { preserveState: true, replace: true },
     );
 }
 
 function resetFilters() {
-    pendingSearch.value = '';
-    activeSearch.value = '';
+    search.value = '';
     pendingStatut.value = 'tous';
     pendingClientId.value = '';
     router.get('/cashback', {}, { preserveState: true, replace: true });
@@ -120,13 +121,13 @@ function resetFilters() {
 
 const hasActiveFilters = computed(
     () =>
-        !!activeSearch.value ||
+        !!search.value ||
         pendingStatut.value !== 'tous' ||
         pendingClientId.value !== '',
 );
 
 const filtered = computed(() => {
-    const q = activeSearch.value.toLowerCase();
+    const q = search.value.toLowerCase();
     if (!q) return props.transactions;
     return props.transactions.filter(
         (t) =>
@@ -508,10 +509,10 @@ function formatPhone(phone: string | null): string {
 
             <!-- Filtres -->
             <DataTableFilters
-                v-model:search="pendingSearch"
+                v-model:search="search"
                 search-placeholder="Client, téléphone…"
                 :has-active-filters="hasActiveFilters"
-                @filter="applyFilters"
+                :result-count="filtered.length"
                 @reset="resetFilters"
             >
                 <Select
@@ -520,6 +521,7 @@ function formatPhone(phone: string | null): string {
                     option-label="label"
                     option-value="value"
                     class="w-36"
+                    @update:model-value="applyFilters"
                 />
                 <Select
                     v-model="pendingClientId"
@@ -529,6 +531,7 @@ function formatPhone(phone: string | null): string {
                     placeholder="Tous les clients"
                     class="w-48"
                     show-clear
+                    @update:model-value="applyFilters"
                 />
             </DataTableFilters>
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -11,14 +12,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import DataTableFilters from '@/components/DataTableFilters.vue';
-import {
-    Briefcase,
-    MoreVertical,
-    Pencil,
-    Plus,
-    Trash2,
-} from 'lucide-vue-next';
+import { Briefcase, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Select from 'primevue/select';
@@ -66,13 +60,11 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 // ── Filtres ───────────────────────────────────────────────────────────────────
-const pendingSearch = ref('');
+const search = ref('');
 const pendingStatut = ref<string | null>(props.filters.statut_contrat ?? null);
 const pendingType = ref<string | null>(props.filters.type_contrat ?? null);
-const activeSearch = ref('');
 
 function applyFilters() {
-    activeSearch.value = pendingSearch.value;
     router.visit('/contrats', {
         method: 'get',
         data: {
@@ -86,10 +78,9 @@ function applyFilters() {
 }
 
 function resetFilters() {
-    pendingSearch.value = '';
+    search.value = '';
     pendingStatut.value = null;
     pendingType.value = null;
-    activeSearch.value = '';
     router.visit('/contrats', {
         method: 'get',
         data: {},
@@ -101,13 +92,13 @@ function resetFilters() {
 
 const hasActiveFilters = computed(
     () =>
-        !!activeSearch.value ||
+        !!search.value ||
         !!props.filters.statut_contrat ||
         !!props.filters.type_contrat,
 );
 
 const filteredContrats = computed(() => {
-    const q = activeSearch.value.toLowerCase().trim();
+    const q = search.value.toLowerCase().trim();
     if (!q) return props.contrats;
     return props.contrats.filter(
         (c) =>
@@ -177,10 +168,10 @@ function confirmDelete(c: Contrat) {
 
             <!-- Filtres -->
             <DataTableFilters
-                v-model:search="pendingSearch"
+                v-model:search="search"
                 search-placeholder="Nom, matricule, type, statut, date…"
                 :has-active-filters="hasActiveFilters"
-                @filter="applyFilters"
+                :result-count="filteredContrats.length"
                 @reset="resetFilters"
             >
                 <Select
@@ -191,6 +182,7 @@ function confirmDelete(c: Contrat) {
                     placeholder="Tous types"
                     show-clear
                     class="w-44"
+                    @update:model-value="applyFilters"
                 />
                 <Select
                     v-model="pendingStatut"
@@ -200,6 +192,7 @@ function confirmDelete(c: Contrat) {
                     placeholder="Tous statuts"
                     show-clear
                     class="w-44"
+                    @update:model-value="applyFilters"
                 />
             </DataTableFilters>
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
-import ComptabiliteFilters from '@/components/ComptabiliteFilters.vue';
+import FilterDrawer from '@/components/FilterDrawer.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -20,10 +21,12 @@ import {
     HandCoins,
     History,
     MoreHorizontal,
+    Search,
     Truck,
     User,
+    X,
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface LivreurRow {
     livreur_id: string;
@@ -68,19 +71,23 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+const filterDrawerOpen = ref(false);
 const searchVal = ref(props.search ?? '');
 const statutFiltre = ref(props.filtre_statut ?? '');
 const periodeFiltre = ref(props.selected_periode ?? '');
 const siteFiltre = ref(props.filtre_site ?? '');
 
-const hasActiveFilters = computed(
+const activeFilterCount = computed(
     () =>
-        !!(
-            searchVal.value ||
-            statutFiltre.value ||
-            periodeFiltre.value ||
-            siteFiltre.value
-        ),
+        [
+            !!statutFiltre.value,
+            !!periodeFiltre.value,
+            !!siteFiltre.value,
+        ].filter(Boolean).length,
+);
+
+const hasActiveFilters = computed(
+    () => !!searchVal.value || activeFilterCount.value > 0,
 );
 
 function appliquerFiltres() {
@@ -107,6 +114,12 @@ function resetFilters() {
         { preserveState: true, replace: true },
     );
 }
+
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+watch(searchVal, () => {
+    if (searchDebounce) clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(appliquerFiltres, 400);
+});
 
 const kpiTotalBrut = computed(() =>
     props.livreurs.reduce(
@@ -261,25 +274,19 @@ function fmtTel(tel: string | null | undefined): string {
             </div>
 
             <!-- KPIs -->
-            <div class="grid grid-cols-3 gap-3 sm:grid-cols-5">
-                <div class="rounded-lg border bg-card p-4 text-center">
+            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Total cumulé</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        Total cumulé
-                    </p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">
                         {{ fmt(kpiTotalBrut) }}
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Frais</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-red-600 uppercase dark:text-red-400"
-                    >
-                        Frais
-                    </p>
-                    <p
-                        class="mt-1 text-lg font-semibold text-red-600 tabular-nums dark:text-red-400"
+                        class="mt-2 text-2xl font-bold text-red-600 tabular-nums dark:text-red-400"
                     >
                         {{
                             kpiTotalFrais > 0
@@ -288,78 +295,122 @@ function fmtTel(tel: string | null | undefined): string {
                         }}
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Net à payer</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        Net à payer
-                    </p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">
                         {{ fmt(kpiTotalNet) }}
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Déjà payé</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        Déjà payé
-                    </p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">
                         {{ fmt(kpiTotalPaye) }}
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Reste à payer</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        Reste à payer
-                    </p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">
                         {{ fmt(kpiTotalReste) }}
                     </p>
                 </div>
             </div>
 
             <!-- Filtres -->
-            <ComptabiliteFilters
-                v-model:search="searchVal"
-                search-placeholder="Rechercher un livreur, téléphone, véhicule..."
-                :has-active-filters="hasActiveFilters"
-                @filter="appliquerFiltres"
-                @reset="resetFilters"
-            >
-                <select
-                    v-model="statutFiltre"
-                    class="h-9 w-[160px] rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Tous les statuts</option>
-                    <option value="impaye">Impayé</option>
-                    <option value="paye">Payé</option>
-                </select>
-                <select
-                    v-model="periodeFiltre"
-                    class="h-9 w-[200px] rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Toutes les périodes</option>
-                    <option
-                        v-for="p in periodes_disponibles"
-                        :key="p.code"
-                        :value="p.code"
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-[280px] shrink-0">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                        v-model="searchVal"
+                        type="search"
+                        placeholder="Rechercher un livreur, téléphone, véhicule..."
+                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    />
+                    <button
+                        v-if="searchVal"
+                        type="button"
+                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        @click="searchVal = ''"
                     >
-                        {{ p.label }}
-                    </option>
-                </select>
-                <select
-                    v-if="sites && sites.length > 0"
-                    v-model="siteFiltre"
-                    class="h-9 w-[170px] rounded-md border border-input bg-background px-2 text-sm"
+                        <X class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+
+                <FilterDrawer
+                    v-model:open="filterDrawerOpen"
+                    title="Filtres"
+                    :active-count="activeFilterCount"
+                    @apply="appliquerFiltres"
+                    @reset="resetFilters"
                 >
-                    <option value="">Toutes les agences</option>
-                    <option v-for="s in sites" :key="s.value" :value="s.value">
-                        {{ s.label }}
-                    </option>
-                </select>
-            </ComptabiliteFilters>
+                    <div class="space-y-1.5">
+                        <Label>Statut</Label>
+                        <select
+                            v-model="statutFiltre"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Tous les statuts</option>
+                            <option value="impaye">Impayé</option>
+                            <option value="paye">Payé</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Période</Label>
+                        <select
+                            v-model="periodeFiltre"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Toutes les périodes</option>
+                            <option
+                                v-for="p in periodes_disponibles"
+                                :key="p.code"
+                                :value="p.code"
+                            >
+                                {{ p.label }}
+                            </option>
+                        </select>
+                    </div>
+                    <div v-if="sites && sites.length > 0" class="space-y-1.5">
+                        <Label>Agence</Label>
+                        <select
+                            v-model="siteFiltre"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Toutes les agences</option>
+                            <option
+                                v-for="s in sites"
+                                :key="s.value"
+                                :value="s.value"
+                            >
+                                {{ s.label }}
+                            </option>
+                        </select>
+                    </div>
+                </FilterDrawer>
+
+                <span
+                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                >
+                    {{ livreurs.length }} résultat{{
+                        livreurs.length !== 1 ? 's' : ''
+                    }}
+                </span>
+                <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    @click="resetFilters"
+                >
+                    Réinitialiser
+                </button>
+            </div>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">

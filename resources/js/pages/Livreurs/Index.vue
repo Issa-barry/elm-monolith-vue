@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
@@ -7,7 +8,6 @@ import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { CheckCircle, Users } from 'lucide-vue-next';
-import DataTableFilters from '@/components/DataTableFilters.vue';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Select from 'primevue/select';
@@ -40,25 +40,16 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Livreurs', href: '/livreurs' },
 ];
 
-const pendingSearch = ref('');
-const activeSearch = ref('');
-const pendingStatut = ref<'tous' | 'actif' | 'inactif' | 'pending'>('tous');
-const activeStatut = ref<'tous' | 'actif' | 'inactif' | 'pending'>('tous');
-
-function applyFilters() {
-    activeSearch.value = pendingSearch.value;
-    activeStatut.value = pendingStatut.value;
-}
+const search = ref('');
+const statutFilter = ref<'tous' | 'actif' | 'inactif' | 'pending'>('tous');
 
 function resetFilters() {
-    pendingSearch.value = '';
-    activeSearch.value = '';
-    pendingStatut.value = 'tous';
-    activeStatut.value = 'tous';
+    search.value = '';
+    statutFilter.value = 'tous';
 }
 
 const hasActiveFilters = computed(
-    () => !!activeSearch.value || activeStatut.value !== 'tous',
+    () => !!search.value || statutFilter.value !== 'tous',
 );
 
 const pendingCount = computed(
@@ -67,17 +58,19 @@ const pendingCount = computed(
 
 const livreursFiltres = computed(() => {
     let list = props.livreurs;
-    if (activeStatut.value === 'actif') list = list.filter((l) => l.is_active);
-    else if (activeStatut.value === 'inactif')
+    if (statutFilter.value === 'actif') list = list.filter((l) => l.is_active);
+    else if (statutFilter.value === 'inactif')
         list = list.filter((l) => !l.is_active);
-    else if (activeStatut.value === 'pending')
+    else if (statutFilter.value === 'pending')
         list = list.filter((l) => l.has_account && !l.is_active);
-    const q = activeSearch.value.toLowerCase().trim();
+    const q = search.value.toLowerCase().trim();
     if (!q) return list;
     return list.filter(
         (l) =>
             l.nom_complet.toLowerCase().includes(q) ||
-            (l.telephone ?? '').replace(/\D/g, '').includes(q.replace(/\D/g, '')),
+            (l.telephone ?? '')
+                .replace(/\D/g, '')
+                .includes(q.replace(/\D/g, '')),
     );
 });
 
@@ -140,7 +133,7 @@ function approuver(livreur: Livreur) {
                     en attente de validation.
                     <button
                         class="underline underline-offset-2"
-                        @click="() => { pendingStatut = 'pending'; activeStatut = 'pending'; }"
+                        @click="statutFilter = 'pending'"
                     >
                         Voir
                     </button>
@@ -149,14 +142,14 @@ function approuver(livreur: Livreur) {
 
             <!-- Filtres -->
             <DataTableFilters
-                v-model:search="pendingSearch"
+                v-model:search="search"
                 search-placeholder="Nom, téléphone…"
                 :has-active-filters="hasActiveFilters"
-                @filter="applyFilters"
+                :result-count="livreursFiltres.length"
                 @reset="resetFilters"
             >
                 <Select
-                    v-model="pendingStatut"
+                    v-model="statutFilter"
                     :options="[
                         { value: 'tous', label: 'Tous' },
                         { value: 'actif', label: 'Actif' },
