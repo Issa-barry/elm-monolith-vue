@@ -4,6 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 return new class extends Migration
 {
@@ -35,7 +36,7 @@ return new class extends Migration
                     : 'toutes_agences';
 
                 DB::table('droit_ajustement_stocks')->insertOrIgnore([
-                    'id' => \Illuminate\Support\Str::ulid(),
+                    'id' => Str::ulid(),
                     'organization_id' => $scope->organization_id,
                     'role_name' => $scope->role_name,
                     'perimetre' => $perimetre,

@@ -7,7 +7,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\PaieLigne;
 use App\Models\PaiePeriode;
-use App\Models\Site;
 use App\Services\AuditLogService;
 use App\Services\PaieCalculService;
 use App\Services\SiteScopeService;

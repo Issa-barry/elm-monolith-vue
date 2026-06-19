@@ -4,6 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 return new class extends Migration
 {
@@ -36,7 +37,7 @@ return new class extends Migration
                 };
 
                 DB::table('role_site_scopes')->insertOrIgnore([
-                    'id' => \Illuminate\Support\Str::ulid(),
+                    'id' => Str::ulid(),
                     'organization_id' => $droit->organization_id,
                     'role_name' => $droit->role_name,
                     'module' => 'produits_stock',

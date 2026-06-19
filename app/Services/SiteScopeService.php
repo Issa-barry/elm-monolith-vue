@@ -81,8 +81,8 @@ class SiteScopeService
         }
 
         return [
-            'is_admin'    => $isAdmin,
-            'sites'       => $sites,
+            'is_admin' => $isAdmin,
+            'sites' => $sites,
             'filtre_site' => $isAdmin ? trim($filtreParam) : '',
         ];
     }
