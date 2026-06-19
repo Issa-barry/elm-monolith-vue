@@ -22,12 +22,10 @@ import {
     Truck,
     X,
 } from 'lucide-vue-next';
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
@@ -123,14 +121,34 @@ function baseParams(): Record<string, string> {
     return p;
 }
 
-function setPeriode(p: string) {
-    const params = { ...baseParams(), periode: p };
-    if (props.statut !== 'tous') params.statut = props.statut;
-    if (props.site_id !== 'tous') params.site_id = props.site_id;
+// ── Filtres (server-driven : période + statut + site) ─────────────────────────
+const localPeriode = ref(props.periode);
+const localStatut = ref(props.statut);
+const localSiteId = ref(props.site_id);
+
+function applyFilters() {
+    const params: Record<string, string> = { ...baseParams(), periode: localPeriode.value };
+    if (localStatut.value !== 'tous') params.statut = localStatut.value;
+    if (localSiteId.value !== 'tous') params.site_id = localSiteId.value;
     router.get('/factures', params, { preserveScroll: true, replace: true });
 }
 
-// ── Filtre par statut (server-driven) ────────────────────────────────────────
+function resetFilters() {
+    localPeriode.value = 'today';
+    localStatut.value = 'tous';
+    localSiteId.value = 'tous';
+    search.value = '';
+    router.get('/factures', { ...baseParams() }, { preserveScroll: true, replace: true });
+}
+
+const hasActiveFilters = computed(
+    () =>
+        localPeriode.value !== 'today' ||
+        localStatut.value !== 'tous' ||
+        localSiteId.value !== 'tous' ||
+        !!search.value,
+);
+
 const filtres = [
     { value: 'tous', label: 'Toutes' },
     { value: 'impayee', label: 'Impayées' },
@@ -139,21 +157,7 @@ const filtres = [
     { value: 'annulee', label: 'Annulées' },
 ];
 
-function setStatut(s: string) {
-    const params = { ...baseParams(), periode: props.periode };
-    if (s !== 'tous') params.statut = s;
-    if (props.site_id !== 'tous') params.site_id = props.site_id;
-    router.get('/factures', params, { preserveScroll: true, replace: true });
-}
-
-function setSite(s: string) {
-    const params = { ...baseParams(), periode: props.periode };
-    if (props.statut !== 'tous') params.statut = props.statut;
-    if (s !== 'tous') params.site_id = s;
-    router.get('/factures', params, { preserveScroll: true, replace: true });
-}
-
-// ── Recherche locale ──────────────────────────────────────────────────────────
+// ── Recherche locale (client-side) ────────────────────────────────────────────
 const search = ref('');
 
 // Applique uniquement la recherche (statut déjà filtré côté serveur)
@@ -542,6 +546,37 @@ function _progressPercent(f: FactureItem): number {
                 </div>
             </div>
 
+            <!-- Filtres -->
+            <DataTableFilters
+                v-model:search="search"
+                :search-placeholder="'Référence, véhicule, client…'"
+                :has-active-filters="hasActiveFilters"
+                @filter="applyFilters"
+                @reset="resetFilters"
+            >
+                <Select
+                    v-model="localSiteId"
+                    :options="sites"
+                    option-label="label"
+                    option-value="value"
+                    class="w-44"
+                />
+                <Select
+                    v-model="localStatut"
+                    :options="filtres"
+                    option-label="label"
+                    option-value="value"
+                    class="w-36"
+                />
+                <Select
+                    v-model="localPeriode"
+                    :options="periodes"
+                    option-label="label"
+                    option-value="value"
+                    class="w-40"
+                />
+            </DataTableFilters>
+
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
@@ -554,55 +589,9 @@ function _progressPercent(f: FactureItem): number {
                     class="text-sm"
                     :pt="{
                         root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
                         tbody: { class: 'divide-y' },
                     }"
                 >
-                    <template #header>
-                        <div class="flex items-center gap-3">
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Référence, véhicule, client…"
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Select
-                                :model-value="site_id"
-                                :options="sites"
-                                option-label="label"
-                                option-value="value"
-                                @update:model-value="setSite($event)"
-                                class="w-44"
-                            />
-                            <Select
-                                :model-value="statut"
-                                :options="filtres"
-                                option-label="label"
-                                option-value="value"
-                                @update:model-value="setStatut($event)"
-                                class="w-36"
-                            />
-                            <Select
-                                :model-value="periode"
-                                :options="periodes"
-                                option-label="label"
-                                option-value="value"
-                                @update:model-value="setPeriode($event)"
-                                class="w-40"
-                            />
-                            <span class="text-xs text-muted-foreground">
-                                {{ facturesFiltrees.length }} résultat{{
-                                    facturesFiltrees.length !== 1 ? 's' : ''
-                                }}
-                            </span>
-                        </div>
-                    </template>
 
                     <!-- Référence -->
                     <Column

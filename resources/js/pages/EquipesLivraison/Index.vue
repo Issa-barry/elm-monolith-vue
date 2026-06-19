@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,15 +21,13 @@ import {
     Trash2,
     Users,
 } from 'lucide-vue-next';
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Equipe {
     id: string;
@@ -56,25 +54,54 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Équipes de livraison', href: '/equipes-livraison' },
 ];
 
-const search = ref('');
-const statutFilter = ref<'tous' | 'actif' | 'inactif'>('tous');
-const categorieFilter = ref<'tous' | 'interne' | 'externe'>('tous');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
+// Pending state (ce que l'utilisateur est en train de saisir)
+const pendingSearch = ref('');
+const pendingStatut = ref<'tous' | 'actif' | 'inactif'>('tous');
+const pendingCategorie = ref<'tous' | 'interne' | 'externe'>('tous');
+
+// Active state (appliqué au clic sur "Appliquer les filtres")
+const activeSearch = ref('');
+const activeStatut = ref<'tous' | 'actif' | 'inactif'>('tous');
+const activeCategorie = ref<'tous' | 'interne' | 'externe'>('tous');
+
+function applyFilters() {
+    activeSearch.value = pendingSearch.value;
+    activeStatut.value = pendingStatut.value;
+    activeCategorie.value = pendingCategorie.value;
+}
+
+function resetFilters() {
+    pendingSearch.value = '';
+    pendingStatut.value = 'tous';
+    pendingCategorie.value = 'tous';
+    activeSearch.value = '';
+    activeStatut.value = 'tous';
+    activeCategorie.value = 'tous';
+}
+
+const hasActiveFilters = computed(
+    () =>
+        !!activeSearch.value ||
+        activeStatut.value !== 'tous' ||
+        activeCategorie.value !== 'tous',
+);
 
 const equipesFiltrees = computed(() => {
+    const q = activeSearch.value.toLowerCase().trim();
     return props.equipes.filter((e) => {
+        const searchMatch =
+            !q ||
+            e.nom.toLowerCase().includes(q) ||
+            (e.premier_chauffeur_nom ?? '').toLowerCase().includes(q) ||
+            (e.vehicule_nom ?? '').toLowerCase().includes(q) ||
+            (e.vehicule_immatriculation ?? '').toLowerCase().includes(q);
         const statusMatch =
-            statutFilter.value === 'tous' ||
-            e.is_active === (statutFilter.value === 'actif');
-
+            activeStatut.value === 'tous' ||
+            e.is_active === (activeStatut.value === 'actif');
         const categorieMatch =
-            categorieFilter.value === 'tous' ||
-            e.vehicule_categorie === categorieFilter.value;
-
-        return statusMatch && categorieMatch;
+            activeCategorie.value === 'tous' ||
+            e.vehicule_categorie === activeCategorie.value;
+        return searchMatch && statusMatch && categorieMatch;
     });
 });
 
@@ -135,17 +162,14 @@ function confirmDelete(equipe: Equipe) {
             </div>
 
             <!-- Barre de recherche + filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <IconField class="max-w-xs flex-1">
-                    <InputIcon class="pi pi-search" />
-                    <InputText
-                        v-model="search"
-                        class="w-full"
-                        placeholder="recherche"
-                    />
-                </IconField>
+            <DataTableFilters
+                v-model:search="pendingSearch"
+                :has-active-filters="hasActiveFilters"
+                @filter="applyFilters"
+                @reset="resetFilters"
+            >
                 <Select
-                    v-model="statutFilter"
+                    v-model="pendingStatut"
                     :options="[
                         { value: 'tous', label: 'Tous' },
                         { value: 'actif', label: 'Actif' },
@@ -156,7 +180,7 @@ function confirmDelete(equipe: Equipe) {
                     class="w-32"
                 />
                 <Select
-                    v-model="categorieFilter"
+                    v-model="pendingCategorie"
                     :options="[
                         { value: 'tous', label: 'Tous véhicules' },
                         { value: 'interne', label: 'Interne' },
@@ -166,18 +190,11 @@ function confirmDelete(equipe: Equipe) {
                     option-value="value"
                     class="w-40"
                 />
-            </div>
+            </DataTableFilters>
 
             <!-- Tableau -->
             <DataTable
                 :value="equipesFiltrees"
-                :filters="filters"
-                :global-filter-fields="[
-                    'nom',
-                    'premier_chauffeur_nom',
-                    'vehicule_nom',
-                    'vehicule_immatriculation',
-                ]"
                 striped-rows
                 :rows="25"
                 :paginator="equipes.length > 25"

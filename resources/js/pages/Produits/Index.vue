@@ -30,13 +30,11 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import Dropdown from 'primevue/dropdown';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
 import HistoriqueModal from './partials/HistoriqueModal.vue';
 import ProduitsMobile from './partials/ProduitsMobile.vue';
@@ -135,8 +133,6 @@ const selectedType = ref(props.filters.type ?? '');
 const selectedStatut = ref(props.filters.statut ?? '');
 const selectedSite = ref(props.filters.site_id ?? '');
 
-let searchTimer: ReturnType<typeof setTimeout> | null = null;
-
 function applyFilters(overrides: Partial<Filters> = {}) {
     const params: Record<string, string | undefined> = {
         search: searchInput.value || undefined,
@@ -150,15 +146,6 @@ function applyFilters(overrides: Partial<Filters> = {}) {
         replace: true,
     });
 }
-
-watch(searchInput, () => {
-    if (searchTimer) clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => applyFilters(), 400);
-});
-
-watch(selectedType, () => applyFilters());
-watch(selectedStatut, () => applyFilters());
-watch(selectedSite, () => applyFilters());
 
 const hasActiveFilters = computed(
     () =>
@@ -589,26 +576,12 @@ function confirmArchive(produit: Produit) {
             </div>
 
             <!-- Barre de filtres -->
-            <div class="flex flex-wrap items-center gap-2">
-                <IconField class="max-w-xs flex-1">
-                    <InputIcon class="pointer-events-none">
-                        <svg
-                            class="h-4 w-4 text-muted-foreground"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <circle cx="11" cy="11" r="8" />
-                            <path d="m21 21-4.35-4.35" />
-                        </svg>
-                    </InputIcon>
-                    <InputText
-                        v-model="searchInput"
-                        placeholder="Rechercher…"
-                        class="w-full text-sm"
-                    />
-                </IconField>
-
+            <DataTableFilters
+                v-model:search="searchInput"
+                :has-active-filters="hasActiveFilters"
+                @filter="applyFilters"
+                @reset="clearFilters"
+            >
                 <Dropdown
                     v-model="selectedSite"
                     :options="siteOptions"
@@ -617,7 +590,6 @@ function confirmArchive(produit: Produit) {
                     placeholder="Agence"
                     class="min-w-[160px] text-sm"
                 />
-
                 <Dropdown
                     v-model="selectedType"
                     :options="typeOptions"
@@ -626,7 +598,6 @@ function confirmArchive(produit: Produit) {
                     placeholder="Type"
                     class="min-w-[140px] text-sm"
                 />
-
                 <Dropdown
                     v-model="selectedStatut"
                     :options="statutOptions"
@@ -635,19 +606,7 @@ function confirmArchive(produit: Produit) {
                     placeholder="Statut"
                     class="min-w-[140px] text-sm"
                 />
-
-                <Button
-                    v-if="hasActiveFilters"
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    class="h-9 text-muted-foreground"
-                    @click="clearFilters"
-                >
-                    <X class="mr-1.5 h-3.5 w-3.5" />
-                    Effacer
-                </Button>
-            </div>
+            </DataTableFilters>
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">

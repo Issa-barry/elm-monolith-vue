@@ -27,18 +27,16 @@ import {
     Trash2,
     XCircle,
 } from 'lucide-vue-next';
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
 import InputNumber from 'primevue/inputnumber';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Commande {
@@ -97,7 +95,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Ventes', href: '/ventes' },
 ];
 
-// ── Filtres période ───────────────────────────────────────────────────────────
+// ── Filtres (server-driven : période + statut) ────────────────────────────────
 const periodes = [
     { value: 'today', label: "Aujourd'hui" },
     { value: 'week', label: 'Cette semaine' },
@@ -105,13 +103,6 @@ const periodes = [
     { value: 'all', label: 'Tout' },
 ];
 
-function setPeriode(p: string) {
-    const params: Record<string, string> = { periode: p };
-    if (props.statut !== 'tous') params.statut = props.statut;
-    router.get('/ventes', params, { preserveScroll: true, replace: true });
-}
-
-// ── Filtres statut (server-driven) ────────────────────────────────────────────
 const filtresStatut = [
     { value: 'tous', label: 'Toutes' },
     { value: 'brouillon', label: 'Brouillons' },
@@ -123,18 +114,31 @@ const filtresStatut = [
     { value: 'annulee', label: 'Annulées' },
 ];
 
-function setStatut(s: string) {
-    const params: Record<string, string> = { periode: props.periode };
-    if (s !== 'tous') params.statut = s;
+const localPeriode = ref(props.periode);
+const localStatut = ref(props.statut);
+
+function applyFilters() {
+    const params: Record<string, string> = { periode: localPeriode.value };
+    if (localStatut.value !== 'tous') params.statut = localStatut.value;
     router.get('/ventes', params, { preserveScroll: true, replace: true });
 }
 
-// ── Recherche locale ──────────────────────────────────────────────────────────
+function resetFilters() {
+    localPeriode.value = 'today';
+    localStatut.value = 'tous';
+    search.value = '';
+    router.get('/ventes', {}, { preserveScroll: true, replace: true });
+}
+
+const hasActiveFilters = computed(
+    () =>
+        localPeriode.value !== 'today' ||
+        localStatut.value !== 'tous' ||
+        !!search.value,
+);
+
+// ── Recherche locale (client-side) ────────────────────────────────────────────
 const search = ref('');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
 
 const commandesFiltrees = computed(() => {
     const q = search.value.toLowerCase().trim();
@@ -513,6 +517,30 @@ function confirmDelete(c: Commande) {
                 </div>
             </div>
 
+            <!-- Filtres -->
+            <DataTableFilters
+                v-model:search="search"
+                :search-placeholder="'Référence, véhicule, client…'"
+                :has-active-filters="hasActiveFilters"
+                @filter="applyFilters"
+                @reset="resetFilters"
+            >
+                <Select
+                    v-model="localStatut"
+                    :options="filtresStatut"
+                    option-label="label"
+                    option-value="value"
+                    class="w-36"
+                />
+                <Select
+                    v-model="localPeriode"
+                    :options="periodes"
+                    option-label="label"
+                    option-value="value"
+                    class="w-40"
+                />
+            </DataTableFilters>
+
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
@@ -525,47 +553,9 @@ function confirmDelete(c: Commande) {
                     class="text-sm"
                     :pt="{
                         root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
                         tbody: { class: 'divide-y' },
                     }"
                 >
-                    <template #header>
-                        <div class="flex items-center gap-3">
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Référence, véhicule, client…"
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Select
-                                :model-value="statut"
-                                :options="filtresStatut"
-                                option-label="label"
-                                option-value="value"
-                                class="w-36"
-                                @update:model-value="setStatut($event)"
-                            />
-                            <Select
-                                :model-value="periode"
-                                :options="periodes"
-                                option-label="label"
-                                option-value="value"
-                                class="w-40"
-                                @update:model-value="setPeriode($event)"
-                            />
-                            <span class="text-xs text-muted-foreground">
-                                {{ commandesFiltrees.length }} résultat{{
-                                    commandesFiltrees.length !== 1 ? 's' : ''
-                                }}
-                            </span>
-                        </div>
-                    </template>
 
                     <!-- Référence -->
                     <Column

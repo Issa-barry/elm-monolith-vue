@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
-import FilterBar from '@/components/FilterBar.vue';
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,7 +42,7 @@ import {
     X,
 } from 'lucide-vue-next';
 import { useToast } from 'primevue/usetoast';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Option {
     value: string;
@@ -346,16 +346,15 @@ const categorieColors: Record<string, string> = {
     vehicule: 'bg-green-100 text-green-700',
 };
 
-const hasActiveFilters = ref(
-    !!(
-        props.filters.search ||
-        props.filters.type ||
-        props.filters.statut ||
-        props.filters.categorie ||
-        props.filters.site ||
-        props.filters.date_debut ||
-        props.filters.date_fin
-    ),
+const hasActiveFilters = computed(
+    () =>
+        !!filterSearch.value ||
+        !!filterType.value ||
+        !!filterStatut.value ||
+        !!filterCategorie.value ||
+        !!filterSite.value ||
+        !!filterDebut.value ||
+        !!filterFin.value,
 );
 </script>
 
@@ -427,7 +426,14 @@ const hasActiveFilters = ref(
             </div>
 
             <!-- Filtres -->
-            <FilterBar>
+            <DataTableFilters
+                v-model:search="filterSearch"
+                v-model:date-debut="filterDebut"
+                v-model:date-fin="filterFin"
+                :has-active-filters="hasActiveFilters"
+                @filter="applyFilters"
+                @reset="resetFilters"
+            >
                 <select
                     v-model="filterType"
                     class="h-9 w-[180px] rounded-md border border-input bg-background px-2 text-sm"
@@ -475,47 +481,7 @@ const hasActiveFilters = ref(
                         {{ s.nom }}
                     </option>
                 </select>
-
-                <input
-                    v-model="filterDebut"
-                    type="date"
-                    class="h-9 w-[140px] rounded-md border border-input bg-background px-2 text-sm"
-                />
-                <input
-                    v-model="filterFin"
-                    type="date"
-                    class="h-9 w-[140px] rounded-md border border-input bg-background px-2 text-sm"
-                />
-
-                <div class="relative w-[240px]">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                        v-model="filterSearch"
-                        type="search"
-                        placeholder="Rechercher…"
-                        class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        @keydown.enter="applyFilters"
-                    />
-                </div>
-
-                <template #actions>
-                    <Button size="sm" @click="applyFilters">
-                        <Search class="mr-1.5 h-3.5 w-3.5" />
-                        Filtrer
-                    </Button>
-                    <Button
-                        v-if="hasActiveFilters"
-                        size="sm"
-                        variant="ghost"
-                        @click="resetFilters"
-                    >
-                        <X class="mr-1.5 h-3.5 w-3.5" />
-                        Réinitialiser
-                    </Button>
-                </template>
-            </FilterBar>
+            </DataTableFilters>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">

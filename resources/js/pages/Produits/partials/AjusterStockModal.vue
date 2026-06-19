@@ -50,16 +50,6 @@ const localVisible = computed({
     set: (val) => emit('update:visible', val),
 });
 
-// Si un seul site autorisé, le présélectionner automatiquement
-watch(
-    () => props.visible,
-    (val) => {
-        if (val && props.sitesAutorises.length === 1) {
-            form.site_id = props.sitesAutorises[0].id;
-        }
-    },
-);
-
 const form = useForm({
     site_id: null as string | null,
     augmenter: null as number | null,
@@ -67,6 +57,19 @@ const form = useForm({
     motif_type: null as string | null,
     motif_detail: '',
 });
+
+// Si un seul site autorisé, le présélectionner automatiquement.
+// immediate:true car le composant monte avec visible=true (v-if + showModal
+// sont assignés dans le même tick par le parent).
+watch(
+    () => props.visible,
+    (val) => {
+        if (val && props.sitesAutorises.length === 1) {
+            form.site_id = props.sitesAutorises[0].id;
+        }
+    },
+    { immediate: true },
+);
 
 function onAugmenterInput(event: Event) {
     const input = event.target as HTMLInputElement;
