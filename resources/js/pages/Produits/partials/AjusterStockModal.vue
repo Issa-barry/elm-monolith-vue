@@ -35,9 +35,10 @@ interface Site {
 const props = defineProps<{
     visible: boolean;
     produit: ProduitMin;
-    sites: Site[];
-    isAdmin: boolean;
-    userDefaultSiteId: string | null;
+    /** Sites sur lesquels l'utilisateur est autorisé à ajuster le stock. */
+    sitesAutorises: Site[];
+    canAugmenter: boolean;
+    canDiminuer: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -49,12 +50,12 @@ const localVisible = computed({
     set: (val) => emit('update:visible', val),
 });
 
-// Pré-remplir le site pour les non-admins dès l'ouverture du modal
+// Si un seul site autorisé, le présélectionner automatiquement
 watch(
     () => props.visible,
     (val) => {
-        if (val && !props.isAdmin && props.userDefaultSiteId) {
-            form.site_id = props.userDefaultSiteId;
+        if (val && props.sitesAutorises.length === 1) {
+            form.site_id = props.sitesAutorises[0].id;
         }
     },
 );
@@ -130,11 +131,20 @@ const stockPreview = computed(() => {
 });
 
 const siteOptions = computed(() =>
-    props.sites.map((s) => ({
+    props.sitesAutorises.map((s) => ({
         label: s.nom + (s.code ? ` (${s.code})` : ''),
         value: s.id,
     })),
 );
+
+/** Vrai si le site est verrouillé (un seul choix possible) */
+const siteVerrouille = computed(() => props.sitesAutorises.length === 1);
+
+const siteLabel = computed(() => {
+    if (!form.site_id) return '—';
+    const site = props.sitesAutorises.find((s) => s.id === form.site_id);
+    return site ? site.nom + (site.code ? ` (${site.code})` : '') : '—';
+});
 
 function resetMotifIfInvalid() {
     if (!form.motif_type) return;
@@ -210,9 +220,9 @@ function submit() {
                     Site <span class="text-destructive">*</span>
                 </label>
 
-                <!-- Admin : peut choisir n'importe quel site -->
+                <!-- Dropdown si plusieurs sites autorisés -->
                 <Dropdown
-                    v-if="isAdmin"
+                    v-if="!siteVerrouille"
                     v-model="form.site_id"
                     input-id="ajuster-site"
                     :options="siteOptions"
@@ -224,18 +234,13 @@ function submit() {
                     :pt="{ root: { 'data-testid': 'stock-site-select' } }"
                 />
 
-                <!-- Non-admin : site verrouillé sur son agence -->
+                <!-- Site verrouillé (un seul site autorisé) -->
                 <div
                     v-else
                     class="flex items-center gap-2 rounded-md border border-input bg-muted/50 px-3 py-2 text-sm"
                 >
                     <Lock class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span class="font-medium">
-                        {{
-                            siteOptions.find((o) => o.value === form.site_id)
-                                ?.label ?? '—'
-                        }}
-                    </span>
+                    <span class="font-medium">{{ siteLabel }}</span>
                     <span class="ml-auto text-xs text-muted-foreground"
                         >Votre agence</span
                     >
@@ -246,9 +251,16 @@ function submit() {
                 </p>
             </div>
 
-            <!-- Augmenter + Diminuer côte à côte -->
-            <div class="grid grid-cols-2 gap-3">
-                <div class="space-y-1.5" data-testid="stock-augmenter-input">
+            <!-- Augmenter + Diminuer (affichés selon les droits) -->
+            <div
+                class="gap-3"
+                :class="canAugmenter && canDiminuer ? 'grid grid-cols-2' : 'flex flex-col'"
+            >
+                <div
+                    v-if="canAugmenter"
+                    class="space-y-1.5"
+                    data-testid="stock-augmenter-input"
+                >
                     <label
                         for="ajuster-augmenter"
                         class="flex items-center gap-1.5 text-sm font-medium"
@@ -278,7 +290,11 @@ function submit() {
                     </p>
                 </div>
 
-                <div class="space-y-1.5" data-testid="stock-diminuer-input">
+                <div
+                    v-if="canDiminuer"
+                    class="space-y-1.5"
+                    data-testid="stock-diminuer-input"
+                >
                     <label
                         for="ajuster-diminuer"
                         class="flex items-center gap-1.5 text-sm font-medium"

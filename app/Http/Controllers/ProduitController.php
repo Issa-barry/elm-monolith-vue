@@ -12,6 +12,7 @@ use App\Models\Produit;
 use App\Models\ProduitStock;
 use App\Models\Site;
 use App\Services\AuditLogService;
+use App\Services\DroitAjustementStockService;
 use App\Services\ImageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +26,10 @@ use Inertia\Response;
 
 class ProduitController extends Controller
 {
-    public function __construct(private readonly AuditLogService $auditService) {}
+    public function __construct(
+        private readonly AuditLogService $auditService,
+        private readonly DroitAjustementStockService $droitService,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -128,13 +132,23 @@ class ProduitController extends Controller
             ];
         });
 
-        $sites = Site::where('organization_id', $orgId)
+        $allSites = Site::where('organization_id', $orgId)
             ->orderBy('nom')
             ->get(['id', 'nom', 'code']);
 
+        $user = auth()->user();
+        $canAjuster = $this->droitService->canAjuster($user, $orgId);
+        $sitesAutorisesRaw = $canAjuster
+            ? ($this->droitService->sitesAutorises($user, $orgId) ?? $allSites)
+            : collect();
+
         return Inertia::render('Produits/Index', [
             'produits' => $mapped,
-            'sites' => $sites,
+            'sites' => $allSites,
+            'can_ajuster_stock' => $canAjuster,
+            'can_augmenter_stock' => $this->droitService->canAugmenter($user, $orgId),
+            'can_diminuer_stock' => $this->droitService->canDiminuer($user, $orgId),
+            'sites_autorises' => $sitesAutorisesRaw->values(),
             'types' => ProduitType::options(),
             'statuts' => ProduitStatut::options(),
             'filters' => $filters,
@@ -199,10 +213,19 @@ class ProduitController extends Controller
         $this->authorize('view', $produit);
 
         $orgId = $produit->organization_id;
+        $user = auth()->user();
 
-        $sites = Site::where('organization_id', $orgId)
+        $allSites = Site::where('organization_id', $orgId)
             ->orderBy('nom')
             ->get(['id', 'nom', 'code']);
+
+        $canAjuster = $this->droitService->canAjuster($user, $orgId);
+        $sitesAutorisesRaw = $canAjuster
+            ? ($this->droitService->sitesAutorises($user, $orgId) ?? $allSites)
+            : collect();
+
+        $canAugmenter = $this->droitService->canAugmenter($user, $orgId);
+        $canDiminuer = $this->droitService->canDiminuer($user, $orgId);
 
         $stocksParSite = ProduitStock::where('produit_id', $produit->id)
             ->with('site:id,nom,code')
@@ -298,7 +321,10 @@ class ProduitController extends Controller
             ],
             'mouvements' => collect($mouvements),
             'historiques' => $this->loadModifications($produit),
-            'sites' => $sites,
+            'can_ajuster_stock' => $canAjuster,
+            'can_augmenter_stock' => $canAugmenter,
+            'can_diminuer_stock' => $canDiminuer,
+            'sites_autorises' => $sitesAutorisesRaw->values(),
         ]);
     }
 
@@ -435,7 +461,7 @@ class ProduitController extends Controller
 
     public function ajusterStock(Request $request, Produit $produit): RedirectResponse
     {
-        $this->authorize('update', $produit);
+        $this->authorize('ajusterStock', $produit);
         abort_unless((bool) $produit->type?->hasStock(), 422, 'Ce produit ne gère pas de stock.');
 
         $data = $request->validate([
@@ -462,14 +488,15 @@ class ProduitController extends Controller
             ->where('organization_id', $produit->organization_id)
             ->firstOrFail();
 
-        // Non-admins ne peuvent ajuster que les sites auxquels ils sont affectés
         $user = auth()->user();
-        if (! $user->isAdmin() && ! $user->isAssignedToSite($site->id)) {
-            abort(403, 'Vous ne pouvez ajuster que le stock de votre agence.');
-        }
 
         $hasAugmenter = ! empty($data['augmenter']);
         $hasDiminuer = ! empty($data['diminuer']);
+
+        $direction = $hasAugmenter ? 'augmenter' : 'diminuer';
+        if (! $this->droitService->canAjusterSurSite($user, $produit->organization_id, $site->id, $direction)) {
+            abort(403, 'Vous n\'êtes pas autorisé à '.$direction.' le stock de cette agence.');
+        }
 
         if ($hasAugmenter && $hasDiminuer) {
             throw ValidationException::withMessages(['augmenter' => 'Renseignez uniquement l\'un des deux champs.']);
@@ -531,7 +558,12 @@ class ProduitController extends Controller
                 AuditEvent::STOCK_ADJUSTED,
                 $user,
                 ['qte_stock' => $stockAvant, 'site' => $site->nom],
-                ['qte_stock' => $stockApres, 'site' => $site->nom, 'motif' => $notes],
+                [
+                    'qte_stock' => $stockApres,
+                    'site' => $site->nom,
+                    'motif' => $notes,
+                    'role' => $user->roles->first()?->name,
+                ],
             );
         });
 

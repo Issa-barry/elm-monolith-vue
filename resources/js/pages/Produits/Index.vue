@@ -11,7 +11,7 @@ import {
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     Archive,
@@ -118,19 +118,15 @@ const props = defineProps<{
     types: FilterOption[];
     statuts: FilterOption[];
     filters: Filters;
+    can_ajuster_stock: boolean;
+    can_augmenter_stock: boolean;
+    can_diminuer_stock: boolean;
+    sites_autorises: Site[];
 }>();
 
-const { can, hasRole } = usePermissions();
+const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
-const page = usePage();
-
-const isAdmin = computed(
-    () => hasRole('super_admin') || hasRole('admin_entreprise'),
-);
-const userDefaultSiteId = computed(
-    () => (page.props.auth?.default_site?.id as string) ?? null,
-);
 
 // ── Filtres serveur ───────────────────────────────────────────────────────────
 
@@ -926,7 +922,7 @@ function confirmArchive(produit: Produit) {
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                             v-if="
-                                                can('produits.update') &&
+                                                can_ajuster_stock &&
                                                 data.has_stock
                                             "
                                             class="cursor-pointer"
@@ -1050,9 +1046,9 @@ function confirmArchive(produit: Produit) {
             v-if="stockAjustementProduit"
             v-model:visible="showStockModal"
             :produit="stockAjustementProduit"
-            :sites="sites"
-            :is-admin="isAdmin"
-            :user-default-site-id="userDefaultSiteId"
+            :sites-autorises="sites_autorises"
+            :can-augmenter="can_augmenter_stock"
+            :can-diminuer="can_diminuer_stock"
         />
 
         <!-- Modal historique -->

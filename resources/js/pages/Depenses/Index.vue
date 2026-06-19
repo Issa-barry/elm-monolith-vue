@@ -105,6 +105,7 @@ const props = defineProps<{
         en_attente: number;
         validees: number;
     };
+    can_create: boolean;
 }>();
 
 const { can } = usePermissions();
@@ -388,7 +389,7 @@ const hasActiveFilters = ref(
                         <Printer class="mr-1.5 h-3.5 w-3.5" />
                         Imprimer
                     </Button>
-                    <Link v-if="can('depenses.create')" href="/depenses/create">
+                    <Link v-if="props.can_create" href="/depenses/create">
                         <Button>
                             <Plus class="mr-2 h-4 w-4" />
                             Nouvelle dépense
@@ -795,7 +796,7 @@ const hasActiveFilters = ref(
                                     <Receipt class="h-12 w-12 opacity-20" />
                                     <p>Aucune dépense enregistrée.</p>
                                     <Link
-                                        v-if="can('depenses.create')"
+                                        v-if="props.can_create"
                                         href="/depenses/create"
                                     >
                                         <Button variant="outline" size="sm">

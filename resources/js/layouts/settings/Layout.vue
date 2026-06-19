@@ -15,7 +15,9 @@ import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
-const { can } = usePermissions();
+const { can, hasRole } = usePermissions();
+
+const isAdmin = computed(() => hasRole('super_admin') || hasRole('admin_entreprise'));
 
 const sidebarNavItems = computed((): NavItem[] => {
     const items: NavItem[] = [
@@ -25,15 +27,16 @@ const sidebarNavItems = computed((): NavItem[] => {
         { title: 'Apparence', href: editAppearance() },
     ];
 
-    if (can('users.read')) {
+    if (isAdmin.value) {
         items.push({ title: 'Roles & Permissions', href: '/roles' });
     }
 
     if (can('parametres.update')) {
         items.push(
             { title: 'Parametrage systeme', href: editParametres().url },
-            { title: 'Parametrage ventes', href: '/settings/ventes' },
-            { title: 'Types de dépense', href: '/settings/depense-types' },
+            { title: 'Paramètres produits', href: '/settings/produits' },
+            { title: 'Paramètres dépenses', href: '/settings/depenses' },
+            { title: 'Paramètres ventes', href: '/settings/ventes' },
             { title: 'Modules metier', href: '/settings/modules' },
         );
     }
