@@ -10,7 +10,7 @@ export PHP=/opt/alt/php84/usr/bin/php
 composer2 update
 $PHP artisan migrate:fresh --seed
 $PHP artisan optimize:clear
-$PHP artisan optimize
+$PHP artisan optimize 
 
 /opt/alt/php84/usr/bin/php artisan up
  
