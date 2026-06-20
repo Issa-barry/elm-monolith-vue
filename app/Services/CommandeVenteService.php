@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\FactureVente;
 use App\Models\Parametre;
@@ -46,6 +47,40 @@ class CommandeVenteService
             'statut' => StatutCommandeVente::A_CHARGER,
             'a_charger_at' => now(),
         ]);
+    }
+
+    /**
+     * Vente directe client (sans véhicule) : BROUILLON → FACTURATION + création facture.
+     * Aucune commission n'est générée.
+     */
+    public static function creerFactureDirecte(CommandeVente $commande): void
+    {
+        abort_if($commande->vehicule_id, 422, 'Cette méthode est réservée aux commandes sans véhicule.');
+        abort_if(! $commande->isBrouillon(), 422, 'Seule une commande en brouillon peut être traitée.');
+
+        $commande->loadMissing('lignes');
+
+        if ($commande->lignes->isEmpty()) {
+            throw ValidationException::withMessages([
+                'lignes' => 'La commande doit contenir au moins une ligne produit.',
+            ]);
+        }
+
+        DB::transaction(function () use ($commande) {
+            $commande->update([
+                'statut' => StatutCommandeVente::FACTURATION,
+            ]);
+
+            FactureVente::create([
+                'organization_id' => $commande->organization_id,
+                'site_id' => $commande->site_id,
+                'vehicule_id' => null,
+                'commande_vente_id' => $commande->id,
+                'reference' => $commande->reference,
+                'montant_brut' => $commande->total_commande,
+                'montant_net' => $commande->total_commande,
+            ]);
+        });
     }
 
     /**
@@ -184,8 +219,8 @@ class CommandeVenteService
     }
 
     /**
-     * Annuler — uniquement depuis BROUILLON ou A_CHARGER.
-     * Aucune facture n'existe encore à ces stades.
+     * Annuler — depuis BROUILLON, A_CHARGER ou FACTURATION (vente directe non encaissée).
+     * Pour les commandes FACTURATION, la facture associée est également annulée.
      */
     public static function annuler(CommandeVente $commande, string $motif): void
     {
@@ -193,15 +228,33 @@ class CommandeVenteService
         abort_if(
             ! $commande->statut->isAnnulable(),
             422,
-            'L\'annulation n\'est possible que depuis les statuts « Brouillon » ou « À charger ».'
+            'L\'annulation n\'est possible que depuis les statuts « Brouillon », « À charger » ou « Facturation ».'
         );
 
-        $commande->update([
-            'statut' => StatutCommandeVente::ANNULEE,
-            'motif_annulation' => $motif,
-            'annulee_at' => now(),
-            'annulee_par' => Auth::id(),
-        ]);
+        $commande->loadMissing('facture');
+        abort_if(
+            $commande->facture && (float) $commande->facture->montant_encaisse > 0,
+            422,
+            'Impossible d\'annuler une commande ayant reçu au moins un encaissement.'
+        );
+
+        $estDirecte = $commande->isFacturation();
+
+        DB::transaction(function () use ($commande, $motif, $estDirecte) {
+            $commande->update([
+                'statut' => StatutCommandeVente::ANNULEE,
+                'motif_annulation' => $motif,
+                'annulee_at' => now(),
+                'annulee_par' => Auth::id(),
+            ]);
+
+            if ($estDirecte) {
+                $commande->loadMissing('facture');
+                if ($commande->facture && ! $commande->facture->isAnnulee() && ! $commande->facture->isPayee()) {
+                    $commande->facture->update(['statut_facture' => StatutFactureVente::ANNULEE]);
+                }
+            }
+        });
     }
 
     // ── Pré-conditions ────────────────────────────────────────────────────────

@@ -364,6 +364,9 @@ onMounted(() => {
     }
 });
 
+// ── Type de commande ──────────────────────────────────────────────────────────
+const isCommandeLogistique = computed(() => form.vehicule_id !== null);
+
 // ── Validation locale ────────────────────────────────────────────────────────
 const canSubmit = computed(
     () =>
@@ -1362,9 +1365,25 @@ function confirmerEtCreer() {
         >
             <template #header>
                 <div>
-                    <h2 class="text-lg font-semibold">
-                        Confirmer la création de la commande
-                    </h2>
+                    <div class="flex items-center gap-2.5">
+                        <h2 class="text-lg font-semibold">
+                            Confirmer la création de la commande
+                        </h2>
+                        <span
+                            class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                            :class="
+                                isCommandeLogistique
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                    : 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300'
+                            "
+                        >
+                            {{
+                                isCommandeLogistique
+                                    ? 'Vente avec livraison'
+                                    : 'Vente directe'
+                            }}
+                        </span>
+                    </div>
                     <p class="mt-0.5 text-sm text-muted-foreground">
                         Vérifiez le récapitulatif avant de valider.
                     </p>
@@ -1501,6 +1520,7 @@ function confirmerEtCreer() {
                     </tfoot>
                 </table>
             </div>
+
 
             <!-- Alertes -->
             <div

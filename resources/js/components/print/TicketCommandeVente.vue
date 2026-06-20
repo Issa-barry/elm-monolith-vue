@@ -86,10 +86,6 @@ function nowStr(): string {
                 <span class="ticket-label">Client</span>
                 <span class="ticket-value">{{ commande.client_nom }}</span>
             </div>
-            <div v-if="commande.created_by" class="ticket-row">
-                <span class="ticket-label">Confirmée par</span>
-                <span class="ticket-value">{{ commande.created_by }}</span>
-            </div>
         </div>
 
         <div class="ticket-sep" />

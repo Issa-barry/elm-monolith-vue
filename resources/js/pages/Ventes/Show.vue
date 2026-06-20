@@ -17,6 +17,7 @@ import {
     ArrowLeft,
     CheckCircle,
     CheckCircle2,
+    ExternalLink,
     HandCoins,
     History,
     MoreVertical,
@@ -94,6 +95,27 @@ interface LigneCommande {
     total_ligne: number;
 }
 
+interface VehiculeDetail {
+    nom: string;
+    immatriculation: string | null;
+    type: string | null;
+    capacite_packs: number | null;
+    proprietaire_nom: string | null;
+    proprietaire_telephone: string | null;
+}
+
+interface MembreEquipe {
+    nom: string;
+    telephone: string | null;
+}
+
+interface EquipeDetail {
+    nom: string;
+    taux_commission_proprietaire: number | null;
+    chauffeur: MembreEquipe | null;
+    convoyeurs: MembreEquipe[];
+}
+
 interface CommandeData {
     id: string;
     reference: string;
@@ -102,6 +124,10 @@ interface CommandeData {
     statut_color: string;
     total_commande: number;
     vehicule_nom: string | null;
+    vehicule_detail: VehiculeDetail | null;
+    livreur_nom: string | null;
+    livreur_telephone: string | null;
+    equipe_detail: EquipeDetail | null;
     client_nom: string | null;
     site_nom: string | null;
     motif_annulation: string | null;
@@ -116,6 +142,7 @@ interface CommandeData {
     is_chargement_en_cours: boolean;
     is_livraison_en_cours: boolean;
     is_livree: boolean;
+    is_facturation: boolean;
     is_cloturee: boolean;
     is_annulee: boolean;
     can_modifier: boolean;
@@ -129,10 +156,16 @@ interface CommandeData {
     lignes: LigneCommande[];
 }
 
+interface CommissionStatut {
+    value: 'paye' | 'partiel' | 'impaye';
+    label: string;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
     commande: CommandeData;
     facture: FactureData | null;
+    commission_statut: CommissionStatut | null;
     historiques: AuditEntry[];
     activites: ActiviteEntry[];
 }>();
@@ -147,6 +180,19 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 // ── Statut couleurs ───────────────────────────────────────────────────────────
+const statutFactureColor: Record<string, string> = {
+    impayee: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+    partiel: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+    payee: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+    annulee: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
+};
+
+const statutCommissionColor: Record<string, string> = {
+    impaye: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+    partiel: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+    paye: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+};
+
 const statutCommandeColor: Record<string, string> = {
     brouillon: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
     a_charger:
@@ -161,7 +207,25 @@ const statutCommandeColor: Record<string, string> = {
     annulee: 'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400',
 };
 
+// ── Popups véhicule / équipe ──────────────────────────────────────────────────
+const vehiculeDialogVisible = ref(false);
+const equipeDialogVisible = ref(false);
+
 // ── Formatage ─────────────────────────────────────────────────────────────────
+function formatPhone(tel: string | null | undefined): string {
+    if (!tel) return '—';
+    const digits = tel.replace(/\D/g, '');
+    const local = digits.startsWith('00224')
+        ? digits.slice(5)
+        : digits.startsWith('224')
+          ? digits.slice(3)
+          : null;
+    if (local && local.length >= 9) {
+        return `+224 ${local.slice(0, 3)} ${local.slice(3, 5)} ${local.slice(5, 7)} ${local.slice(7, 9)}`;
+    }
+    return tel;
+}
+
 function formatGNF(val: number | string | null | undefined): string {
     const n = Math.round(Number(val ?? 0));
     const s = n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -336,6 +400,16 @@ function submitAnnuler() {
     annulerForm.patch(`/ventes/${props.commande.id}/annuler`, {
         onSuccess: () => {
             annulerDialogVisible.value = false;
+            const flashError = (usePage().props as Record<string, any>).flash?.error;
+            if (flashError) {
+                toast.add({
+                    severity: 'error',
+                    summary: 'Annulation impossible',
+                    detail: flashError,
+                    life: 7000,
+                });
+                return;
+            }
             toast.add({
                 severity: 'success',
                 summary: 'Annulée',
@@ -435,8 +509,15 @@ const STEPS = [
     { key: 'cloturee', shortLabel: 'Clôturée', icon: CheckCircle2 },
 ];
 
+const isCommandeDirecte = computed(() => !props.commande.vehicule_nom);
+
 const currentStepIdx = computed(() => {
     if (props.commande.is_annulee) return -1;
+    if (isCommandeDirecte.value) {
+        if (props.commande.is_cloturee) return 5;
+        if (props.facture?.statut === 'payee') return 4;
+        return 3;
+    }
     if (props.commande.is_livree) {
         return props.facture?.statut === 'payee' ? 4 : 3;
     }
@@ -453,6 +534,7 @@ const currentStepIdx = computed(() => {
 function stepState(idx: number): 'done' | 'current' | 'future' {
     const cur = currentStepIdx.value;
     if (cur === -1) return 'future';
+    if (isCommandeDirecte.value && idx < 3) return 'future';
     if (idx < cur) return 'done';
     if (idx === cur) return 'current';
     return 'future';
@@ -460,6 +542,7 @@ function stepState(idx: number): 'done' | 'current' | 'future' {
 
 function connectorIsActive(idx: number): boolean {
     if (currentStepIdx.value === -1) return false;
+    if (isCommandeDirecte.value && idx < 3) return false;
     return idx < currentStepIdx.value;
 }
 </script>
@@ -773,16 +856,61 @@ function connectorIsActive(idx: number): boolean {
 
             <!-- Infos générales -->
             <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
-                <h3
-                    class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                <div class="mb-5 flex items-center justify-between">
+                    <h3 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+                        Informations
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <span
+                            class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                            :class="statutCommandeColor[commande.statut] ?? 'bg-zinc-100 text-zinc-600'"
+                        >
+                            {{ commande.statut_label }}
+                        </span>
+                        <span
+                            v-if="facture"
+                            class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                            :class="statutFactureColor[facture.statut] ?? 'bg-zinc-100 text-zinc-500'"
+                        >
+                            Facture : {{ facture.statut_label }}
+                        </span>
+                        <span
+                            v-if="commission_statut"
+                            class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                            :class="statutCommissionColor[commission_statut.value] ?? 'bg-zinc-100 text-zinc-500'"
+                        >
+                            Commission : {{ commission_statut.label }}
+                        </span>
+                    </div>
+                </div>
+                <div
+                    :class="commande.livreur_nom
+                        ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-5'
+                        : 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4'"
                 >
-                    Informations
-                </h3>
-                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <div>
                         <p class="text-xs text-muted-foreground">Véhicule</p>
-                        <p class="mt-0.5 font-medium">
-                            {{ commande.vehicule_nom ?? '—' }}
+                        <button
+                            v-if="commande.vehicule_detail"
+                            class="mt-0.5 flex items-center gap-1 font-medium text-primary hover:underline focus:outline-none"
+                            @click="vehiculeDialogVisible = true"
+                        >
+                            {{ commande.vehicule_nom }}
+                            <ExternalLink class="h-3 w-3 shrink-0" />
+                        </button>
+                        <p v-else class="mt-0.5 font-medium">—</p>
+                    </div>
+                    <div v-if="commande.livreur_nom">
+                        <p class="text-xs text-muted-foreground">Livreur</p>
+                        <button
+                            class="mt-0.5 flex items-center gap-1 font-medium text-primary hover:underline focus:outline-none"
+                            @click="equipeDialogVisible = true"
+                        >
+                            {{ commande.livreur_nom }}
+                            <ExternalLink class="h-3 w-3 shrink-0" />
+                        </button>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            {{ formatPhone(commande.livreur_telephone) }}
                         </p>
                     </div>
                     <div>
@@ -805,33 +933,6 @@ function connectorIsActive(idx: number): boolean {
                             {{ formatGNF(commande.total_commande) }}
                         </p>
                     </div>
-                </div>
-
-                <!-- Timeline statuts -->
-                <div
-                    class="mt-4 flex flex-wrap gap-4 border-t pt-4 text-xs text-muted-foreground"
-                >
-                    <span v-if="commande.a_charger_at">
-                        Confirmée le
-                        <strong>{{ commande.a_charger_at }}</strong>
-                    </span>
-                    <span v-if="commande.chargement_demarre_at">
-                        Chargement démarré le
-                        <strong>{{ commande.chargement_demarre_at }}</strong>
-                    </span>
-                    <span v-if="commande.chargement_valide_at">
-                        Chargement validé le
-                        <strong>{{ commande.chargement_valide_at }}</strong>
-                    </span>
-                    <span v-if="commande.livree_at">
-                        Livrée le <strong>{{ commande.livree_at }}</strong>
-                    </span>
-                    <span v-if="commande.closed_at">
-                        Clôturée le <strong>{{ commande.closed_at }}</strong>
-                    </span>
-                    <span v-if="commande.created_by">
-                        par <strong>{{ commande.created_by }}</strong>
-                    </span>
                 </div>
 
                 <!-- Motif annulation -->
@@ -1448,6 +1549,113 @@ function connectorIsActive(idx: number): boolean {
                         Imprimer
                     </Button>
                 </div>
+            </template>
+        </Dialog>
+
+        <!-- Dialog Détail véhicule -->
+        <Dialog
+            v-model:visible="vehiculeDialogVisible"
+            modal
+            header="Détail véhicule"
+            :style="{ width: '28rem' }"
+        >
+            <div class="space-y-3 px-1 py-2">
+                <div class="flex justify-between">
+                    <span class="text-sm text-muted-foreground">Nom</span>
+                    <span class="text-sm font-medium">{{ commande.vehicule_detail?.nom ?? '—' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-sm text-muted-foreground">Immatriculation</span>
+                    <span class="text-sm font-medium">{{ commande.vehicule_detail?.immatriculation ?? '—' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-sm text-muted-foreground">Type</span>
+                    <span class="text-sm font-medium">{{ commande.vehicule_detail?.type ?? '—' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-sm text-muted-foreground">Capacité</span>
+                    <span class="text-sm font-medium">
+                        {{
+                            commande.vehicule_detail?.capacite_packs != null
+                                ? commande.vehicule_detail.capacite_packs + ' packs'
+                                : '—'
+                        }}
+                    </span>
+                </div>
+                <div class="border-t pt-3">
+                    <p class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                        Propriétaire
+                    </p>
+                    <div class="flex justify-between">
+                        <span class="text-sm text-muted-foreground">Nom</span>
+                        <span class="text-sm font-medium">{{ commande.vehicule_detail?.proprietaire_nom ?? '—' }}</span>
+                    </div>
+                    <div
+                        v-if="commande.vehicule_detail?.proprietaire_telephone"
+                        class="mt-2 flex justify-between"
+                    >
+                        <span class="text-sm text-muted-foreground">Téléphone</span>
+                        <span class="text-sm font-medium">
+                            {{ formatPhone(commande.vehicule_detail.proprietaire_telephone) }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <template #footer>
+                <Button variant="outline" size="sm" @click="vehiculeDialogVisible = false">Fermer</Button>
+            </template>
+        </Dialog>
+
+        <!-- Dialog Équipe de livraison -->
+        <Dialog
+            v-model:visible="equipeDialogVisible"
+            modal
+            header="Équipe de livraison"
+            :style="{ width: '30rem' }"
+        >
+            <div class="space-y-4 px-1 py-2">
+                <div class="flex justify-between">
+                    <span class="text-sm text-muted-foreground">Équipe</span>
+                    <span class="text-sm font-medium">{{ commande.equipe_detail?.nom ?? '—' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-sm text-muted-foreground">Véhicule</span>
+                    <span class="text-sm font-medium">{{ commande.vehicule_nom ?? '—' }}</span>
+                </div>
+                <div
+                    v-if="commande.equipe_detail?.taux_commission_proprietaire != null"
+                    class="flex justify-between"
+                >
+                    <span class="text-sm text-muted-foreground">Taux propriétaire</span>
+                    <span class="text-sm font-medium">{{ commande.equipe_detail.taux_commission_proprietaire }} %</span>
+                </div>
+                <div v-if="commande.equipe_detail?.chauffeur" class="border-t pt-3">
+                    <p class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                        Chauffeur principal
+                    </p>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">{{ commande.equipe_detail.chauffeur.nom }}</span>
+                        <span class="text-sm text-muted-foreground">
+                            {{ formatPhone(commande.equipe_detail.chauffeur.telephone) }}
+                        </span>
+                    </div>
+                </div>
+                <div v-if="commande.equipe_detail?.convoyeurs?.length" class="border-t pt-3">
+                    <p class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                        Convoyeurs
+                    </p>
+                    <div
+                        v-for="conv in commande.equipe_detail.convoyeurs"
+                        :key="conv.nom"
+                        class="flex items-center justify-between py-1"
+                    >
+                        <span class="text-sm font-medium">{{ conv.nom }}</span>
+                        <span class="text-sm text-muted-foreground">{{ formatPhone(conv.telephone) }}</span>
+                    </div>
+                </div>
+            </div>
+            <template #footer>
+                <Button variant="outline" size="sm" @click="equipeDialogVisible = false">Fermer</Button>
             </template>
         </Dialog>
 

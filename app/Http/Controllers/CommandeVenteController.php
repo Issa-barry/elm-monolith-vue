@@ -122,22 +122,18 @@ class CommandeVenteController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
 
-        $periode = $request->input('periode', 'today');
+        $periode = $request->input('periode', 'all');
         $statut = $request->input('statut', 'tous');
+        $statutFacture = $request->input('statut_facture');
+        $statutCommission = $request->input('statut_commission');
         $siteId = $request->input('site_id');
         $dateDebut = $request->input('date_debut');
         $dateFin = $request->input('date_fin');
-        $vehiculeNom = $request->input('vehicule_nom');
-        $vehiculeImmat = $request->input('vehicule_immatriculation');
-        $proprietaireNom = $request->input('proprietaire_nom');
-        $proprietaireTel = $request->input('proprietaire_telephone');
-        $livreurNom = $request->input('livreur_nom');
-        $livreurPrenom = $request->input('livreur_prenom');
-        $livreurTel = $request->input('livreur_telephone');
-        $livreurRole = $request->input('livreur_role');
+        $vehicule = $request->input('vehicule');
+        $proprietaire = $request->input('proprietaire');
+        $livreur = $request->input('livreur');
         $numeroCommande = $request->input('numero_commande');
-        $clientNom = $request->input('client_nom');
-        $clientTel = $request->input('client_telephone');
+        $client = $request->input('client');
 
         $query = CommandeVente::with([
             'vehicule.proprietaire',
@@ -180,63 +176,46 @@ class CommandeVenteController extends Controller
             $query->where('statut', $statut);
         }
 
+        if ($statutFacture) {
+            $query->whereHas('facture', fn ($q) => $q->where('statut_facture', $statutFacture));
+        }
+
+        if ($statutCommission) {
+            $query->whereHas('commissions', fn ($q) => $q->where('statut', $statutCommission));
+        }
+
         if ($numeroCommande) {
             $query->where('reference', 'like', "%{$numeroCommande}%");
         }
 
-        if ($vehiculeNom || $vehiculeImmat) {
-            $query->whereHas('vehicule', function ($q) use ($vehiculeNom, $vehiculeImmat) {
-                if ($vehiculeNom) {
-                    $q->where('nom_vehicule', 'like', "%{$vehiculeNom}%");
-                }
-                if ($vehiculeImmat) {
-                    $q->where('immatriculation', 'like', "%{$vehiculeImmat}%");
-                }
+        if ($vehicule) {
+            $query->whereHas('vehicule', function ($q) use ($vehicule) {
+                $q->where('nom_vehicule', 'like', "%{$vehicule}%")
+                    ->orWhere('immatriculation', 'like', "%{$vehicule}%");
             });
         }
 
-        if ($proprietaireNom || $proprietaireTel) {
-            $query->whereHas('vehicule.proprietaire', function ($q) use ($proprietaireNom, $proprietaireTel) {
-                if ($proprietaireNom) {
-                    $q->where(function ($sub) use ($proprietaireNom) {
-                        $sub->where('nom', 'like', "%{$proprietaireNom}%")
-                            ->orWhere('prenom', 'like', "%{$proprietaireNom}%");
-                    });
-                }
-                if ($proprietaireTel) {
-                    $q->where('telephone', 'like', "%{$proprietaireTel}%");
-                }
+        if ($proprietaire) {
+            $query->whereHas('vehicule.proprietaire', function ($q) use ($proprietaire) {
+                $q->where('nom', 'like', "%{$proprietaire}%")
+                    ->orWhere('prenom', 'like', "%{$proprietaire}%")
+                    ->orWhere('telephone', 'like', "%{$proprietaire}%");
             });
         }
 
-        if ($livreurNom || $livreurPrenom || $livreurTel || $livreurRole) {
-            $query->whereHas('vehicule.equipe.livreurs', function ($q) use ($livreurNom, $livreurPrenom, $livreurTel, $livreurRole) {
-                if ($livreurNom) {
-                    $q->where('livreurs.nom', 'like', "%{$livreurNom}%");
-                }
-                if ($livreurPrenom) {
-                    $q->where('livreurs.prenom', 'like', "%{$livreurPrenom}%");
-                }
-                if ($livreurTel) {
-                    $q->where('livreurs.telephone', 'like', "%{$livreurTel}%");
-                }
-                if ($livreurRole) {
-                    $q->where('equipe_livreurs.role', $livreurRole);
-                }
+        if ($livreur) {
+            $query->whereHas('vehicule.equipe.livreurs', function ($q) use ($livreur) {
+                $q->where('livreurs.nom', 'like', "%{$livreur}%")
+                    ->orWhere('livreurs.prenom', 'like', "%{$livreur}%")
+                    ->orWhere('livreurs.telephone', 'like', "%{$livreur}%");
             });
         }
 
-        if ($clientNom || $clientTel) {
-            $query->whereHas('client', function ($q) use ($clientNom, $clientTel) {
-                if ($clientNom) {
-                    $q->where(function ($sub) use ($clientNom) {
-                        $sub->where('nom', 'like', "%{$clientNom}%")
-                            ->orWhere('prenom', 'like', "%{$clientNom}%");
-                    });
-                }
-                if ($clientTel) {
-                    $q->where('telephone', 'like', "%{$clientTel}%");
-                }
+        if ($client) {
+            $query->whereHas('client', function ($q) use ($client) {
+                $q->where('nom', 'like', "%{$client}%")
+                    ->orWhere('prenom', 'like', "%{$client}%")
+                    ->orWhere('telephone', 'like', "%{$client}%");
             });
         }
 
@@ -276,17 +255,13 @@ class CommandeVenteController extends Controller
                 'site_id' => $siteId,
                 'date_debut' => $dateDebut,
                 'date_fin' => $dateFin,
-                'vehicule_nom' => $vehiculeNom,
-                'vehicule_immatriculation' => $vehiculeImmat,
-                'proprietaire_nom' => $proprietaireNom,
-                'proprietaire_telephone' => $proprietaireTel,
-                'livreur_nom' => $livreurNom,
-                'livreur_prenom' => $livreurPrenom,
-                'livreur_telephone' => $livreurTel,
-                'livreur_role' => $livreurRole,
+                'statut_facture' => $statutFacture,
+                'statut_commission' => $statutCommission,
+                'vehicule' => $vehicule,
+                'proprietaire' => $proprietaire,
+                'livreur' => $livreur,
                 'numero_commande' => $numeroCommande,
-                'client_nom' => $clientNom,
-                'client_telephone' => $clientTel,
+                'client' => $client,
             ],
         ]);
     }
@@ -348,12 +323,14 @@ class CommandeVenteController extends Controller
             CommandeVenteService::confirmer($commande);
             CommandeVenteActiviteService::log($commande, 'creation_confirmee');
 
-            return redirect()->route('ventes.show', $commande)->with('success', 'Commande créée et confirmée.');
+            return redirect()->route('ventes.show', $commande)->with('success', 'Commande créée et confirmée. En attente de chargement.');
         }
 
-        CommandeVenteActiviteService::log($commande, 'creation');
+        // Vente directe client — passe en FACTURATION + crée la facture
+        CommandeVenteService::creerFactureDirecte($commande);
+        CommandeVenteActiviteService::log($commande, 'creation_directe');
 
-        return redirect()->route('ventes.show', $commande)->with('success', 'Commande créée.');
+        return redirect()->route('ventes.show', $commande)->with('success', 'Commande créée. Facture générée — en attente d\'encaissement.');
     }
 
     // ── Show ──────────────────────────────────────────────────────────────────
@@ -363,10 +340,18 @@ class CommandeVenteController extends Controller
         $this->authorize('view', $vente);
 
         $commande = $vente;
-        $commande->load(['vehicule', 'client', 'site', 'lignes.produit', 'createdBy', 'facture.encaissements.creator', 'activites.user']);
+        $commande->load(['vehicule.proprietaire', 'vehicule.typeVehicule', 'vehicule.equipe.livreurs', 'client', 'site', 'lignes.produit', 'createdBy', 'facture.encaissements.creator', 'commissions', 'activites.user']);
+
+        $commande->cloturerSiComplete();
+        $commande->refresh();
 
         $user = auth()->user();
         $facture = $commande->facture;
+
+        $vehicule = $commande->vehicule;
+        $equipe = $vehicule?->equipe;
+        $chauffeur = $equipe?->livreurs->first(fn ($l) => ($l->pivot->role ?? null) === 'chauffeur');
+        $convoyeurs = $equipe ? $equipe->livreurs->filter(fn ($l) => ($l->pivot->role ?? null) !== 'chauffeur') : collect();
 
         $lignes = $commande->lignes->map(fn ($l) => [
             'id' => $l->id,
@@ -419,6 +404,32 @@ class CommandeVenteController extends Controller
                 'statut_color' => $commande->statut?->color(),
                 'total_commande' => (float) $commande->total_commande,
                 'vehicule_nom' => $commande->vehicule?->nom_vehicule,
+                'vehicule_detail' => $vehicule ? [
+                    'nom' => $vehicule->nom_vehicule,
+                    'immatriculation' => $vehicule->immatriculation,
+                    'type' => $vehicule->typeVehicule?->nom,
+                    'capacite_packs' => $vehicule->capacite_packs,
+                    'proprietaire_nom' => $vehicule->proprietaire
+                        ? trim($vehicule->proprietaire->prenom.' '.$vehicule->proprietaire->nom)
+                        : null,
+                    'proprietaire_telephone' => $vehicule->proprietaire?->telephone,
+                ] : null,
+                'livreur_nom' => $chauffeur ? trim($chauffeur->prenom.' '.$chauffeur->nom) : null,
+                'livreur_telephone' => $chauffeur?->telephone,
+                'equipe_detail' => $equipe ? [
+                    'nom' => $equipe->nom,
+                    'taux_commission_proprietaire' => $equipe->taux_commission_proprietaire !== null
+                        ? (float) $equipe->taux_commission_proprietaire
+                        : null,
+                    'chauffeur' => $chauffeur ? [
+                        'nom' => trim($chauffeur->prenom.' '.$chauffeur->nom),
+                        'telephone' => $chauffeur->telephone,
+                    ] : null,
+                    'convoyeurs' => $convoyeurs->map(fn ($l) => [
+                        'nom' => trim($l->prenom.' '.$l->nom),
+                        'telephone' => $l->telephone,
+                    ])->values(),
+                ] : null,
                 'client_nom' => $commande->client ? trim($commande->client->prenom.' '.$commande->client->nom) : null,
                 'site_nom' => $commande->site?->nom,
                 'motif_annulation' => $commande->motif_annulation,
@@ -433,13 +444,16 @@ class CommandeVenteController extends Controller
                 'is_chargement_en_cours' => $commande->isChargementEnCours(),
                 'is_livraison_en_cours' => $commande->isLivraisonEnCours(),
                 'is_livree' => $commande->isLivree(),
+                'is_facturation' => $commande->isFacturation(),
                 'is_cloturee' => $commande->isCloturee(),
                 'is_annulee' => $commande->isAnnulee(),
                 'can_modifier' => $commande->isBrouillon() && $user->can('update', $commande),
                 'can_confirmer' => $commande->isBrouillon() && $user->can('confirmer', $commande),
                 'can_demarrer_chargement' => $commande->isACharger() && $user->can('demarrerChargement', $commande),
                 'can_valider_chargement' => $commande->isChargementEnCours() && $user->can('validerChargement', $commande),
-                'can_annuler' => $commande->statut->isAnnulable() && $user->can('annuler', $commande),
+                'can_annuler' => $commande->statut->isAnnulable()
+                    && (! $facture || (float) $facture->montant_encaisse === 0.0)
+                    && $user->can('annuler', $commande),
                 'can_encaisser' => $facture && ! $facture->isAnnulee()
                     && (float) $facture->montant_restant > 0
                     && $user->can('update', $commande),
@@ -466,6 +480,7 @@ class CommandeVenteController extends Controller
                     'created_by' => $e->creator?->name,
                 ])->values(),
             ] : null,
+            'commission_statut' => $this->getCommissionStatutGlobal($commande),
         ]);
     }
 
@@ -575,7 +590,9 @@ class CommandeVenteController extends Controller
 
     public function annuler(Request $request, CommandeVente $commande_vente): RedirectResponse
     {
-        $this->authorize('annuler', $commande_vente);
+        if (auth()->user()->cannot('annuler', $commande_vente)) {
+            return back()->with('error', "Vous n'êtes pas autorisé à annuler cette commande.");
+        }
 
         $validCodes = implode(',', MotifAnnulation::validValues());
 
@@ -593,7 +610,14 @@ class CommandeVenteController extends Controller
             ->toMotifString($data['motif_annulation_detail'] ?? '');
 
         $oldStatut = $commande_vente->statut->value;
-        CommandeVenteService::annuler($commande_vente, $motif);
+
+        try {
+            CommandeVenteService::annuler($commande_vente, $motif);
+        } catch (ValidationException $e) {
+            return back()->withErrors($e->errors());
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         $this->auditService->record(
             $commande_vente,
@@ -630,6 +654,23 @@ class CommandeVenteController extends Controller
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
+    private function getCommissionStatutGlobal(CommandeVente $commande): array|null
+    {
+        $commissions = $commande->commissions;
+        if ($commissions->isEmpty()) {
+            return null;
+        }
+
+        if ($commissions->every(fn ($c) => $c->statut === \App\Enums\StatutCommission::PAYE)) {
+            return ['value' => 'paye', 'label' => 'Payé'];
+        }
+        if ($commissions->some(fn ($c) => $c->statut === \App\Enums\StatutCommission::PAYE || $c->statut === \App\Enums\StatutCommission::PARTIEL)) {
+            return ['value' => 'partiel', 'label' => 'Partiel'];
+        }
+
+        return ['value' => 'impaye', 'label' => 'Impayé'];
+    }
+
     private function mapCommandeForIndex(CommandeVente $c, mixed $user): array
     {
         return [
@@ -641,6 +682,9 @@ class CommandeVenteController extends Controller
             'total_commande' => (float) $c->total_commande,
             'vehicule_nom' => $c->vehicule?->nom_vehicule,
             'vehicule_immatriculation' => $c->vehicule?->immatriculation,
+            'chauffeur_nom' => $c->vehicule?->equipe?->livreurs
+                ?->first(fn ($l) => ($l->pivot->role ?? null) === 'chauffeur')
+                ?->nom_complet,
             'client_nom' => $c->client ? trim($c->client->prenom.' '.$c->client->nom) : null,
             'client_telephone' => $c->client?->telephone,
             'site_nom' => $c->site?->nom,
@@ -660,9 +704,12 @@ class CommandeVenteController extends Controller
             'created_at' => $c->created_at?->format(self::DATE_DISPLAY_FORMAT),
             'is_annulee' => $c->isAnnulee(),
             'is_brouillon' => $c->isBrouillon(),
+            'is_facturation' => $c->isFacturation(),
             'can_modifier' => $c->isBrouillon() && $user->can('update', $c),
             'can_confirmer' => $c->isBrouillon() && $user->can('confirmer', $c),
-            'can_annuler' => $c->statut->isAnnulable() && $user->can('annuler', $c),
+            'can_annuler' => $c->statut->isAnnulable()
+                && (! $c->facture || (float) $c->facture->montant_encaisse === 0.0)
+                && $user->can('annuler', $c),
         ];
     }
 
