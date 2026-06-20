@@ -18,8 +18,8 @@ import {
     CheckCircle,
     CheckCircle2,
     ExternalLink,
+    FileText,
     HandCoins,
-    History,
     MoreVertical,
     Package,
     PackageOpen,
@@ -428,8 +428,8 @@ const annulerDisabled = computed(
             !annulerForm.motif_annulation_detail.trim()),
 );
 
-// ── Historique dialog ─────────────────────────────────────────────────────────
-const historiquesDialogVisible = ref(false);
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+const activeTab = ref<'informations' | 'produits' | 'facturation' | 'journal' | 'historique'>('informations');
 
 // ── Encaissement ──────────────────────────────────────────────────────────────
 const modesPaiement = [
@@ -501,6 +501,7 @@ function printTicketCommande(): void {
 
 // ── Timeline de progression ────────────────────────────────────────────────────
 const STEPS = [
+    { key: 'creee', shortLabel: 'Créée', icon: FileText },
     { key: 'a_charger', shortLabel: 'À charger', icon: Package },
     { key: 'chargement', shortLabel: 'Chargement en cours', icon: PackageOpen },
     { key: 'livraison', shortLabel: 'Livraison en cours', icon: Truck },
@@ -514,19 +515,20 @@ const isCommandeDirecte = computed(() => !props.commande.vehicule_nom);
 const currentStepIdx = computed(() => {
     if (props.commande.is_annulee) return -1;
     if (isCommandeDirecte.value) {
-        if (props.commande.is_cloturee) return 5;
-        if (props.facture?.statut === 'payee') return 4;
-        return 3;
+        if (props.commande.is_cloturee) return 6;
+        if (props.facture?.statut === 'payee') return 5;
+        return 4;
     }
     if (props.commande.is_livree) {
-        return props.facture?.statut === 'payee' ? 4 : 3;
+        return props.facture?.statut === 'payee' ? 5 : 4;
     }
     const map: Record<string, number> = {
         brouillon: 0,
-        a_charger: 0,
-        chargement_en_cours: 1,
-        livraison_en_cours: 2,
-        cloturee: 5,
+        a_charger: 1,
+        chargement_en_cours: 2,
+        livraison_en_cours: 3,
+        facturation: 4,
+        cloturee: 6,
     };
     return map[props.commande.statut] ?? 0;
 });
@@ -534,7 +536,7 @@ const currentStepIdx = computed(() => {
 function stepState(idx: number): 'done' | 'current' | 'future' {
     const cur = currentStepIdx.value;
     if (cur === -1) return 'future';
-    if (isCommandeDirecte.value && idx < 3) return 'future';
+    if (isCommandeDirecte.value && idx >= 1 && idx <= 3) return 'future';
     if (idx < cur) return 'done';
     if (idx === cur) return 'current';
     return 'future';
@@ -542,7 +544,7 @@ function stepState(idx: number): 'done' | 'current' | 'future' {
 
 function connectorIsActive(idx: number): boolean {
     if (currentStepIdx.value === -1) return false;
-    if (isCommandeDirecte.value && idx < 3) return false;
+    if (isCommandeDirecte.value && idx < 4) return false;
     return idx < currentStepIdx.value;
 }
 </script>
@@ -659,7 +661,7 @@ function connectorIsActive(idx: number): boolean {
             </div>
         </div>
 
-        <div class="space-y-6 p-4 sm:p-6">
+        <div class="space-y-5 px-4 py-6 sm:px-6">
             <!-- En-tête commande ─────────────────────────────────────────────── -->
             <div class="hidden items-start justify-between gap-4 sm:flex">
                 <div class="flex items-start gap-4">
@@ -673,6 +675,9 @@ function connectorIsActive(idx: number): boolean {
                         </Button>
                     </Link>
                     <div>
+                        <p class="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+                            Détail commande
+                        </p>
                         <h1 class="font-mono text-2xl font-bold tracking-wide">
                             {{ commande.reference }}
                         </h1>
@@ -695,17 +700,6 @@ function connectorIsActive(idx: number): boolean {
 
                 <!-- Boutons d'action selon statut -->
                 <div class="flex items-center gap-2">
-                    <!-- Historique -->
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        class="h-8 w-8 text-muted-foreground"
-                        title="Historique"
-                        @click="historiquesDialogVisible = true"
-                    >
-                        <History class="h-4 w-4" />
-                    </Button>
-
                     <!-- Imprimer ticket -->
                     <Button
                         variant="outline"
@@ -763,15 +757,14 @@ function connectorIsActive(idx: number): boolean {
                     <!-- Encaisser -->
                     <Button
                         v-if="commande.can_encaisser"
-                        variant="outline"
                         size="sm"
                         @click="openEncaisserDialog"
                     >
-                        <HandCoins class="mr-2 h-4 w-4" />
-                        Encaisser
+                        <HandCoins class="mr-1.5 h-4 w-4" />
+                        Encaisser {{ facture ? formatGNF(facture.montant_restant) : '' }}
                     </Button>
 
-                    <!-- Annuler (brouillon ou a_charger, admin) -->
+                    <!-- Annuler -->
                     <template v-if="commande.can_annuler">
                         <Button
                             variant="outline"
@@ -854,492 +847,573 @@ function connectorIsActive(idx: number): boolean {
                 </div>
             </div>
 
-            <!-- Infos générales -->
-            <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
-                <div class="mb-5 flex items-center justify-between">
-                    <h3 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
-                        Informations
-                    </h3>
-                    <div class="flex items-center gap-2">
-                        <span
-                            class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                            :class="statutCommandeColor[commande.statut] ?? 'bg-zinc-100 text-zinc-600'"
-                        >
-                            {{ commande.statut_label }}
-                        </span>
-                        <span
-                            v-if="facture"
-                            class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                            :class="statutFactureColor[facture.statut] ?? 'bg-zinc-100 text-zinc-500'"
-                        >
-                            Facture : {{ facture.statut_label }}
-                        </span>
-                        <span
-                            v-if="commission_statut"
-                            class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                            :class="statutCommissionColor[commission_statut.value] ?? 'bg-zinc-100 text-zinc-500'"
-                        >
-                            Commission : {{ commission_statut.label }}
-                        </span>
-                    </div>
-                </div>
-                <div
-                    :class="commande.livreur_nom
-                        ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-5'
-                        : 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4'"
+            <!-- Navigation par onglets ──────────────────────────────────────── -->
+            <div class="flex border-b">
+                <button
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="
+                        activeTab === 'informations'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="activeTab = 'informations'"
                 >
-                    <div>
-                        <p class="text-xs text-muted-foreground">Véhicule</p>
-                        <button
-                            v-if="commande.vehicule_detail"
-                            class="mt-0.5 flex items-center gap-1 font-medium text-primary hover:underline focus:outline-none"
-                            @click="vehiculeDialogVisible = true"
-                        >
-                            {{ commande.vehicule_nom }}
-                            <ExternalLink class="h-3 w-3 shrink-0" />
-                        </button>
-                        <p v-else class="mt-0.5 font-medium">—</p>
-                    </div>
-                    <div v-if="commande.livreur_nom">
-                        <p class="text-xs text-muted-foreground">Livreur</p>
-                        <button
-                            class="mt-0.5 flex items-center gap-1 font-medium text-primary hover:underline focus:outline-none"
-                            @click="equipeDialogVisible = true"
-                        >
-                            {{ commande.livreur_nom }}
-                            <ExternalLink class="h-3 w-3 shrink-0" />
-                        </button>
-                        <p class="mt-0.5 text-xs text-muted-foreground">
-                            {{ formatPhone(commande.livreur_telephone) }}
-                        </p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-muted-foreground">Client</p>
-                        <p class="mt-0.5 font-medium">
-                            {{ commande.client_nom ?? '—' }}
-                        </p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-muted-foreground">Site</p>
-                        <p class="mt-0.5 font-medium">
-                            {{ commande.site_nom ?? '—' }}
-                        </p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-muted-foreground">
-                            Total commande
-                        </p>
-                        <p class="mt-0.5 text-xl font-bold tabular-nums">
-                            {{ formatGNF(commande.total_commande) }}
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Motif annulation -->
-                <div
-                    v-if="commande.is_annulee && commande.motif_annulation"
-                    class="mt-4 rounded-lg bg-red-50 p-4 dark:bg-red-950/30"
+                    Informations
+                </button>
+                <button
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="
+                        activeTab === 'produits'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="activeTab = 'produits'"
                 >
-                    <p
-                        class="mb-1 text-xs font-medium tracking-wider text-red-600 uppercase dark:text-red-400"
-                    >
-                        Motif d'annulation
-                    </p>
-                    <p class="text-sm">{{ commande.motif_annulation }}</p>
-                </div>
+                    Produits
+                </button>
+                <button
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="
+                        activeTab === 'facturation'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="activeTab = 'facturation'"
+                >
+                    Facturation
+                </button>
+                <button
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="
+                        activeTab === 'journal'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="activeTab = 'journal'"
+                >
+                    Journal d'activité
+                </button>
+                <button
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="
+                        activeTab === 'historique'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="activeTab = 'historique'"
+                >
+                    Historique
+                </button>
             </div>
 
-            <!-- Lignes de commande -->
-            <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
-                <h3
-                    class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                >
-                    Lignes de commande
-                </h3>
-                <div class="overflow-hidden overflow-x-auto rounded-lg border">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b bg-muted/40">
-                                <th
-                                    class="px-4 py-2.5 text-left font-medium text-muted-foreground"
-                                >
-                                    Produit
-                                </th>
-                                <th
-                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                                    style="width: 80px"
-                                >
-                                    Demandée
-                                </th>
-                                <th
-                                    v-if="showChargeeCol"
-                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                                    style="width: 80px"
-                                >
-                                    Chargée
-                                </th>
-                                <th
-                                    v-if="showChargeeCol"
-                                    class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                                    style="width: 70px"
-                                >
-                                    Écart
-                                </th>
-                                <th
-                                    class="px-4 py-2.5 text-right font-medium text-muted-foreground"
-                                    style="width: 150px"
-                                >
-                                    Prix unit.
-                                </th>
-                                <th
-                                    class="px-4 py-2.5 text-right font-medium text-muted-foreground"
-                                    style="width: 150px"
-                                >
-                                    Total
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y">
-                            <tr
-                                v-for="ligne in commande.lignes"
-                                :key="ligne.id"
-                                class="hover:bg-muted/10"
+            <!-- Onglet : Informations ───────────────────────────────────────── -->
+            <div v-if="activeTab === 'informations'">
+                <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+                    <div class="mb-5 flex items-center justify-between">
+                        <h3 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+                            Informations
+                        </h3>
+                        <div class="flex items-center gap-2">
+                            <span
+                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                :class="statutCommandeColor[commande.statut] ?? 'bg-zinc-100 text-zinc-600'"
                             >
-                                <td class="px-4 py-3 font-medium">
-                                    {{ ligne.produit_nom ?? '—' }}
-                                </td>
-                                <td class="px-4 py-3 text-center tabular-nums">
-                                    {{ ligne.quantite_demandee }}
-                                </td>
-                                <td
-                                    v-if="showChargeeCol"
-                                    class="px-4 py-3 text-center tabular-nums"
-                                >
-                                    {{ ligne.quantite_chargee ?? '—' }}
-                                </td>
-                                <td
-                                    v-if="showChargeeCol"
-                                    class="px-4 py-3 text-center font-semibold tabular-nums"
-                                    :class="ecartClass(ligne.ecart_chargement)"
-                                >
-                                    {{ ecartLabel(ligne.ecart_chargement) }}
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-right text-muted-foreground tabular-nums"
-                                >
-                                    {{ formatGNF(ligne.prix_vente_snapshot) }}
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-right font-semibold tabular-nums"
-                                >
-                                    {{ formatGNF(ligne.total_ligne) }}
-                                </td>
-                            </tr>
-                        </tbody>
-                        <tfoot>
-                            <tr class="border-t bg-muted/20">
-                                <td
-                                    :colspan="showChargeeCol ? 5 : 3"
-                                    class="px-4 py-3 text-right text-sm font-semibold text-muted-foreground"
-                                >
-                                    Total
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-right text-lg font-bold tabular-nums"
-                                >
-                                    {{ formatGNF(commande.total_commande) }}
-                                </td>
-                            </tr>
-                        </tfoot>
-                    </table>
+                                {{ commande.statut_label }}
+                            </span>
+                            <span
+                                v-if="facture"
+                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                :class="statutFactureColor[facture.statut] ?? 'bg-zinc-100 text-zinc-500'"
+                            >
+                                Facture : {{ facture.statut_label }}
+                            </span>
+                            <span
+                                v-if="commission_statut"
+                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                :class="statutCommissionColor[commission_statut.value] ?? 'bg-zinc-100 text-zinc-500'"
+                            >
+                                Commission : {{ commission_statut.label }}
+                            </span>
+                        </div>
+                    </div>
+                    <div
+                        :class="commande.livreur_nom
+                            ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-5'
+                            : 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4'"
+                    >
+                        <div>
+                            <p class="text-xs text-muted-foreground">Véhicule</p>
+                            <button
+                                v-if="commande.vehicule_detail"
+                                class="mt-0.5 flex items-center gap-1 font-medium text-primary hover:underline focus:outline-none"
+                                @click="vehiculeDialogVisible = true"
+                            >
+                                {{ commande.vehicule_nom }}
+                                <ExternalLink class="h-3 w-3 shrink-0" />
+                            </button>
+                            <p v-else class="mt-0.5 font-medium">—</p>
+                        </div>
+                        <div v-if="commande.livreur_nom">
+                            <p class="text-xs text-muted-foreground">Livreur</p>
+                            <button
+                                class="mt-0.5 flex items-center gap-1 font-medium text-primary hover:underline focus:outline-none"
+                                @click="equipeDialogVisible = true"
+                            >
+                                {{ commande.livreur_nom }}
+                                <ExternalLink class="h-3 w-3 shrink-0" />
+                            </button>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                {{ formatPhone(commande.livreur_telephone) }}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-muted-foreground">Client</p>
+                            <p class="mt-0.5 font-medium">
+                                {{ commande.client_nom ?? '—' }}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-muted-foreground">Site</p>
+                            <p class="mt-0.5 font-medium">
+                                {{ commande.site_nom ?? '—' }}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-muted-foreground">
+                                Total commande
+                            </p>
+                            <p class="mt-0.5 text-xl font-bold tabular-nums">
+                                {{ formatGNF(commande.total_commande) }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Motif annulation -->
+                    <div
+                        v-if="commande.is_annulee && commande.motif_annulation"
+                        class="mt-4 rounded-lg bg-red-50 p-4 dark:bg-red-950/30"
+                    >
+                        <p
+                            class="mb-1 text-xs font-medium tracking-wider text-red-600 uppercase dark:text-red-400"
+                        >
+                            Motif d'annulation
+                        </p>
+                        <p class="text-sm">{{ commande.motif_annulation }}</p>
+                    </div>
                 </div>
             </div>
 
-            <!-- Facturation -->
-            <div
-                v-if="facture"
-                class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
-            >
-                <div class="mb-5 flex items-center justify-between">
+            <!-- Onglet : Produits ───────────────────────────────────────────── -->
+            <div v-else-if="activeTab === 'produits'">
+                <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
                     <h3
-                        class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                     >
-                        Facturation
+                        Lignes de commande
                     </h3>
-                    <div class="flex items-center gap-2">
-                        <Button
-                            v-if="commande.can_encaisser"
-                            size="sm"
-                            @click="openEncaisserDialog"
-                        >
-                            <HandCoins class="mr-2 h-4 w-4" />
-                            Encaisser
-                        </Button>
-                        <span
-                            class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                            :class="{
-                                'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400':
-                                    facture.statut === 'impayee',
-                                'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300':
-                                    facture.statut === 'partiel',
-                                'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300':
-                                    facture.statut === 'payee',
-                                'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400':
-                                    facture.statut === 'annulee',
-                            }"
-                        >
-                            {{ facture.statut_label }}
-                        </span>
-                    </div>
-                </div>
-
-                <!-- KPIs -->
-                <div class="mb-6 grid grid-cols-3 gap-3">
-                    <div class="rounded-lg border bg-muted/30 px-4 py-3">
-                        <p class="text-xs text-muted-foreground">
-                            Total facturé
-                        </p>
-                        <p class="mt-0.5 text-lg font-bold tabular-nums">
-                            {{ formatGNF(facture.montant_net) }}
-                        </p>
-                    </div>
-                    <div class="rounded-lg border bg-muted/30 px-4 py-3">
-                        <p class="text-xs text-muted-foreground">
-                            Déjà encaissé
-                        </p>
-                        <p class="mt-0.5 text-lg font-bold tabular-nums">
-                            {{ formatGNF(facture.montant_encaisse) }}
-                        </p>
-                    </div>
-                    <div class="rounded-lg border bg-muted/30 px-4 py-3">
-                        <p class="text-xs text-muted-foreground">Restant dû</p>
-                        <p class="mt-0.5 text-lg font-bold tabular-nums">
-                            {{ formatGNF(facture.montant_restant) }}
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Historique encaissements -->
-                <div v-if="facture.encaissements.length > 0">
-                    <p
-                        class="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                    >
-                        Historique des encaissements
-                    </p>
-                    <div class="overflow-hidden rounded-lg border">
+                    <div class="overflow-hidden overflow-x-auto rounded-lg border">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b bg-muted/40">
                                     <th
                                         class="px-4 py-2.5 text-left font-medium text-muted-foreground"
                                     >
-                                        Date
+                                        Produit
                                     </th>
                                     <th
-                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 80px"
                                     >
-                                        Heure
+                                        Demandée
                                     </th>
                                     <th
-                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                        v-if="showChargeeCol"
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 80px"
                                     >
-                                        Mode
+                                        Chargée
+                                    </th>
+                                    <th
+                                        v-if="showChargeeCol"
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 70px"
+                                    >
+                                        Écart
                                     </th>
                                     <th
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                        style="width: 150px"
                                     >
-                                        Montant
+                                        Prix unit.
                                     </th>
                                     <th
-                                        class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground sm:table-cell"
+                                        class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                        style="width: 150px"
                                     >
-                                        Par
+                                        Total
                                     </th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
                                 <tr
-                                    v-for="enc in facture.encaissements"
-                                    :key="enc.id"
+                                    v-for="ligne in commande.lignes"
+                                    :key="ligne.id"
                                     class="hover:bg-muted/10"
                                 >
-                                    <td class="px-4 py-3 tabular-nums">
-                                        {{ enc.date_encaissement }}
+                                    <td class="px-4 py-3 font-medium">
+                                        {{ ligne.produit_nom ?? '—' }}
+                                    </td>
+                                    <td class="px-4 py-3 text-center tabular-nums">
+                                        {{ ligne.quantite_demandee }}
                                     </td>
                                     <td
-                                        class="px-4 py-3 text-muted-foreground tabular-nums"
+                                        v-if="showChargeeCol"
+                                        class="px-4 py-3 text-center tabular-nums"
                                     >
-                                        {{ enc.heure ?? '—' }}
+                                        {{ ligne.quantite_chargee ?? '—' }}
                                     </td>
-                                    <td class="px-4 py-3 text-muted-foreground">
-                                        {{ enc.mode_paiement_label }}
+                                    <td
+                                        v-if="showChargeeCol"
+                                        class="px-4 py-3 text-center font-semibold tabular-nums"
+                                        :class="ecartClass(ligne.ecart_chargement)"
+                                    >
+                                        {{ ecartLabel(ligne.ecart_chargement) }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                    >
+                                        {{ formatGNF(ligne.prix_vente_snapshot) }}
                                     </td>
                                     <td
                                         class="px-4 py-3 text-right font-semibold tabular-nums"
                                     >
-                                        {{ formatGNF(enc.montant) }}
-                                    </td>
-                                    <td
-                                        class="hidden px-4 py-3 text-muted-foreground sm:table-cell"
-                                    >
-                                        {{ enc.created_by ?? '—' }}
+                                        {{ formatGNF(ligne.total_ligne) }}
                                     </td>
                                 </tr>
                             </tbody>
+                            <tfoot>
+                                <tr class="border-t bg-muted/20">
+                                    <td
+                                        :colspan="showChargeeCol ? 5 : 3"
+                                        class="px-4 py-3 text-right text-sm font-semibold text-muted-foreground"
+                                    >
+                                        Total
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-right text-lg font-bold tabular-nums"
+                                    >
+                                        {{ formatGNF(commande.total_commande) }}
+                                    </td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
-                <p v-else class="text-sm text-muted-foreground">
-                    Aucun encaissement enregistré.
-                </p>
             </div>
 
-            <!-- Journal d'activité -->
-            <div
-                v-if="activites.length > 0"
-                class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
-            >
-                <h3
-                    class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+            <!-- Onglet : Facturation ────────────────────────────────────────── -->
+            <div v-else-if="activeTab === 'facturation'">
+                <div
+                    v-if="facture"
+                    class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
                 >
-                    Journal d'activité
-                </h3>
-                <ol class="relative border-l border-border">
-                    <li
-                        v-for="act in activites"
-                        :key="act.id"
-                        class="mb-5 ml-4 last:mb-0"
-                    >
-                        <span
-                            class="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border border-background bg-primary"
-                        />
-                        <div
-                            class="flex flex-wrap items-baseline gap-1 text-xs"
+                    <div class="mb-5 flex items-center justify-between">
+                        <h3
+                            class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                         >
-                            <strong class="text-foreground">{{
-                                act.user_name
-                            }}</strong>
-                            <span class="text-muted-foreground">{{
-                                act.action_label
-                            }}</span>
-                            <span class="text-muted-foreground"
-                                >— {{ act.created_at }}</span
+                            Facturation
+                        </h3>
+                        <div class="flex items-center gap-2">
+                            <Button
+                                v-if="commande.can_encaisser"
+                                size="sm"
+                                @click="openEncaisserDialog"
                             >
+                                <HandCoins class="mr-2 h-4 w-4" />
+                                Encaisser {{ formatGNF(facture.montant_restant) }}
+                            </Button>
+                            <span
+                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                :class="{
+                                    'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400':
+                                        facture.statut === 'impayee',
+                                    'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300':
+                                        facture.statut === 'partiel',
+                                    'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300':
+                                        facture.statut === 'payee',
+                                    'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400':
+                                        facture.statut === 'annulee',
+                                }"
+                            >
+                                {{ facture.statut_label }}
+                            </span>
                         </div>
+                    </div>
+
+                    <!-- KPIs -->
+                    <div class="mb-6 grid grid-cols-3 gap-3">
+                        <div class="rounded-lg border bg-muted/30 px-4 py-3">
+                            <p class="text-xs text-muted-foreground">
+                                Total facturé
+                            </p>
+                            <p class="mt-0.5 text-lg font-bold tabular-nums">
+                                {{ formatGNF(facture.montant_net) }}
+                            </p>
+                        </div>
+                        <div class="rounded-lg border bg-muted/30 px-4 py-3">
+                            <p class="text-xs text-muted-foreground">
+                                Déjà encaissé
+                            </p>
+                            <p class="mt-0.5 text-lg font-bold tabular-nums">
+                                {{ formatGNF(facture.montant_encaisse) }}
+                            </p>
+                        </div>
+                        <div class="rounded-lg border bg-muted/30 px-4 py-3">
+                            <p class="text-xs text-muted-foreground">Restant dû</p>
+                            <p class="mt-0.5 text-lg font-bold tabular-nums">
+                                {{ formatGNF(facture.montant_restant) }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Historique encaissements -->
+                    <div v-if="facture.encaissements.length > 0">
                         <p
-                            v-if="act.details?.motif"
-                            class="mt-1 text-xs text-muted-foreground"
+                            class="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                         >
-                            Motif : {{ act.details.motif }}
+                            Historique des encaissements
                         </p>
-                    </li>
-                </ol>
+                        <div class="overflow-hidden rounded-lg border">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b bg-muted/40">
+                                        <th
+                                            class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                        >
+                                            Date
+                                        </th>
+                                        <th
+                                            class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                        >
+                                            Heure
+                                        </th>
+                                        <th
+                                            class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                        >
+                                            Mode
+                                        </th>
+                                        <th
+                                            class="px-4 py-2.5 text-right font-medium text-muted-foreground"
+                                        >
+                                            Montant
+                                        </th>
+                                        <th
+                                            class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground sm:table-cell"
+                                        >
+                                            Par
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y">
+                                    <tr
+                                        v-for="enc in facture.encaissements"
+                                        :key="enc.id"
+                                        class="hover:bg-muted/10"
+                                    >
+                                        <td class="px-4 py-3 tabular-nums">
+                                            {{ enc.date_encaissement }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-muted-foreground tabular-nums"
+                                        >
+                                            {{ enc.heure ?? '—' }}
+                                        </td>
+                                        <td class="px-4 py-3 text-muted-foreground">
+                                            {{ enc.mode_paiement_label }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right font-semibold tabular-nums"
+                                        >
+                                            {{ formatGNF(enc.montant) }}
+                                        </td>
+                                        <td
+                                            class="hidden px-4 py-3 text-muted-foreground sm:table-cell"
+                                        >
+                                            {{ enc.created_by ?? '—' }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <p v-else class="text-sm text-muted-foreground">
+                        Aucun encaissement enregistré.
+                    </p>
+                </div>
+                <div
+                    v-else
+                    class="rounded-xl border bg-card p-8 shadow-sm text-center text-sm text-muted-foreground"
+                >
+                    Aucune facture associée à cette commande.
+                </div>
+            </div>
+
+            <!-- Onglet : Journal d'activité ─────────────────────────────────── -->
+            <div v-else-if="activeTab === 'journal'">
+                <div
+                    v-if="activites.length > 0"
+                    class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
+                >
+                    <h3
+                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
+                        Journal d'activité
+                    </h3>
+                    <ol class="relative border-l border-border">
+                        <li
+                            v-for="act in activites"
+                            :key="act.id"
+                            class="mb-5 ml-4 last:mb-0"
+                        >
+                            <span
+                                class="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border border-background bg-primary"
+                            />
+                            <div
+                                class="flex flex-wrap items-baseline gap-1 text-xs"
+                            >
+                                <strong class="text-foreground">{{
+                                    act.user_name
+                                }}</strong>
+                                <span class="text-muted-foreground">{{
+                                    act.action_label
+                                }}</span>
+                                <span class="text-muted-foreground"
+                                    >— {{ act.created_at }}</span
+                                >
+                            </div>
+                            <p
+                                v-if="act.details?.motif"
+                                class="mt-1 text-xs text-muted-foreground"
+                            >
+                                Motif : {{ act.details.motif }}
+                            </p>
+                        </li>
+                    </ol>
+                </div>
+                <div
+                    v-else
+                    class="rounded-xl border bg-card p-8 shadow-sm text-center text-sm text-muted-foreground"
+                >
+                    Aucune activité enregistrée.
+                </div>
+            </div>
+
+            <!-- Onglet : Historique ─────────────────────────────────────────── -->
+            <div v-else-if="activeTab === 'historique'">
+                <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+                    <h3
+                        class="mb-5 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
+                        Historique des modifications
+                    </h3>
+                    <div
+                        v-if="historiques.length === 0"
+                        class="py-6 text-center text-sm text-muted-foreground"
+                    >
+                        Aucun historique disponible.
+                    </div>
+
+                    <ol v-else class="relative border-l border-border">
+                        <li
+                            v-for="entry in historiques"
+                            :key="entry.id"
+                            class="mb-6 ml-4 last:mb-0"
+                        >
+                            <span
+                                class="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border border-background bg-border"
+                            />
+                            <div class="flex flex-wrap items-baseline gap-1 text-xs">
+                                <span
+                                    class="font-semibold"
+                                    :class="
+                                        auditEventTextColor[entry.event_code] ??
+                                        'text-muted-foreground'
+                                    "
+                                >
+                                    {{
+                                        auditEventVerb[entry.event_code] ??
+                                        entry.event_label
+                                    }}
+                                </span>
+                                <strong>{{ entry.actor_name }}</strong>
+                                <span class="text-muted-foreground"
+                                    >— {{ entry.created_at }}</span
+                                >
+                            </div>
+
+                            <div
+                                v-if="
+                                    (entry.old_values &&
+                                        Object.keys(entry.old_values).length > 0) ||
+                                    (entry.new_values &&
+                                        Object.keys(entry.new_values).length > 0)
+                                "
+                                class="mt-2 overflow-hidden rounded-lg border text-xs"
+                            >
+                                <table class="w-full">
+                                    <thead>
+                                        <tr class="border-b bg-muted/40">
+                                            <th
+                                                class="px-3 py-1.5 text-left font-medium text-muted-foreground"
+                                            >
+                                                Champ
+                                            </th>
+                                            <th
+                                                v-if="entry.old_values"
+                                                class="px-3 py-1.5 text-left font-medium text-muted-foreground"
+                                            >
+                                                Avant
+                                            </th>
+                                            <th
+                                                v-if="entry.new_values"
+                                                class="px-3 py-1.5 text-left font-medium text-muted-foreground"
+                                            >
+                                                Après
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">
+                                        <tr
+                                            v-for="row in auditDiffRows(entry)"
+                                            :key="row.field"
+                                            class="hover:bg-muted/10"
+                                        >
+                                            <td
+                                                class="px-3 py-1.5 font-medium text-muted-foreground"
+                                            >
+                                                {{ row.label }}
+                                            </td>
+                                            <td
+                                                v-if="entry.old_values"
+                                                class="px-3 py-1.5 whitespace-pre-line"
+                                            >
+                                                {{ row.old }}
+                                            </td>
+                                            <td
+                                                v-if="entry.new_values"
+                                                class="px-3 py-1.5 whitespace-pre-line"
+                                            >
+                                                {{ row.new }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </li>
+                    </ol>
+                </div>
             </div>
         </div>
-
-        <!-- Dialog Historique audit -->
-        <Dialog
-            v-model:visible="historiquesDialogVisible"
-            modal
-            header="Historique"
-            :style="{ width: '860px' }"
-        >
-            <div
-                v-if="historiques.length === 0"
-                class="py-6 text-center text-sm text-muted-foreground"
-            >
-                Aucun historique disponible.
-            </div>
-
-            <ol v-else class="relative border-l border-border">
-                <li
-                    v-for="entry in historiques"
-                    :key="entry.id"
-                    class="mb-6 ml-4 last:mb-0"
-                >
-                    <span
-                        class="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border border-background bg-border"
-                    />
-                    <div class="flex flex-wrap items-baseline gap-1 text-xs">
-                        <span
-                            class="font-semibold"
-                            :class="
-                                auditEventTextColor[entry.event_code] ??
-                                'text-muted-foreground'
-                            "
-                        >
-                            {{
-                                auditEventVerb[entry.event_code] ??
-                                entry.event_label
-                            }}
-                        </span>
-                        <strong>{{ entry.actor_name }}</strong>
-                        <span class="text-muted-foreground"
-                            >— {{ entry.created_at }}</span
-                        >
-                    </div>
-
-                    <div
-                        v-if="
-                            (entry.old_values &&
-                                Object.keys(entry.old_values).length > 0) ||
-                            (entry.new_values &&
-                                Object.keys(entry.new_values).length > 0)
-                        "
-                        class="mt-2 overflow-hidden rounded-lg border text-xs"
-                    >
-                        <table class="w-full">
-                            <thead>
-                                <tr class="border-b bg-muted/40">
-                                    <th
-                                        class="px-3 py-1.5 text-left font-medium text-muted-foreground"
-                                    >
-                                        Champ
-                                    </th>
-                                    <th
-                                        v-if="entry.old_values"
-                                        class="px-3 py-1.5 text-left font-medium text-muted-foreground"
-                                    >
-                                        Avant
-                                    </th>
-                                    <th
-                                        v-if="entry.new_values"
-                                        class="px-3 py-1.5 text-left font-medium text-muted-foreground"
-                                    >
-                                        Après
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y">
-                                <tr
-                                    v-for="row in auditDiffRows(entry)"
-                                    :key="row.field"
-                                    class="hover:bg-muted/10"
-                                >
-                                    <td
-                                        class="px-3 py-1.5 font-medium text-muted-foreground"
-                                    >
-                                        {{ row.label }}
-                                    </td>
-                                    <td
-                                        v-if="entry.old_values"
-                                        class="px-3 py-1.5 whitespace-pre-line"
-                                    >
-                                        {{ row.old }}
-                                    </td>
-                                    <td
-                                        v-if="entry.new_values"
-                                        class="px-3 py-1.5 whitespace-pre-line"
-                                    >
-                                        {{ row.new }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </li>
-            </ol>
-        </Dialog>
 
         <!-- Dialog Encaissement -->
         <Dialog
