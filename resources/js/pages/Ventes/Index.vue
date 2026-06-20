@@ -177,12 +177,15 @@ function applyFilters() {
     if (localSiteId.value) params.site_id = localSiteId.value;
     if (localDateDebut.value) params.date_debut = localDateDebut.value;
     if (localDateFin.value) params.date_fin = localDateFin.value;
-    if (localStatutFacture.value) params.statut_facture = localStatutFacture.value;
-    if (localStatutCommission.value) params.statut_commission = localStatutCommission.value;
+    if (localStatutFacture.value)
+        params.statut_facture = localStatutFacture.value;
+    if (localStatutCommission.value)
+        params.statut_commission = localStatutCommission.value;
     if (localVehicule.value) params.vehicule = localVehicule.value;
     if (localProprietaire.value) params.proprietaire = localProprietaire.value;
     if (localLivreur.value) params.livreur = localLivreur.value;
-    if (localNumeroCommande.value) params.numero_commande = localNumeroCommande.value;
+    if (localNumeroCommande.value)
+        params.numero_commande = localNumeroCommande.value;
     if (localClient.value) params.client = localClient.value;
     router.get('/ventes', params, { preserveScroll: true, replace: true });
 }
@@ -200,7 +203,11 @@ function resetFilters() {
     localNumeroCommande.value = '';
     localClient.value = '';
     search.value = '';
-    router.get('/ventes', { periode: 'all', statut: 'tous' }, { preserveScroll: true, replace: true });
+    router.get(
+        '/ventes',
+        { periode: 'all', statut: 'tous' },
+        { preserveScroll: true, replace: true },
+    );
 }
 
 const activeFilterCount = computed(() => {
@@ -232,9 +239,11 @@ const commandesFiltrees = computed(() => {
         (c) =>
             c.reference.toLowerCase().includes(q) ||
             (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
-            (c.vehicule_immatriculation && c.vehicule_immatriculation.toLowerCase().includes(q)) ||
+            (c.vehicule_immatriculation &&
+                c.vehicule_immatriculation.toLowerCase().includes(q)) ||
             (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
-            (c.client_telephone && c.client_telephone.toLowerCase().includes(q)) ||
+            (c.client_telephone &&
+                c.client_telephone.toLowerCase().includes(q)) ||
             (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
             (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
             (c.facture_statut_label &&
@@ -253,7 +262,8 @@ const mobileFiltered = computed(() => {
         (c) =>
             c.reference.toLowerCase().includes(q) ||
             (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
-            (c.vehicule_immatriculation && c.vehicule_immatriculation.toLowerCase().includes(q)) ||
+            (c.vehicule_immatriculation &&
+                c.vehicule_immatriculation.toLowerCase().includes(q)) ||
             (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
             (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
             (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
@@ -646,92 +656,147 @@ function confirmDelete(c: Commande) {
                     @apply="applyFilters"
                     @reset="resetFilters"
                 >
-                    <div @keydown.enter.prevent="applyFilters" class="space-y-5">
-                    <!-- Agence / Site (Admin uniquement) -->
-                    <div v-if="is_admin" class="space-y-1.5">
-                        <Label>Agence / Site</Label>
-                        <select
-                            v-model="localSiteId"
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        >
-                            <option v-for="s in sitesOptions" :key="s.id" :value="s.id">{{ s.nom }}</option>
-                        </select>
-                    </div>
-
-                    <!-- Statut commande -->
-                    <div class="space-y-1.5">
-                        <Label>Statut commande</Label>
-                        <select
-                            v-model="localStatut"
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        >
-                            <option v-for="s in filtresStatut" :key="s.value" :value="s.value">{{ s.label }}</option>
-                        </select>
-                    </div>
-
-                    <!-- Statut facture -->
-                    <div class="space-y-1.5">
-                        <Label>Statut facture</Label>
-                        <select
-                            v-model="localStatutFacture"
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        >
-                            <option v-for="s in filtresStatutFacture" :key="s.value" :value="s.value">{{ s.label }}</option>
-                        </select>
-                    </div>
-
-                    <!-- Statut commission -->
-                    <div class="space-y-1.5">
-                        <Label>Statut commission</Label>
-                        <select
-                            v-model="localStatutCommission"
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        >
-                            <option v-for="s in filtresStatutCommission" :key="s.value" :value="s.value">{{ s.label }}</option>
-                        </select>
-                    </div>
-
-                    <!-- Dates -->
-                    <div class="grid grid-cols-2 gap-2">
-                        <div class="space-y-1.5">
-                            <Label>Date début</Label>
-                            <Input v-model="localDateDebut" type="date" class="h-9" />
+                    <div
+                        @keydown.enter.prevent="applyFilters"
+                        class="space-y-5"
+                    >
+                        <!-- Agence / Site (Admin uniquement) -->
+                        <div v-if="is_admin" class="space-y-1.5">
+                            <Label>Agence / Site</Label>
+                            <select
+                                v-model="localSiteId"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            >
+                                <option
+                                    v-for="s in sitesOptions"
+                                    :key="s.id"
+                                    :value="s.id"
+                                >
+                                    {{ s.nom }}
+                                </option>
+                            </select>
                         </div>
+
+                        <!-- Statut commande -->
                         <div class="space-y-1.5">
-                            <Label>Date fin</Label>
-                            <Input v-model="localDateFin" type="date" class="h-9" />
+                            <Label>Statut commande</Label>
+                            <select
+                                v-model="localStatut"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            >
+                                <option
+                                    v-for="s in filtresStatut"
+                                    :key="s.value"
+                                    :value="s.value"
+                                >
+                                    {{ s.label }}
+                                </option>
+                            </select>
                         </div>
-                    </div>
 
-                    <!-- Véhicule -->
-                    <div class="space-y-1.5">
-                        <Label>Véhicule</Label>
-                        <Input v-model="localVehicule" placeholder="Nom ou immatriculation…" class="h-9" />
-                    </div>
+                        <!-- Statut facture -->
+                        <div class="space-y-1.5">
+                            <Label>Statut facture</Label>
+                            <select
+                                v-model="localStatutFacture"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            >
+                                <option
+                                    v-for="s in filtresStatutFacture"
+                                    :key="s.value"
+                                    :value="s.value"
+                                >
+                                    {{ s.label }}
+                                </option>
+                            </select>
+                        </div>
 
-                    <!-- Propriétaire -->
-                    <div class="space-y-1.5">
-                        <Label>Propriétaire</Label>
-                        <Input v-model="localProprietaire" placeholder="Nom, prénom ou téléphone…" class="h-9" />
-                    </div>
+                        <!-- Statut commission -->
+                        <div class="space-y-1.5">
+                            <Label>Statut commission</Label>
+                            <select
+                                v-model="localStatutCommission"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            >
+                                <option
+                                    v-for="s in filtresStatutCommission"
+                                    :key="s.value"
+                                    :value="s.value"
+                                >
+                                    {{ s.label }}
+                                </option>
+                            </select>
+                        </div>
 
-                    <!-- Livreur -->
-                    <div class="space-y-1.5">
-                        <Label>Livreur</Label>
-                        <Input v-model="localLivreur" placeholder="Nom, prénom ou téléphone…" class="h-9" />
-                    </div>
+                        <!-- Dates -->
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="space-y-1.5">
+                                <Label>Date début</Label>
+                                <Input
+                                    v-model="localDateDebut"
+                                    type="date"
+                                    class="h-9"
+                                />
+                            </div>
+                            <div class="space-y-1.5">
+                                <Label>Date fin</Label>
+                                <Input
+                                    v-model="localDateFin"
+                                    type="date"
+                                    class="h-9"
+                                />
+                            </div>
+                        </div>
 
-                    <!-- Client -->
-                    <div class="space-y-1.5">
-                        <Label>Client</Label>
-                        <Input v-model="localClient" placeholder="Nom, prénom ou téléphone…" class="h-9" />
-                    </div>
+                        <!-- Véhicule -->
+                        <div class="space-y-1.5">
+                            <Label>Véhicule</Label>
+                            <Input
+                                v-model="localVehicule"
+                                placeholder="Nom ou immatriculation…"
+                                class="h-9"
+                            />
+                        </div>
 
-                    <!-- Numéro de commande -->
-                    <div class="space-y-1.5">
-                        <Label>N° commande</Label>
-                        <Input v-model="localNumeroCommande" placeholder="CMD-…" class="h-9" />
-                    </div>
+                        <!-- Propriétaire -->
+                        <div class="space-y-1.5">
+                            <Label>Propriétaire</Label>
+                            <Input
+                                v-model="localProprietaire"
+                                placeholder="Nom, prénom ou téléphone…"
+                                class="h-9"
+                            />
+                        </div>
+
+                        <!-- Livreur -->
+                        <div class="space-y-1.5">
+                            <Label>Livreur</Label>
+                            <Input
+                                v-model="localLivreur"
+                                placeholder="Nom, prénom ou téléphone…"
+                                class="h-9"
+                            />
+                        </div>
+
+                        <!-- Client -->
+                        <div class="space-y-1.5">
+                            <Label>Client</Label>
+                            <Input
+                                v-model="localClient"
+                                placeholder="Nom, prénom ou téléphone…"
+                                class="h-9"
+                            />
+                        </div>
+
+                        <!-- Numéro de commande -->
+                        <div class="space-y-1.5">
+                            <Label>N° commande</Label>
+                            <Input
+                                v-model="localNumeroCommande"
+                                placeholder="CMD-…"
+                                class="h-9"
+                            />
+                        </div>
                     </div>
                 </FilterDrawer>
 
@@ -812,7 +877,11 @@ function confirmDelete(c: Commande) {
                     <!-- Chauffeur -->
                     <Column header="Chauffeur" style="min-width: 130px">
                         <template #body="{ data }">
-                            <span v-if="data.chauffeur_nom" class="text-muted-foreground">{{ data.chauffeur_nom }}</span>
+                            <span
+                                v-if="data.chauffeur_nom"
+                                class="text-muted-foreground"
+                                >{{ data.chauffeur_nom }}</span
+                            >
                             <span v-else class="text-muted-foreground">—</span>
                         </template>
                     </Column>
@@ -877,7 +946,10 @@ function confirmDelete(c: Commande) {
                         <template #body="{ data }">
                             <StatusDot
                                 :label="data.statut_label"
-                                :dot-class="statutCommandeColor[data.statut] ?? 'bg-zinc-400 dark:bg-zinc-500'"
+                                :dot-class="
+                                    statutCommandeColor[data.statut] ??
+                                    'bg-zinc-400 dark:bg-zinc-500'
+                                "
                                 class="text-muted-foreground"
                             />
                         </template>

@@ -6,7 +6,15 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, ExternalLink, Lock, Phone, Plus, Save, Trash2 } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    ExternalLink,
+    Lock,
+    Phone,
+    Plus,
+    Save,
+    Trash2,
+} from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
@@ -692,11 +700,20 @@ function confirmerEtCreer() {
                                                 {
                                                     type: 'vehicule',
                                                     titre: vehiculeSelected
-                                                        ? vehiculeLabel(vehiculeSelected)
+                                                        ? vehiculeLabel(
+                                                              vehiculeSelected,
+                                                          )
                                                         : 'Véhicule',
-                                                    chauffeur: vehiculeSelected?.livreur_nom
-                                                        ? vehiculeSelected.livreur_nom + (vehiculeSelected.livreur_telephone ? ' — ' + formatPhoneDisplay(vehiculeSelected.livreur_telephone) : '')
-                                                        : undefined,
+                                                    chauffeur:
+                                                        vehiculeSelected?.livreur_nom
+                                                            ? vehiculeSelected.livreur_nom +
+                                                              (vehiculeSelected.livreur_telephone
+                                                                  ? ' — ' +
+                                                                    formatPhoneDisplay(
+                                                                        vehiculeSelected.livreur_telephone,
+                                                                    )
+                                                                  : '')
+                                                            : undefined,
                                                 },
                                             )
                                         "
@@ -930,11 +947,16 @@ function confirmerEtCreer() {
                                                 {
                                                     type: 'client',
                                                     titre: clientSelected
-                                                        ? clientLabel(clientSelected)
+                                                        ? clientLabel(
+                                                              clientSelected,
+                                                          )
                                                         : 'Client',
-                                                    sousTitre: clientSelected?.telephone
-                                                        ? formatPhoneDisplay(clientSelected.telephone)
-                                                        : undefined,
+                                                    sousTitre:
+                                                        clientSelected?.telephone
+                                                            ? formatPhoneDisplay(
+                                                                  clientSelected.telephone,
+                                                              )
+                                                            : undefined,
                                                 },
                                             )
                                         "
@@ -1521,7 +1543,6 @@ function confirmerEtCreer() {
                 </table>
             </div>
 
-
             <!-- Alertes -->
             <div
                 v-if="
@@ -1605,10 +1626,16 @@ function confirmerEtCreer() {
                         <p class="text-sm font-medium text-foreground">
                             {{ dialogContext.titre }}
                         </p>
-                        <p v-if="dialogContext.chauffeur" class="text-xs text-muted-foreground">
+                        <p
+                            v-if="dialogContext.chauffeur"
+                            class="text-xs text-muted-foreground"
+                        >
                             Chauffeur : {{ dialogContext.chauffeur }}
                         </p>
-                        <p v-if="dialogContext.sousTitre" class="text-xs text-muted-foreground">
+                        <p
+                            v-if="dialogContext.sousTitre"
+                            class="text-xs text-muted-foreground"
+                        >
                             {{ dialogContext.sousTitre }}
                         </p>
                     </div>
@@ -1650,7 +1677,9 @@ function confirmerEtCreer() {
                         </p>
                     </div>
                     <div class="rounded-xl border bg-card p-3 text-center">
-                        <p class="text-lg font-bold text-red-600 tabular-nums dark:text-red-400">
+                        <p
+                            class="text-lg font-bold text-red-600 tabular-nums dark:text-red-400"
+                        >
                             {{ formatGNF(dialogSolvabilite.total_remaining) }}
                         </p>
                         <p class="mt-1 text-xs text-muted-foreground">
@@ -1712,16 +1741,22 @@ function confirmerEtCreer() {
                                         class="inline-flex items-center gap-1 font-mono text-xs text-primary underline underline-offset-2 hover:opacity-75"
                                     >
                                         {{ f.reference }}
-                                        <ExternalLink class="h-3 w-3 shrink-0" />
+                                        <ExternalLink
+                                            class="h-3 w-3 shrink-0"
+                                        />
                                     </a>
                                 </td>
-                                <td class="px-4 py-3 text-xs text-muted-foreground">
+                                <td
+                                    class="px-4 py-3 text-xs text-muted-foreground"
+                                >
                                     {{ formatDate(f.date) }}
                                 </td>
                                 <td class="px-4 py-3 text-right tabular-nums">
                                     {{ formatGNF(f.montant) }}
                                 </td>
-                                <td class="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                                <td
+                                    class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                >
                                     {{ formatGNF(f.encaisse) }}
                                 </td>
                                 <td class="px-4 py-3 text-right tabular-nums">

@@ -18,7 +18,7 @@ class CommissionVenteFactory extends Factory
 
         return [
             'organization_id' => $org->id,
-            'commande_vente_id' => CommandeVente::factory()->create(['organization_id' => $org->id])->id,
+            'commande_vente_id' => CommandeVente::factory()->create(['organization_id' => $org->id, 'statut' => 'livree'])->id,
             'vehicule_id' => Vehicule::factory()->create(['organization_id' => $org->id])->id,
             'montant_commande' => $montantCommande,
             'montant_commission_totale' => $montantCommissionTotale,

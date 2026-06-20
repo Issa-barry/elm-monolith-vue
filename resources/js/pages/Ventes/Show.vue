@@ -193,7 +193,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 // ── Statut couleurs ───────────────────────────────────────────────────────────
 const statutFactureColor: Record<string, string> = {
     creee: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-    impayee: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+    impayee:
+        'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
     partiel: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
     payee: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
     annulee: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
@@ -226,7 +227,10 @@ const equipeDialogVisible = ref(false);
 const clientDialogVisible = ref(false);
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
-function formatPhone(tel: string | null | undefined, dialCode?: string | null): string {
+function formatPhone(
+    tel: string | null | undefined,
+    dialCode?: string | null,
+): string {
     if (!tel) return '—';
     const digits = tel.replace(/\D/g, '');
     if (!digits) return '—';
@@ -238,22 +242,22 @@ function formatPhone(tel: string | null | undefined, dialCode?: string | null): 
     if (digits.startsWith('00224') && digits.length >= 14) {
         local = digits.slice(5);
         resolvedDial = '224';
-    // Préfixe 224 (ex: 22462200...)
+        // Préfixe 224 (ex: 22462200...)
     } else if (digits.startsWith('224') && digits.length >= 12) {
         local = digits.slice(3);
         resolvedDial = '224';
-    // Numéro local 9 chiffres → Guinea par défaut
+        // Numéro local 9 chiffres → Guinea par défaut
     } else if (digits.length === 9) {
         local = digits;
         resolvedDial = resolvedDial ?? '224';
-    // Préfixe connu passé en paramètre
+        // Préfixe connu passé en paramètre
     } else if (resolvedDial && digits.startsWith(resolvedDial)) {
         local = digits.slice(resolvedDial.length);
-    // Heuristique : 11 chiffres → 2 chiffres indicatif + 9 local
+        // Heuristique : 11 chiffres → 2 chiffres indicatif + 9 local
     } else if (digits.length === 11) {
         resolvedDial = digits.slice(0, 2);
         local = digits.slice(2);
-    // Heuristique : 12 chiffres non-Guinea → 3 chiffres indicatif + 9 local
+        // Heuristique : 12 chiffres non-Guinea → 3 chiffres indicatif + 9 local
     } else if (digits.length === 12) {
         resolvedDial = digits.slice(0, 3);
         local = digits.slice(3);
@@ -443,7 +447,8 @@ function submitAnnuler() {
     annulerForm.patch(`/ventes/${props.commande.id}/annuler`, {
         onSuccess: () => {
             annulerDialogVisible.value = false;
-            const flashError = (usePage().props as Record<string, any>).flash?.error;
+            const flashError = (usePage().props as Record<string, any>).flash
+                ?.error;
             if (flashError) {
                 toast.add({
                     severity: 'error',
@@ -472,7 +477,9 @@ const annulerDisabled = computed(
 );
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
-const activeTab = ref<'informations' | 'produits' | 'facturation' | 'journal' | 'historique'>('informations');
+const activeTab = ref<
+    'informations' | 'produits' | 'facturation' | 'journal' | 'historique'
+>('informations');
 
 // ── Encaissement ──────────────────────────────────────────────────────────────
 const modesPaiement = [
@@ -716,7 +723,9 @@ function connectorIsActive(idx: number): boolean {
                         </Button>
                     </Link>
                     <div>
-                        <p class="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+                        <p
+                            class="text-xs font-semibold tracking-widest text-muted-foreground uppercase"
+                        >
                             Détail commande
                         </p>
                         <h1 class="font-mono text-2xl font-bold tracking-wide">
@@ -941,13 +950,18 @@ function connectorIsActive(idx: number): boolean {
             <div v-if="activeTab === 'informations'">
                 <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
                     <div class="mb-5 flex items-center justify-between">
-                        <h3 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+                        <h3
+                            class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
                             Informations
                         </h3>
                         <div class="flex items-center gap-2">
                             <span
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="statutCommandeColor[commande.statut] ?? 'bg-zinc-100 text-zinc-600'"
+                                :class="
+                                    statutCommandeColor[commande.statut] ??
+                                    'bg-zinc-100 text-zinc-600'
+                                "
                             >
                                 {{ commande.statut_label }}
                             </span>
@@ -955,29 +969,43 @@ function connectorIsActive(idx: number): boolean {
                                 v-if="facture"
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-opacity"
                                 :class="[
-                                    statutFactureColor[facture.statut] ?? 'bg-zinc-100 text-zinc-500',
-                                    facture.statut !== 'payee' ? 'cursor-pointer hover:opacity-80' : 'cursor-default',
+                                    statutFactureColor[facture.statut] ??
+                                        'bg-zinc-100 text-zinc-500',
+                                    facture.statut !== 'payee'
+                                        ? 'cursor-pointer hover:opacity-80'
+                                        : 'cursor-default',
                                 ]"
-                                @click="facture.statut !== 'payee' && (activeTab = 'facturation')"
+                                @click="
+                                    facture.statut !== 'payee' &&
+                                    (activeTab = 'facturation')
+                                "
                             >
                                 Facture : {{ facture.statut_label }}
                             </button>
                             <span
                                 v-if="commission_statut"
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="statutCommissionColor[commission_statut.value] ?? 'bg-zinc-100 text-zinc-500'"
+                                :class="
+                                    statutCommissionColor[
+                                        commission_statut.value
+                                    ] ?? 'bg-zinc-100 text-zinc-500'
+                                "
                             >
                                 Commission : {{ commission_statut.label }}
                             </span>
                         </div>
                     </div>
                     <div
-                        :class="commande.livreur_nom
-                            ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-5'
-                            : 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4'"
+                        :class="
+                            commande.livreur_nom
+                                ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-5'
+                                : 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4'
+                        "
                     >
                         <div>
-                            <p class="text-xs text-muted-foreground">Véhicule</p>
+                            <p class="text-xs text-muted-foreground">
+                                Véhicule
+                            </p>
                             <button
                                 v-if="commande.vehicule_detail"
                                 class="mt-0.5 flex items-center gap-1 font-medium text-primary hover:underline focus:outline-none"
@@ -987,7 +1015,10 @@ function connectorIsActive(idx: number): boolean {
                                 <ExternalLink class="h-3 w-3 shrink-0" />
                             </button>
                             <p v-else class="mt-0.5 font-medium">—</p>
-                            <p v-if="commande.vehicule_detail?.immatriculation" class="mt-0.5 text-xs text-muted-foreground">
+                            <p
+                                v-if="commande.vehicule_detail?.immatriculation"
+                                class="mt-0.5 text-xs text-muted-foreground"
+                            >
                                 {{ commande.vehicule_detail.immatriculation }}
                             </p>
                         </div>
@@ -1015,8 +1046,16 @@ function connectorIsActive(idx: number): boolean {
                                 <ExternalLink class="h-3 w-3 shrink-0" />
                             </button>
                             <p v-else class="mt-0.5 font-medium">—</p>
-                            <p v-if="commande.client_detail?.telephone" class="mt-0.5 text-xs text-muted-foreground">
-                                {{ formatPhone(commande.client_detail.telephone, commande.client_detail.code_phone_pays) }}
+                            <p
+                                v-if="commande.client_detail?.telephone"
+                                class="mt-0.5 text-xs text-muted-foreground"
+                            >
+                                {{
+                                    formatPhone(
+                                        commande.client_detail.telephone,
+                                        commande.client_detail.code_phone_pays,
+                                    )
+                                }}
                             </p>
                         </div>
                         <div>
@@ -1058,7 +1097,9 @@ function connectorIsActive(idx: number): boolean {
                     >
                         Lignes de commande
                     </h3>
-                    <div class="overflow-hidden overflow-x-auto rounded-lg border">
+                    <div
+                        class="overflow-hidden overflow-x-auto rounded-lg border"
+                    >
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b bg-muted/40">
@@ -1116,7 +1157,9 @@ function connectorIsActive(idx: number): boolean {
                                     <td class="px-4 py-3 font-medium">
                                         {{ ligne.produit_nom ?? '—' }}
                                     </td>
-                                    <td class="px-4 py-3 text-center tabular-nums">
+                                    <td
+                                        class="px-4 py-3 text-center tabular-nums"
+                                    >
                                         {{ ligne.quantite_demandee }}
                                     </td>
                                     <td
@@ -1128,7 +1171,9 @@ function connectorIsActive(idx: number): boolean {
                                     <td
                                         v-if="showChargeeCol"
                                         class="px-4 py-3 text-center font-semibold tabular-nums"
-                                        :class="ecartClass(ligne.ecart_chargement)"
+                                        :class="
+                                            ecartClass(ligne.ecart_chargement)
+                                        "
                                     >
                                         {{ ecartLabel(ligne.ecart_chargement) }}
                                     </td>
@@ -1136,14 +1181,29 @@ function connectorIsActive(idx: number): boolean {
                                         v-if="showChargeeCol"
                                         class="px-4 py-3 text-sm"
                                     >
-                                        <span v-if="ligne.type_ecart_label" class="text-foreground">{{ ligne.type_ecart_label }}</span>
-                                        <span v-else class="text-muted-foreground">—</span>
-                                        <p v-if="ligne.commentaire_ecart" class="mt-0.5 text-xs text-muted-foreground">{{ ligne.commentaire_ecart }}</p>
+                                        <span
+                                            v-if="ligne.type_ecart_label"
+                                            class="text-foreground"
+                                            >{{ ligne.type_ecart_label }}</span
+                                        >
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
+                                            >—</span
+                                        >
+                                        <p
+                                            v-if="ligne.commentaire_ecart"
+                                            class="mt-0.5 text-xs text-muted-foreground"
+                                        >
+                                            {{ ligne.commentaire_ecart }}
+                                        </p>
                                     </td>
                                     <td
                                         class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                     >
-                                        {{ formatGNF(ligne.prix_vente_snapshot) }}
+                                        {{
+                                            formatGNF(ligne.prix_vente_snapshot)
+                                        }}
                                     </td>
                                     <td
                                         class="px-4 py-3 text-right font-semibold tabular-nums"
@@ -1187,7 +1247,11 @@ function connectorIsActive(idx: number): boolean {
                         <div class="flex items-center gap-2">
                             <span
                                 v-if="facture && facture.montant_restant > 0"
-                                :title="!commande.can_encaisser ? 'L\'encaissement est possible uniquement après validation du chargement.' : ''"
+                                :title="
+                                    !commande.can_encaisser
+                                        ? 'L\'encaissement est possible uniquement après validation du chargement.'
+                                        : ''
+                                "
                             >
                                 <Button
                                     size="sm"
@@ -1195,7 +1259,8 @@ function connectorIsActive(idx: number): boolean {
                                     @click="openEncaisserDialog"
                                 >
                                     <HandCoins class="mr-2 h-4 w-4" />
-                                    Encaisser {{ formatGNF(facture.montant_restant) }}
+                                    Encaisser
+                                    {{ formatGNF(facture.montant_restant) }}
                                 </Button>
                             </span>
                             <span
@@ -1235,7 +1300,9 @@ function connectorIsActive(idx: number): boolean {
                             </p>
                         </div>
                         <div class="rounded-lg border bg-muted/30 px-4 py-3">
-                            <p class="text-xs text-muted-foreground">Restant dû</p>
+                            <p class="text-xs text-muted-foreground">
+                                Restant dû
+                            </p>
                             <p class="mt-0.5 text-lg font-bold tabular-nums">
                                 {{ formatGNF(facture.montant_restant) }}
                             </p>
@@ -1294,7 +1361,9 @@ function connectorIsActive(idx: number): boolean {
                                         >
                                             {{ enc.heure ?? '—' }}
                                         </td>
-                                        <td class="px-4 py-3 text-muted-foreground">
+                                        <td
+                                            class="px-4 py-3 text-muted-foreground"
+                                        >
                                             {{ enc.mode_paiement_label }}
                                         </td>
                                         <td
@@ -1318,7 +1387,7 @@ function connectorIsActive(idx: number): boolean {
                 </div>
                 <div
                     v-else
-                    class="rounded-xl border bg-card p-8 shadow-sm text-center text-sm text-muted-foreground"
+                    class="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm"
                 >
                     Aucune facture associée à cette commande.
                 </div>
@@ -1368,7 +1437,7 @@ function connectorIsActive(idx: number): boolean {
                 </div>
                 <div
                     v-else
-                    class="rounded-xl border bg-card p-8 shadow-sm text-center text-sm text-muted-foreground"
+                    class="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm"
                 >
                     Aucune activité enregistrée.
                 </div>
@@ -1398,7 +1467,9 @@ function connectorIsActive(idx: number): boolean {
                             <span
                                 class="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border border-background bg-border"
                             />
-                            <div class="flex flex-wrap items-baseline gap-1 text-xs">
+                            <div
+                                class="flex flex-wrap items-baseline gap-1 text-xs"
+                            >
                                 <span
                                     class="font-semibold"
                                     :class="
@@ -1420,9 +1491,11 @@ function connectorIsActive(idx: number): boolean {
                             <div
                                 v-if="
                                     (entry.old_values &&
-                                        Object.keys(entry.old_values).length > 0) ||
+                                        Object.keys(entry.old_values).length >
+                                            0) ||
                                     (entry.new_values &&
-                                        Object.keys(entry.new_values).length > 0)
+                                        Object.keys(entry.new_values).length >
+                                            0)
                                 "
                                 class="mt-2 overflow-hidden rounded-lg border text-xs"
                             >
@@ -1702,47 +1775,74 @@ function connectorIsActive(idx: number): boolean {
             <div class="space-y-3 px-1 py-2">
                 <div class="flex justify-between">
                     <span class="text-sm text-muted-foreground">Nom</span>
-                    <span class="text-sm font-medium">{{ commande.vehicule_detail?.nom ?? '—' }}</span>
+                    <span class="text-sm font-medium">{{
+                        commande.vehicule_detail?.nom ?? '—'
+                    }}</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-sm text-muted-foreground">Immatriculation</span>
-                    <span class="text-sm font-medium">{{ commande.vehicule_detail?.immatriculation ?? '—' }}</span>
+                    <span class="text-sm text-muted-foreground"
+                        >Immatriculation</span
+                    >
+                    <span class="text-sm font-medium">{{
+                        commande.vehicule_detail?.immatriculation ?? '—'
+                    }}</span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-sm text-muted-foreground">Type</span>
-                    <span class="text-sm font-medium">{{ commande.vehicule_detail?.type ?? '—' }}</span>
+                    <span class="text-sm font-medium">{{
+                        commande.vehicule_detail?.type ?? '—'
+                    }}</span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-sm text-muted-foreground">Capacité</span>
                     <span class="text-sm font-medium">
                         {{
                             commande.vehicule_detail?.capacite_packs != null
-                                ? commande.vehicule_detail.capacite_packs + ' packs'
+                                ? commande.vehicule_detail.capacite_packs +
+                                  ' packs'
                                 : '—'
                         }}
                     </span>
                 </div>
                 <div class="border-t pt-3">
-                    <p class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                    <p
+                        class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                    >
                         Propriétaire
                     </p>
                     <div class="flex justify-between">
                         <span class="text-sm text-muted-foreground">Nom</span>
-                        <span class="text-sm font-medium">{{ commande.vehicule_detail?.proprietaire_nom ?? '—' }}</span>
+                        <span class="text-sm font-medium">{{
+                            commande.vehicule_detail?.proprietaire_nom ?? '—'
+                        }}</span>
                     </div>
                     <div
                         v-if="commande.vehicule_detail?.proprietaire_telephone"
                         class="mt-2 flex justify-between"
                     >
-                        <span class="text-sm text-muted-foreground">Téléphone</span>
+                        <span class="text-sm text-muted-foreground"
+                            >Téléphone</span
+                        >
                         <span class="text-sm font-medium">
-                            {{ formatPhone(commande.vehicule_detail.proprietaire_telephone, commande.vehicule_detail.proprietaire_code_phone_pays) }}
+                            {{
+                                formatPhone(
+                                    commande.vehicule_detail
+                                        .proprietaire_telephone,
+                                    commande.vehicule_detail
+                                        .proprietaire_code_phone_pays,
+                                )
+                            }}
                         </span>
                     </div>
                 </div>
             </div>
             <template #footer>
-                <Button variant="outline" size="sm" @click="vehiculeDialogVisible = false">Fermer</Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    @click="vehiculeDialogVisible = false"
+                    >Fermer</Button
+                >
             </template>
         </Dialog>
 
@@ -1756,32 +1856,62 @@ function connectorIsActive(idx: number): boolean {
             <div class="space-y-4 px-1 py-2">
                 <div class="flex justify-between">
                     <span class="text-sm text-muted-foreground">Équipe</span>
-                    <span class="text-sm font-medium">{{ commande.equipe_detail?.nom ?? '—' }}</span>
+                    <span class="text-sm font-medium">{{
+                        commande.equipe_detail?.nom ?? '—'
+                    }}</span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-sm text-muted-foreground">Véhicule</span>
-                    <span class="text-sm font-medium">{{ commande.vehicule_nom ?? '—' }}</span>
+                    <span class="text-sm font-medium">{{
+                        commande.vehicule_nom ?? '—'
+                    }}</span>
                 </div>
                 <div
-                    v-if="commande.equipe_detail?.taux_commission_proprietaire != null"
+                    v-if="
+                        commande.equipe_detail?.taux_commission_proprietaire !=
+                        null
+                    "
                     class="flex justify-between"
                 >
-                    <span class="text-sm text-muted-foreground">Taux propriétaire</span>
-                    <span class="text-sm font-medium">{{ commande.equipe_detail.taux_commission_proprietaire }} %</span>
+                    <span class="text-sm text-muted-foreground"
+                        >Taux propriétaire</span
+                    >
+                    <span class="text-sm font-medium"
+                        >{{
+                            commande.equipe_detail.taux_commission_proprietaire
+                        }}
+                        %</span
+                    >
                 </div>
-                <div v-if="commande.equipe_detail?.chauffeur" class="border-t pt-3">
-                    <p class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                <div
+                    v-if="commande.equipe_detail?.chauffeur"
+                    class="border-t pt-3"
+                >
+                    <p
+                        class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                    >
                         Chauffeur principal
                     </p>
                     <div class="flex items-center justify-between">
-                        <span class="text-sm font-medium">{{ commande.equipe_detail.chauffeur.nom }}</span>
+                        <span class="text-sm font-medium">{{
+                            commande.equipe_detail.chauffeur.nom
+                        }}</span>
                         <span class="text-sm text-muted-foreground">
-                            {{ formatPhone(commande.equipe_detail.chauffeur.telephone) }}
+                            {{
+                                formatPhone(
+                                    commande.equipe_detail.chauffeur.telephone,
+                                )
+                            }}
                         </span>
                     </div>
                 </div>
-                <div v-if="commande.equipe_detail?.convoyeurs?.length" class="border-t pt-3">
-                    <p class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                <div
+                    v-if="commande.equipe_detail?.convoyeurs?.length"
+                    class="border-t pt-3"
+                >
+                    <p
+                        class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                    >
                         Convoyeurs
                     </p>
                     <div
@@ -1790,12 +1920,19 @@ function connectorIsActive(idx: number): boolean {
                         class="flex items-center justify-between py-1"
                     >
                         <span class="text-sm font-medium">{{ conv.nom }}</span>
-                        <span class="text-sm text-muted-foreground">{{ formatPhone(conv.telephone) }}</span>
+                        <span class="text-sm text-muted-foreground">{{
+                            formatPhone(conv.telephone)
+                        }}</span>
                     </div>
                 </div>
             </div>
             <template #footer>
-                <Button variant="outline" size="sm" @click="equipeDialogVisible = false">Fermer</Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    @click="equipeDialogVisible = false"
+                    >Fermer</Button
+                >
             </template>
         </Dialog>
 
@@ -1809,41 +1946,74 @@ function connectorIsActive(idx: number): boolean {
             <div class="space-y-3 px-1 py-2">
                 <div class="flex justify-between">
                     <span class="text-sm text-muted-foreground">Nom</span>
-                    <span class="text-sm font-medium">{{ commande.client_detail?.nom ?? '—' }}</span>
+                    <span class="text-sm font-medium">{{
+                        commande.client_detail?.nom ?? '—'
+                    }}</span>
                 </div>
-                <div v-if="commande.client_detail?.telephone" class="flex justify-between">
+                <div
+                    v-if="commande.client_detail?.telephone"
+                    class="flex justify-between"
+                >
                     <span class="text-sm text-muted-foreground">Téléphone</span>
                     <span class="text-sm font-medium">
-                        {{ formatPhone(commande.client_detail.telephone, commande.client_detail.code_phone_pays) }}
+                        {{
+                            formatPhone(
+                                commande.client_detail.telephone,
+                                commande.client_detail.code_phone_pays,
+                            )
+                        }}
                     </span>
                 </div>
                 <div class="border-t pt-3">
-                    <p class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                    <p
+                        class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                    >
                         Localisation
                     </p>
                     <div class="flex justify-between">
                         <span class="text-sm text-muted-foreground">Ville</span>
-                        <span class="text-sm font-medium">{{ commande.client_detail?.ville ?? '—' }}</span>
+                        <span class="text-sm font-medium">{{
+                            commande.client_detail?.ville ?? '—'
+                        }}</span>
                     </div>
-                    <div v-if="commande.client_detail?.adresse" class="mt-2 flex justify-between">
-                        <span class="text-sm text-muted-foreground">Adresse</span>
-                        <span class="text-sm font-medium text-right max-w-[60%]">{{ commande.client_detail.adresse }}</span>
+                    <div
+                        v-if="commande.client_detail?.adresse"
+                        class="mt-2 flex justify-between"
+                    >
+                        <span class="text-sm text-muted-foreground"
+                            >Adresse</span
+                        >
+                        <span
+                            class="max-w-[60%] text-right text-sm font-medium"
+                            >{{ commande.client_detail.adresse }}</span
+                        >
                     </div>
                 </div>
-                <div class="border-t pt-3 flex justify-between">
+                <div class="flex justify-between border-t pt-3">
                     <span class="text-sm text-muted-foreground">Cashback</span>
                     <span
                         class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                        :class="commande.client_detail?.cashback_eligible
-                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                            : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'"
+                        :class="
+                            commande.client_detail?.cashback_eligible
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+                        "
                     >
-                        {{ commande.client_detail?.cashback_eligible ? 'Éligible' : 'Non éligible' }}
+                        {{
+                            commande.client_detail?.cashback_eligible
+                                ? 'Éligible'
+                                : 'Non éligible'
+                        }}
                     </span>
                 </div>
             </div>
             <template #footer>
-                <Button variant="outline" size="sm" @click="clientDialogVisible = false">Fermer</Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    @click="clientDialogVisible = false"
+                    >Fermer</Button
+                >
             </template>
         </Dialog>
 

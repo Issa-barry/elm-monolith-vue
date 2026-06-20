@@ -474,8 +474,16 @@ function _progressPercent(f: FactureItem): number {
                             >{{ f.created_at }}</span
                         >
                         <span
-                            v-if="!f.is_annulee && !f.is_payee && can('ventes.update')"
-                            :title="!f.is_encaissable ? 'Encaissement possible uniquement après validation du chargement.' : ''"
+                            v-if="
+                                !f.is_annulee &&
+                                !f.is_payee &&
+                                can('ventes.update')
+                            "
+                            :title="
+                                !f.is_encaissable
+                                    ? 'Encaissement possible uniquement après validation du chargement.'
+                                    : ''
+                            "
                         >
                             <Button
                                 size="sm"
@@ -897,8 +905,15 @@ function _progressPercent(f: FactureItem): number {
                                             <DropdownMenuItem
                                                 class="cursor-pointer"
                                                 :disabled="!data.is_encaissable"
-                                                :title="!data.is_encaissable ? 'Encaissement possible uniquement après validation du chargement.' : ''"
-                                                @click="data.is_encaissable && openDialog(data)"
+                                                :title="
+                                                    !data.is_encaissable
+                                                        ? 'Encaissement possible uniquement après validation du chargement.'
+                                                        : ''
+                                                "
+                                                @click="
+                                                    data.is_encaissable &&
+                                                    openDialog(data)
+                                                "
                                             >
                                                 <CreditCard class="h-4 w-4" />
                                                 Encaisser

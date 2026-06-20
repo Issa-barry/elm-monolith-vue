@@ -236,7 +236,11 @@ function deleteVersement(versementId: number) {
     });
 }
 function isVersementDisabled(part: CommissionPart): boolean {
-    return part.montant_restant <= 0 || !can('ventes.update') || !props.commission.is_payable;
+    return (
+        part.montant_restant <= 0 ||
+        !can('ventes.update') ||
+        !props.commission.is_payable
+    );
 }
 </script>
 
