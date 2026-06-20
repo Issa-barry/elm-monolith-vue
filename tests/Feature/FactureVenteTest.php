@@ -5,7 +5,11 @@ namespace Tests\Feature;
 use App\Models\CommandeVente;
 use App\Models\FactureVente;
 use App\Models\Organization;
+use App\Models\Site;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -22,7 +26,8 @@ class FactureVenteTest extends TestCase
 
     private function makeFacture(array $overrides = []): FactureVente
     {
-        $siteId = $this->user->sites()->first(['sites.id'])?->id;
+        $siteId = $overrides['site_id'] ?? $this->user->sites()->first(['sites.id'])?->id;
+        unset($overrides['site_id']);
         $commande = CommandeVente::factory()->create(['organization_id' => $this->org->id, 'site_id' => $siteId]);
 
         return FactureVente::factory()->create(array_merge([
@@ -31,6 +36,22 @@ class FactureVenteTest extends TestCase
             'montant_net' => 10000,
             'statut_facture' => 'impayee',
         ], $overrides));
+    }
+
+    private function makeNonAdminUser(array $siteIds): User
+    {
+        // "manager" : un rôle staff non-admin, pour tester la portée par site
+        // (isAdmin() ne renvoie true que pour super_admin/admin_entreprise).
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'ventes.read', 'guard_name' => 'web']);
+        $user = User::factory()->create(['organization_id' => $this->org->id]);
+        $user->assignRole('manager');
+        $user->givePermissionTo('ventes.read');
+        foreach ($siteIds as $siteId) {
+            $user->sites()->attach($siteId, ['role' => 'employe', 'is_default' => false]);
+        }
+
+        return $user;
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
@@ -195,5 +216,86 @@ class FactureVenteTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('factures.index', ['periode' => 'all']))
             ->assertInertia(fn ($page) => $page->where('statut', 'tous'));
+    }
+
+    // ── filtre site = "tous les sites" ───────────────────────────────────────
+
+    public function test_site_id_tous_explicit_is_preserved_and_not_reverted_to_default_site(): void
+    {
+        // Régression : le frontend doit toujours envoyer site_id=tous explicitement
+        // (jamais omis), sinon le backend retombe sur le site par défaut de l'utilisateur.
+        $this->actingAs($this->user)
+            ->get(route('factures.index', ['periode' => 'all', 'site_id' => 'tous']))
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page->where('site_id', 'tous'));
+    }
+
+    public function test_admin_with_site_id_tous_sees_factures_from_every_site(): void
+    {
+        // L'utilisateur de test (HasOrgAndUser) a le rôle admin_entreprise.
+        $autreSite = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Site Secondaire',
+            'type' => 'depot',
+            'localisation' => 'Kindia',
+        ]);
+
+        $this->makeFacture(['montant_net' => 10000]);
+        $this->makeFacture(['montant_net' => 5000, 'site_id' => $autreSite->id]);
+
+        $this->actingAs($this->user)
+            ->get(route('factures.index', ['periode' => 'all', 'site_id' => 'tous']))
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->where('site_id', 'tous')
+                ->has('factures', 2)
+            );
+    }
+
+    public function test_non_admin_with_site_id_tous_only_sees_factures_from_authorized_sites(): void
+    {
+        $siteAutorise = $this->user->sites()->first(['sites.id']);
+        $siteNonAutorise = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Site Non Autorisé',
+            'type' => 'depot',
+            'localisation' => 'Kindia',
+        ]);
+
+        $nonAdmin = $this->makeNonAdminUser([$siteAutorise->id]);
+
+        $this->makeFacture(['montant_net' => 10000, 'site_id' => $siteAutorise->id]);
+        $this->makeFacture(['montant_net' => 5000, 'site_id' => $siteNonAutorise->id]);
+
+        $this->actingAs($nonAdmin)
+            ->get(route('factures.index', ['periode' => 'all', 'site_id' => 'tous']))
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->where('site_id', 'tous')
+                ->has('factures', 1)
+                ->where('factures.0.montant_net', fn ($v) => (float) $v === 10000.0)
+            );
+    }
+
+    public function test_non_admin_sites_filter_options_exclude_unauthorized_sites(): void
+    {
+        $siteAutorise = $this->user->sites()->first(['sites.id']);
+        Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Site Non Autorisé',
+            'type' => 'depot',
+            'localisation' => 'Kindia',
+        ]);
+
+        $nonAdmin = $this->makeNonAdminUser([$siteAutorise->id]);
+
+        $this->actingAs($nonAdmin)
+            ->get(route('factures.index', ['periode' => 'all', 'site_id' => 'tous']))
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->where('sites', fn ($sites) => collect($sites)
+                    ->pluck('label')
+                    ->contains('Site Non Autorisé') === false)
+            );
     }
 }

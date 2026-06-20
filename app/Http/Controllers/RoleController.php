@@ -11,13 +11,30 @@ use Spatie\Permission\PermissionRegistrar;
 
 class RoleController extends Controller
 {
-    private const RESOURCES = ['clients', 'prestataires', 'livreurs', 'proprietaires', 'vehicules', 'equipes-livraison', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres'];
+    private const RESOURCES = [
+        // Personnes
+        'clients', 'prestataires', 'livreurs', 'proprietaires',
+        // Véhicules & terrain
+        'vehicules', 'equipes-livraison', 'sites',
+        // Commerce
+        'produits', 'packings', 'ventes', 'achats', 'factures', 'commissions', 'cashback', 'pdv',
+        // Opérations
+        'logistique', 'transferts', 'receptions',
+        // Finances
+        'depenses', 'comptabilite', 'journal-financier',
+        // RH
+        'rh-employes', 'rh-contrats', 'rh-paie',
+        // Administration
+        'users',
+        // Paramètres
+        'parametres', 'parametres-produits', 'parametres-depenses', 'parametres-ventes', 'parametres-systeme', 'modules-metier',
+    ];
 
     private const ACTIONS = ['create', 'read', 'update', 'delete'];
 
     public function index(): Response
     {
-        abort_unless(auth()->user()->can('users.read'), 403);
+        abort_unless(auth()->user()->isAdmin(), 403);
 
         $roles = Role::withCount(['users', 'permissions'])->get()->map(fn (Role $role) => [
             'id' => $role->id,
@@ -35,9 +52,10 @@ class RoleController extends Controller
 
     public function edit(Role $role): Response
     {
-        abort_unless(auth()->user()->can('users.read'), 403);
+        abort_unless(auth()->user()->isAdmin(), 403);
 
-        $isSuperAdmin = auth()->user()->isSuperAdmin();
+        $user = auth()->user();
+        $isSuperAdmin = $user->isSuperAdmin();
         $resources = $isSuperAdmin
             ? self::RESOURCES
             : array_values(array_filter(self::RESOURCES, fn ($r) => $r !== 'users'));

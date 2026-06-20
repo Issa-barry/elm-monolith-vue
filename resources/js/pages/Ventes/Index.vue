@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilterDrawer from '@/components/FilterDrawer.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,20 +26,18 @@ import {
     Search,
     ShoppingCart,
     Trash2,
+    X,
     XCircle,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
 import InputNumber from 'primevue/inputnumber';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Commande {
@@ -97,7 +96,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Ventes', href: '/ventes' },
 ];
 
-// ── Filtres période ───────────────────────────────────────────────────────────
+// ── Filtres (server-driven : période + statut) ────────────────────────────────
 const periodes = [
     { value: 'today', label: "Aujourd'hui" },
     { value: 'week', label: 'Cette semaine' },
@@ -105,13 +104,6 @@ const periodes = [
     { value: 'all', label: 'Tout' },
 ];
 
-function setPeriode(p: string) {
-    const params: Record<string, string> = { periode: p };
-    if (props.statut !== 'tous') params.statut = props.statut;
-    router.get('/ventes', params, { preserveScroll: true, replace: true });
-}
-
-// ── Filtres statut (server-driven) ────────────────────────────────────────────
 const filtresStatut = [
     { value: 'tous', label: 'Toutes' },
     { value: 'brouillon', label: 'Brouillons' },
@@ -123,18 +115,42 @@ const filtresStatut = [
     { value: 'annulee', label: 'Annulées' },
 ];
 
-function setStatut(s: string) {
-    const params: Record<string, string> = { periode: props.periode };
-    if (s !== 'tous') params.statut = s;
-    router.get('/ventes', params, { preserveScroll: true, replace: true });
+const filterDrawerOpen = ref(false);
+const localPeriode = ref(props.periode);
+const localStatut = ref(props.statut);
+
+function applyFilters() {
+    router.get(
+        '/ventes',
+        { periode: localPeriode.value, statut: localStatut.value },
+        { preserveScroll: true, replace: true },
+    );
 }
 
-// ── Recherche locale ──────────────────────────────────────────────────────────
+function resetFilters() {
+    localPeriode.value = 'today';
+    localStatut.value = 'tous';
+    search.value = '';
+    router.get(
+        '/ventes',
+        { periode: 'today', statut: 'tous' },
+        { preserveScroll: true, replace: true },
+    );
+}
+
+const activeFilterCount = computed(() =>
+    localStatut.value !== 'tous' ? 1 : 0,
+);
+
+const hasActiveFilters = computed(
+    () =>
+        localPeriode.value !== 'today' ||
+        activeFilterCount.value > 0 ||
+        !!search.value,
+);
+
+// ── Recherche locale (client-side, immédiate) ─────────────────────────────────
 const search = ref('');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
 
 const commandesFiltrees = computed(() => {
     const q = search.value.toLowerCase().trim();
@@ -143,7 +159,12 @@ const commandesFiltrees = computed(() => {
         (c) =>
             c.reference.toLowerCase().includes(q) ||
             (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
-            (c.client_nom && c.client_nom.toLowerCase().includes(q)),
+            (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
+            (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
+            (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
+            (c.facture_statut_label &&
+                c.facture_statut_label.toLowerCase().includes(q)) ||
+            (c.created_at && c.created_at.toLowerCase().includes(q)),
     );
 });
 
@@ -156,7 +177,13 @@ const mobileFiltered = computed(() => {
     return props.commandes.filter(
         (c) =>
             c.reference.toLowerCase().includes(q) ||
-            (c.client_nom && c.client_nom.toLowerCase().includes(q)),
+            (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
+            (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
+            (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
+            (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
+            (c.facture_statut_label &&
+                c.facture_statut_label.toLowerCase().includes(q)) ||
+            (c.created_at && c.created_at.toLowerCase().includes(q)),
     );
 });
 
@@ -513,6 +540,74 @@ function confirmDelete(c: Commande) {
                 </div>
             </div>
 
+            <!-- Filtres -->
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-[260px] shrink-0">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                        v-model="search"
+                        type="search"
+                        placeholder="Référence, véhicule, client…"
+                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    />
+                    <button
+                        v-if="search"
+                        type="button"
+                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        @click="search = ''"
+                    >
+                        <X class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+
+                <FilterDrawer
+                    v-model:open="filterDrawerOpen"
+                    title="Filtres"
+                    :active-count="activeFilterCount"
+                    @apply="applyFilters"
+                    @reset="resetFilters"
+                >
+                    <div class="space-y-1.5">
+                        <Label>Statut</Label>
+                        <Select
+                            v-model="localStatut"
+                            :options="filtresStatut"
+                            option-label="label"
+                            option-value="value"
+                            class="w-full"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Période</Label>
+                        <Select
+                            v-model="localPeriode"
+                            :options="periodes"
+                            option-label="label"
+                            option-value="value"
+                            class="w-full"
+                        />
+                    </div>
+                </FilterDrawer>
+
+                <span
+                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                >
+                    {{ commandesFiltrees.length }} résultat{{
+                        commandesFiltrees.length !== 1 ? 's' : ''
+                    }}
+                </span>
+                <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    @click="resetFilters"
+                >
+                    Réinitialiser
+                </button>
+            </div>
+
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
@@ -525,48 +620,9 @@ function confirmDelete(c: Commande) {
                     class="text-sm"
                     :pt="{
                         root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
                         tbody: { class: 'divide-y' },
                     }"
                 >
-                    <template #header>
-                        <div class="flex items-center gap-3">
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Référence, véhicule, client…"
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Select
-                                :model-value="statut"
-                                :options="filtresStatut"
-                                option-label="label"
-                                option-value="value"
-                                class="w-36"
-                                @update:model-value="setStatut($event)"
-                            />
-                            <Select
-                                :model-value="periode"
-                                :options="periodes"
-                                option-label="label"
-                                option-value="value"
-                                class="w-40"
-                                @update:model-value="setPeriode($event)"
-                            />
-                            <span class="text-xs text-muted-foreground">
-                                {{ commandesFiltrees.length }} résultat{{
-                                    commandesFiltrees.length !== 1 ? 's' : ''
-                                }}
-                            </span>
-                        </div>
-                    </template>
-
                     <!-- Référence -->
                     <Column
                         field="reference"

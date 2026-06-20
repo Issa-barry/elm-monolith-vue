@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,20 +21,16 @@ import {
     MoreVertical,
     Pencil,
     Plus,
-    Search,
     Shield,
     Trash2,
     UserCircle,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface StaffUser {
     id: number;
@@ -123,17 +120,33 @@ const inactiveUsers = computed(
 );
 
 const search = ref('');
-const statusFilter = ref<string>('tous');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
+const statut = ref<string>('tous');
+
+function resetFilters() {
+    search.value = '';
+    statut.value = 'tous';
+}
+
+const hasActiveFilters = computed(
+    () => !!search.value || statut.value !== 'tous',
+);
 
 const filteredUsers = computed(() => {
-    if (statusFilter.value === 'tous') return props.users;
-    return props.users.filter(
-        (u) => u.is_active === (statusFilter.value === 'actif'),
-    );
+    let list = props.users;
+    if (statut.value !== 'tous') {
+        list = list.filter((u) => u.is_active === (statut.value === 'actif'));
+    }
+    const q = search.value.toLowerCase().trim();
+    if (q) {
+        list = list.filter(
+            (u) =>
+                u.nom_complet.toLowerCase().includes(q) ||
+                (u.email ?? '').toLowerCase().includes(q) ||
+                (u.site ?? '').toLowerCase().includes(q) ||
+                (u.matricule ?? '').toLowerCase().includes(q),
+        );
+    }
+    return list;
 });
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -221,6 +234,26 @@ function confirmDelete(u: StaffUser) {
                 </div>
             </div>
 
+            <DataTableFilters
+                v-model:search="search"
+                search-placeholder="Rechercher un utilisateur…"
+                :has-active-filters="hasActiveFilters"
+                :result-count="filteredUsers.length"
+                @reset="resetFilters"
+            >
+                <Select
+                    v-model="statut"
+                    :options="[
+                        { value: 'tous', label: 'Tous' },
+                        { value: 'actif', label: 'Actif' },
+                        { value: 'inactif', label: 'Inactif' },
+                    ]"
+                    option-label="label"
+                    option-value="value"
+                    class="w-32"
+                />
+            </DataTableFilters>
+
             <div
                 class="overflow-hidden rounded-xl border bg-card"
                 data-testid="staff-users-table"
@@ -229,49 +262,12 @@ function confirmDelete(u: StaffUser) {
                     :value="filteredUsers"
                     :paginator="props.users.length > 20"
                     :rows="20"
-                    :global-filter-fields="[
-                        'nom_complet',
-                        'email',
-                        'site',
-                        'matricule',
-                    ]"
-                    v-model:filters="filters"
                     data-key="id"
                     striped-rows
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
                 >
-                    <template #header>
-                        <div
-                            class="flex items-center gap-3 border-b border-border bg-muted/30 px-4 py-3"
-                        >
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Rechercher un utilisateur..."
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Select
-                                v-model="statusFilter"
-                                :options="[
-                                    { value: 'tous', label: 'Tous' },
-                                    { value: 'actif', label: 'Actif' },
-                                    { value: 'inactif', label: 'Inactif' },
-                                ]"
-                                option-label="label"
-                                option-value="value"
-                                class="w-32"
-                            />
-                        </div>
-                    </template>
-
                     <!-- Avatar + nom -->
                     <Column
                         field="nom_complet"

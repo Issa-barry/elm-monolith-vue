@@ -23,16 +23,17 @@ import {
     Search,
     Trash2,
     Users,
+    X,
 } from 'lucide-vue-next';
+
+import FilterDrawer from '@/components/FilterDrawer.vue';
+import { Label } from '@/components/ui/label';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 function initials(name: string | null | undefined): string {
     if (!name) return '?';
@@ -67,12 +68,10 @@ const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
 
+const mobileSearch = ref('');
+const filterDrawerOpen = ref(false);
 const search = ref('');
-const statusFilter = ref<string>('tous');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
+const statut = ref<string>('tous');
 
 const totalClients = computed(() => props.clients.length);
 const activeClients = computed(
@@ -82,16 +81,25 @@ const inactiveClients = computed(
     () => props.clients.filter((c) => !c.is_active).length,
 );
 
-function applyFilters(list: Client[]): Client[] {
-    const byStatus =
-        statusFilter.value === 'tous'
-            ? list
-            : list.filter(
-                  (c) => c.is_active === (statusFilter.value === 'actif'),
-              );
+function resetFilters() {
+    search.value = '';
+    statut.value = 'tous';
+}
+
+const activeFilterCount = computed(() => (statut.value !== 'tous' ? 1 : 0));
+
+const hasActiveFilters = computed(
+    () => !!search.value || activeFilterCount.value > 0,
+);
+
+const filteredClients = computed(() => {
+    let list = props.clients;
+    if (statut.value !== 'tous') {
+        list = list.filter((c) => c.is_active === (statut.value === 'actif'));
+    }
     const q = search.value.trim().toLowerCase();
-    if (!q) return byStatus;
-    return byStatus.filter(
+    if (!q) return list;
+    return list.filter(
         (c) =>
             c.nom_complet.toLowerCase().includes(q) ||
             (c.email ?? '').toLowerCase().includes(q) ||
@@ -99,10 +107,19 @@ function applyFilters(list: Client[]): Client[] {
             (c.ville ?? '').toLowerCase().includes(q) ||
             (c.pays ?? '').toLowerCase().includes(q),
     );
-}
+});
 
-const filteredClients = computed(() => applyFilters(props.clients));
-const mobileFiltered = computed(() => applyFilters(props.clients));
+const mobileFiltered = computed(() => {
+    const q = mobileSearch.value.trim().toLowerCase();
+    if (!q) return props.clients;
+    return props.clients.filter(
+        (c) =>
+            c.nom_complet.toLowerCase().includes(q) ||
+            (c.email ?? '').toLowerCase().includes(q) ||
+            (c.adresse ?? '').toLowerCase().includes(q) ||
+            (c.ville ?? '').toLowerCase().includes(q),
+    );
+});
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -189,7 +206,7 @@ function confirmDelete(c: Client) {
                         class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
                     <input
-                        v-model="search"
+                        v-model="mobileSearch"
                         type="search"
                         placeholder="Rechercher..."
                         class="w-full rounded-lg border bg-background py-2 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -365,62 +382,77 @@ function confirmDelete(c: Client) {
             </div>
 
             <!-- Tableau -->
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-[260px] shrink-0">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                        v-model="search"
+                        type="search"
+                        placeholder="Rechercher…"
+                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    />
+                    <button
+                        v-if="search"
+                        type="button"
+                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        @click="search = ''"
+                    >
+                        <X class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+
+                <FilterDrawer
+                    v-model:open="filterDrawerOpen"
+                    title="Filtres"
+                    :active-count="activeFilterCount"
+                    @reset="resetFilters"
+                >
+                    <div class="space-y-1.5">
+                        <Label>Statut</Label>
+                        <Select
+                            v-model="statut"
+                            :options="[
+                                { value: 'tous', label: 'Tous' },
+                                { value: 'actif', label: 'Actif' },
+                                { value: 'inactif', label: 'Inactif' },
+                            ]"
+                            option-label="label"
+                            option-value="value"
+                            class="w-full"
+                        />
+                    </div>
+                </FilterDrawer>
+
+                <span
+                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                >
+                    {{ filteredClients.length }} résultat{{
+                        filteredClients.length !== 1 ? 's' : ''
+                    }}
+                </span>
+                <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    @click="resetFilters"
+                >
+                    Réinitialiser
+                </button>
+            </div>
+
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="filteredClients"
                     :paginator="totalClients > 20"
                     :rows="20"
-                    :global-filter-fields="[
-                        'nom_complet',
-                        'email',
-                        'telephone',
-                        'adresse',
-                        'ville',
-                        'pays',
-                        'cashback_eligible',
-                    ]"
-                    v-model:filters="filters"
                     data-key="id"
                     striped-rows
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
-                    :pt="{
-                        root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
-                        tbody: { class: 'divide-y' },
-                    }"
                 >
-                    <template #header>
-                        <div
-                            class="flex items-center gap-3 border-b border-border bg-muted/30 px-4 py-3"
-                        >
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Rechercher..."
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Select
-                                v-model="statusFilter"
-                                :options="[
-                                    { value: 'tous', label: 'Tous' },
-                                    { value: 'actif', label: 'Actif' },
-                                    { value: 'inactif', label: 'Inactif' },
-                                ]"
-                                option-label="label"
-                                option-value="value"
-                                class="w-32"
-                            />
-                        </div>
-                    </template>
-
                     <!-- Nom -->
                     <Column
                         field="nom_complet"

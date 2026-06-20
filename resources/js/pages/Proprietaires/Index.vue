@@ -24,15 +24,14 @@ import {
     Search,
     Trash2,
 } from 'lucide-vue-next';
+
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 function initials(name: string | null | undefined): string {
     if (!name) return '?';
@@ -66,12 +65,9 @@ const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
 
+const mobileSearch = ref('');
 const search = ref('');
-const statusFilter = ref<string>('tous');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
+const statut = ref<string>('tous');
 
 const totalProprietaires = computed(() => props.proprietaires.length);
 const activeProprietaires = computed(
@@ -81,16 +77,23 @@ const inactiveProprietaires = computed(
     () => props.proprietaires.filter((p) => !p.is_active).length,
 );
 
-function applyFilters(list: Proprietaire[]): Proprietaire[] {
-    const byStatus =
-        statusFilter.value === 'tous'
-            ? list
-            : list.filter(
-                  (p) => p.is_active === (statusFilter.value === 'actif'),
-              );
+function resetFilters() {
+    search.value = '';
+    statut.value = 'tous';
+}
+
+const hasActiveFilters = computed(
+    () => !!search.value || statut.value !== 'tous',
+);
+
+const filteredProprietaires = computed(() => {
+    let list = props.proprietaires;
+    if (statut.value !== 'tous') {
+        list = list.filter((p) => p.is_active === (statut.value === 'actif'));
+    }
     const q = search.value.trim().toLowerCase();
-    if (!q) return byStatus;
-    return byStatus.filter(
+    if (!q) return list;
+    return list.filter(
         (p) =>
             p.nom_complet.toLowerCase().includes(q) ||
             (p.email ?? '').toLowerCase().includes(q) ||
@@ -98,10 +101,19 @@ function applyFilters(list: Proprietaire[]): Proprietaire[] {
             (p.ville ?? '').toLowerCase().includes(q) ||
             (p.pays ?? '').toLowerCase().includes(q),
     );
-}
+});
 
-const filteredProprietaires = computed(() => applyFilters(props.proprietaires));
-const mobileFiltered = computed(() => applyFilters(props.proprietaires));
+const mobileFiltered = computed(() => {
+    const q = mobileSearch.value.trim().toLowerCase();
+    if (!q) return props.proprietaires;
+    return props.proprietaires.filter(
+        (p) =>
+            p.nom_complet.toLowerCase().includes(q) ||
+            (p.email ?? '').toLowerCase().includes(q) ||
+            (p.adresse ?? '').toLowerCase().includes(q) ||
+            (p.ville ?? '').toLowerCase().includes(q),
+    );
+});
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -191,7 +203,7 @@ function confirmDelete(p: Proprietaire) {
                         class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
                     <input
-                        v-model="search"
+                        v-model="mobileSearch"
                         type="search"
                         placeholder="Rechercher..."
                         class="w-full rounded-lg border bg-background py-2 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -386,61 +398,37 @@ function confirmDelete(p: Proprietaire) {
             </div>
 
             <!-- Tableau -->
+            <DataTableFilters
+                v-model:search="search"
+                search-placeholder="Rechercher…"
+                :has-active-filters="hasActiveFilters"
+                :result-count="filteredProprietaires.length"
+                @reset="resetFilters"
+            >
+                <Select
+                    v-model="statut"
+                    :options="[
+                        { value: 'tous', label: 'Tous' },
+                        { value: 'actif', label: 'Actif' },
+                        { value: 'inactif', label: 'Inactif' },
+                    ]"
+                    option-label="label"
+                    option-value="value"
+                    class="w-32"
+                />
+            </DataTableFilters>
+
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="filteredProprietaires"
                     :paginator="totalProprietaires > 20"
                     :rows="20"
-                    :global-filter-fields="[
-                        'nom_complet',
-                        'email',
-                        'telephone',
-                        'adresse',
-                        'ville',
-                        'pays',
-                    ]"
-                    v-model:filters="filters"
                     data-key="id"
                     striped-rows
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
-                    :pt="{
-                        root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
-                        tbody: { class: 'divide-y' },
-                    }"
                 >
-                    <template #header>
-                        <div
-                            class="flex items-center gap-3 border-b border-border bg-muted/30 px-4 py-3"
-                        >
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Rechercher..."
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Select
-                                v-model="statusFilter"
-                                :options="[
-                                    { value: 'tous', label: 'Tous' },
-                                    { value: 'actif', label: 'Actif' },
-                                    { value: 'inactif', label: 'Inactif' },
-                                ]"
-                                option-label="label"
-                                option-value="value"
-                                class="w-32"
-                            />
-                        </div>
-                    </template>
-
                     <!-- Nom -->
                     <Column
                         field="nom_complet"

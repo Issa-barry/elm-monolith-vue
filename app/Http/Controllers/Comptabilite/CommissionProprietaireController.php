@@ -16,6 +16,7 @@ use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommissionVentePaiementService;
 use App\Services\PeriodeComptableService;
+use App\Services\SiteScopeService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -32,14 +33,25 @@ class CommissionProprietaireController extends Controller
 {
     private const DATE_FORMAT = 'd/m/Y';
 
+    public function __construct(private SiteScopeService $siteScope) {}
+
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         $search = trim((string) $request->input('search', ''));
         $filtreStatut = (string) $request->input('statut', '');
         $filtrePeriode = trim((string) $request->input('periode', ''));
+        if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
+            $filtrePeriode = '';
+        }
+
+        $siteProps = $this->siteScope->inertiaProps($user, $orgId, $request->input('site', ''));
+        $filtreSite = $siteProps['filtre_site'];
+        $isAdmin = $siteProps['is_admin'];
+        $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
 
         $query = CommissionPart::query()
             ->from('commission_parts AS cp')
@@ -154,6 +166,12 @@ class CommissionProprietaireController extends Controller
                 [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
                 $q->whereHas('commission', fn ($q2) => $q2->whereBetween('created_at', [$debut, $fin]));
             })
+            ->when($isAdmin && $filtreSite !== '', fn ($q) => $q->whereHas(
+                'commission.commande', fn ($q2) => $q2->where('site_id', $filtreSite)
+            ))
+            ->when(! $isAdmin && ! empty($siteIds), fn ($q) => $q->whereHas(
+                'commission.commande', fn ($q2) => $q2->whereIn('site_id', $siteIds)
+            ))
             ->get()
             ->groupBy('proprietaire_id');
 
@@ -175,6 +193,11 @@ class CommissionProprietaireController extends Controller
                 'agence' => $agencesParProprio[$b['beneficiaire_id']] ?: null,
             ]);
         })->values();
+
+        if (! $isAdmin || $filtreSite !== '') {
+            $allowedIds = $partsParProprio->keys()->map(fn ($k) => (string) $k)->all();
+            $list = $list->filter(fn ($b) => in_array($b['beneficiaire_id'], $allowedIds))->values();
+        }
 
         $kpis = [
             'nb_proprietaires' => $list->count(),
@@ -204,9 +227,12 @@ class CommissionProprietaireController extends Controller
             'kpis' => $kpis,
             'search' => $search,
             'filtre_statut' => $filtreStatut,
+            'filtre_site' => $filtreSite,
             'selected_periode' => $filtrePeriode,
             'periodes_disponibles' => $periodesDisponibles,
             'periode_courante' => $periodeCourante,
+            'is_admin' => $isAdmin,
+            'sites' => $siteProps['sites'],
             'can_payer' => auth()->user()->can('comptabilite.payer'),
         ]);
     }

@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import ComptabiliteFilters from '@/components/ComptabiliteFilters.vue';
+import FilterDrawer from '@/components/FilterDrawer.vue';
+import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Download, ReceiptText } from 'lucide-vue-next';
+import { Download, ReceiptText, Search, X } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface Fiche {
     id: string;
@@ -83,19 +84,23 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: typeTitle[props.type], href: typeRoute[props.type] },
 ];
 
+const filterDrawerOpen = ref(false);
 const searchInput = ref(props.filters.search ?? '');
 const selectedSite = ref(props.filters.site_id ?? '');
 const selectedStatut = ref(props.filters.statut ?? '');
 const selectedPeriode = ref(props.filters.periode_id ?? '');
 
-const hasActiveFilters = computed(
+const activeFilterCount = computed(
     () =>
-        !!(
-            searchInput.value ||
-            selectedSite.value ||
-            selectedStatut.value ||
-            selectedPeriode.value
-        ),
+        [
+            !!selectedSite.value,
+            !!selectedStatut.value,
+            !!selectedPeriode.value,
+        ].filter(Boolean).length,
+);
+
+const hasActiveFilters = computed(
+    () => !!searchInput.value || activeFilterCount.value > 0,
 );
 
 function applyFilters() {
@@ -122,6 +127,12 @@ function resetFilters() {
         { preserveState: true, replace: true },
     );
 }
+
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+watch(searchInput, () => {
+    if (searchDebounce) clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(applyFilters, 400);
+});
 
 function fmt(n: number) {
     return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' GNF';
@@ -217,45 +228,100 @@ function exportExcel() {
             </div>
 
             <!-- Filtres -->
-            <ComptabiliteFilters
-                v-model:search="searchInput"
-                :has-active-filters="hasActiveFilters"
-                @filter="applyFilters"
-                @reset="resetFilters"
-            >
-                <select
-                    v-if="sites.length > 0"
-                    v-model="selectedSite"
-                    class="h-9 w-[170px] rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Toutes les agences</option>
-                    <option v-for="s in sites" :key="s.id" :value="s.id">
-                        {{ s.nom }}
-                    </option>
-                </select>
-                <select
-                    v-model="selectedStatut"
-                    class="h-9 w-[160px] rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Tous les statuts</option>
-                    <option
-                        v-for="s in statuts"
-                        :key="s.value"
-                        :value="s.value"
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-[260px] shrink-0">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                        v-model="searchInput"
+                        type="search"
+                        placeholder="Rechercher…"
+                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    />
+                    <button
+                        v-if="searchInput"
+                        type="button"
+                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        @click="searchInput = ''"
                     >
-                        {{ s.label }}
-                    </option>
-                </select>
-                <select
-                    v-model="selectedPeriode"
-                    class="h-9 w-[200px] rounded-md border border-input bg-background px-2 text-sm"
+                        <X class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+
+                <FilterDrawer
+                    v-model:open="filterDrawerOpen"
+                    title="Filtres"
+                    :active-count="activeFilterCount"
+                    @apply="applyFilters"
+                    @reset="resetFilters"
                 >
-                    <option value="">Toutes les périodes</option>
-                    <option v-for="p in periodes" :key="p.id" :value="p.id">
-                        {{ p.reference }}
-                    </option>
-                </select>
-            </ComptabiliteFilters>
+                    <div v-if="sites.length > 0" class="space-y-1.5">
+                        <Label>Agence</Label>
+                        <select
+                            v-model="selectedSite"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Toutes les agences</option>
+                            <option
+                                v-for="s in sites"
+                                :key="s.id"
+                                :value="s.id"
+                            >
+                                {{ s.nom }}
+                            </option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Statut</Label>
+                        <select
+                            v-model="selectedStatut"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Tous les statuts</option>
+                            <option
+                                v-for="s in statuts"
+                                :key="s.value"
+                                :value="s.value"
+                            >
+                                {{ s.label }}
+                            </option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Période</Label>
+                        <select
+                            v-model="selectedPeriode"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Toutes les périodes</option>
+                            <option
+                                v-for="p in periodes"
+                                :key="p.id"
+                                :value="p.id"
+                            >
+                                {{ p.reference }}
+                            </option>
+                        </select>
+                    </div>
+                </FilterDrawer>
+
+                <span
+                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                >
+                    {{ fiches.data.length }} résultat{{
+                        fiches.data.length !== 1 ? 's' : ''
+                    }}
+                </span>
+                <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    @click="resetFilters"
+                >
+                    Réinitialiser
+                </button>
+            </div>
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">

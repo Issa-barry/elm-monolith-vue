@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilterDrawer from '@/components/FilterDrawer.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,10 +9,11 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     Archive,
@@ -24,6 +26,7 @@ import {
     Package,
     Pencil,
     Plus,
+    Search,
     Sliders,
     Trash2,
     X,
@@ -31,9 +34,6 @@ import {
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dropdown from 'primevue/dropdown';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -118,28 +118,23 @@ const props = defineProps<{
     types: FilterOption[];
     statuts: FilterOption[];
     filters: Filters;
+    can_ajuster_stock: boolean;
+    can_augmenter_stock: boolean;
+    can_diminuer_stock: boolean;
+    sites_autorises: Site[];
 }>();
 
-const { can, hasRole } = usePermissions();
+const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
-const page = usePage();
-
-const isAdmin = computed(
-    () => hasRole('super_admin') || hasRole('admin_entreprise'),
-);
-const userDefaultSiteId = computed(
-    () => (page.props.auth?.default_site?.id as string) ?? null,
-);
 
 // ── Filtres serveur ───────────────────────────────────────────────────────────
 
+const filterDrawerOpen = ref(false);
 const searchInput = ref(props.filters.search ?? '');
 const selectedType = ref(props.filters.type ?? '');
 const selectedStatut = ref(props.filters.statut ?? '');
 const selectedSite = ref(props.filters.site_id ?? '');
-
-let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
 function applyFilters(overrides: Partial<Filters> = {}) {
     const params: Record<string, string | undefined> = {
@@ -155,21 +150,19 @@ function applyFilters(overrides: Partial<Filters> = {}) {
     });
 }
 
-watch(searchInput, () => {
-    if (searchTimer) clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => applyFilters(), 400);
-});
-
-watch(selectedType, () => applyFilters());
-watch(selectedStatut, () => applyFilters());
-watch(selectedSite, () => applyFilters());
+const activeFilterCount = computed(
+    () =>
+        [
+            !!selectedType.value,
+            !!selectedStatut.value,
+            !!selectedSite.value,
+        ].filter(Boolean).length,
+);
 
 const hasActiveFilters = computed(
     () =>
         !!searchInput.value ||
-        !!selectedType.value ||
-        !!selectedStatut.value ||
-        !!selectedSite.value ||
+        activeFilterCount.value > 0 ||
         showOnlyRuptures.value ||
         showOnlyFaibles.value,
 );
@@ -188,6 +181,12 @@ function clearFilters() {
         site_id: undefined,
     });
 }
+
+let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
+watch(searchInput, () => {
+    if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
+    searchDebounceTimeout = setTimeout(() => applyFilters(), 400);
+});
 
 const siteOptions = computed(() => [
     { label: 'Toutes les agences', value: '' },
@@ -593,64 +592,84 @@ function confirmArchive(produit: Produit) {
             </div>
 
             <!-- Barre de filtres -->
-            <div class="flex flex-wrap items-center gap-2">
-                <IconField class="max-w-xs flex-1">
-                    <InputIcon class="pointer-events-none">
-                        <svg
-                            class="h-4 w-4 text-muted-foreground"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <circle cx="11" cy="11" r="8" />
-                            <path d="m21 21-4.35-4.35" />
-                        </svg>
-                    </InputIcon>
-                    <InputText
-                        v-model="searchInput"
-                        placeholder="Rechercher…"
-                        class="w-full text-sm"
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-[260px] shrink-0">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
-                </IconField>
+                    <input
+                        v-model="searchInput"
+                        type="search"
+                        placeholder="Rechercher…"
+                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    />
+                    <button
+                        v-if="searchInput"
+                        type="button"
+                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        @click="searchInput = ''"
+                    >
+                        <X class="h-3.5 w-3.5" />
+                    </button>
+                </div>
 
-                <Dropdown
-                    v-model="selectedSite"
-                    :options="siteOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Agence"
-                    class="min-w-[160px] text-sm"
-                />
+                <FilterDrawer
+                    v-model:open="filterDrawerOpen"
+                    title="Filtres"
+                    :active-count="activeFilterCount"
+                    @apply="applyFilters()"
+                    @reset="clearFilters"
+                >
+                    <div class="space-y-1.5">
+                        <Label>Agence</Label>
+                        <Dropdown
+                            v-model="selectedSite"
+                            :options="siteOptions"
+                            option-label="label"
+                            option-value="value"
+                            placeholder="Agence"
+                            class="w-full text-sm"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Type</Label>
+                        <Dropdown
+                            v-model="selectedType"
+                            :options="typeOptions"
+                            option-label="label"
+                            option-value="value"
+                            placeholder="Type"
+                            class="w-full text-sm"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Statut</Label>
+                        <Dropdown
+                            v-model="selectedStatut"
+                            :options="statutOptions"
+                            option-label="label"
+                            option-value="value"
+                            placeholder="Statut"
+                            class="w-full text-sm"
+                        />
+                    </div>
+                </FilterDrawer>
 
-                <Dropdown
-                    v-model="selectedType"
-                    :options="typeOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Type"
-                    class="min-w-[140px] text-sm"
-                />
-
-                <Dropdown
-                    v-model="selectedStatut"
-                    :options="statutOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Statut"
-                    class="min-w-[140px] text-sm"
-                />
-
-                <Button
+                <span
+                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                >
+                    {{ filteredProduits.length }} résultat{{
+                        filteredProduits.length !== 1 ? 's' : ''
+                    }}
+                </span>
+                <button
                     v-if="hasActiveFilters"
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    class="h-9 text-muted-foreground"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                     @click="clearFilters"
                 >
-                    <X class="mr-1.5 h-3.5 w-3.5" />
-                    Effacer
-                </Button>
+                    Réinitialiser
+                </button>
             </div>
 
             <!-- Table -->
@@ -926,7 +945,7 @@ function confirmArchive(produit: Produit) {
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                             v-if="
-                                                can('produits.update') &&
+                                                can_ajuster_stock &&
                                                 data.has_stock
                                             "
                                             class="cursor-pointer"
@@ -1050,9 +1069,9 @@ function confirmArchive(produit: Produit) {
             v-if="stockAjustementProduit"
             v-model:visible="showStockModal"
             :produit="stockAjustementProduit"
-            :sites="sites"
-            :is-admin="isAdmin"
-            :user-default-site-id="userDefaultSiteId"
+            :sites-autorises="sites_autorises"
+            :can-augmenter="can_augmenter_stock"
+            :can-diminuer="can_diminuer_stock"
         />
 
         <!-- Modal historique -->

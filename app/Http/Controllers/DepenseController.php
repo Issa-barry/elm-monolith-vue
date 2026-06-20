@@ -19,6 +19,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\DepenseImputationService;
+use App\Services\DroitCreationDepenseService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -37,13 +38,15 @@ class DepenseController extends Controller
     public function __construct(
         private DepenseImputationService $imputationService,
         private AuditLogService $audit,
+        private DroitCreationDepenseService $droitService,
     ) {}
 
     public function index(Request $request): Response
     {
         $this->authorize('viewAny', Depense::class);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
 
         $paginator = $this->buildQuery($filters, $orgId)
@@ -84,6 +87,7 @@ class DepenseController extends Controller
                 'en_attente' => (int) $statsRow->en_attente,
                 'validees' => (int) $statsRow->validees,
             ],
+            'can_create' => $user->can('depenses.create'),
         ]);
     }
 
@@ -91,7 +95,8 @@ class DepenseController extends Controller
     {
         $this->authorize('viewAny', Depense::class);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
 
         $depenses = $this->buildQuery($filters, $orgId)
@@ -137,10 +142,11 @@ class DepenseController extends Controller
     {
         $this->authorize('viewAny', Depense::class);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
         $org = Organization::find($orgId);
-        $printedBy = auth()->user()->name;
+        $printedBy = $user->name;
         $now = now();
         $dateStr = $now->format('dmY');
 
@@ -178,10 +184,11 @@ class DepenseController extends Controller
     {
         $this->authorize('viewAny', Depense::class);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
         $org = Organization::find($orgId);
-        $printedBy = auth()->user()->name;
+        $printedBy = $user->name;
         $now = now();
 
         $depenses = $this->buildQuery($filters, $orgId)
@@ -316,12 +323,18 @@ class DepenseController extends Controller
     {
         $this->authorize('create', Depense::class);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+
+        $sitesAutorises = $this->droitService->sitesAutorises($user, $orgId);
+        $sites = $sitesAutorises === null
+            ? $this->loadSites($orgId)
+            : $sitesAutorises->map(fn ($s) => ['id' => $s->id, 'nom' => $s->nom]);
 
         return Inertia::render('Depenses/Create', [
             'types' => $this->loadTypes($orgId),
             'vehicules' => $this->loadVehicules($orgId),
-            'sites' => $this->loadSites($orgId),
+            'sites' => $sites,
             'employes' => $this->loadEmployes($orgId),
             'livreurs' => $this->loadLivreurs($orgId),
             'proprietaires' => $this->loadProprietaires($orgId),
@@ -332,7 +345,17 @@ class DepenseController extends Controller
 
     public function store(StoreDepenseRequest $request): RedirectResponse
     {
-        $orgId = auth()->user()->organization_id;
+        $this->authorize('create', Depense::class);
+
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+
+        abort_unless(
+            $this->droitService->peutCreerSurSite($user, $orgId, $request->site_id ?? ''),
+            403,
+            'Vous n\'êtes pas autorisé à saisir une dépense sur cette agence.'
+        );
+
         $type = DepenseType::where('organization_id', $orgId)->findOrFail($request->depense_type_id);
 
         $depense = Depense::create([
@@ -389,7 +412,8 @@ class DepenseController extends Controller
     {
         $this->authorize('update', $depense);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         $type = DepenseType::where('organization_id', $orgId)->findOrFail($request->depense_type_id);
 
         $fields = ['depense_type_id', 'beneficiaire_type', 'beneficiaire_id', 'site_id', 'montant', 'date_depense', 'commentaire'];
@@ -436,6 +460,8 @@ class DepenseController extends Controller
     public function valider(Depense $depense): RedirectResponse
     {
         $this->authorize('valider', $depense);
+
+        $user = auth()->user();
 
         if ($depense->statut !== StatutDepense::SOUMIS) {
             return back()->withErrors(['statut' => 'Seules les dépenses soumises peuvent être validées.']);

@@ -7,9 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\PaieLigne;
 use App\Models\PaiePeriode;
-use App\Models\Site;
 use App\Services\AuditLogService;
 use App\Services\PaieCalculService;
+use App\Services\SiteScopeService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,18 +19,23 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SalaireController extends Controller
 {
-    public function __construct(private PaieCalculService $paieCalc) {}
+    public function __construct(private PaieCalculService $paieCalc, private SiteScopeService $siteScope) {}
 
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         $filtreMois = (int) $request->input('mois', now()->month);
         $filtreAnnee = (int) $request->input('annee', now()->year);
         $filtreStatut = (string) $request->input('statut', '');
-        $filtreSite = (string) $request->input('site_id', '');
         $search = trim((string) $request->input('search', ''));
+
+        $siteProps = $this->siteScope->inertiaProps($user, $orgId, $request->input('site_id', ''));
+        $filtreSite = $siteProps['filtre_site'];
+        $isAdmin = $siteProps['is_admin'];
+        $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
 
         $periode = PaiePeriode::firstOrCreate(
             ['organization_id' => $orgId, 'mois' => $filtreMois, 'annee' => $filtreAnnee],
@@ -55,6 +60,10 @@ class SalaireController extends Controller
 
             if ($filtreSite !== '') {
                 $query->whereHas('employe', fn ($q) => $q->where('site_id', $filtreSite));
+            }
+
+            if (! $isAdmin && ! empty($siteIds)) {
+                $query->whereHas('employe', fn ($q) => $q->whereIn('site_id', $siteIds));
             }
 
             $allLignes = $query->get()->sortBy(fn ($l) => $l->employe?->nom_complet ?? '');
@@ -105,12 +114,6 @@ class SalaireController extends Controller
             ])
             ->values();
 
-        $sites = Site::where('organization_id', $orgId)
-            ->orderBy('nom')
-            ->get(['id', 'nom'])
-            ->map(fn ($s) => ['value' => $s->id, 'label' => $s->nom])
-            ->values();
-
         return Inertia::render('Comptabilite/Salaire/Index', [
             'lignes' => $lignes,
             'kpis' => $kpis,
@@ -127,7 +130,8 @@ class SalaireController extends Controller
             'filtre_statut' => $filtreStatut,
             'filtre_site' => $filtreSite,
             'search' => $search,
-            'sites' => $sites,
+            'is_admin' => $isAdmin,
+            'sites' => $siteProps['sites'],
             'can_payer' => auth()->user()->can('comptabilite.payer'),
         ]);
     }

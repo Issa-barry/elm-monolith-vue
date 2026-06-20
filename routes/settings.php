@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Controllers\Settings\DepenseParametrageController;
 use App\Http\Controllers\Settings\DepenseTypeController;
 use App\Http\Controllers\Settings\ModuleController;
 use App\Http\Controllers\Settings\ParametreController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
+use App\Http\Controllers\Settings\StockAjustementController;
 use App\Http\Controllers\Settings\TwoFactorAuthenticationController;
 use App\Http\Controllers\Settings\VenteParametrageController;
 use Illuminate\Support\Facades\Route;
@@ -40,6 +42,12 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/ventes', [VenteParametrageController::class, 'edit'])->name('settings.ventes.edit');
     Route::put('settings/ventes', [VenteParametrageController::class, 'update'])->name('settings.ventes.update');
+
+    Route::get('settings/produits', [StockAjustementController::class, 'edit'])->name('settings.produits');
+    Route::put('settings/produits', [StockAjustementController::class, 'update'])->name('settings.produits.update');
+
+    Route::get('settings/depenses', [DepenseParametrageController::class, 'edit'])->name('settings.depenses');
+    Route::put('settings/depenses/droits', [DepenseParametrageController::class, 'updateDroits'])->name('settings.depenses.droits');
 
     Route::prefix('settings/depense-types')->name('settings.depense-types.')->group(function () {
         Route::get('/', [DepenseTypeController::class, 'index'])->name('index');

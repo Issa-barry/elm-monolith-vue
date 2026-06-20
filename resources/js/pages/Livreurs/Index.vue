@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
@@ -9,11 +10,8 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { CheckCircle, Users } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface EquipeRef {
     id: number;
@@ -44,23 +42,36 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const search = ref('');
 const statutFilter = ref<'tous' | 'actif' | 'inactif' | 'pending'>('tous');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
+
+function resetFilters() {
+    search.value = '';
+    statutFilter.value = 'tous';
+}
+
+const hasActiveFilters = computed(
+    () => !!search.value || statutFilter.value !== 'tous',
+);
 
 const pendingCount = computed(
     () => props.livreurs.filter((l) => l.has_account && !l.is_active).length,
 );
 
 const livreursFiltres = computed(() => {
-    if (statutFilter.value === 'actif')
-        return props.livreurs.filter((l) => l.is_active);
-    if (statutFilter.value === 'inactif')
-        return props.livreurs.filter((l) => !l.is_active);
-    if (statutFilter.value === 'pending')
-        return props.livreurs.filter((l) => l.has_account && !l.is_active);
-    return props.livreurs;
+    let list = props.livreurs;
+    if (statutFilter.value === 'actif') list = list.filter((l) => l.is_active);
+    else if (statutFilter.value === 'inactif')
+        list = list.filter((l) => !l.is_active);
+    else if (statutFilter.value === 'pending')
+        list = list.filter((l) => l.has_account && !l.is_active);
+    const q = search.value.toLowerCase().trim();
+    if (!q) return list;
+    return list.filter(
+        (l) =>
+            l.nom_complet.toLowerCase().includes(q) ||
+            (l.telephone ?? '')
+                .replace(/\D/g, '')
+                .includes(q.replace(/\D/g, '')),
+    );
 });
 
 function approuver(livreur: Livreur) {
@@ -130,15 +141,13 @@ function approuver(livreur: Livreur) {
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <IconField class="max-w-xs flex-1">
-                    <InputIcon class="pi pi-search" />
-                    <InputText
-                        v-model="search"
-                        placeholder="Rechercher un livreur…"
-                        class="w-full"
-                    />
-                </IconField>
+            <DataTableFilters
+                v-model:search="search"
+                search-placeholder="Nom, téléphone…"
+                :has-active-filters="hasActiveFilters"
+                :result-count="livreursFiltres.length"
+                @reset="resetFilters"
+            >
                 <Select
                     v-model="statutFilter"
                     :options="[
@@ -151,13 +160,11 @@ function approuver(livreur: Livreur) {
                     option-value="value"
                     class="w-36"
                 />
-            </div>
+            </DataTableFilters>
 
             <!-- Tableau -->
             <DataTable
                 :value="livreursFiltres"
-                :filters="filters"
-                :global-filter-fields="['nom_complet', 'telephone']"
                 striped-rows
                 :rows="30"
                 :paginator="livreursFiltres.length > 30"

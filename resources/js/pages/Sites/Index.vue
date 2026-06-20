@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,13 +27,10 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Site {
     id: number;
@@ -60,39 +58,48 @@ const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
 
+const mobileSearch = ref('');
 const search = ref('');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-const ALL_TYPES = '__all_types__';
-const selectedType = ref<string>(ALL_TYPES);
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
+const type = ref<string>('');
 
 const typeOptions = computed(() => {
     const map = new Map<string, string>();
-
     props.sites.forEach((s) => {
-        if (s.type) {
-            map.set(s.type, s.type_label);
-        }
+        if (s.type) map.set(s.type, s.type_label);
     });
-
     return [
-        { label: 'Tous les types', value: ALL_TYPES },
+        { label: 'Tous les types', value: '' },
         ...Array.from(map.entries())
             .map(([value, label]) => ({ value, label }))
             .sort((a, b) => a.label.localeCompare(b.label, 'fr')),
     ];
 });
 
-const desktopTypeFiltered = computed(() =>
-    selectedType.value === ALL_TYPES
-        ? props.sites
-        : props.sites.filter((s) => s.type === selectedType.value),
-);
+function resetFilters() {
+    search.value = '';
+    type.value = '';
+}
+
+const hasActiveFilters = computed(() => !!search.value || !!type.value);
+
+const desktopTypeFiltered = computed(() => {
+    let list = props.sites;
+    if (type.value) list = list.filter((s) => s.type === type.value);
+    const q = search.value.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+        (s) =>
+            s.nom.toLowerCase().includes(q) ||
+            s.code.toLowerCase().includes(q) ||
+            s.type_label.toLowerCase().includes(q) ||
+            s.statut_label.toLowerCase().includes(q) ||
+            (s.localisation ?? '').toLowerCase().includes(q) ||
+            (s.telephone ?? '').includes(q),
+    );
+});
 
 const mobileFiltered = computed(() => {
-    const q = search.value.trim().toLowerCase();
+    const q = mobileSearch.value.trim().toLowerCase();
     if (!q) return props.sites;
     return props.sites.filter(
         (s) =>
@@ -272,7 +279,7 @@ function confirmDelete(s: Site) {
                         class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
                     <input
-                        v-model="search"
+                        v-model="mobileSearch"
                         type="search"
                         placeholder="Rechercher..."
                         class="w-full rounded-lg border bg-background py-2 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -418,60 +425,33 @@ function confirmDelete(s: Site) {
             </div>
 
             <!-- Tableau -->
+            <DataTableFilters
+                v-model:search="search"
+                search-placeholder="Rechercher…"
+                :has-active-filters="hasActiveFilters"
+                :result-count="desktopTypeFiltered.length"
+                @reset="resetFilters"
+            >
+                <Select
+                    v-model="type"
+                    :options="typeOptions"
+                    option-label="label"
+                    option-value="value"
+                    class="w-44"
+                />
+            </DataTableFilters>
+
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="desktopTypeFiltered"
                     :paginator="desktopTypeFiltered.length > 20"
                     :rows="20"
-                    :global-filter-fields="[
-                        'nom',
-                        'code',
-                        'type_label',
-                        'statut_label',
-                        'localisation',
-                        'telephone',
-                    ]"
-                    v-model:filters="filters"
                     data-key="id"
                     striped-rows
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
-                    :pt="{
-                        root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
-                        tbody: { class: 'divide-y' },
-                    }"
                 >
-                    <template #header>
-                        <div class="flex items-center gap-3">
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Rechercher..."
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Select
-                                v-model="selectedType"
-                                :options="typeOptions"
-                                option-label="label"
-                                option-value="value"
-                                class="w-44"
-                            />
-                            <span class="text-xs text-muted-foreground"
-                                >{{ desktopTypeFiltered.length }} résultat{{
-                                    desktopTypeFiltered.length !== 1 ? 's' : ''
-                                }}</span
-                            >
-                        </div>
-                    </template>
-
                     <!-- Nom + code -->
                     <Column
                         field="nom"

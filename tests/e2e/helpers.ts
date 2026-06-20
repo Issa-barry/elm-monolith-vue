@@ -241,7 +241,7 @@ export async function login(page: Page): Promise<void> {
 export function getVisibleSearchInput(page: Page): Locator {
     return page
         .locator(
-            'input[placeholder*="rechercher" i]:visible, input[placeholder*="recherche" i]:visible',
+            '[data-testid="search-input"]:visible, input[placeholder*="rechercher" i]:visible, input[placeholder*="recherche" i]:visible',
         )
         .first();
 }

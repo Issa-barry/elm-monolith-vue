@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowDown,
@@ -22,7 +22,7 @@ import {
     TrendingDown,
     Warehouse,
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
 import HistoriqueModal from './partials/HistoriqueModal.vue';
 
@@ -96,18 +96,13 @@ const props = defineProps<{
     produit: Produit;
     mouvements: StockMouvement[];
     historiques: AuditEntry[];
-    sites: Site[];
+    can_ajuster_stock: boolean;
+    can_augmenter_stock: boolean;
+    can_diminuer_stock: boolean;
+    sites_autorises: Site[];
 }>();
 
-const { can, hasRole } = usePermissions();
-const page = usePage();
-
-const isAdmin = computed(
-    () => hasRole('super_admin') || hasRole('admin_entreprise'),
-);
-const userDefaultSiteId = computed(
-    () => (page.props.auth?.default_site?.id as string) ?? null,
-);
+const { can } = usePermissions();
 
 const showStockModal = ref(false);
 const showHistoriqueModal = ref(false);
@@ -239,7 +234,7 @@ const ajustements = props.mouvements.map((m) => ({
                         Historique
                     </Button>
                     <Button
-                        v-if="can('produits.update') && produit.has_stock"
+                        v-if="can_ajuster_stock && produit.has_stock"
                         variant="outline"
                         @click="showStockModal = true"
                     >
@@ -718,9 +713,9 @@ const ajustements = props.mouvements.map((m) => ({
         <AjusterStockModal
             v-model:visible="showStockModal"
             :produit="produit"
-            :sites="sites"
-            :is-admin="isAdmin"
-            :user-default-site-id="userDefaultSiteId"
+            :sites-autorises="sites_autorises"
+            :can-augmenter="can_augmenter_stock"
+            :can-diminuer="can_diminuer_stock"
         />
     </AppLayout>
 </template>

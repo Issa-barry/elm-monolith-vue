@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,9 +24,6 @@ import {
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { computed, ref } from 'vue';
 
@@ -90,10 +88,11 @@ const statutOptions = [
     { label: 'Partiel', value: 'partiel' },
     { label: 'Versé', value: 'verse' },
 ];
-const localStatut = ref(props.filters.statut ?? 'tous');
-const localClientId = ref<number | ''>(
+const pendingStatut = ref(props.filters.statut ?? 'tous');
+const pendingClientId = ref<number | ''>(
     props.filters.client_id ? Number(props.filters.client_id) : '',
 );
+const mobileSearch = ref('');
 const search = ref('');
 
 function applyFilters() {
@@ -101,16 +100,44 @@ function applyFilters() {
         '/cashback',
         {
             statut:
-                localStatut.value !== 'tous' ? localStatut.value : undefined,
+                pendingStatut.value !== 'tous'
+                    ? pendingStatut.value
+                    : undefined,
             client_id:
-                localClientId.value !== '' ? localClientId.value : undefined,
+                pendingClientId.value !== ''
+                    ? pendingClientId.value
+                    : undefined,
         },
         { preserveState: true, replace: true },
     );
 }
 
+function resetFilters() {
+    search.value = '';
+    pendingStatut.value = 'tous';
+    pendingClientId.value = '';
+    router.get('/cashback', {}, { preserveState: true, replace: true });
+}
+
+const hasActiveFilters = computed(
+    () =>
+        !!search.value ||
+        pendingStatut.value !== 'tous' ||
+        pendingClientId.value !== '',
+);
+
 const filtered = computed(() => {
     const q = search.value.toLowerCase();
+    if (!q) return props.transactions;
+    return props.transactions.filter(
+        (t) =>
+            t.client?.nom_complet.toLowerCase().includes(q) ||
+            t.client?.telephone?.includes(q),
+    );
+});
+
+const mobileFiltered = computed(() => {
+    const q = mobileSearch.value.toLowerCase();
     if (!q) return props.transactions;
     return props.transactions.filter(
         (t) =>
@@ -319,7 +346,7 @@ function formatPhone(phone: string | null): string {
                         class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
                     <input
-                        v-model="search"
+                        v-model="mobileSearch"
                         type="text"
                         placeholder="Client, téléphone…"
                         class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
@@ -330,7 +357,7 @@ function formatPhone(phone: string | null): string {
             <!-- Card list -->
             <div class="divide-y">
                 <div
-                    v-for="t in filtered"
+                    v-for="t in mobileFiltered"
                     :key="t.id"
                     class="flex items-start justify-between gap-3 px-4 py-3"
                 >
@@ -402,7 +429,7 @@ function formatPhone(phone: string | null): string {
 
             <!-- Empty state -->
             <div
-                v-if="filtered.length === 0"
+                v-if="mobileFiltered.length === 0"
                 class="py-16 text-center text-sm text-muted-foreground"
             >
                 Aucun cashback trouvé.
@@ -480,6 +507,34 @@ function formatPhone(phone: string | null): string {
                 </div>
             </div>
 
+            <!-- Filtres -->
+            <DataTableFilters
+                v-model:search="search"
+                search-placeholder="Client, téléphone…"
+                :has-active-filters="hasActiveFilters"
+                :result-count="filtered.length"
+                @reset="resetFilters"
+            >
+                <Select
+                    v-model="pendingStatut"
+                    :options="statutOptions"
+                    option-label="label"
+                    option-value="value"
+                    class="w-36"
+                    @update:model-value="applyFilters"
+                />
+                <Select
+                    v-model="pendingClientId"
+                    :options="clients"
+                    option-label="nom_complet"
+                    option-value="id"
+                    placeholder="Tous les clients"
+                    class="w-48"
+                    show-clear
+                    @update:model-value="applyFilters"
+                />
+            </DataTableFilters>
+
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
@@ -490,55 +545,8 @@ function formatPhone(phone: string | null): string {
                     striped-rows
                     removable-sort
                     class="text-sm"
-                    :pt="{
-                        root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
-                        tbody: { class: 'divide-y' },
-                    }"
+                    table-class="w-full"
                 >
-                    <template #header>
-                        <div class="flex items-center gap-3">
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Client, téléphone…"
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Select
-                                v-model="localStatut"
-                                :options="statutOptions"
-                                option-label="label"
-                                option-value="value"
-                                class="w-36"
-                                @update:model-value="applyFilters"
-                            />
-                            <Select
-                                v-model="localClientId"
-                                :options="[
-                                    { id: '', nom_complet: 'Tous les clients' },
-                                    ...clients,
-                                ]"
-                                option-label="nom_complet"
-                                option-value="id"
-                                placeholder="Tous les clients"
-                                class="w-48"
-                                show-clear
-                                @update:model-value="applyFilters"
-                            />
-                            <span class="text-xs text-muted-foreground">
-                                {{ filtered.length }} résultat{{
-                                    filtered.length !== 1 ? 's' : ''
-                                }}
-                            </span>
-                        </div>
-                    </template>
-
                     <!-- Client -->
                     <Column
                         field="client.nom_complet"

@@ -19,7 +19,6 @@ import {
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
-// ── Props ─────────────────────────────────────────────────────────────────────
 interface RoleData {
     id: number;
     name: string;
@@ -33,7 +32,6 @@ const props = defineProps<{
     actions: string[];
 }>();
 
-// ── Config d'affichage ────────────────────────────────────────────────────────
 const roleConfig: Record<string, { label: string; color: string; bg: string }> =
     {
         super_admin: {
@@ -59,19 +57,45 @@ const roleConfig: Record<string, { label: string; color: string; bg: string }> =
     };
 
 const resourceLabels: Record<string, string> = {
+    // Personnes
     clients: 'Clients',
     prestataires: 'Prestataires',
     livreurs: 'Livreurs',
     proprietaires: 'Propriétaires',
+    // Véhicules & terrain
     vehicules: 'Véhicules',
     'equipes-livraison': 'Équipes livraison',
     sites: 'Sites',
+    // Commerce
     produits: 'Produits',
     packings: 'Packings',
     ventes: 'Ventes',
     achats: 'Achats',
+    factures: 'Factures',
+    commissions: 'Commissions',
+    cashback: 'Cashback',
+    pdv: 'PDV',
+    // Opérations
+    logistique: 'Logistique',
+    transferts: 'Transferts',
+    receptions: 'Réceptions',
+    // Finances
+    depenses: 'Dépenses',
+    comptabilite: 'Comptabilité',
+    'journal-financier': 'Journal financier',
+    // RH
+    'rh-employes': 'RH — Employés',
+    'rh-contrats': 'RH — Contrats',
+    'rh-paie': 'Paie / Salaires',
+    // Administration
     users: 'Utilisateurs',
+    // Paramètres
     parametres: 'Paramètres',
+    'parametres-produits': 'Paramètres produits',
+    'parametres-depenses': 'Paramètres dépenses',
+    'parametres-ventes': 'Paramètres ventes',
+    'parametres-systeme': 'Paramètres système',
+    'modules-metier': 'Modules métier',
 };
 
 const actionLabels: Record<string, { label: string; color: string }> = {
@@ -81,7 +105,6 @@ const actionLabels: Record<string, { label: string; color: string }> = {
     delete: { label: 'Supprimer', color: 'text-red-600 dark:text-red-400' },
 };
 
-// ── État ──────────────────────────────────────────────────────────────────────
 const isSuperAdmin = computed(() => props.role.name === 'super_admin');
 const cfg = computed(
     () =>
@@ -105,7 +128,6 @@ const activePermissions = ref<Set<string>>(
 const saving = ref(false);
 const flashSuccess = ref(false);
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function permKey(resource: string, action: string) {
     return `${resource}.${action}`;
 }
@@ -123,7 +145,6 @@ function toggle(resource: string, action: string) {
     activePermissions.value = next;
 }
 
-// ── État colonne (all | partial | none) ───────────────────────────────────────
 type ColState = 'all' | 'partial' | 'none';
 
 function columnState(action: string): ColState {
@@ -145,14 +166,6 @@ function toggleColumn(action: string) {
     activePermissions.value = next;
 }
 
-function _columnCheckedValue(action: string): boolean | 'indeterminate' {
-    const s = columnState(action);
-    if (s === 'all') return true;
-    if (s === 'partial') return 'indeterminate';
-    return false;
-}
-
-// ── État ligne (all | partial | none) ────────────────────────────────────────
 function rowState(resource: string): ColState {
     const checked = props.actions.filter((a) => isChecked(resource, a)).length;
     if (checked === 0) return 'none';
@@ -172,22 +185,18 @@ function toggleRow(resource: string) {
     activePermissions.value = next;
 }
 
-// ── Stats globales ────────────────────────────────────────────────────────────
 const totalChecked = computed(() => activePermissions.value.size);
 const totalPossible = computed(
     () => props.resources.length * props.actions.length,
 );
 
-// ── Sauvegarde ────────────────────────────────────────────────────────────────
 function save() {
     if (isSuperAdmin.value) return;
     saving.value = true;
 
     router.put(
         `/roles/${props.role.id}`,
-        {
-            permissions: [...activePermissions.value],
-        },
+        { permissions: [...activePermissions.value] },
         {
             onSuccess: () => {
                 flashSuccess.value = true;
@@ -213,7 +222,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     <Head :title="`Permissions — ${cfg.label}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-        <!-- Mobile sticky header -->
         <div
             class="sticky top-0 z-10 flex items-center gap-3 border-b bg-background px-4 py-3 sm:hidden"
         >
@@ -229,7 +237,6 @@ const breadcrumbs: BreadcrumbItem[] = [
         </div>
 
         <div class="flex flex-col gap-6 p-4 sm:p-6">
-            <!-- En-tête ─────────────────────────────────────────────────────── -->
             <div
                 class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
             >
@@ -288,51 +295,42 @@ const breadcrumbs: BreadcrumbItem[] = [
                         </p>
                     </div>
                 </div>
-
-                <!-- Actions -->
-                <div class="flex items-center gap-2">
-                    <!-- Flash succès -->
-                    <transition name="fade">
-                        <span
-                            v-if="flashSuccess"
-                            class="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400"
-                        >
-                            <CheckCheck class="h-4 w-4" />
-                            Sauvegardé
-                        </span>
-                    </transition>
-
-                    <Button
-                        v-if="!isSuperAdmin"
-                        :disabled="saving"
-                        @click="save"
-                    >
-                        <Save class="mr-2 h-4 w-4" />
-                        {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
-                    </Button>
-                </div>
             </div>
 
-            <!-- Matrice de permissions ──────────────────────────────────────── -->
+            <!-- Matrice des permissions -->
             <div
                 class="overflow-hidden overflow-x-auto rounded-xl border bg-card shadow-sm"
             >
-                <!-- Titre matrice -->
                 <div
                     class="flex items-center justify-between border-b bg-muted/30 px-6 py-3"
                 >
                     <p class="text-sm font-medium">Matrice des permissions</p>
-                    <p class="text-xs text-muted-foreground">
-                        Cochez les actions autorisées par ressource
-                    </p>
+                    <div class="flex items-center gap-3">
+                        <transition name="fade">
+                            <span
+                                v-if="flashSuccess"
+                                class="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400"
+                            >
+                                <CheckCheck class="h-4 w-4" />
+                                Sauvegardé
+                            </span>
+                        </transition>
+                        <Button
+                            v-if="!isSuperAdmin"
+                            size="sm"
+                            :disabled="saving"
+                            @click="save"
+                        >
+                            <Save class="mr-2 h-4 w-4" />
+                            {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
+                        </Button>
+                    </div>
                 </div>
 
                 <div class="overflow-x-auto">
                     <table class="w-full">
-                        <!-- En-têtes colonnes ─────────────────────────────── -->
                         <thead>
                             <tr class="border-b bg-muted/20">
-                                <!-- Colonne ressource -->
                                 <th class="w-52 px-6 py-4 text-left">
                                     <span
                                         class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
@@ -340,8 +338,6 @@ const breadcrumbs: BreadcrumbItem[] = [
                                         Ressource
                                     </span>
                                 </th>
-
-                                <!-- Colonnes actions -->
                                 <th
                                     v-for="action in actions"
                                     :key="action"
@@ -362,8 +358,6 @@ const breadcrumbs: BreadcrumbItem[] = [
                                                 action
                                             }}
                                         </span>
-
-                                        <!-- Checkbox toggle-colonne -->
                                         <button
                                             class="group flex h-7 w-7 items-center justify-center rounded-md border-2 transition-all"
                                             :class="[
@@ -378,10 +372,9 @@ const breadcrumbs: BreadcrumbItem[] = [
                                                       : 'border-primary/60 bg-primary/10',
                                             ]"
                                             :disabled="isSuperAdmin"
-                                            @click="toggleColumn(action)"
                                             :title="`Tout ${columnState(action) === 'all' ? 'désactiver' : 'activer'} — ${actionLabels[action]?.label}`"
+                                            @click="toggleColumn(action)"
                                         >
-                                            <!-- État: tout coché -->
                                             <CheckSquare
                                                 v-if="
                                                     columnState(action) ===
@@ -389,7 +382,6 @@ const breadcrumbs: BreadcrumbItem[] = [
                                                 "
                                                 class="h-4 w-4"
                                             />
-                                            <!-- État: partiel -->
                                             <Minus
                                                 v-else-if="
                                                     columnState(action) ===
@@ -397,7 +389,6 @@ const breadcrumbs: BreadcrumbItem[] = [
                                                 "
                                                 class="h-4 w-4 text-primary"
                                             />
-                                            <!-- État: aucun -->
                                             <Square
                                                 v-else
                                                 class="h-4 w-4 text-muted-foreground/40"
@@ -408,7 +399,6 @@ const breadcrumbs: BreadcrumbItem[] = [
                             </tr>
                         </thead>
 
-                        <!-- Lignes ressources ────────────────────────────── -->
                         <tbody class="divide-y">
                             <tr
                                 v-for="(resource, idx) in resources"
@@ -416,10 +406,8 @@ const breadcrumbs: BreadcrumbItem[] = [
                                 class="group transition-colors hover:bg-muted/30"
                                 :class="{ 'bg-muted/10': idx % 2 === 0 }"
                             >
-                                <!-- Nom de la ressource + toggle ligne -->
                                 <td class="px-6 py-4">
                                     <div class="flex items-center gap-3">
-                                        <!-- Bouton toggle-ligne (style Strapi) -->
                                         <button
                                             class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-all"
                                             :class="[
@@ -434,8 +422,8 @@ const breadcrumbs: BreadcrumbItem[] = [
                                                       : 'border-primary/60 bg-primary/10 hover:border-primary',
                                             ]"
                                             :disabled="isSuperAdmin"
-                                            @click="toggleRow(resource)"
                                             :title="`${rowState(resource) === 'all' ? 'Tout retirer' : 'Tout accorder'} — ${resourceLabels[resource] ?? resource}`"
+                                            @click="toggleRow(resource)"
                                         >
                                             <Minus
                                                 v-if="
@@ -450,7 +438,6 @@ const breadcrumbs: BreadcrumbItem[] = [
                                                 "
                                             />
                                         </button>
-
                                         <span class="text-sm font-medium">
                                             {{
                                                 resourceLabels[resource] ??
@@ -460,7 +447,6 @@ const breadcrumbs: BreadcrumbItem[] = [
                                     </div>
                                 </td>
 
-                                <!-- Cellules permission individuelle -->
                                 <td
                                     v-for="action in actions"
                                     :key="action"
@@ -494,7 +480,6 @@ const breadcrumbs: BreadcrumbItem[] = [
                     </table>
                 </div>
 
-                <!-- Pied de tableau -->
                 <div
                     class="flex items-center justify-between border-t bg-muted/20 px-6 py-3"
                 >
@@ -520,21 +505,10 @@ const breadcrumbs: BreadcrumbItem[] = [
                             Partiel
                         </span>
                     </div>
-
-                    <Button
-                        v-if="!isSuperAdmin"
-                        :disabled="saving"
-                        @click="save"
+                    <p
+                        v-if="isSuperAdmin"
+                        class="text-xs text-muted-foreground italic"
                     >
-                        <Save class="mr-2 h-4 w-4" />
-                        {{
-                            saving
-                                ? 'Enregistrement…'
-                                : 'Enregistrer les modifications'
-                        }}
-                    </Button>
-
-                    <p v-else class="text-xs text-muted-foreground italic">
                         Les permissions du Super Admin sont gérées
                         automatiquement.
                     </p>
