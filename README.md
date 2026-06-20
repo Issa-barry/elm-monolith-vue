@@ -14,7 +14,7 @@ $PHP artisan optimize
 
 /opt/alt/php84/usr/bin/php artisan up
  
-test
+test2
  
 # Sur ton PC
 npm run build
