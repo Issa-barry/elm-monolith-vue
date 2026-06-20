@@ -284,13 +284,6 @@ const statutCommandeColor: Record<string, string> = {
     annulee: 'bg-red-400',
 };
 
-const statutFactureColor: Record<string, string> = {
-    creee: 'bg-zinc-400 dark:bg-zinc-500',
-    impayee: 'bg-amber-500',
-    partiel: 'bg-blue-500',
-    payee: 'bg-emerald-500',
-    annulee: 'bg-red-400',
-};
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
 function formatGNF(val: number): string {

@@ -115,10 +115,6 @@ npx playwright test tests/e2e/vehicule-flow.spec.ts
 Variables d'environnement E2E utiles (optionnelles) :
 
 ```bash
-E2E_BASE_URL=http://127.0.0.1:8000
-E2E_PHONE=+33758855039
-E2E_PASSWORD=Staff@2025
-E2E_EMAIL=superadmin@admin.com
 ```
 
  

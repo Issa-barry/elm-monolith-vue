@@ -111,7 +111,7 @@ class FactureVente extends Model
 
     public function recalculStatut(): bool
     {
-        if ($this->isAnnulee() || $this->isCreee()) {
+        if ($this->isAnnulee()) {
             return false;
         }
 

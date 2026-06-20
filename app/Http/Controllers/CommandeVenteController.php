@@ -29,7 +29,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class CommandeVenteController extends Controller
 {
@@ -603,7 +602,7 @@ class CommandeVenteController extends Controller
     public function annuler(Request $request, CommandeVente $commande_vente): RedirectResponse
     {
         if (auth()->user()->cannot('annuler', $commande_vente)) {
-            return back()->with('error', "Vous n'êtes pas autorisé à annuler cette commande.");
+            abort(403, "Vous n'êtes pas autorisé à annuler cette commande.");
         }
 
         $validCodes = implode(',', MotifAnnulation::validValues());
@@ -627,8 +626,6 @@ class CommandeVenteController extends Controller
             CommandeVenteService::annuler($commande_vente, $motif);
         } catch (ValidationException $e) {
             return back()->withErrors($e->errors());
-        } catch (HttpException $e) {
-            return back()->with('error', $e->getMessage());
         }
 
         $this->auditService->record(
