@@ -7,6 +7,7 @@ use App\Enums\MotifAnnulation;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutCommission;
 use App\Enums\StatutFactureVente;
 use App\Jobs\NotifierLivreursCommandeVenteJob;
 use App\Models\AuditLog;
@@ -28,6 +29,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class CommandeVenteController extends Controller
 {
@@ -625,7 +627,7 @@ class CommandeVenteController extends Controller
             CommandeVenteService::annuler($commande_vente, $motif);
         } catch (ValidationException $e) {
             return back()->withErrors($e->errors());
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return back()->with('error', $e->getMessage());
         }
 
@@ -664,20 +666,20 @@ class CommandeVenteController extends Controller
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    private function getCommissionStatutGlobal(CommandeVente $commande): array|null
+    private function getCommissionStatutGlobal(CommandeVente $commande): ?array
     {
         $commissions = $commande->commissions;
         if ($commissions->isEmpty()) {
             return null;
         }
 
-        if ($commissions->every(fn ($c) => $c->statut === \App\Enums\StatutCommission::CREEE)) {
+        if ($commissions->every(fn ($c) => $c->statut === StatutCommission::CREEE)) {
             return ['value' => 'creee', 'label' => 'Créée'];
         }
-        if ($commissions->every(fn ($c) => $c->statut === \App\Enums\StatutCommission::PAYE)) {
+        if ($commissions->every(fn ($c) => $c->statut === StatutCommission::PAYE)) {
             return ['value' => 'paye', 'label' => 'Payée'];
         }
-        if ($commissions->some(fn ($c) => $c->statut === \App\Enums\StatutCommission::PAYE || $c->statut === \App\Enums\StatutCommission::PARTIEL)) {
+        if ($commissions->some(fn ($c) => $c->statut === StatutCommission::PAYE || $c->statut === StatutCommission::PARTIEL)) {
             return ['value' => 'partiel', 'label' => 'Partiellement payée'];
         }
 

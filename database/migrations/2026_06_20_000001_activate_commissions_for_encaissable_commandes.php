@@ -14,20 +14,23 @@ return new class extends Migration
         $placeholders = implode(',', array_fill(0, count($statutsEncaissables), '?'));
 
         DB::statement("
-            UPDATE commissions_ventes cv
-            INNER JOIN commandes_ventes cmd ON cmd.id = cv.commande_vente_id
-            SET cv.statut = 'impaye'
-            WHERE cv.statut = 'creee'
-            AND cmd.statut IN ({$placeholders})
+            UPDATE commissions_ventes
+            SET statut = 'impaye'
+            WHERE statut = 'creee'
+            AND commande_vente_id IN (
+                SELECT id FROM commandes_ventes WHERE statut IN ({$placeholders})
+            )
         ", $statutsEncaissables);
 
         DB::statement("
-            UPDATE commission_parts cp
-            INNER JOIN commissions_ventes cv ON cv.id = cp.commission_vente_id
-            INNER JOIN commandes_ventes cmd ON cmd.id = cv.commande_vente_id
-            SET cp.statut = 'impaye'
-            WHERE cp.statut = 'creee'
-            AND cmd.statut IN ({$placeholders})
+            UPDATE commission_parts
+            SET statut = 'impaye'
+            WHERE statut = 'creee'
+            AND commission_vente_id IN (
+                SELECT cv.id FROM commissions_ventes cv
+                INNER JOIN commandes_ventes cmd ON cmd.id = cv.commande_vente_id
+                WHERE cmd.statut IN ({$placeholders})
+            )
         ", $statutsEncaissables);
     }
 

@@ -96,7 +96,7 @@ class CommissionVente extends Model
      */
     public function recalculStatutGlobal(): bool
     {
-        if ($this->statut === \App\Enums\StatutCommission::CREEE) {
+        if ($this->statut === StatutCommission::CREEE) {
             return false;
         }
 

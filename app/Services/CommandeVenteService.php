@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutCommission;
 use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\FactureVente;
@@ -165,8 +166,8 @@ class CommandeVenteService
         }
 
         foreach ($commande->commissions as $commission) {
-            if ($commission->statut === \App\Enums\StatutCommission::CREEE) {
-                $commission->update(['statut' => \App\Enums\StatutCommission::IMPAYE]);
+            if ($commission->statut === StatutCommission::CREEE) {
+                $commission->update(['statut' => StatutCommission::IMPAYE]);
                 $commission->parts()->where('statut', 'creee')->update(['statut' => 'impaye']);
             }
         }

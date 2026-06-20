@@ -238,7 +238,7 @@ class CommissionVenteController extends Controller
         $totalNet = max(0.0, $totalBrut - $totalFrais);
         $totalVerse = (float) $allParts->sum('montant_verse');
 
-        $activeParts = $allParts->filter(fn ($p) => $p->statut !== \App\Enums\StatutCommission::CREEE);
+        $activeParts = $allParts->filter(fn ($p) => $p->statut !== StatutCommission::CREEE);
         $solde = max(0.0, (float) $activeParts->sum('montant_net') - (float) $activeParts->sum('montant_verse'));
 
         $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
