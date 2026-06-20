@@ -638,7 +638,7 @@ function confirmDelete(c: Commande) {
                     />
                     <input
                         v-model="search"
-                        type="search"
+                        type="text"
                         placeholder="Référence, véhicule, client…"
                         class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     />
