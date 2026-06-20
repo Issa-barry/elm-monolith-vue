@@ -1,4 +1,5 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,13 +24,10 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Equipe {
     id: string;
@@ -57,24 +55,36 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const search = ref('');
-const statutFilter = ref<'tous' | 'actif' | 'inactif'>('tous');
-const categorieFilter = ref<'tous' | 'interne' | 'externe'>('tous');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
+const statut = ref<'tous' | 'actif' | 'inactif'>('tous');
+const categorie = ref<'tous' | 'interne' | 'externe'>('tous');
+
+function resetFilters() {
+    search.value = '';
+    statut.value = 'tous';
+    categorie.value = 'tous';
+}
+
+const hasActiveFilters = computed(
+    () =>
+        !!search.value || statut.value !== 'tous' || categorie.value !== 'tous',
+);
 
 const equipesFiltrees = computed(() => {
+    const q = search.value.toLowerCase().trim();
     return props.equipes.filter((e) => {
+        const searchMatch =
+            !q ||
+            e.nom.toLowerCase().includes(q) ||
+            (e.premier_chauffeur_nom ?? '').toLowerCase().includes(q) ||
+            (e.vehicule_nom ?? '').toLowerCase().includes(q) ||
+            (e.vehicule_immatriculation ?? '').toLowerCase().includes(q);
         const statusMatch =
-            statutFilter.value === 'tous' ||
-            e.is_active === (statutFilter.value === 'actif');
-
+            statut.value === 'tous' ||
+            e.is_active === (statut.value === 'actif');
         const categorieMatch =
-            categorieFilter.value === 'tous' ||
-            e.vehicule_categorie === categorieFilter.value;
-
-        return statusMatch && categorieMatch;
+            categorie.value === 'tous' ||
+            e.vehicule_categorie === categorie.value;
+        return searchMatch && statusMatch && categorieMatch;
     });
 });
 
@@ -135,17 +145,14 @@ function confirmDelete(equipe: Equipe) {
             </div>
 
             <!-- Barre de recherche + filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <IconField class="max-w-xs flex-1">
-                    <InputIcon class="pi pi-search" />
-                    <InputText
-                        v-model="search"
-                        class="w-full"
-                        placeholder="recherche"
-                    />
-                </IconField>
+            <DataTableFilters
+                v-model:search="search"
+                :has-active-filters="hasActiveFilters"
+                :result-count="equipesFiltrees.length"
+                @reset="resetFilters"
+            >
                 <Select
-                    v-model="statutFilter"
+                    v-model="statut"
                     :options="[
                         { value: 'tous', label: 'Tous' },
                         { value: 'actif', label: 'Actif' },
@@ -156,7 +163,7 @@ function confirmDelete(equipe: Equipe) {
                     class="w-32"
                 />
                 <Select
-                    v-model="categorieFilter"
+                    v-model="categorie"
                     :options="[
                         { value: 'tous', label: 'Tous véhicules' },
                         { value: 'interne', label: 'Interne' },
@@ -166,18 +173,11 @@ function confirmDelete(equipe: Equipe) {
                     option-value="value"
                     class="w-40"
                 />
-            </div>
+            </DataTableFilters>
 
             <!-- Tableau -->
             <DataTable
                 :value="equipesFiltrees"
-                :filters="filters"
-                :global-filter-fields="[
-                    'nom',
-                    'premier_chauffeur_nom',
-                    'vehicule_nom',
-                    'vehicule_immatriculation',
-                ]"
                 striped-rows
                 :rows="25"
                 :paginator="equipes.length > 25"

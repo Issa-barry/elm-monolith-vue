@@ -258,7 +258,9 @@ test('membre modal affiche prefixe +224 et rejette telephone invalide', async ({
         .first()
         .click();
 
-    const dialog = page.locator('[role="dialog"]');
+    const dialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /nouveau membre/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
     await expect(dialog.locator('text=+224')).toBeVisible();
 

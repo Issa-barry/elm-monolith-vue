@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import ComptabiliteFilters from '@/components/ComptabiliteFilters.vue';
+import FilterDrawer from '@/components/FilterDrawer.vue';
+import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
-import { ArrowDown, ArrowUp, BookOpen } from 'lucide-vue-next';
+import { ArrowDown, ArrowUp, BookOpen, Search, X } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface Ligne {
     id: string;
@@ -53,6 +54,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Journal financier', href: '/comptabilite/journal' },
 ];
 
+const filterDrawerOpen = ref(false);
 const selectedSens = ref(props.filters.sens ?? '');
 const selectedCategorie = ref(props.filters.categorie ?? '');
 const selectedSite = ref(props.filters.site_id ?? '');
@@ -60,16 +62,19 @@ const dateFrom = ref(props.filters.date_from ?? '');
 const dateTo = ref(props.filters.date_to ?? '');
 const searchVal = ref(props.filters.search ?? '');
 
-const hasActiveFilters = computed(
+const activeFilterCount = computed(
     () =>
-        !!(
-            selectedSens.value ||
-            selectedCategorie.value ||
-            selectedSite.value ||
-            dateFrom.value ||
-            dateTo.value ||
-            searchVal.value
-        ),
+        [
+            !!selectedSens.value,
+            !!selectedCategorie.value,
+            !!selectedSite.value,
+            !!dateFrom.value,
+            !!dateTo.value,
+        ].filter(Boolean).length,
+);
+
+const hasActiveFilters = computed(
+    () => !!searchVal.value || activeFilterCount.value > 0,
 );
 
 function applyFilters() {
@@ -101,6 +106,12 @@ function resetFilters() {
     );
 }
 
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+watch(searchVal, () => {
+    if (searchDebounce) clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(applyFilters, 400);
+});
+
 function fmt(n: number) {
     return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' GNF';
 }
@@ -121,8 +132,8 @@ function fmt(n: number) {
             </div>
 
             <!-- KPI strip -->
-            <div class="grid gap-3 sm:grid-cols-3">
-                <div class="rounded-xl border bg-card p-4">
+            <div class="grid gap-4 sm:grid-cols-3">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <div class="flex items-center gap-2">
                         <ArrowUp class="h-4 w-4 text-emerald-500" />
                         <span class="text-sm text-muted-foreground"
@@ -130,12 +141,12 @@ function fmt(n: number) {
                         >
                     </div>
                     <p
-                        class="mt-1 text-xl font-bold text-emerald-600 dark:text-emerald-400"
+                        class="mt-2 text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
                     >
                         {{ fmt(kpis.total_entrees) }}
                     </p>
                 </div>
-                <div class="rounded-xl border bg-card p-4">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <div class="flex items-center gap-2">
                         <ArrowDown class="h-4 w-4 text-red-500" />
                         <span class="text-sm text-muted-foreground"
@@ -143,18 +154,18 @@ function fmt(n: number) {
                         >
                     </div>
                     <p
-                        class="mt-1 text-xl font-bold text-red-600 dark:text-red-400"
+                        class="mt-2 text-2xl font-bold text-red-600 tabular-nums dark:text-red-400"
                     >
                         {{ fmt(kpis.total_sorties) }}
                     </p>
                 </div>
-                <div class="rounded-xl border bg-card p-4">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <div class="flex items-center gap-2">
                         <BookOpen class="h-4 w-4 text-blue-500" />
                         <span class="text-sm text-muted-foreground">Solde</span>
                     </div>
                     <p
-                        class="mt-1 text-xl font-bold"
+                        class="mt-2 text-2xl font-bold tabular-nums"
                         :class="
                             kpis.solde >= 0
                                 ? 'text-blue-600 dark:text-blue-400'
@@ -167,52 +178,119 @@ function fmt(n: number) {
             </div>
 
             <!-- Filtres -->
-            <ComptabiliteFilters
-                v-model:search="searchVal"
-                v-model:dateDebut="dateFrom"
-                v-model:dateFin="dateTo"
-                search-placeholder="Rechercher une référence, un libellé..."
-                :has-active-filters="hasActiveFilters"
-                @filter="applyFilters"
-                @reset="resetFilters"
-            >
-                <select
-                    v-model="selectedSens"
-                    class="h-9 w-[140px] rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Tous les sens</option>
-                    <option
-                        v-for="o in sens_options"
-                        :key="o.value"
-                        :value="o.value"
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-[260px] shrink-0">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                        v-model="searchVal"
+                        type="search"
+                        placeholder="Rechercher une référence, un libellé..."
+                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    />
+                    <button
+                        v-if="searchVal"
+                        type="button"
+                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        @click="searchVal = ''"
                     >
-                        {{ o.label }}
-                    </option>
-                </select>
-                <select
-                    v-model="selectedCategorie"
-                    class="h-9 w-[180px] rounded-md border border-input bg-background px-2 text-sm"
+                        <X class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+
+                <FilterDrawer
+                    v-model:open="filterDrawerOpen"
+                    title="Filtres"
+                    :active-count="activeFilterCount"
+                    @apply="applyFilters"
+                    @reset="resetFilters"
                 >
-                    <option value="">Toutes les catégories</option>
-                    <option
-                        v-for="c in categories"
-                        :key="c.value"
-                        :value="c.value"
+                    <div class="space-y-1.5">
+                        <Label>Sens</Label>
+                        <select
+                            v-model="selectedSens"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Tous les sens</option>
+                            <option
+                                v-for="o in sens_options"
+                                :key="o.value"
+                                :value="o.value"
+                            >
+                                {{ o.label }}
+                            </option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Catégorie</Label>
+                        <select
+                            v-model="selectedCategorie"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Toutes les catégories</option>
+                            <option
+                                v-for="c in categories"
+                                :key="c.value"
+                                :value="c.value"
+                            >
+                                {{ c.label }}
+                            </option>
+                        </select>
+                    </div>
+                    <div
+                        v-if="is_admin && sites.length > 0"
+                        class="space-y-1.5"
                     >
-                        {{ c.label }}
-                    </option>
-                </select>
-                <select
-                    v-if="is_admin && sites.length > 0"
-                    v-model="selectedSite"
-                    class="h-9 w-[170px] rounded-md border border-input bg-background px-2 text-sm"
+                        <Label>Agence</Label>
+                        <select
+                            v-model="selectedSite"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Toutes les agences</option>
+                            <option
+                                v-for="s in sites"
+                                :key="s.id"
+                                :value="s.id"
+                            >
+                                {{ s.nom }}
+                            </option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Date début</Label>
+                        <input
+                            v-model="dateFrom"
+                            type="date"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Date fin</Label>
+                        <input
+                            v-model="dateTo"
+                            type="date"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        />
+                    </div>
+                </FilterDrawer>
+
+                <span
+                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
                 >
-                    <option value="">Toutes les agences</option>
-                    <option v-for="s in sites" :key="s.id" :value="s.id">
-                        {{ s.nom }}
-                    </option>
-                </select>
-            </ComptabiliteFilters>
+                    {{ lignes.data.length }} résultat{{
+                        lignes.data.length !== 1 ? 's' : ''
+                    }}
+                </span>
+                <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    @click="resetFilters"
+                >
+                    Réinitialiser
+                </button>
+            </div>
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">

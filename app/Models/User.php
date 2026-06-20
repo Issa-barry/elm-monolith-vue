@@ -106,7 +106,16 @@ class User extends Authenticatable
      */
     public function permissionsMap(): array
     {
-        $resources = ['clients', 'prestataires', 'livreurs', 'proprietaires', 'vehicules', 'equipes-livraison', 'sites', 'produits', 'packings', 'ventes', 'achats', 'users', 'parametres', 'logistique', 'depenses', 'rh-employes', 'rh-contrats', 'rh-paie', 'comptabilite'];
+        $resources = [
+            'clients', 'prestataires', 'livreurs', 'proprietaires',
+            'vehicules', 'equipes-livraison', 'sites',
+            'produits', 'packings', 'ventes', 'achats', 'factures', 'commissions', 'cashback', 'pdv',
+            'logistique', 'transferts', 'receptions',
+            'depenses', 'comptabilite', 'journal-financier',
+            'rh-employes', 'rh-contrats', 'rh-paie',
+            'users',
+            'parametres', 'parametres-produits', 'parametres-depenses', 'parametres-ventes', 'parametres-systeme', 'modules-metier',
+        ];
         $actions = ['create', 'read', 'update', 'delete'];
 
         $map = [];
@@ -118,7 +127,16 @@ class User extends Authenticatable
         }
 
         // Permissions standalone hors matrice CRUD
-        $standalone = ['logistique.commission.verser', 'ventes.qte.update', 'ventes.prix.update', 'rh-paie.validate', 'rh-paie.pay', 'rh-paie.close', 'comptabilite.payer'];
+        $standalone = [
+            'logistique.commission.verser', 'ventes.qte.update', 'ventes.prix.update',
+            'rh-paie.validate', 'rh-paie.pay', 'rh-paie.close', 'comptabilite.payer',
+            'depenses.soumettre', 'depenses.valider', 'depenses.rejeter', 'depenses.annuler',
+            'produits.ajuster_stock',
+            'ventes.confirmer', 'ventes.annuler', 'ventes.demarrer_chargement', 'ventes.valider_chargement',
+            'factures.encaisser', 'factures.annuler',
+            'commissions.payer', 'commissions.cloturer', 'commissions.exporter',
+            'logistique.valider_chargement', 'logistique.valider_reception', 'logistique.cloturer',
+        ];
         foreach ($standalone as $perm) {
             $map[$perm] = $this->isSuperAdmin() || $this->can($perm);
         }

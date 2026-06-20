@@ -108,6 +108,7 @@ class CommandeVenteService
 
         DB::transaction(function () use ($commande, $lignesData) {
             self::appliquerQuantitesChargees($commande, $lignesData);
+            self::recalculerTotaux($commande);
             self::validerPreconditions($commande->fresh(), StatutCommandeVente::LIVRAISON_EN_COURS);
 
             $commande->update([
@@ -137,9 +138,34 @@ class CommandeVenteService
                 'commentaire_ecart',
             ]));
 
+            if (array_key_exists('quantite_chargee', $update) && $update['quantite_chargee'] !== null) {
+                $update['total_ligne'] = $update['quantite_chargee'] * (float) $ligne->prix_vente_snapshot;
+            }
+
             if (! empty($update)) {
                 $ligne->update($update);
             }
+        }
+    }
+
+    /**
+     * Recalcule le total de la commande à partir des lignes (quantités réellement chargées)
+     * et répercute le nouveau montant sur la facture associée si elle existe.
+     */
+    private static function recalculerTotaux(CommandeVente $commande): void
+    {
+        $commande->load('lignes', 'facture');
+
+        $totalCommande = (float) $commande->lignes->sum('total_ligne');
+
+        $commande->update(['total_commande' => $totalCommande]);
+
+        if ($commande->facture) {
+            $commande->facture->update([
+                'montant_brut' => $totalCommande,
+                'montant_net' => $totalCommande,
+            ]);
+            $commande->facture->recalculStatut();
         }
     }
 

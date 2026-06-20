@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\Produit;
 use App\Models\User;
+use App\Services\DroitAjustementStockService;
 
 class ProduitPolicy
 {
@@ -27,6 +28,13 @@ class ProduitPolicy
     {
         return $user->can('produits.update')
             && $user->organization_id === $produit->organization_id;
+    }
+
+    public function ajusterStock(User $user, Produit $produit): bool
+    {
+        return $user->can('produits.read')
+            && $user->organization_id === $produit->organization_id
+            && app(DroitAjustementStockService::class)->canAjuster($user, $produit->organization_id);
     }
 
     public function delete(User $user, Produit $produit): bool

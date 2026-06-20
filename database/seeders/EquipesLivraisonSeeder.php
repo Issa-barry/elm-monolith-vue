@@ -189,6 +189,17 @@ class EquipesLivraisonSeeder extends Seeder
                     ['telephone' => '+224622000007', 'role' => 'chauffeur', 'montant' => 200, 'ordre' => 0],
                 ],
             ],
+            [
+                'nom' => 'Cousin',
+                'membres' => [
+                    ['telephone' => '+224621346981', 'role' => 'chauffeur', 'montant' => 50, 'ordre' => 0],
+                    ['telephone' => '+224624099568', 'role' => 'chauffeur', 'montant' => 50, 'ordre' => 1],
+                    ['telephone' => '+224622458645', 'role' => 'convoyeur', 'montant' => 30, 'ordre' => 2],
+                    ['telephone' => '+224623479658', 'role' => 'convoyeur', 'montant' => 25, 'ordre' => 3],
+                    ['telephone' => '+224625145898', 'role' => 'convoyeur', 'montant' => 25, 'ordre' => 4],
+                    ['telephone' => '+224623146589', 'role' => 'convoyeur', 'montant' => 20, 'ordre' => 5],
+                ],
+            ],
         ];
 
         foreach ($equipesInternes as $equipeData) {

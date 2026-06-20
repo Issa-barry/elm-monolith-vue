@@ -236,6 +236,42 @@ class CommandeVenteStatutTest extends TestCase
         $this->assertEquals('Un pack endommagé', $freshLigne->commentaire_ecart);
     }
 
+    public function test_avancer_valide_chargement_recalcule_totaux_sur_ecart(): void
+    {
+        ['commande' => $commande, 'ligne' => $ligne] = $this->makeCommandeWithLigne([
+            'statut' => StatutCommandeVente::A_CHARGER,
+            'total_commande' => 4000,
+        ]);
+
+        // Démarre le chargement → crée la facture à 4000 (sur quantité demandée = 2 × 2000)
+        $this->actingAs($this->user)->post(route('ventes.statut.avancer', $commande))->assertRedirect();
+
+        // Valide le chargement avec une quantité chargée inférieure à la demandée (40 au lieu de 60 dans le cas réel ; ici 1 au lieu de 2)
+        $this->actingAs($this->user)
+            ->post(route('ventes.statut.avancer', $commande), [
+                'lignes' => [[
+                    'id' => $ligne->id,
+                    'quantite_chargee' => 1,
+                    'type_ecart' => 'manquant',
+                    'commentaire_ecart' => 'Casse',
+                ]],
+            ])
+            ->assertRedirect();
+
+        $freshCommande = $commande->fresh();
+        $freshLigne = $ligne->fresh();
+
+        // 1 × prix_vente_snapshot (2000) = 2000, pas 4000 (basé sur la quantité demandée)
+        $this->assertEquals(2000, (float) $freshLigne->total_ligne);
+        $this->assertEquals(2000, (float) $freshCommande->total_commande);
+
+        $this->assertDatabaseHas('factures_ventes', [
+            'commande_vente_id' => $commande->id,
+            'montant_brut' => 2000,
+            'montant_net' => 2000,
+        ]);
+    }
+
     public function test_valider_chargement_sans_quantite_chargee_retourne_erreur(): void
     {
         ['commande' => $commande] = $this->makeCommandeWithLigne([

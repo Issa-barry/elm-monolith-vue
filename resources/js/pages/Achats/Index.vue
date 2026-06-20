@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,13 +27,10 @@ import {
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Commande {
@@ -58,15 +56,30 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const search = ref('');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Achats', href: '/achats' },
 ];
+
+const hasActiveFilters = computed(() => !!search.value);
+
+function resetFilters() {
+    search.value = '';
+}
+
+const desktopFiltered = computed(() => {
+    const q = search.value.toLowerCase().trim();
+    if (!q) return props.commandes;
+    return props.commandes.filter(
+        (c) =>
+            c.reference.toLowerCase().includes(q) ||
+            (c.prestataire_nom &&
+                c.prestataire_nom.toLowerCase().includes(q)) ||
+            c.statut_label.toLowerCase().includes(q) ||
+            (c.note && c.note.toLowerCase().includes(q)),
+    );
+});
 
 // ── Statut couleurs ───────────────────────────────────────────────────────────
 const statutColor: Record<string, string> = {
@@ -279,19 +292,21 @@ function confirmDelete(c: Commande) {
                 </Link>
             </div>
 
+            <!-- Filtres -->
+            <DataTableFilters
+                v-model:search="search"
+                search-placeholder="Rechercher..."
+                :has-active-filters="hasActiveFilters"
+                :result-count="desktopFiltered.length"
+                @reset="resetFilters"
+            />
+
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="commandes"
-                    :paginator="commandes.length > 20"
+                    :value="desktopFiltered"
+                    :paginator="desktopFiltered.length > 20"
                     :rows="20"
-                    :global-filter-fields="[
-                        'reference',
-                        'prestataire_nom',
-                        'statut_label',
-                        'note',
-                    ]"
-                    v-model:filters="filters"
                     data-key="id"
                     striped-rows
                     removable-sort
@@ -299,32 +314,9 @@ function confirmDelete(c: Commande) {
                     table-class="w-full"
                     :pt="{
                         root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
                         tbody: { class: 'divide-y' },
                     }"
                 >
-                    <template #header>
-                        <div class="flex items-center gap-3">
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Rechercher..."
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <span class="text-xs text-muted-foreground"
-                                >{{ commandes.length }} résultat{{
-                                    commandes.length !== 1 ? 's' : ''
-                                }}</span
-                            >
-                        </div>
-                    </template>
-
                     <!-- Référence -->
                     <Column
                         field="reference"

@@ -127,7 +127,7 @@ function fmt(n: number) {
 
             <!-- KPI cards -->
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div class="rounded-xl border bg-card p-5">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <div class="flex items-center justify-between">
                         <span class="text-sm text-muted-foreground"
                             >Entrées</span
@@ -135,16 +135,16 @@ function fmt(n: number) {
                         <TrendingUp class="h-4 w-4 text-emerald-500" />
                     </div>
                     <p
-                        class="mt-2 text-2xl font-bold text-emerald-600 dark:text-emerald-400"
+                        class="mt-2 text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
                     >
                         {{ fmt(stats_entrees) }}
                     </p>
-                    <p class="mt-1 text-xs text-muted-foreground">
+                    <p class="mt-0.5 text-xs text-muted-foreground">
                         Encaissements clients
                     </p>
                 </div>
 
-                <div class="rounded-xl border bg-card p-5">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <div class="flex items-center justify-between">
                         <span class="text-sm text-muted-foreground"
                             >Sorties</span
@@ -152,16 +152,16 @@ function fmt(n: number) {
                         <TrendingDown class="h-4 w-4 text-red-500" />
                     </div>
                     <p
-                        class="mt-2 text-2xl font-bold text-red-600 dark:text-red-400"
+                        class="mt-2 text-2xl font-bold text-red-600 tabular-nums dark:text-red-400"
                     >
                         {{ fmt(stats_sorties) }}
                     </p>
-                    <p class="mt-1 text-xs text-muted-foreground">
+                    <p class="mt-0.5 text-xs text-muted-foreground">
                         Commissions · salaires · dépenses
                     </p>
                 </div>
 
-                <div class="rounded-xl border bg-card p-5">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <div class="flex items-center justify-between">
                         <span class="text-sm text-muted-foreground"
                             >Solde théorique</span
@@ -169,7 +169,7 @@ function fmt(n: number) {
                         <Wallet class="h-4 w-4 text-blue-500" />
                     </div>
                     <p
-                        class="mt-2 text-2xl font-bold"
+                        class="mt-2 text-2xl font-bold tabular-nums"
                         :class="
                             solde >= 0
                                 ? 'text-blue-600 dark:text-blue-400'
@@ -178,12 +178,12 @@ function fmt(n: number) {
                     >
                         {{ fmt(solde) }}
                     </p>
-                    <p class="mt-1 text-xs text-muted-foreground">
+                    <p class="mt-0.5 text-xs text-muted-foreground">
                         Entrées − Sorties
                     </p>
                 </div>
 
-                <div class="rounded-xl border bg-card p-5">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
                     <div class="flex items-center justify-between">
                         <span class="text-sm text-muted-foreground"
                             >Fiches à payer</span
@@ -191,11 +191,11 @@ function fmt(n: number) {
                         <ReceiptText class="h-4 w-4 text-amber-500" />
                     </div>
                     <p
-                        class="mt-2 text-2xl font-bold text-amber-600 dark:text-amber-400"
+                        class="mt-2 text-2xl font-bold text-amber-600 tabular-nums dark:text-amber-400"
                     >
                         {{ fiches_a_payer }}
                     </p>
-                    <p class="mt-1 text-xs text-muted-foreground">
+                    <p class="mt-0.5 text-xs text-muted-foreground">
                         En attente de paiement
                     </p>
                 </div>

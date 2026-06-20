@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataTableFilters from '@/components/DataTableFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,12 +27,9 @@ import {
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dropdown from 'primevue/dropdown';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface Packing {
@@ -61,11 +59,6 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const search = ref('');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
-
 const statutFilter = ref<string>('tous');
 
 const statutOptions = [
@@ -75,6 +68,15 @@ const statutOptions = [
     { value: 'payee', label: 'Payée' },
     { value: 'annulee', label: 'Annulée' },
 ];
+
+const hasActiveFilters = computed(
+    () => !!search.value || statutFilter.value !== 'tous',
+);
+
+function resetFilters() {
+    search.value = '';
+    statutFilter.value = 'tous';
+}
 
 const baseFiltered = computed(() => {
     if (statutFilter.value === 'tous') return props.packings;
@@ -92,7 +94,7 @@ const mobileFiltered = computed(() => {
     );
 });
 
-const desktopFiltered = computed(() => baseFiltered.value);
+const desktopFiltered = computed(() => mobileFiltered.value);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -389,18 +391,29 @@ function confirmDelete(packing: Packing) {
                 </Link>
             </div>
 
+            <!-- Filtres ──────────────────────────────────────────────────────── -->
+            <DataTableFilters
+                v-model:search="search"
+                search-placeholder="Rechercher un packing…"
+                :has-active-filters="hasActiveFilters"
+                :result-count="desktopFiltered.length"
+                @reset="resetFilters"
+            >
+                <Dropdown
+                    v-model="statutFilter"
+                    :options="statutOptions"
+                    option-label="label"
+                    option-value="value"
+                    class="w-40"
+                />
+            </DataTableFilters>
+
             <!-- Tableau ──────────────────────────────────────────────────────── -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="desktopFiltered"
                     :paginator="packings.length > 20"
                     :rows="20"
-                    :global-filter-fields="[
-                        'reference',
-                        'prestataire_nom',
-                        'statut_label',
-                    ]"
-                    v-model:filters="filters"
                     data-key="id"
                     striped-rows
                     removable-sort
@@ -408,40 +421,9 @@ function confirmDelete(packing: Packing) {
                     table-class="w-full"
                     :pt="{
                         root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
                         tbody: { class: 'divide-y' },
                     }"
                 >
-                    <!-- Barre de recherche -->
-                    <template #header>
-                        <div class="flex items-center gap-3">
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Rechercher un packing..."
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Dropdown
-                                v-model="statutFilter"
-                                :options="statutOptions"
-                                option-label="label"
-                                option-value="value"
-                                class="w-40"
-                            />
-                            <span class="text-xs text-muted-foreground">
-                                {{ desktopFiltered.length }} résultat{{
-                                    desktopFiltered.length !== 1 ? 's' : ''
-                                }}
-                            </span>
-                        </div>
-                    </template>
-
                     <!-- Référence -->
                     <Column
                         field="reference"

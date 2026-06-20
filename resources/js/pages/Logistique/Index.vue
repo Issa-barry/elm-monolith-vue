@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilterDrawer from '@/components/FilterDrawer.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -7,6 +8,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import ReceptionDialog from '@/pages/Logistique/partials/ReceptionDialog.vue';
@@ -21,16 +23,14 @@ import {
     Plus,
     Search,
     Truck,
+    X,
     XCircle,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Dropdown from 'primevue/dropdown';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -90,11 +90,6 @@ interface SiteOption {
     nom: string;
 }
 
-interface FilterOption {
-    value: number | string | null;
-    label: string;
-}
-
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 const props = defineProps<{
@@ -129,31 +124,20 @@ const breadcrumbs = computed((): BreadcrumbItem[] => [
 
 // ── Filtres desktop ───────────────────────────────────────────────────────────
 
+const filterDrawerOpen = ref(false);
 const search = ref('');
-const statutFiltre = ref(props.filtre_statut ?? null);
+const statutFiltre = ref<string | null>(props.filtre_statut ?? null);
 const siteSourceFiltre = ref<number | null>(
     props.filtre_site_source_id ?? null,
 );
 const siteDestinationFiltre = ref<number | null>(
     props.filtre_site_destination_id ?? null,
 );
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-const statutOptions = computed<FilterOption[]>(() => [
-    { value: null, label: 'Tous les statuts' },
-    ...props.statuts,
-]);
-const siteSourceOptions = computed<FilterOption[]>(() => [
-    { value: null, label: 'Tous les sites depart' },
-    ...props.sites.map((site) => ({ value: site.id, label: site.nom })),
-]);
-const siteDestinationOptions = computed<FilterOption[]>(() => [
-    { value: null, label: 'Tous les sites arrivee' },
-    ...props.sites.map((site) => ({ value: site.id, label: site.nom })),
-]);
 
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
+const statutOptions = computed(() => props.statuts);
+const siteOptions = computed(() =>
+    props.sites.map((s) => ({ value: s.id, label: s.nom })),
+);
 
 function indexUrl(): string {
     return props.vue === 'receptions'
@@ -161,7 +145,7 @@ function indexUrl(): string {
         : '/logistique/transferts';
 }
 
-function appliquerFiltresServeur() {
+function applyFilters() {
     router.get(
         indexUrl(),
         {
@@ -173,20 +157,38 @@ function appliquerFiltresServeur() {
     );
 }
 
-function appliquerFiltreStatut(val: string | null) {
-    statutFiltre.value = val;
-    appliquerFiltresServeur();
+function resetFilters() {
+    search.value = '';
+    statutFiltre.value = null;
+    siteSourceFiltre.value = null;
+    siteDestinationFiltre.value = null;
+    router.get(indexUrl(), {}, { preserveState: true, replace: true });
 }
 
-function appliquerFiltreSiteSource(val: number | null) {
-    siteSourceFiltre.value = val;
-    appliquerFiltresServeur();
-}
+const activeFilterCount = computed(
+    () =>
+        [
+            !!statutFiltre.value,
+            !!siteSourceFiltre.value,
+            !!siteDestinationFiltre.value,
+        ].filter(Boolean).length,
+);
 
-function appliquerFiltreSiteDestination(val: number | null) {
-    siteDestinationFiltre.value = val;
-    appliquerFiltresServeur();
-}
+const hasActiveFilters = computed(
+    () => !!search.value || activeFilterCount.value > 0,
+);
+
+const filteredTransferts = computed(() => {
+    const q = search.value.toLowerCase().trim();
+    if (!q) return props.transferts;
+    return props.transferts.filter(
+        (t) =>
+            t.reference.toLowerCase().includes(q) ||
+            (t.site_source_nom ?? '').toLowerCase().includes(q) ||
+            (t.site_destination_nom ?? '').toLowerCase().includes(q) ||
+            (t.vehicule_nom ?? '').toLowerCase().includes(q),
+    );
+});
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
 
@@ -511,85 +513,102 @@ const commStatutDot: Record<string, string> = {
                 </div>
             </div>
 
+            <!-- Filtres -->
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-[260px] shrink-0">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                        v-model="search"
+                        type="search"
+                        placeholder="Référence, site, véhicule…"
+                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    />
+                    <button
+                        v-if="search"
+                        type="button"
+                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        @click="search = ''"
+                    >
+                        <X class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+
+                <FilterDrawer
+                    v-model:open="filterDrawerOpen"
+                    title="Filtres"
+                    :active-count="activeFilterCount"
+                    @apply="applyFilters"
+                    @reset="resetFilters"
+                >
+                    <div class="space-y-1.5">
+                        <Label>Statut</Label>
+                        <Select
+                            v-model="statutFiltre"
+                            :options="statutOptions"
+                            option-label="label"
+                            option-value="value"
+                            placeholder="Tous les statuts"
+                            show-clear
+                            class="w-full"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Site de départ</Label>
+                        <Select
+                            v-model="siteSourceFiltre"
+                            :options="siteOptions"
+                            option-label="label"
+                            option-value="value"
+                            placeholder="Tous les sites départ"
+                            show-clear
+                            class="w-full"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label>Site d'arrivée</Label>
+                        <Select
+                            v-model="siteDestinationFiltre"
+                            :options="siteOptions"
+                            option-label="label"
+                            option-value="value"
+                            placeholder="Tous les sites arrivée"
+                            show-clear
+                            class="w-full"
+                        />
+                    </div>
+                </FilterDrawer>
+
+                <span
+                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                >
+                    {{ filteredTransferts.length }} résultat{{
+                        filteredTransferts.length !== 1 ? 's' : ''
+                    }}
+                </span>
+                <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    @click="resetFilters"
+                >
+                    Réinitialiser
+                </button>
+            </div>
+
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="transferts"
-                    :paginator="transferts.length > 20"
+                    :value="filteredTransferts"
+                    :paginator="filteredTransferts.length > 20"
                     :rows="20"
-                    :global-filter-fields="[
-                        'reference',
-                        'site_source_nom',
-                        'site_destination_nom',
-                        'vehicule_nom',
-                        'statut_label',
-                    ]"
-                    v-model:filters="filters"
                     data-key="id"
                     striped-rows
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
-                    :pt="{
-                        root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
-                        tbody: { class: 'divide-y' },
-                    }"
                 >
-                    <template #header>
-                        <div class="flex items-center gap-3">
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Rechercher..."
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Dropdown
-                                :options="statutOptions"
-                                option-label="label"
-                                option-value="value"
-                                :model-value="statutFiltre"
-                                placeholder="Tous les statuts"
-                                class="w-48 text-sm"
-                                @change="(e) => appliquerFiltreStatut(e.value)"
-                            />
-                            <Dropdown
-                                :options="siteSourceOptions"
-                                option-label="label"
-                                option-value="value"
-                                :model-value="siteSourceFiltre"
-                                placeholder="Tous les sites depart"
-                                class="w-56 text-sm"
-                                @change="
-                                    (e) => appliquerFiltreSiteSource(e.value)
-                                "
-                            />
-                            <Dropdown
-                                :options="siteDestinationOptions"
-                                option-label="label"
-                                option-value="value"
-                                :model-value="siteDestinationFiltre"
-                                placeholder="Tous les sites arrivee"
-                                class="w-56 text-sm"
-                                @change="
-                                    (e) =>
-                                        appliquerFiltreSiteDestination(e.value)
-                                "
-                            />
-                            <span class="text-xs text-muted-foreground">
-                                {{ transferts.length }} résultat{{
-                                    transferts.length !== 1 ? 's' : ''
-                                }}
-                            </span>
-                        </div>
-                    </template>
-
                     <!-- Référence -->
                     <Column
                         field="reference"

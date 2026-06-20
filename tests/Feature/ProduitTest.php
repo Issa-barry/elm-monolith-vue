@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\DroitAjustementStock;
 use App\Models\MouvementStock;
 use App\Models\Organization;
 use App\Models\Produit;
@@ -34,11 +35,12 @@ class ProduitTest extends TestCase
     private function makeNonAdminUserOnSite(Site $site): User
     {
         Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'produits.read', 'guard_name' => 'web']);
         Permission::firstOrCreate(['name' => 'produits.update', 'guard_name' => 'web']);
 
         $user = User::factory()->create(['organization_id' => $this->org->id]);
         $user->assignRole('manager');
-        $user->givePermissionTo('produits.update');
+        $user->givePermissionTo(['produits.read', 'produits.update']);
         $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
 
         return $user;
@@ -664,6 +666,15 @@ class ProduitTest extends TestCase
         ]);
 
         $employe = $this->makeNonAdminUserOnSite($site);
+
+        DroitAjustementStock::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'manager',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_augmenter' => true,
+            'peut_diminuer' => true,
+        ]);
 
         $this->actingAs($employe)
             ->post(route('produits.ajuster-stock', $produit), [

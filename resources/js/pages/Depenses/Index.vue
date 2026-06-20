@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
-import FilterBar from '@/components/FilterBar.vue';
+import FilterDrawer from '@/components/FilterDrawer.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,7 +42,7 @@ import {
     X,
 } from 'lucide-vue-next';
 import { useToast } from 'primevue/usetoast';
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface Option {
     value: string;
@@ -105,6 +105,7 @@ const props = defineProps<{
         en_attente: number;
         validees: number;
     };
+    can_create: boolean;
 }>();
 
 const { can } = usePermissions();
@@ -115,6 +116,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dépenses', href: '/depenses' },
 ];
 
+const filterDrawerOpen = ref(false);
 const filterSearch = ref(props.filters.search ?? '');
 const filterType = ref(props.filters.type ?? '');
 const filterStatut = ref(props.filters.statut ?? '');
@@ -152,6 +154,26 @@ function resetFilters() {
     filterFin.value = '';
     router.get('/depenses', {}, { preserveScroll: true, replace: true });
 }
+
+// Seule la recherche libre est envoyée automatiquement (debounce) ; les
+// filtres avancés du panneau ne sont appliqués qu'au clic sur "Appliquer".
+let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
+watch(filterSearch, () => {
+    if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
+    searchDebounceTimeout = setTimeout(applyFilters, 400);
+});
+
+const activeFilterCount = computed(
+    () =>
+        [
+            !!filterType.value,
+            !!filterStatut.value,
+            !!filterCategorie.value,
+            !!filterSite.value,
+            !!filterDebut.value,
+            !!filterFin.value,
+        ].filter(Boolean).length,
+);
 
 function exportExcel() {
     const params = new URLSearchParams();
@@ -345,16 +367,8 @@ const categorieColors: Record<string, string> = {
     vehicule: 'bg-green-100 text-green-700',
 };
 
-const hasActiveFilters = ref(
-    !!(
-        props.filters.search ||
-        props.filters.type ||
-        props.filters.statut ||
-        props.filters.categorie ||
-        props.filters.site ||
-        props.filters.date_debut ||
-        props.filters.date_fin
-    ),
+const hasActiveFilters = computed(
+    () => !!filterSearch.value || activeFilterCount.value > 0,
 );
 </script>
 
@@ -388,7 +402,7 @@ const hasActiveFilters = ref(
                         <Printer class="mr-1.5 h-3.5 w-3.5" />
                         Imprimer
                     </Button>
-                    <Link v-if="can('depenses.create')" href="/depenses/create">
+                    <Link v-if="props.can_create" href="/depenses/create">
                         <Button>
                             <Plus class="mr-2 h-4 w-4" />
                             Nouvelle dépense
@@ -426,67 +440,8 @@ const hasActiveFilters = ref(
             </div>
 
             <!-- Filtres -->
-            <FilterBar>
-                <select
-                    v-model="filterType"
-                    class="h-9 w-[180px] rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Tous les types</option>
-                    <option v-for="t in types" :key="t.id" :value="t.id">
-                        {{ t.libelle }}
-                    </option>
-                </select>
-
-                <select
-                    v-model="filterCategorie"
-                    class="h-9 w-[180px] rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Tous les concernés</option>
-                    <option
-                        v-for="c in categories"
-                        :key="c.value"
-                        :value="c.value"
-                    >
-                        {{ c.label }}
-                    </option>
-                </select>
-
-                <select
-                    v-model="filterStatut"
-                    class="h-9 w-[160px] rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Tous les statuts</option>
-                    <option
-                        v-for="s in statuts"
-                        :key="s.value"
-                        :value="s.value"
-                    >
-                        {{ s.label }}
-                    </option>
-                </select>
-
-                <select
-                    v-model="filterSite"
-                    class="h-9 w-[170px] rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Tous les sites</option>
-                    <option v-for="s in sites" :key="s.id" :value="s.id">
-                        {{ s.nom }}
-                    </option>
-                </select>
-
-                <input
-                    v-model="filterDebut"
-                    type="date"
-                    class="h-9 w-[140px] rounded-md border border-input bg-background px-2 text-sm"
-                />
-                <input
-                    v-model="filterFin"
-                    type="date"
-                    class="h-9 w-[140px] rounded-md border border-input bg-background px-2 text-sm"
-                />
-
-                <div class="relative w-[240px]">
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-[260px] shrink-0">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
@@ -494,27 +449,128 @@ const hasActiveFilters = ref(
                         v-model="filterSearch"
                         type="search"
                         placeholder="Rechercher…"
-                        class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        @keydown.enter="applyFilters"
+                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     />
+                    <button
+                        v-if="filterSearch"
+                        type="button"
+                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        @click="filterSearch = ''"
+                    >
+                        <X class="h-3.5 w-3.5" />
+                    </button>
                 </div>
 
-                <template #actions>
-                    <Button size="sm" @click="applyFilters">
-                        <Search class="mr-1.5 h-3.5 w-3.5" />
-                        Filtrer
-                    </Button>
-                    <Button
-                        v-if="hasActiveFilters"
-                        size="sm"
-                        variant="ghost"
-                        @click="resetFilters"
-                    >
-                        <X class="mr-1.5 h-3.5 w-3.5" />
-                        Réinitialiser
-                    </Button>
-                </template>
-            </FilterBar>
+                <FilterDrawer
+                    v-model:open="filterDrawerOpen"
+                    title="Filtres"
+                    :active-count="activeFilterCount"
+                    @apply="applyFilters"
+                    @reset="resetFilters"
+                >
+                    <div class="space-y-1.5">
+                        <Label>Type</Label>
+                        <select
+                            v-model="filterType"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Tous les types</option>
+                            <option
+                                v-for="t in types"
+                                :key="t.id"
+                                :value="t.id"
+                            >
+                                {{ t.libelle }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <Label>Concerné</Label>
+                        <select
+                            v-model="filterCategorie"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Tous les concernés</option>
+                            <option
+                                v-for="c in categories"
+                                :key="c.value"
+                                :value="c.value"
+                            >
+                                {{ c.label }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <Label>Statut</Label>
+                        <select
+                            v-model="filterStatut"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Tous les statuts</option>
+                            <option
+                                v-for="s in statuts"
+                                :key="s.value"
+                                :value="s.value"
+                            >
+                                {{ s.label }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <Label>Site</Label>
+                        <select
+                            v-model="filterSite"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                            <option value="">Tous les sites</option>
+                            <option
+                                v-for="s in sites"
+                                :key="s.id"
+                                :value="s.id"
+                            >
+                                {{ s.nom }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <Label>Date début</Label>
+                        <input
+                            v-model="filterDebut"
+                            type="date"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        />
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <Label>Date fin</Label>
+                        <input
+                            v-model="filterFin"
+                            type="date"
+                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        />
+                    </div>
+                </FilterDrawer>
+
+                <span
+                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                >
+                    {{ depenses.total }} résultat{{
+                        depenses.total !== 1 ? 's' : ''
+                    }}
+                </span>
+                <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    @click="resetFilters"
+                >
+                    Réinitialiser
+                </button>
+            </div>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
@@ -795,7 +851,7 @@ const hasActiveFilters = ref(
                                     <Receipt class="h-12 w-12 opacity-20" />
                                     <p>Aucune dépense enregistrée.</p>
                                     <Link
-                                        v-if="can('depenses.create')"
+                                        v-if="props.can_create"
                                         href="/depenses/create"
                                     >
                                         <Button variant="outline" size="sm">

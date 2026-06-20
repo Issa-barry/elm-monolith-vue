@@ -36,6 +36,11 @@ class SitesSeeder extends Seeder
                 'type' => SiteType::DEPOT->value,
                 'localisation' => 'Tamisso',
             ],
+            [
+                'nom' => 'Kouria',
+                'type' => SiteType::DEPOT->value,
+                'localisation' => 'Kouria',
+            ],
         ];
 
         foreach ($sitesRattaches as $siteData) {

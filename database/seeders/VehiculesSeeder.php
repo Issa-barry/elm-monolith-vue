@@ -10,7 +10,7 @@ use App\Models\Vehicule;
 use Illuminate\Database\Seeder;
 
 /**
- * Crée 9 véhicules (5 externes + 4 internes) et les associe à leurs équipes.
+ * Crée 10 véhicules (5 externes + 5 internes) et les associe à leurs équipes.
  *
  * EXTERNES (appartiennent à un propriétaire privé) :
  * | Véhicule         | Type     | Équipe         | Immat      |
@@ -22,12 +22,13 @@ use Illuminate\Database\Seeder;
  * | Conakry 2        | tricycle | Conakry 2      | TC-002-GN  |
  *
  * INTERNES (appartiennent à l'organisation — 100 % livreurs) :
- * | Véhicule | Type    | Équipe           | Immat      |
- * |----------|---------|------------------|------------|
- * | elm-1    | minibus | ELM Logistique 1 | ELM-001-GN |
- * | elm-2    | minibus | ELM Logistique 2 | ELM-002-GN |
- * | elm-3    | camion  | ELM Logistique 3 | ELM-003-GN |
- * | elm-4    | minibus | ELM Logistique 4 | ELM-004-GN |
+ * | Véhicule | Type    | Équipe           | Immat      | Site   |
+ * |----------|---------|------------------|------------|--------|
+ * | elm-1    | minibus | ELM Logistique 1 | ELM-001-GN | Matoto |
+ * | elm-2    | minibus | ELM Logistique 2 | ELM-002-GN | Matoto |
+ * | elm-3    | camion  | ELM Logistique 3 | ELM-003-GN | Matoto |
+ * | elm-4    | minibus | ELM Logistique 4 | ELM-004-GN | Matoto |
+ * | Cousin   | —       | Cousin           | BK-4627-02 | Kouria |
  */
 class VehiculesSeeder extends Seeder
 {
@@ -37,6 +38,10 @@ class VehiculesSeeder extends Seeder
 
         $matoto = Site::where('organization_id', $org->id)
             ->where('nom', 'Matoto')
+            ->firstOrFail();
+
+        $kouria = Site::where('organization_id', $org->id)
+            ->where('nom', 'Kouria')
             ->firstOrFail();
 
         $equipe = fn (string $nom) => EquipeLivraison::query()
@@ -62,6 +67,7 @@ class VehiculesSeeder extends Seeder
         $eqElm2 = $equipe('ELM Logistique 2');
         $eqElm3 = $equipe('ELM Logistique 3');
         $eqElm4 = $equipe('ELM Logistique 4');
+        $eqCousin = $equipe('Cousin');
 
         $vehicules = [
             // ── Externes ────────────────────────────────────────────────────
@@ -187,6 +193,20 @@ class VehiculesSeeder extends Seeder
                 'pris_en_charge_par_usine' => true,
                 'is_active' => true,
                 'equipe' => $eqElm4,
+            ],
+            [
+                'nom_vehicule' => 'Cousin',
+                'marque' => null,
+                'modele' => null,
+                'immatriculation' => 'BK-4627-02',
+                'type_vehicule' => null,
+                'capacite_packs' => 200,
+                'categorie' => 'interne',
+                'site_id' => $kouria->id,
+                'proprietaire_id' => null,
+                'pris_en_charge_par_usine' => true,
+                'is_active' => true,
+                'equipe' => $eqCousin,
             ],
         ];
 

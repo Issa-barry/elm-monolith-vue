@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
-import ComptabiliteFilters from '@/components/ComptabiliteFilters.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -20,13 +19,15 @@ import {
     HandCoins,
     History,
     MoreHorizontal,
+    Search,
     Truck,
     User,
+    X,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 
 interface BeneficiaireRow {
     beneficiaire_id: string;
@@ -60,9 +61,12 @@ const props = defineProps<{
     };
     search: string;
     filtre_statut: string;
+    filtre_site: string;
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
     periode_courante: string;
+    is_admin: boolean;
+    sites: { value: string; label: string }[];
     can_payer: boolean;
 }>();
 
@@ -78,14 +82,19 @@ const breadcrumbs: BreadcrumbItem[] = [
 const searchVal = ref(props.search ?? '');
 const statutFiltre = ref(props.filtre_statut || '');
 const periodeFiltre = ref(props.selected_periode || '');
+const siteFiltre = ref(props.filtre_site || '');
 
-const periodeOptions = computed(() => [
-    { code: '', label: 'Toutes les périodes' },
-    ...props.periodes_disponibles,
-]);
+const activeFilterCount = computed(
+    () =>
+        [
+            !!statutFiltre.value,
+            !!periodeFiltre.value,
+            !!siteFiltre.value,
+        ].filter(Boolean).length,
+);
 
 const hasActiveFilters = computed(
-    () => !!(searchVal.value || statutFiltre.value || periodeFiltre.value),
+    () => !!searchVal.value || activeFilterCount.value > 0,
 );
 
 function appliquerFiltres() {
@@ -95,6 +104,7 @@ function appliquerFiltres() {
             search: searchVal.value || undefined,
             statut: statutFiltre.value || undefined,
             periode: periodeFiltre.value || undefined,
+            site: siteFiltre.value || undefined,
         },
         { preserveState: true, replace: true },
     );
@@ -104,12 +114,19 @@ function resetFilters() {
     searchVal.value = '';
     statutFiltre.value = '';
     periodeFiltre.value = '';
+    siteFiltre.value = '';
     router.get(
         '/comptabilite/commissions/proprietaires',
         {},
         { preserveState: true, replace: true },
     );
 }
+
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+watch(searchVal, () => {
+    if (searchDebounce) clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(appliquerFiltres, 400);
+});
 
 function statutClass(s: string) {
     return (
@@ -194,6 +211,7 @@ function buildParams(): URLSearchParams {
     const params = new URLSearchParams();
     if (periodeFiltre.value) params.set('periode', periodeFiltre.value);
     if (statutFiltre.value) params.set('statut', statutFiltre.value);
+    if (siteFiltre.value) params.set('site', siteFiltre.value);
     if (searchVal.value) params.set('search', searchVal.value);
     return params;
 }
@@ -270,25 +288,24 @@ function fmtTel(tel: string | null | undefined): string {
             </div>
 
             <!-- KPIs -->
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                <div class="rounded-lg border bg-card p-4 text-center">
+            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Total cumulé</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        Total cumulé
-                    </p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">
                         {{ fmt(kpis.total_brut) }}
                     </p>
-                </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
-                    <p
-                        class="text-xs font-medium tracking-wide text-red-600 uppercase dark:text-red-400"
-                    >
-                        Frais
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ beneficiaires.length }} propriétaire{{
+                            beneficiaires.length !== 1 ? 's' : ''
+                        }}
                     </p>
+                </div>
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Frais</p>
                     <p
-                        class="mt-1 text-lg font-semibold text-red-600 tabular-nums dark:text-red-400"
+                        class="mt-2 text-2xl font-bold text-red-600 tabular-nums dark:text-red-400"
                     >
                         {{
                             kpis.total_frais > 0
@@ -297,267 +314,337 @@ function fmtTel(tel: string | null | undefined): string {
                         }}
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Net à payer</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        Net à payer
-                    </p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">
                         {{ fmt(kpis.total_net) }}
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Déjà payé</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        Déjà payé
-                    </p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">
                         {{ fmt(kpis.total_verse) }}
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card p-4 text-center">
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Reste à payer</p>
                     <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        Reste à payer
-                    </p>
-                    <p class="mt-1 text-lg font-semibold tabular-nums">
                         {{ fmt(kpis.solde_total) }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{
+                            beneficiaires.filter((b) => b.solde_restant > 0)
+                                .length
+                        }}
+                        impayé{{
+                            beneficiaires.filter((b) => b.solde_restant > 0)
+                                .length !== 1
+                                ? 's'
+                                : ''
+                        }}
                     </p>
                 </div>
             </div>
 
             <!-- Filtres -->
-            <ComptabiliteFilters
-                v-model:search="searchVal"
-                search-placeholder="Rechercher un propriétaire, téléphone..."
-                :has-active-filters="hasActiveFilters"
-                @filter="appliquerFiltres"
-                @reset="resetFilters"
-            >
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-[260px] shrink-0">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                        v-model="searchVal"
+                        type="search"
+                        placeholder="Rechercher un propriétaire, téléphone..."
+                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    />
+                    <button
+                        v-if="searchVal"
+                        type="button"
+                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        @click="searchVal = ''"
+                    >
+                        <X class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+
+                <select
+                    v-if="is_admin && sites.length > 1"
+                    v-model="siteFiltre"
+                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                >
+                    <option value="">Toutes les agences</option>
+                    <option v-for="s in sites" :key="s.value" :value="s.value">
+                        {{ s.label }}
+                    </option>
+                </select>
+                <span
+                    v-else-if="!is_admin && sites.length >= 1"
+                    class="inline-flex h-9 items-center gap-1.5 rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground"
+                >
+                    <Building2 class="h-3.5 w-3.5" />
+                    {{ sites[0]?.label }}
+                </span>
+
                 <select
                     v-model="statutFiltre"
-                    class="h-9 w-[160px] rounded-md border border-input bg-background px-2 text-sm"
+                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
                 >
                     <option value="">Tous les statuts</option>
                     <option value="impaye">Impayé</option>
                     <option value="partiel">Partiel</option>
                     <option value="paye">Payé</option>
                 </select>
+
                 <select
                     v-model="periodeFiltre"
-                    class="h-9 w-[200px] rounded-md border border-input bg-background px-2 text-sm"
+                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
                 >
                     <option value="">Toutes les périodes</option>
                     <option
-                        v-for="p in periodeOptions"
+                        v-for="p in periodes_disponibles"
                         :key="p.code"
                         :value="p.code"
                     >
                         {{ p.label }}
                     </option>
                 </select>
-            </ComptabiliteFilters>
+
+                <button
+                    type="button"
+                    class="h-9 rounded-md bg-primary px-3 text-sm text-primary-foreground hover:bg-primary/90"
+                    @click="appliquerFiltres"
+                >
+                    Appliquer
+                </button>
+
+                <span
+                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+                >
+                    {{ beneficiaires.length }} résultat{{
+                        beneficiaires.length !== 1 ? 's' : ''
+                    }}
+                </span>
+                <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    @click="resetFilters"
+                >
+                    Réinitialiser
+                </button>
+            </div>
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
-                <table v-if="beneficiaires.length > 0" class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b bg-muted/40">
-                            <th
-                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
-                            >
-                                Propriétaire
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
-                            >
-                                Véhicule(s)
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
-                            >
-                                Agence
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Total cumulé
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Frais
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Net à payer
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Déjà payé
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-right font-medium text-muted-foreground"
-                            >
-                                Reste à payer
-                            </th>
-                            <th
-                                class="px-5 py-3.5 text-left font-medium text-muted-foreground"
-                            >
-                                Statut
-                            </th>
-                            <th class="w-10 px-4 py-3.5" />
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        <tr
-                            v-for="b in beneficiaires"
-                            :key="b.beneficiaire_id"
-                            class="cursor-pointer transition-colors hover:bg-muted/10"
-                            @click="
-                                router.visit(
-                                    '/comptabilite/commissions/proprietaires/' +
-                                        b.beneficiaire_id,
-                                )
-                            "
-                        >
-                            <td class="px-5 py-4">
-                                <div class="flex items-center gap-2.5">
-                                    <User
-                                        class="h-4 w-4 shrink-0 text-muted-foreground"
-                                    />
-                                    <div>
-                                        <p class="font-semibold">
-                                            {{ b.beneficiaire_nom }}
-                                        </p>
-                                        <p
-                                            v-if="b.telephone"
-                                            class="mt-0.5 text-xs text-muted-foreground"
-                                        >
-                                            {{ fmtTel(b.telephone) }}
-                                        </p>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="px-5 py-4">
-                                <div
-                                    v-if="b.vehicules"
-                                    class="flex items-center gap-1.5 text-sm text-muted-foreground"
+                <div v-if="beneficiaires.length > 0" class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b bg-muted/40">
+                                <th
+                                    class="px-5 py-3.5 text-left font-medium text-muted-foreground"
                                 >
-                                    <Truck class="h-3.5 w-3.5 shrink-0" />
-                                    <span>{{ b.vehicules }}</span>
-                                </div>
-                                <span
-                                    v-else
-                                    class="text-xs text-muted-foreground"
-                                    >—</span
+                                    Propriétaire
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-left font-medium text-muted-foreground"
                                 >
-                            </td>
-                            <td class="px-5 py-4 text-sm">
-                                <div
-                                    v-if="b.agence"
-                                    class="flex items-center gap-1.5 text-muted-foreground"
+                                    Véhicule(s)
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-left font-medium text-muted-foreground"
                                 >
-                                    <Building2 class="h-3.5 w-3.5 shrink-0" />
-                                    <span>{{ b.agence }}</span>
-                                </div>
-                                <span
-                                    v-else
-                                    class="text-xs text-muted-foreground"
-                                    >—</span
+                                    Agence
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
                                 >
-                            </td>
-                            <td
-                                class="px-5 py-4 text-right font-semibold tabular-nums"
-                            >
-                                {{ fmt(b.total_brut_cumule) }}
-                            </td>
-                            <td
-                                class="px-5 py-4 text-right text-red-600 tabular-nums dark:text-red-400"
-                            >
-                                {{
-                                    b.total_frais > 0
-                                        ? '-' + fmt(b.total_frais)
-                                        : '—'
-                                }}
-                            </td>
-                            <td
-                                class="px-5 py-4 text-right font-semibold tabular-nums"
-                            >
-                                {{ fmt(b.total_net_cumule) }}
-                            </td>
-                            <td
-                                class="px-5 py-4 text-right font-semibold tabular-nums"
-                            >
-                                {{ fmt(b.total_verse) }}
-                            </td>
-                            <td
-                                class="px-5 py-4 text-right text-lg font-bold tabular-nums"
-                            >
-                                {{ fmt(b.solde_restant) }}
-                            </td>
-                            <td class="px-5 py-4">
-                                <span
-                                    class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
-                                    :class="statutClass(b.statut_global)"
+                                    Total cumulé
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
                                 >
-                                    {{ statutLabel(b.statut_global) }}
-                                </span>
-                            </td>
-                            <td class="px-4 py-3 text-right" @click.stop>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger as-child>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            class="h-7 w-7"
-                                        >
-                                            <MoreHorizontal class="h-4 w-4" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <DropdownMenuItem as-child>
-                                            <Link
-                                                :href="`/comptabilite/commissions/proprietaires/${b.beneficiaire_id}`"
-                                                class="flex w-full cursor-pointer items-center"
+                                    Frais
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Net à payer
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Déjà payé
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-right font-medium text-muted-foreground"
+                                >
+                                    Reste à payer
+                                </th>
+                                <th
+                                    class="px-5 py-3.5 text-left font-medium text-muted-foreground"
+                                >
+                                    Statut
+                                </th>
+                                <th class="w-10 px-4 py-3.5" />
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr
+                                v-for="b in beneficiaires"
+                                :key="b.beneficiaire_id"
+                                class="cursor-pointer transition-colors even:bg-muted/20 hover:bg-muted/10"
+                                @click="
+                                    router.visit(
+                                        '/comptabilite/commissions/proprietaires/' +
+                                            b.beneficiaire_id,
+                                    )
+                                "
+                            >
+                                <td class="px-5 py-3">
+                                    <div class="flex items-center gap-2.5">
+                                        <User
+                                            class="h-4 w-4 shrink-0 text-muted-foreground"
+                                        />
+                                        <div>
+                                            <p class="font-semibold">
+                                                {{ b.beneficiaire_nom }}
+                                            </p>
+                                            <p
+                                                v-if="b.telephone"
+                                                class="mt-0.5 text-xs text-muted-foreground"
                                             >
-                                                Détail
-                                            </Link>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            class="cursor-pointer"
-                                            @click="openAudit(b)"
-                                        >
-                                            <History class="mr-2 h-4 w-4" />
-                                            Historique
-                                        </DropdownMenuItem>
-                                        <template
-                                            v-if="
-                                                can_payer && b.solde_restant > 0
-                                            "
-                                        >
-                                            <DropdownMenuSeparator />
+                                                {{ fmtTel(b.telephone) }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-5 py-3">
+                                    <div
+                                        v-if="b.vehicules"
+                                        class="flex items-center gap-1.5 text-sm text-muted-foreground"
+                                    >
+                                        <Truck class="h-3.5 w-3.5 shrink-0" />
+                                        <span>{{ b.vehicules }}</span>
+                                    </div>
+                                    <span
+                                        v-else
+                                        class="text-xs text-muted-foreground"
+                                        >—</span
+                                    >
+                                </td>
+                                <td class="px-5 py-3 text-sm">
+                                    <div
+                                        v-if="b.agence"
+                                        class="flex items-center gap-1.5 text-muted-foreground"
+                                    >
+                                        <Building2
+                                            class="h-3.5 w-3.5 shrink-0"
+                                        />
+                                        <span>{{ b.agence }}</span>
+                                    </div>
+                                    <span
+                                        v-else
+                                        class="text-xs text-muted-foreground"
+                                        >—</span
+                                    >
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ fmt(b.total_brut_cumule) }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right text-red-600 tabular-nums dark:text-red-400"
+                                >
+                                    {{
+                                        b.total_frais > 0
+                                            ? '-' + fmt(b.total_frais)
+                                            : '—'
+                                    }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ fmt(b.total_net_cumule) }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ fmt(b.total_verse) }}
+                                </td>
+                                <td
+                                    class="px-5 py-3 text-right font-bold tabular-nums"
+                                >
+                                    {{ fmt(b.solde_restant) }}
+                                </td>
+                                <td class="px-5 py-3">
+                                    <span
+                                        class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
+                                        :class="statutClass(b.statut_global)"
+                                    >
+                                        {{ statutLabel(b.statut_global) }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-right" @click.stop>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger as-child>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                class="h-7 w-7"
+                                            >
+                                                <MoreHorizontal
+                                                    class="h-4 w-4"
+                                                />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem as-child>
+                                                <Link
+                                                    :href="`/comptabilite/commissions/proprietaires/${b.beneficiaire_id}`"
+                                                    class="flex w-full cursor-pointer items-center"
+                                                >
+                                                    Détail
+                                                </Link>
+                                            </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 class="cursor-pointer"
-                                                @click="openPaiement(b)"
+                                                @click="openAudit(b)"
                                             >
-                                                <HandCoins
-                                                    class="mr-2 h-4 w-4"
-                                                />
-                                                Payer
+                                                <History class="mr-2 h-4 w-4" />
+                                                Historique
                                             </DropdownMenuItem>
-                                        </template>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                            <template
+                                                v-if="
+                                                    can_payer &&
+                                                    b.solde_restant > 0
+                                                "
+                                            >
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                    class="cursor-pointer"
+                                                    @click="openPaiement(b)"
+                                                >
+                                                    <HandCoins
+                                                        class="mr-2 h-4 w-4"
+                                                    />
+                                                    Payer
+                                                </DropdownMenuItem>
+                                            </template>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
                 <div
                     v-else
                     class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
