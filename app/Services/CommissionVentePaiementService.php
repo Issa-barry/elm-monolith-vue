@@ -111,6 +111,7 @@ class CommissionVentePaiementService
             ->join('commissions_ventes AS cv_fifo', 'cv_fifo.id', '=', 'commission_parts.commission_vente_id')
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $organizationId))
             ->where('commission_parts.type_beneficiaire', $type)
+            ->where('commission_parts.statut', '!=', \App\Enums\StatutCommission::CREEE->value)
             ->whereRaw('commission_parts.montant_verse < commission_parts.montant_net')
             ->orderBy('cv_fifo.created_at')
             ->orderBy('commission_parts.id')

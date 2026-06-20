@@ -284,7 +284,12 @@ class CommissionVenteController extends Controller
             : (float) $allParts->sum('frais_supplementaires');
         $totalNet = max(0.0, $totalBrut - $totalFrais);
         $totalVerse = (float) $allParts->sum('montant_verse');
-        $solde = max(0.0, $totalNet - $totalVerse);
+
+        // Solde payable = parts activées seulement (IMPAYE/PARTIEL, pas CREEE).
+        $activeParts = $allParts->filter(fn ($p) => $p->statut !== \App\Enums\StatutCommission::CREEE);
+        $solde = $type === 'proprietaire'
+            ? max(0.0, (float) $activeParts->sum('montant_brut') - $totalFraisDepenses - (float) $activeParts->sum('montant_verse'))
+            : max(0.0, (float) $activeParts->sum('montant_net') - (float) $activeParts->sum('montant_verse'));
 
         $statutGlobal = match (true) {
             $solde <= 0 && $totalVerse > 0 => 'solde',
