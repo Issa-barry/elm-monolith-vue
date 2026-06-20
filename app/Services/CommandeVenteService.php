@@ -79,6 +79,7 @@ class CommandeVenteService
                 'reference' => $commande->reference,
                 'montant_brut' => $commande->total_commande,
                 'montant_net' => $commande->total_commande,
+                'statut_facture' => StatutFactureVente::IMPAYEE,
             ]);
         });
     }
@@ -150,7 +151,25 @@ class CommandeVenteService
                 'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
                 'chargement_valide_at' => now(),
             ]);
+
+            self::activerFactureEtCommissions($commande);
         });
+    }
+
+    private static function activerFactureEtCommissions(CommandeVente $commande): void
+    {
+        $commande->load('facture', 'commissions');
+
+        if ($commande->facture && $commande->facture->statut_facture === StatutFactureVente::CREEE) {
+            $commande->facture->update(['statut_facture' => StatutFactureVente::IMPAYEE]);
+        }
+
+        foreach ($commande->commissions as $commission) {
+            if ($commission->statut === \App\Enums\StatutCommission::CREEE) {
+                $commission->update(['statut' => \App\Enums\StatutCommission::IMPAYE]);
+                $commission->parts()->where('statut', 'creee')->update(['statut' => 'impaye']);
+            }
+        }
     }
 
     private static function appliquerQuantitesChargees(CommandeVente $commande, array $lignesData): void

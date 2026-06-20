@@ -518,6 +518,7 @@ class CommissionVenteController extends Controller
             'statut' => $c->statut?->value,
             'statut_label' => $c->statut_label,
             'is_paye' => $c->isPaye(),
+            'is_payable' => $c->commande?->isEncaissable() ?? false,
             'created_at' => $c->created_at?->format(self::DATE_DISPLAY_FORMAT),
             'nb_parts' => $c->relationLoaded('parts') ? $c->parts->count() : null,
         ];

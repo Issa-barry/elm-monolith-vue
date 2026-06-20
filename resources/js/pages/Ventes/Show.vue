@@ -102,6 +102,16 @@ interface VehiculeDetail {
     capacite_packs: number | null;
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
+    proprietaire_code_phone_pays: string | null;
+}
+
+interface ClientDetail {
+    nom: string;
+    telephone: string | null;
+    code_phone_pays: string | null;
+    ville: string | null;
+    adresse: string | null;
+    cashback_eligible: boolean;
 }
 
 interface MembreEquipe {
@@ -129,6 +139,7 @@ interface CommandeData {
     livreur_telephone: string | null;
     equipe_detail: EquipeDetail | null;
     client_nom: string | null;
+    client_detail: ClientDetail | null;
     site_nom: string | null;
     motif_annulation: string | null;
     annulee_at: string | null;
@@ -157,7 +168,7 @@ interface CommandeData {
 }
 
 interface CommissionStatut {
-    value: 'paye' | 'partiel' | 'impaye';
+    value: 'creee' | 'paye' | 'partiel' | 'impaye';
     label: string;
 }
 
@@ -181,6 +192,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Statut couleurs ───────────────────────────────────────────────────────────
 const statutFactureColor: Record<string, string> = {
+    creee: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
     impayee: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
     partiel: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
     payee: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
@@ -188,6 +200,7 @@ const statutFactureColor: Record<string, string> = {
 };
 
 const statutCommissionColor: Record<string, string> = {
+    creee: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
     impaye: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
     partiel: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
     paye: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
@@ -210,20 +223,50 @@ const statutCommandeColor: Record<string, string> = {
 // ── Popups véhicule / équipe ──────────────────────────────────────────────────
 const vehiculeDialogVisible = ref(false);
 const equipeDialogVisible = ref(false);
+const clientDialogVisible = ref(false);
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
-function formatPhone(tel: string | null | undefined): string {
+function formatPhone(tel: string | null | undefined, dialCode?: string | null): string {
     if (!tel) return '—';
     const digits = tel.replace(/\D/g, '');
-    const local = digits.startsWith('00224')
-        ? digits.slice(5)
-        : digits.startsWith('224')
-          ? digits.slice(3)
-          : null;
-    if (local && local.length >= 9) {
+    if (!digits) return '—';
+
+    let local: string | null = null;
+    let resolvedDial = dialCode?.replace(/\D/g, '') ?? null;
+
+    // Préfixe 00224 (ex: 0022462200...)
+    if (digits.startsWith('00224') && digits.length >= 14) {
+        local = digits.slice(5);
+        resolvedDial = '224';
+    // Préfixe 224 (ex: 22462200...)
+    } else if (digits.startsWith('224') && digits.length >= 12) {
+        local = digits.slice(3);
+        resolvedDial = '224';
+    // Numéro local 9 chiffres → Guinea par défaut
+    } else if (digits.length === 9) {
+        local = digits;
+        resolvedDial = resolvedDial ?? '224';
+    // Préfixe connu passé en paramètre
+    } else if (resolvedDial && digits.startsWith(resolvedDial)) {
+        local = digits.slice(resolvedDial.length);
+    // Heuristique : 11 chiffres → 2 chiffres indicatif + 9 local
+    } else if (digits.length === 11) {
+        resolvedDial = digits.slice(0, 2);
+        local = digits.slice(2);
+    // Heuristique : 12 chiffres non-Guinea → 3 chiffres indicatif + 9 local
+    } else if (digits.length === 12) {
+        resolvedDial = digits.slice(0, 3);
+        local = digits.slice(3);
+    }
+
+    if (!local) return tel;
+
+    if (resolvedDial === '224') {
         return `+224 ${local.slice(0, 3)} ${local.slice(3, 5)} ${local.slice(5, 7)} ${local.slice(7, 9)}`;
     }
-    return tel;
+
+    const grouped = local.match(/.{1,2}/g)?.join(' ') ?? local;
+    return `+${resolvedDial} ${grouped}`;
 }
 
 function formatGNF(val: number | string | null | undefined): string {
@@ -579,8 +622,7 @@ function connectorIsActive(idx: number): boolean {
                         commande.can_confirmer ||
                         commande.can_demarrer_chargement ||
                         commande.can_valider_chargement ||
-                        commande.can_annuler ||
-                        commande.can_encaisser
+                        commande.can_annuler
                     "
                     class="absolute right-4"
                 >
@@ -643,8 +685,7 @@ function connectorIsActive(idx: number): boolean {
                                     (commande.can_modifier ||
                                         commande.can_confirmer ||
                                         commande.can_demarrer_chargement ||
-                                        commande.can_valider_chargement ||
-                                        commande.can_encaisser)
+                                        commande.can_valider_chargement)
                                 "
                             />
                             <DropdownMenuItem
@@ -752,16 +793,6 @@ function connectorIsActive(idx: number): boolean {
                     >
                         <CheckCircle class="mr-2 h-4 w-4" />
                         Valider le chargement
-                    </Button>
-
-                    <!-- Encaisser -->
-                    <Button
-                        v-if="commande.can_encaisser"
-                        size="sm"
-                        @click="openEncaisserDialog"
-                    >
-                        <HandCoins class="mr-1.5 h-4 w-4" />
-                        Encaisser {{ facture ? formatGNF(facture.montant_restant) : '' }}
                     </Button>
 
                     <!-- Annuler -->
@@ -920,13 +951,17 @@ function connectorIsActive(idx: number): boolean {
                             >
                                 {{ commande.statut_label }}
                             </span>
-                            <span
+                            <button
                                 v-if="facture"
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="statutFactureColor[facture.statut] ?? 'bg-zinc-100 text-zinc-500'"
+                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-opacity"
+                                :class="[
+                                    statutFactureColor[facture.statut] ?? 'bg-zinc-100 text-zinc-500',
+                                    facture.statut !== 'payee' ? 'cursor-pointer hover:opacity-80' : 'cursor-default',
+                                ]"
+                                @click="facture.statut !== 'payee' && (activeTab = 'facturation')"
                             >
                                 Facture : {{ facture.statut_label }}
-                            </span>
+                            </button>
                             <span
                                 v-if="commission_statut"
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
@@ -968,9 +1003,15 @@ function connectorIsActive(idx: number): boolean {
                         </div>
                         <div>
                             <p class="text-xs text-muted-foreground">Client</p>
-                            <p class="mt-0.5 font-medium">
-                                {{ commande.client_nom ?? '—' }}
-                            </p>
+                            <button
+                                v-if="commande.client_detail"
+                                class="mt-0.5 flex items-center gap-1 font-medium text-primary hover:underline focus:outline-none"
+                                @click="clientDialogVisible = true"
+                            >
+                                {{ commande.client_nom }}
+                                <ExternalLink class="h-3 w-3 shrink-0" />
+                            </button>
+                            <p v-else class="mt-0.5 font-medium">—</p>
                         </div>
                         <div>
                             <p class="text-xs text-muted-foreground">Site</p>
@@ -1041,6 +1082,12 @@ function connectorIsActive(idx: number): boolean {
                                         Écart
                                     </th>
                                     <th
+                                        v-if="showChargeeCol"
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Motif d'écart
+                                    </th>
+                                    <th
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
                                         style="width: 150px"
                                     >
@@ -1080,6 +1127,14 @@ function connectorIsActive(idx: number): boolean {
                                         {{ ecartLabel(ligne.ecart_chargement) }}
                                     </td>
                                     <td
+                                        v-if="showChargeeCol"
+                                        class="px-4 py-3 text-sm"
+                                    >
+                                        <span v-if="ligne.type_ecart_label" class="text-foreground">{{ ligne.type_ecart_label }}</span>
+                                        <span v-else class="text-muted-foreground">—</span>
+                                        <p v-if="ligne.commentaire_ecart" class="mt-0.5 text-xs text-muted-foreground">{{ ligne.commentaire_ecart }}</p>
+                                    </td>
+                                    <td
                                         class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                     >
                                         {{ formatGNF(ligne.prix_vente_snapshot) }}
@@ -1094,7 +1149,7 @@ function connectorIsActive(idx: number): boolean {
                             <tfoot>
                                 <tr class="border-t bg-muted/20">
                                     <td
-                                        :colspan="showChargeeCol ? 5 : 3"
+                                        :colspan="showChargeeCol ? 6 : 3"
                                         class="px-4 py-3 text-right text-sm font-semibold text-muted-foreground"
                                     >
                                         Total
@@ -1124,14 +1179,19 @@ function connectorIsActive(idx: number): boolean {
                             Facturation
                         </h3>
                         <div class="flex items-center gap-2">
-                            <Button
-                                v-if="commande.can_encaisser"
-                                size="sm"
-                                @click="openEncaisserDialog"
+                            <span
+                                v-if="facture && facture.montant_restant > 0"
+                                :title="!commande.can_encaisser ? 'L\'encaissement est possible uniquement après validation du chargement.' : ''"
                             >
-                                <HandCoins class="mr-2 h-4 w-4" />
-                                Encaisser {{ formatGNF(facture.montant_restant) }}
-                            </Button>
+                                <Button
+                                    size="sm"
+                                    :disabled="!commande.can_encaisser"
+                                    @click="openEncaisserDialog"
+                                >
+                                    <HandCoins class="mr-2 h-4 w-4" />
+                                    Encaisser {{ formatGNF(facture.montant_restant) }}
+                                </Button>
+                            </span>
                             <span
                                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
                                 :class="{
@@ -1670,7 +1730,7 @@ function connectorIsActive(idx: number): boolean {
                     >
                         <span class="text-sm text-muted-foreground">Téléphone</span>
                         <span class="text-sm font-medium">
-                            {{ formatPhone(commande.vehicule_detail.proprietaire_telephone) }}
+                            {{ formatPhone(commande.vehicule_detail.proprietaire_telephone, commande.vehicule_detail.proprietaire_code_phone_pays) }}
                         </span>
                     </div>
                 </div>
@@ -1730,6 +1790,54 @@ function connectorIsActive(idx: number): boolean {
             </div>
             <template #footer>
                 <Button variant="outline" size="sm" @click="equipeDialogVisible = false">Fermer</Button>
+            </template>
+        </Dialog>
+
+        <!-- Dialog Client -->
+        <Dialog
+            v-model:visible="clientDialogVisible"
+            modal
+            header="Détail client"
+            :style="{ width: '28rem' }"
+        >
+            <div class="space-y-3 px-1 py-2">
+                <div class="flex justify-between">
+                    <span class="text-sm text-muted-foreground">Nom</span>
+                    <span class="text-sm font-medium">{{ commande.client_detail?.nom ?? '—' }}</span>
+                </div>
+                <div v-if="commande.client_detail?.telephone" class="flex justify-between">
+                    <span class="text-sm text-muted-foreground">Téléphone</span>
+                    <span class="text-sm font-medium">
+                        {{ formatPhone(commande.client_detail.telephone, commande.client_detail.code_phone_pays) }}
+                    </span>
+                </div>
+                <div class="border-t pt-3">
+                    <p class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                        Localisation
+                    </p>
+                    <div class="flex justify-between">
+                        <span class="text-sm text-muted-foreground">Ville</span>
+                        <span class="text-sm font-medium">{{ commande.client_detail?.ville ?? '—' }}</span>
+                    </div>
+                    <div v-if="commande.client_detail?.adresse" class="mt-2 flex justify-between">
+                        <span class="text-sm text-muted-foreground">Adresse</span>
+                        <span class="text-sm font-medium text-right max-w-[60%]">{{ commande.client_detail.adresse }}</span>
+                    </div>
+                </div>
+                <div class="border-t pt-3 flex justify-between">
+                    <span class="text-sm text-muted-foreground">Cashback</span>
+                    <span
+                        class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                        :class="commande.client_detail?.cashback_eligible
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'"
+                    >
+                        {{ commande.client_detail?.cashback_eligible ? 'Éligible' : 'Non éligible' }}
+                    </span>
+                </div>
+            </div>
+            <template #footer>
+                <Button variant="outline" size="sm" @click="clientDialogVisible = false">Fermer</Button>
             </template>
         </Dialog>
 

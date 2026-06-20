@@ -157,6 +157,7 @@ class FactureVenteController extends Controller
                 'statut_label' => $f->statut_label,
                 'is_annulee' => $f->isAnnulee(),
                 'is_payee' => $f->isPayee(),
+                'is_encaissable' => $f->commande?->isEncaissable() ?? false,
                 'created_at' => $f->created_at?->format('d/m/Y'),
                 'encaissements' => $f->encaissements
                     ->sortByDesc(fn ($e) => $e->created_at?->timestamp ?? 0)

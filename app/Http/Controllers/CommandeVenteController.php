@@ -407,12 +407,13 @@ class CommandeVenteController extends Controller
                 'vehicule_detail' => $vehicule ? [
                     'nom' => $vehicule->nom_vehicule,
                     'immatriculation' => $vehicule->immatriculation,
-                    'type' => $vehicule->typeVehicule?->nom,
+                    'type' => $vehicule->typeVehicule?->nom ?? $vehicule->type_vehicule,
                     'capacite_packs' => $vehicule->capacite_packs,
                     'proprietaire_nom' => $vehicule->proprietaire
                         ? trim($vehicule->proprietaire->prenom.' '.$vehicule->proprietaire->nom)
                         : null,
                     'proprietaire_telephone' => $vehicule->proprietaire?->telephone,
+                    'proprietaire_code_phone_pays' => $vehicule->proprietaire?->code_phone_pays,
                 ] : null,
                 'livreur_nom' => $chauffeur ? trim($chauffeur->prenom.' '.$chauffeur->nom) : null,
                 'livreur_telephone' => $chauffeur?->telephone,
@@ -431,6 +432,14 @@ class CommandeVenteController extends Controller
                     ])->values(),
                 ] : null,
                 'client_nom' => $commande->client ? trim($commande->client->prenom.' '.$commande->client->nom) : null,
+                'client_detail' => $commande->client ? [
+                    'nom' => trim($commande->client->prenom.' '.$commande->client->nom),
+                    'telephone' => $commande->client->telephone,
+                    'code_phone_pays' => $commande->client->code_phone_pays,
+                    'ville' => $commande->client->ville,
+                    'adresse' => $commande->client->adresse,
+                    'cashback_eligible' => (bool) $commande->client->cashback_eligible,
+                ] : null,
                 'site_nom' => $commande->site?->nom,
                 'motif_annulation' => $commande->motif_annulation,
                 'annulee_at' => $commande->annulee_at?->toISOString(),
@@ -456,6 +465,7 @@ class CommandeVenteController extends Controller
                     && $user->can('annuler', $commande),
                 'can_encaisser' => $facture && ! $facture->isAnnulee()
                     && (float) $facture->montant_restant > 0
+                    && $commande->isEncaissable()
                     && $user->can('update', $commande),
                 'created_at' => $commande->created_at?->format(self::DATE_DISPLAY_FORMAT),
                 'created_by' => $commande->createdBy?->name,
@@ -661,14 +671,17 @@ class CommandeVenteController extends Controller
             return null;
         }
 
+        if ($commissions->every(fn ($c) => $c->statut === \App\Enums\StatutCommission::CREEE)) {
+            return ['value' => 'creee', 'label' => 'Créée'];
+        }
         if ($commissions->every(fn ($c) => $c->statut === \App\Enums\StatutCommission::PAYE)) {
-            return ['value' => 'paye', 'label' => 'Payé'];
+            return ['value' => 'paye', 'label' => 'Payée'];
         }
         if ($commissions->some(fn ($c) => $c->statut === \App\Enums\StatutCommission::PAYE || $c->statut === \App\Enums\StatutCommission::PARTIEL)) {
-            return ['value' => 'partiel', 'label' => 'Partiel'];
+            return ['value' => 'partiel', 'label' => 'Partiellement payée'];
         }
 
-        return ['value' => 'impaye', 'label' => 'Impayé'];
+        return ['value' => 'impaye', 'label' => 'Impayée'];
     }
 
     private function mapCommandeForIndex(CommandeVente $c, mixed $user): array

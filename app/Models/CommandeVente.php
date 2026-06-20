@@ -184,6 +184,16 @@ class CommandeVente extends Model
         return $this->statut === StatutCommandeVente::ANNULEE;
     }
 
+    public function isEncaissable(): bool
+    {
+        return in_array($this->statut, [
+            StatutCommandeVente::LIVRAISON_EN_COURS,
+            StatutCommandeVente::LIVREE,
+            StatutCommandeVente::FACTURATION,
+            StatutCommandeVente::CLOTUREE,
+        ], true);
+    }
+
     public function getMontantLabel(): string
     {
         return number_format((float) $this->total_commande, 0, ',', ' ').' GNF';

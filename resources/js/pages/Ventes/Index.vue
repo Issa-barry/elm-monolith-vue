@@ -135,17 +135,19 @@ const filtresStatut = [
 
 const filtresStatutFacture = [
     { value: '', label: 'Tous' },
+    { value: 'creee', label: 'Créée' },
     { value: 'impayee', label: 'Impayée' },
-    { value: 'partiel', label: 'Partiel' },
-    { value: 'payee', label: 'Payée' },
+    { value: 'partiel', label: 'Partiellement payée' },
+    { value: 'payee', label: 'Soldée' },
     { value: 'annulee', label: 'Annulée' },
 ];
 
 const filtresStatutCommission = [
     { value: '', label: 'Tous' },
-    { value: 'impaye', label: 'Impayé' },
-    { value: 'partiel', label: 'Partiel' },
-    { value: 'paye', label: 'Payé' },
+    { value: 'creee', label: 'Créée' },
+    { value: 'impaye', label: 'Impayée' },
+    { value: 'partiel', label: 'Partiellement payée' },
+    { value: 'paye', label: 'Payée' },
 ];
 
 const sitesOptions = computed(() => [
@@ -273,10 +275,11 @@ const statutCommandeColor: Record<string, string> = {
 };
 
 const statutFactureColor: Record<string, string> = {
+    creee: 'bg-zinc-400 dark:bg-zinc-500',
     impayee: 'bg-amber-500',
     partiel: 'bg-blue-500',
     payee: 'bg-emerald-500',
-    annulee: 'bg-zinc-400 dark:bg-zinc-500',
+    annulee: 'bg-red-400',
 };
 
 // ── Formatage ─────────────────────────────────────────────────────────────────

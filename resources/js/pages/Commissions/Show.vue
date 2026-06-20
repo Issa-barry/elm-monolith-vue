@@ -81,6 +81,7 @@ interface CommissionItem {
     statut: string;
     statut_label: string;
     is_paye: boolean;
+    is_payable: boolean;
     created_at: string;
     parts: CommissionPart[];
 }
@@ -235,7 +236,7 @@ function deleteVersement(versementId: number) {
     });
 }
 function isVersementDisabled(part: CommissionPart): boolean {
-    return part.montant_restant <= 0 || !can('ventes.update');
+    return part.montant_restant <= 0 || !can('ventes.update') || !props.commission.is_payable;
 }
 </script>
 
