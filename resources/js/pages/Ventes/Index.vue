@@ -9,6 +9,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -47,7 +48,9 @@ interface Commande {
     statut_label: string;
     total_commande: number;
     vehicule_nom: string | null;
+    vehicule_immatriculation: string | null;
     client_nom: string | null;
+    client_telephone: string | null;
     site_nom: string | null;
     facture_id: number | null;
     facture_statut: string | null;
@@ -79,12 +82,37 @@ interface Totaux {
     montant_cloturees: number;
 }
 
+interface SiteOption {
+    id: string;
+    nom: string;
+}
+
+interface Filters {
+    site_id: string | null;
+    date_debut: string | null;
+    date_fin: string | null;
+    vehicule_nom: string | null;
+    vehicule_immatriculation: string | null;
+    proprietaire_nom: string | null;
+    proprietaire_telephone: string | null;
+    livreur_nom: string | null;
+    livreur_prenom: string | null;
+    livreur_telephone: string | null;
+    livreur_role: string | null;
+    numero_commande: string | null;
+    client_nom: string | null;
+    client_telephone: string | null;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
     commandes: Commande[];
     totaux: Totaux;
     periode: string;
     statut: string;
+    sites: SiteOption[];
+    is_admin: boolean;
+    filters: Filters;
 }>();
 
 const { can } = usePermissions();
@@ -96,7 +124,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Ventes', href: '/ventes' },
 ];
 
-// ── Filtres (server-driven : période + statut) ────────────────────────────────
+// ── Options statique ──────────────────────────────────────────────────────────
 const periodes = [
     { value: 'today', label: "Aujourd'hui" },
     { value: 'week', label: 'Cette semaine' },
@@ -115,32 +143,91 @@ const filtresStatut = [
     { value: 'annulee', label: 'Annulées' },
 ];
 
+const rolesLivreur = [
+    { value: '', label: 'Tous les rôles' },
+    { value: 'chauffeur', label: 'Chauffeur' },
+    { value: 'convoyeur', label: 'Convoyeur' },
+];
+
+const sitesOptions = computed(() => [
+    { id: '', nom: 'Toutes les agences' },
+    ...props.sites,
+]);
+
+// ── État des filtres locaux ────────────────────────────────────────────────────
 const filterDrawerOpen = ref(false);
 const localPeriode = ref(props.periode);
 const localStatut = ref(props.statut);
+const localSiteId = ref(props.filters.site_id ?? '');
+const localDateDebut = ref(props.filters.date_debut ?? '');
+const localDateFin = ref(props.filters.date_fin ?? '');
+const localVehiculeNom = ref(props.filters.vehicule_nom ?? '');
+const localVehiculeImmat = ref(props.filters.vehicule_immatriculation ?? '');
+const localProprietaireNom = ref(props.filters.proprietaire_nom ?? '');
+const localProprietaireTel = ref(props.filters.proprietaire_telephone ?? '');
+const localLivreurNom = ref(props.filters.livreur_nom ?? '');
+const localLivreurPrenom = ref(props.filters.livreur_prenom ?? '');
+const localLivreurTel = ref(props.filters.livreur_telephone ?? '');
+const localLivreurRole = ref(props.filters.livreur_role ?? '');
+const localNumeroCommande = ref(props.filters.numero_commande ?? '');
+const localClientNom = ref(props.filters.client_nom ?? '');
+const localClientTel = ref(props.filters.client_telephone ?? '');
 
 function applyFilters() {
-    router.get(
-        '/ventes',
-        { periode: localPeriode.value, statut: localStatut.value },
-        { preserveScroll: true, replace: true },
-    );
+    const params: Record<string, string> = {
+        periode: localPeriode.value,
+        statut: localStatut.value,
+    };
+    if (localSiteId.value) params.site_id = localSiteId.value;
+    if (localDateDebut.value) params.date_debut = localDateDebut.value;
+    if (localDateFin.value) params.date_fin = localDateFin.value;
+    if (localVehiculeNom.value) params.vehicule_nom = localVehiculeNom.value;
+    if (localVehiculeImmat.value) params.vehicule_immatriculation = localVehiculeImmat.value;
+    if (localProprietaireNom.value) params.proprietaire_nom = localProprietaireNom.value;
+    if (localProprietaireTel.value) params.proprietaire_telephone = localProprietaireTel.value;
+    if (localLivreurNom.value) params.livreur_nom = localLivreurNom.value;
+    if (localLivreurPrenom.value) params.livreur_prenom = localLivreurPrenom.value;
+    if (localLivreurTel.value) params.livreur_telephone = localLivreurTel.value;
+    if (localLivreurRole.value) params.livreur_role = localLivreurRole.value;
+    if (localNumeroCommande.value) params.numero_commande = localNumeroCommande.value;
+    if (localClientNom.value) params.client_nom = localClientNom.value;
+    if (localClientTel.value) params.client_telephone = localClientTel.value;
+    router.get('/ventes', params, { preserveScroll: true, replace: true });
 }
 
 function resetFilters() {
     localPeriode.value = 'today';
     localStatut.value = 'tous';
+    localSiteId.value = '';
+    localDateDebut.value = '';
+    localDateFin.value = '';
+    localVehiculeNom.value = '';
+    localVehiculeImmat.value = '';
+    localProprietaireNom.value = '';
+    localProprietaireTel.value = '';
+    localLivreurNom.value = '';
+    localLivreurPrenom.value = '';
+    localLivreurTel.value = '';
+    localLivreurRole.value = '';
+    localNumeroCommande.value = '';
+    localClientNom.value = '';
+    localClientTel.value = '';
     search.value = '';
-    router.get(
-        '/ventes',
-        { periode: 'today', statut: 'tous' },
-        { preserveScroll: true, replace: true },
-    );
+    router.get('/ventes', { periode: 'today', statut: 'tous' }, { preserveScroll: true, replace: true });
 }
 
-const activeFilterCount = computed(() =>
-    localStatut.value !== 'tous' ? 1 : 0,
-);
+const activeFilterCount = computed(() => {
+    let n = 0;
+    if (localStatut.value !== 'tous') n++;
+    if (localSiteId.value) n++;
+    if (localDateDebut.value || localDateFin.value) n++;
+    if (localVehiculeNom.value || localVehiculeImmat.value) n++;
+    if (localProprietaireNom.value || localProprietaireTel.value) n++;
+    if (localLivreurNom.value || localLivreurPrenom.value || localLivreurTel.value || localLivreurRole.value) n++;
+    if (localNumeroCommande.value) n++;
+    if (localClientNom.value || localClientTel.value) n++;
+    return n;
+});
 
 const hasActiveFilters = computed(
     () =>
@@ -159,7 +246,9 @@ const commandesFiltrees = computed(() => {
         (c) =>
             c.reference.toLowerCase().includes(q) ||
             (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
+            (c.vehicule_immatriculation && c.vehicule_immatriculation.toLowerCase().includes(q)) ||
             (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
+            (c.client_telephone && c.client_telephone.toLowerCase().includes(q)) ||
             (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
             (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
             (c.facture_statut_label &&
@@ -178,6 +267,7 @@ const mobileFiltered = computed(() => {
         (c) =>
             c.reference.toLowerCase().includes(q) ||
             (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
+            (c.vehicule_immatriculation && c.vehicule_immatriculation.toLowerCase().includes(q)) ||
             (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
             (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
             (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
@@ -569,6 +659,19 @@ function confirmDelete(c: Commande) {
                     @apply="applyFilters"
                     @reset="resetFilters"
                 >
+                    <!-- Agence / Site (Admin uniquement) -->
+                    <div v-if="is_admin" class="space-y-1.5">
+                        <Label>Agence / Site</Label>
+                        <Select
+                            v-model="localSiteId"
+                            :options="sitesOptions"
+                            option-label="nom"
+                            option-value="id"
+                            class="w-full"
+                        />
+                    </div>
+
+                    <!-- Statut -->
                     <div class="space-y-1.5">
                         <Label>Statut</Label>
                         <Select
@@ -579,6 +682,8 @@ function confirmDelete(c: Commande) {
                             class="w-full"
                         />
                     </div>
+
+                    <!-- Période -->
                     <div class="space-y-1.5">
                         <Label>Période</Label>
                         <Select
@@ -588,6 +693,92 @@ function confirmDelete(c: Commande) {
                             option-value="value"
                             class="w-full"
                         />
+                    </div>
+
+                    <!-- Dates -->
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="space-y-1.5">
+                            <Label>Date début</Label>
+                            <Input v-model="localDateDebut" type="date" class="h-9" />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label>Date fin</Label>
+                            <Input v-model="localDateFin" type="date" class="h-9" />
+                        </div>
+                    </div>
+
+                    <!-- Véhicule -->
+                    <div class="space-y-2">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Véhicule</p>
+                        <div class="space-y-1.5">
+                            <Label>Nom du véhicule</Label>
+                            <Input v-model="localVehiculeNom" placeholder="Nom…" class="h-9" />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label>Immatriculation</Label>
+                            <Input v-model="localVehiculeImmat" placeholder="Immatriculation…" class="h-9" />
+                        </div>
+                    </div>
+
+                    <!-- Propriétaire -->
+                    <div class="space-y-2">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Propriétaire</p>
+                        <div class="space-y-1.5">
+                            <Label>Nom</Label>
+                            <Input v-model="localProprietaireNom" placeholder="Nom ou prénom…" class="h-9" />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label>Téléphone</Label>
+                            <Input v-model="localProprietaireTel" placeholder="Téléphone…" class="h-9" />
+                        </div>
+                    </div>
+
+                    <!-- Livreur -->
+                    <div class="space-y-2">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Livreur</p>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="space-y-1.5">
+                                <Label>Nom</Label>
+                                <Input v-model="localLivreurNom" placeholder="Nom…" class="h-9" />
+                            </div>
+                            <div class="space-y-1.5">
+                                <Label>Prénom</Label>
+                                <Input v-model="localLivreurPrenom" placeholder="Prénom…" class="h-9" />
+                            </div>
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label>Téléphone</Label>
+                            <Input v-model="localLivreurTel" placeholder="Téléphone…" class="h-9" />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label>Rôle</Label>
+                            <Select
+                                v-model="localLivreurRole"
+                                :options="rolesLivreur"
+                                option-label="label"
+                                option-value="value"
+                                class="w-full"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Numéro de commande -->
+                    <div class="space-y-1.5">
+                        <Label>Numéro de commande</Label>
+                        <Input v-model="localNumeroCommande" placeholder="CMD-…" class="h-9" />
+                    </div>
+
+                    <!-- Client -->
+                    <div class="space-y-2">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Client</p>
+                        <div class="space-y-1.5">
+                            <Label>Nom</Label>
+                            <Input v-model="localClientNom" placeholder="Nom ou prénom…" class="h-9" />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label>Téléphone</Label>
+                            <Input v-model="localClientTel" placeholder="Téléphone…" class="h-9" />
+                        </div>
                     </div>
                 </FilterDrawer>
 

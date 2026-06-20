@@ -223,3 +223,60 @@ test('workflow brouillon -> soumis -> valide (dépense interne)', async ({
 
     await expect(depenseRowByComment(page, comment)).toContainText(/valid/i);
 });
+
+test('stat cards reflect active filters', async ({ page }) => {
+    const suffix = `${Date.now()}${randomDigits(2)}`.slice(-8);
+    const comment = `E2ESTAT-${suffix}`;
+
+    await createDepenseInterne(page, comment, 5000);
+
+    await page.goto('/depenses');
+    await page.waitForLoadState('networkidle');
+
+    const totalCard = page
+        .locator('p', { hasText: /total dépenses/i })
+        .locator('xpath=following-sibling::p')
+        .first();
+
+    const totalBefore = parseInt(
+        (await totalCard.textContent()) ?? '0',
+        10,
+    );
+    expect(totalBefore).toBeGreaterThan(0);
+
+    const searchInput = page
+        .locator('input[type="search"]')
+        .first();
+    await searchInput.fill('ZZZZNO_MATCH_9999');
+    await page.waitForLoadState('networkidle');
+
+    await expect(totalCard).toHaveText('0', { timeout: 10_000 });
+
+    const enAttenteCard = page
+        .locator('p', { hasText: /en attente/i })
+        .locator('xpath=following-sibling::p')
+        .first();
+    await expect(enAttenteCard).toHaveText('0');
+
+    const valideesCard = page
+        .locator('p', { hasText: /validées/i })
+        .locator('xpath=following-sibling::p')
+        .first();
+    await expect(valideesCard).toHaveText('0');
+
+    await searchInput.fill('');
+    await page.waitForLoadState('networkidle');
+
+    await expect(totalCard).not.toHaveText('0', { timeout: 10_000 });
+
+    await page.goto('/depenses');
+    const row = depenseRowByComment(page, comment);
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    await row.getByRole('button', { name: /actions/i }).first().click();
+    page.once('dialog', (d) => d.accept());
+    await page
+        .getByRole('menuitem', { name: /supprimer/i })
+        .first()
+        .click();
+    await page.waitForLoadState('networkidle');
+});

@@ -15,6 +15,7 @@ use App\Models\CommandeVente;
 use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\Produit;
+use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommandeVenteActiviteService;
@@ -86,6 +87,7 @@ class CommandeVenteController extends Controller
             'last_invoice_reference' => $derniere->reference,
             'last_invoice_date' => $derniere->created_at?->format('Y-m-d'),
             'factures' => $factures->map(fn ($f) => [
+                'commande_id' => $f->commande_vente_id,
                 'reference' => $f->reference,
                 'date' => $f->created_at?->format('Y-m-d'),
                 'montant' => (int) round((float) $f->montant_net),
@@ -117,24 +119,125 @@ class CommandeVenteController extends Controller
     {
         $this->authorize('viewAny', CommandeVente::class);
 
-        $orgId = auth()->user()->organization_id;
         $user = auth()->user();
+        $orgId = $user->organization_id;
+
         $periode = $request->input('periode', 'today');
         $statut = $request->input('statut', 'tous');
+        $siteId = $request->input('site_id');
+        $dateDebut = $request->input('date_debut');
+        $dateFin = $request->input('date_fin');
+        $vehiculeNom = $request->input('vehicule_nom');
+        $vehiculeImmat = $request->input('vehicule_immatriculation');
+        $proprietaireNom = $request->input('proprietaire_nom');
+        $proprietaireTel = $request->input('proprietaire_telephone');
+        $livreurNom = $request->input('livreur_nom');
+        $livreurPrenom = $request->input('livreur_prenom');
+        $livreurTel = $request->input('livreur_telephone');
+        $livreurRole = $request->input('livreur_role');
+        $numeroCommande = $request->input('numero_commande');
+        $clientNom = $request->input('client_nom');
+        $clientTel = $request->input('client_telephone');
 
-        $query = CommandeVente::with(['vehicule', 'client', 'site', 'facture.encaissements.creator'])
+        $query = CommandeVente::with([
+            'vehicule.proprietaire',
+            'vehicule.equipe.livreurs',
+            'client',
+            'site',
+            'facture.encaissements.creator',
+        ])
             ->where('organization_id', $orgId)
             ->orderByDesc('created_at');
 
-        match ($periode) {
-            'today' => $query->whereDate('created_at', Carbon::today()),
-            'week' => $query->whereBetween('created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
-            'month' => $query->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month),
-            default => null,
-        };
+        if ($user->isAdmin()) {
+            if ($siteId) {
+                $query->where('site_id', $siteId);
+            }
+        } else {
+            $userSiteIds = $user->sites()->pluck('sites.id');
+            if ($userSiteIds->isNotEmpty()) {
+                $query->whereIn('site_id', $userSiteIds);
+            }
+        }
+
+        if ($dateDebut || $dateFin) {
+            if ($dateDebut) {
+                $query->whereDate('created_at', '>=', $dateDebut);
+            }
+            if ($dateFin) {
+                $query->whereDate('created_at', '<=', $dateFin);
+            }
+        } else {
+            match ($periode) {
+                'today' => $query->whereDate('created_at', Carbon::today()),
+                'week' => $query->whereBetween('created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
+                'month' => $query->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month),
+                default => null,
+            };
+        }
 
         if ($statut !== 'tous') {
             $query->where('statut', $statut);
+        }
+
+        if ($numeroCommande) {
+            $query->where('reference', 'like', "%{$numeroCommande}%");
+        }
+
+        if ($vehiculeNom || $vehiculeImmat) {
+            $query->whereHas('vehicule', function ($q) use ($vehiculeNom, $vehiculeImmat) {
+                if ($vehiculeNom) {
+                    $q->where('nom_vehicule', 'like', "%{$vehiculeNom}%");
+                }
+                if ($vehiculeImmat) {
+                    $q->where('immatriculation', 'like', "%{$vehiculeImmat}%");
+                }
+            });
+        }
+
+        if ($proprietaireNom || $proprietaireTel) {
+            $query->whereHas('vehicule.proprietaire', function ($q) use ($proprietaireNom, $proprietaireTel) {
+                if ($proprietaireNom) {
+                    $q->where(function ($sub) use ($proprietaireNom) {
+                        $sub->where('nom', 'like', "%{$proprietaireNom}%")
+                            ->orWhere('prenom', 'like', "%{$proprietaireNom}%");
+                    });
+                }
+                if ($proprietaireTel) {
+                    $q->where('telephone', 'like', "%{$proprietaireTel}%");
+                }
+            });
+        }
+
+        if ($livreurNom || $livreurPrenom || $livreurTel || $livreurRole) {
+            $query->whereHas('vehicule.equipe.livreurs', function ($q) use ($livreurNom, $livreurPrenom, $livreurTel, $livreurRole) {
+                if ($livreurNom) {
+                    $q->where('livreurs.nom', 'like', "%{$livreurNom}%");
+                }
+                if ($livreurPrenom) {
+                    $q->where('livreurs.prenom', 'like', "%{$livreurPrenom}%");
+                }
+                if ($livreurTel) {
+                    $q->where('livreurs.telephone', 'like', "%{$livreurTel}%");
+                }
+                if ($livreurRole) {
+                    $q->where('equipe_livreurs.role', $livreurRole);
+                }
+            });
+        }
+
+        if ($clientNom || $clientTel) {
+            $query->whereHas('client', function ($q) use ($clientNom, $clientTel) {
+                if ($clientNom) {
+                    $q->where(function ($sub) use ($clientNom) {
+                        $sub->where('nom', 'like', "%{$clientNom}%")
+                            ->orWhere('prenom', 'like', "%{$clientNom}%");
+                    });
+                }
+                if ($clientTel) {
+                    $q->where('telephone', 'like', "%{$clientTel}%");
+                }
+            });
         }
 
         $commandes = $query->get();
@@ -156,12 +259,35 @@ class CommandeVenteController extends Controller
 
         $mapped = $commandes->map(fn (CommandeVente $c) => $this->mapCommandeForIndex($c, $user));
 
+        $sites = $user->isAdmin()
+            ? Site::where('organization_id', $orgId)->orderBy('nom')->get()
+                ->map(fn ($s) => ['id' => $s->id, 'nom' => $s->nom])->values()
+            : [];
+
         return Inertia::render('Ventes/Index', [
             'commandes' => $mapped->values(),
             'totaux' => $totaux,
             'periode' => $periode,
             'statut' => $statut,
             'statuts' => StatutCommandeVente::options(),
+            'sites' => $sites,
+            'is_admin' => $user->isAdmin(),
+            'filters' => [
+                'site_id' => $siteId,
+                'date_debut' => $dateDebut,
+                'date_fin' => $dateFin,
+                'vehicule_nom' => $vehiculeNom,
+                'vehicule_immatriculation' => $vehiculeImmat,
+                'proprietaire_nom' => $proprietaireNom,
+                'proprietaire_telephone' => $proprietaireTel,
+                'livreur_nom' => $livreurNom,
+                'livreur_prenom' => $livreurPrenom,
+                'livreur_telephone' => $livreurTel,
+                'livreur_role' => $livreurRole,
+                'numero_commande' => $numeroCommande,
+                'client_nom' => $clientNom,
+                'client_telephone' => $clientTel,
+            ],
         ]);
     }
 
@@ -514,7 +640,9 @@ class CommandeVenteController extends Controller
             'statut_color' => $c->statut?->color(),
             'total_commande' => (float) $c->total_commande,
             'vehicule_nom' => $c->vehicule?->nom_vehicule,
+            'vehicule_immatriculation' => $c->vehicule?->immatriculation,
             'client_nom' => $c->client ? trim($c->client->prenom.' '.$c->client->nom) : null,
+            'client_telephone' => $c->client?->telephone,
             'site_nom' => $c->site?->nom,
             'facture_id' => $c->facture?->id,
             'facture_statut' => $c->facture?->statut_facture?->value,

@@ -6,7 +6,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Lock, Phone, Plus, Save, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, ExternalLink, Lock, Phone, Plus, Save, Trash2 } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
@@ -15,6 +15,7 @@ import { computed, onMounted, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface FactureDetail {
+    commande_id: string;
     reference: string;
     date: string | null;
     montant: number;
@@ -202,13 +203,20 @@ function clientLabel(c: ClientOption): string {
 }
 
 // ── Solvabilité — dialog ──────────────────────────────────────────────────────
+interface DialogContext {
+    type: 'vehicule' | 'client';
+    titre: string;
+    sousTitre?: string;
+    chauffeur?: string;
+}
+
 const showFacturesDialog = ref(false);
 const dialogSolvabilite = ref<SolvabiliteResult | null>(null);
-const dialogContextLabel = ref('');
+const dialogContext = ref<DialogContext | null>(null);
 
-function ouvrirDialogFactures(solv: SolvabiliteResult, label: string) {
+function ouvrirDialogFactures(solv: SolvabiliteResult, ctx: DialogContext) {
     dialogSolvabilite.value = solv;
-    dialogContextLabel.value = label;
+    dialogContext.value = ctx;
     showFacturesDialog.value = true;
 }
 
@@ -678,11 +686,15 @@ function confirmerEtCreer() {
                                         @click="
                                             ouvrirDialogFactures(
                                                 vehiculeSolvabilite,
-                                                vehiculeSelected
-                                                    ? vehiculeLabel(
-                                                          vehiculeSelected,
-                                                      )
-                                                    : 'Véhicule',
+                                                {
+                                                    type: 'vehicule',
+                                                    titre: vehiculeSelected
+                                                        ? vehiculeLabel(vehiculeSelected)
+                                                        : 'Véhicule',
+                                                    chauffeur: vehiculeSelected?.livreur_nom
+                                                        ? vehiculeSelected.livreur_nom + (vehiculeSelected.livreur_telephone ? ' — ' + formatPhoneDisplay(vehiculeSelected.livreur_telephone) : '')
+                                                        : undefined,
+                                                },
                                             )
                                         "
                                     >
@@ -912,9 +924,15 @@ function confirmerEtCreer() {
                                         @click="
                                             ouvrirDialogFactures(
                                                 clientSolvabilite,
-                                                clientSelected
-                                                    ? clientSelected.nom
-                                                    : 'Client',
+                                                {
+                                                    type: 'client',
+                                                    titre: clientSelected
+                                                        ? clientLabel(clientSelected)
+                                                        : 'Client',
+                                                    sousTitre: clientSelected?.telephone
+                                                        ? formatPhoneDisplay(clientSelected.telephone)
+                                                        : undefined,
+                                                },
                                             )
                                         "
                                     >
@@ -1563,12 +1581,17 @@ function confirmerEtCreer() {
             <template #header>
                 <div>
                     <h2 class="text-lg font-semibold">Factures impayées</h2>
-                    <p
-                        v-if="dialogContextLabel"
-                        class="mt-0.5 text-sm text-muted-foreground"
-                    >
-                        {{ dialogContextLabel }}
-                    </p>
+                    <div v-if="dialogContext" class="mt-1 space-y-0.5">
+                        <p class="text-sm font-medium text-foreground">
+                            {{ dialogContext.titre }}
+                        </p>
+                        <p v-if="dialogContext.chauffeur" class="text-xs text-muted-foreground">
+                            Chauffeur : {{ dialogContext.chauffeur }}
+                        </p>
+                        <p v-if="dialogContext.sousTitre" class="text-xs text-muted-foreground">
+                            {{ dialogContext.sousTitre }}
+                        </p>
+                    </div>
                 </div>
             </template>
 
@@ -1578,9 +1601,7 @@ function confirmerEtCreer() {
                     class="grid grid-cols-2 gap-3 border-b border-border p-5 sm:grid-cols-4"
                 >
                     <div class="rounded-xl border bg-card p-3 text-center">
-                        <p
-                            class="text-2xl font-bold text-red-600 dark:text-red-400"
-                        >
+                        <p class="text-2xl font-bold tabular-nums">
                             {{ dialogSolvabilite.unpaid_invoices_count }}
                         </p>
                         <p class="mt-1 text-xs text-muted-foreground">
@@ -1588,19 +1609,7 @@ function confirmerEtCreer() {
                         </p>
                     </div>
                     <div class="rounded-xl border bg-card p-3 text-center">
-                        <p
-                            class="text-lg font-bold text-red-600 tabular-nums dark:text-red-400"
-                        >
-                            {{ formatGNF(dialogSolvabilite.total_remaining) }}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Total impayé
-                        </p>
-                    </div>
-                    <div class="rounded-xl border bg-card p-3 text-center">
-                        <p
-                            class="text-lg font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
-                        >
+                        <p class="text-lg font-bold tabular-nums">
                             {{ formatGNF(dialogSolvabilite.total_encaisse) }}
                         </p>
                         <p class="mt-1 text-xs text-muted-foreground">
@@ -1608,9 +1617,7 @@ function confirmerEtCreer() {
                         </p>
                     </div>
                     <div class="rounded-xl border bg-card p-3 text-center">
-                        <p
-                            class="text-lg font-bold text-amber-600 tabular-nums dark:text-amber-400"
-                        >
+                        <p class="text-lg font-bold tabular-nums">
                             {{
                                 formatGNF(
                                     dialogSolvabilite.total_remaining +
@@ -1620,6 +1627,14 @@ function confirmerEtCreer() {
                         </p>
                         <p class="mt-1 text-xs text-muted-foreground">
                             Montant total
+                        </p>
+                    </div>
+                    <div class="rounded-xl border bg-card p-3 text-center">
+                        <p class="text-lg font-bold text-red-600 tabular-nums dark:text-red-400">
+                            {{ formatGNF(dialogSolvabilite.total_remaining) }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Total impayé
                         </p>
                     </div>
                 </div>
@@ -1669,25 +1684,27 @@ function confirmerEtCreer() {
                                 :key="f.reference"
                                 class="hover:bg-muted/30"
                             >
-                                <td
-                                    class="px-4 py-3 font-mono text-xs text-muted-foreground"
-                                >
-                                    {{ f.reference }}
+                                <td class="px-4 py-3">
+                                    <a
+                                        :href="`/ventes/${f.commande_id}`"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="inline-flex items-center gap-1 font-mono text-xs text-primary underline underline-offset-2 hover:opacity-75"
+                                    >
+                                        {{ f.reference }}
+                                        <ExternalLink class="h-3 w-3 shrink-0" />
+                                    </a>
                                 </td>
-                                <td class="px-4 py-3 text-xs">
+                                <td class="px-4 py-3 text-xs text-muted-foreground">
                                     {{ formatDate(f.date) }}
                                 </td>
                                 <td class="px-4 py-3 text-right tabular-nums">
                                     {{ formatGNF(f.montant) }}
                                 </td>
-                                <td
-                                    class="px-4 py-3 text-right text-emerald-700 tabular-nums dark:text-emerald-400"
-                                >
+                                <td class="px-4 py-3 text-right tabular-nums text-muted-foreground">
                                     {{ formatGNF(f.encaisse) }}
                                 </td>
-                                <td
-                                    class="px-4 py-3 text-right font-semibold text-red-700 tabular-nums dark:text-red-400"
-                                >
+                                <td class="px-4 py-3 text-right tabular-nums">
                                     {{ formatGNF(f.restant) }}
                                 </td>
                                 <td class="px-4 py-3 text-center">

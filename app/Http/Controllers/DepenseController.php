@@ -64,7 +64,7 @@ class DepenseController extends Controller
             ->orderBy('nom')
             ->get(['id', 'nom']);
 
-        $statsRow = Depense::where('organization_id', $orgId)
+        $statsRow = $this->buildQuery($filters, $orgId)
             ->selectRaw(
                 'COUNT(*) as total,
                 COALESCE(SUM(montant), 0) as montant_total,
