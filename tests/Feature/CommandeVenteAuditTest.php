@@ -98,18 +98,19 @@ class CommandeVenteAuditTest extends TestCase
 
     public function test_update_creates_audit_log_when_ligne_qty_changes(): void
     {
-        ['produit' => $produit, 'client' => $client] = $this->makeContext($this->org);
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
 
         $this->actingAs($this->user)->post(route('ventes.store'), [
-            'client_id' => $client->id,
+            'vehicule_id' => $vehicule->id,
             'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 2000]],
         ]);
 
         $commande = CommandeVente::where('organization_id', $this->org->id)->latest('id')->first();
+        $commande->update(['statut' => StatutCommandeVente::BROUILLON]);
         $ligne = $commande->lignes->first();
 
         $this->actingAs($this->user)->put(route('ventes.update', $commande), [
-            'client_id' => $client->id,
+            'vehicule_id' => $vehicule->id,
             'lignes' => [['id' => $ligne->id, 'produit_id' => $produit->id, 'qte' => 3, 'prix_vente' => 2000]],
         ]);
 

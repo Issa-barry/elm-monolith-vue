@@ -120,6 +120,8 @@ jobs:
           php artisan migrate --seed --force
 
       - name: Build assets
+        env:
+          VITE_SHOW_ENTITY_STATS_CARDS: 'true'
         run: npm run build
 
       # dev → pre-prod : full E2E suite

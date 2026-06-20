@@ -45,7 +45,7 @@ class FactureVente extends Model
                 $f->reference = CommandeVente::find($f->commande_vente_id)?->reference;
             }
             if (empty($f->statut_facture)) {
-                $f->statut_facture = StatutFactureVente::IMPAYEE;
+                $f->statut_facture = StatutFactureVente::CREEE;
             }
         });
     }
@@ -92,6 +92,11 @@ class FactureVente extends Model
     public function getMontantRestantAttribute(): float
     {
         return max(0, (float) $this->montant_net - $this->montant_encaisse);
+    }
+
+    public function isCreee(): bool
+    {
+        return $this->statut_facture === StatutFactureVente::CREEE;
     }
 
     public function isPayee(): bool

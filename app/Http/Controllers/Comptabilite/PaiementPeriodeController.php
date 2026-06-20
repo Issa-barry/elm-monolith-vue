@@ -50,15 +50,15 @@ class PaiementPeriodeController extends Controller
             $query->where(fn ($q) => $q->whereRaw('LOWER(reference) LIKE ?', ["%{$s}%"]));
         }
 
+        $kpis = (clone $query)
+            ->selectRaw('statut, COUNT(*) as total')
+            ->groupBy('statut')
+            ->pluck('total', 'statut');
+
         $periodes = $query->orderByDesc('date_debut')
             ->paginate(20)
             ->withQueryString()
             ->through(fn (PaiementPeriode $p) => $this->transform($p));
-
-        $kpis = PaiementPeriode::forOrg($orgId)
-            ->selectRaw('statut, COUNT(*) as total')
-            ->groupBy('statut')
-            ->pluck('total', 'statut');
 
         return Inertia::render('Comptabilite/Periodes/Index', [
             'periodes' => $periodes,

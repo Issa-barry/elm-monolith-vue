@@ -169,6 +169,11 @@ class CommandeVente extends Model
         return $this->statut === StatutCommandeVente::LIVREE;
     }
 
+    public function isFacturation(): bool
+    {
+        return $this->statut === StatutCommandeVente::FACTURATION;
+    }
+
     public function isCloturee(): bool
     {
         return $this->statut === StatutCommandeVente::CLOTUREE;
@@ -177,6 +182,16 @@ class CommandeVente extends Model
     public function isAnnulee(): bool
     {
         return $this->statut === StatutCommandeVente::ANNULEE;
+    }
+
+    public function isEncaissable(): bool
+    {
+        return in_array($this->statut, [
+            StatutCommandeVente::LIVRAISON_EN_COURS,
+            StatutCommandeVente::LIVREE,
+            StatutCommandeVente::FACTURATION,
+            StatutCommandeVente::CLOTUREE,
+        ], true);
     }
 
     public function getMontantLabel(): string
@@ -188,17 +203,17 @@ class CommandeVente extends Model
 
     /**
      * Clôture automatiquement la commande si :
-     *  - statut LIVREE
+     *  - statut LIVREE (workflow logistique) ou FACTURATION (vente directe)
      *  - la facture est entièrement payée
      *  - toutes les commissions sont versées (ou absentes)
      */
     public function cloturerSiComplete(): bool
     {
-        if (! $this->isLivree()) {
+        if (! $this->isLivree() && ! $this->isFacturation()) {
             return false;
         }
 
-        $facture = $this->facture ?? $this->load('facture')->facture;
+        $facture = $this->load('facture')->facture;
         $commissionsVersees = $this->commissions()->get()->every(fn ($c) => $c->isVersee());
 
         if (! $facture?->isPayee() || ! $commissionsVersees) {

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
 use App\Models\CommissionPart;
 use App\Models\CommissionVente;
@@ -42,6 +43,9 @@ class CommissionGenerator
 
         $vehicule = $commande->vehicule;
 
+        // Commandes déjà en livraison (ex : mode FACTURE_PAYEE) → activer directement.
+        $statutInitial = $commande->isEncaissable() ? StatutCommission::IMPAYE : StatutCommission::CREEE;
+
         $commission = CommissionVente::create([
             'organization_id' => $commande->organization_id,
             'commande_vente_id' => $commande->id,
@@ -49,7 +53,7 @@ class CommissionGenerator
             'montant_commande' => (float) $commande->total_commande,
             'montant_commission_totale' => $calc['commission_totale'],
             'montant_verse' => 0,
-            'statut' => 'impaye',
+            'statut' => $statutInitial->value,
         ]);
 
         foreach ($calc['parts'] as $part) {
@@ -65,7 +69,7 @@ class CommissionGenerator
                 'frais_supplementaires' => $part['frais_supplementaires'],
                 'montant_net' => $part['montant_net'],
                 'montant_verse' => 0,
-                'statut' => 'impaye',
+                'statut' => $statutInitial->value,
             ]);
         }
     }

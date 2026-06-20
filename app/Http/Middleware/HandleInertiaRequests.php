@@ -192,6 +192,7 @@ class HandleInertiaRequests extends Middleware
             'module_flags' => $this->moduleFlags($request),
             'flash' => [
                 'success' => $request->session()->get('success'),
+                'error' => $request->session()->get('error'),
                 'warning' => $request->session()->get('warning'),
                 'pdv_commande' => $request->session()->get('pdv_commande'),
             ],

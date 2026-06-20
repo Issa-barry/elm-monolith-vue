@@ -166,7 +166,7 @@ class EnumsTest extends TestCase
     public function test_statut_commande_vente_options(): void
     {
         $options = StatutCommandeVente::options();
-        $this->assertCount(7, $options);
+        $this->assertCount(8, $options);
         foreach ($options as $option) {
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);
@@ -178,7 +178,7 @@ class EnumsTest extends TestCase
     public function test_statut_facture_vente_labels(): void
     {
         $this->assertSame('Impayée', StatutFactureVente::IMPAYEE->label());
-        $this->assertSame('Partiel', StatutFactureVente::PARTIEL->label());
+        $this->assertSame('Partiellement payée', StatutFactureVente::PARTIEL->label());
         $this->assertSame('Payée', StatutFactureVente::PAYEE->label());
         $this->assertSame('Annulée', StatutFactureVente::ANNULEE->label());
     }
@@ -186,7 +186,7 @@ class EnumsTest extends TestCase
     public function test_statut_facture_vente_options(): void
     {
         $options = StatutFactureVente::options();
-        $this->assertCount(4, $options);
+        $this->assertCount(5, $options);
         foreach ($options as $option) {
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);

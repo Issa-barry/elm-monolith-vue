@@ -149,8 +149,84 @@ class CommandeVenteTest extends TestCase
         $this->assertDatabaseHas('commandes_ventes', [
             'organization_id' => $this->org->id,
             'client_id' => $client->id,
-            'statut' => 'brouillon',
+            'statut' => 'facturation',
         ]);
+    }
+
+    public function test_store_commande_directe_cree_facture_associee(): void
+    {
+        ['produit' => $produit, 'client' => $client] = $this->makeContext($this->org);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'client_id' => $client->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => (int) $produit->prix_vente],
+                ],
+            ])
+            ->assertRedirect();
+
+        $commande = CommandeVente::where('client_id', $client->id)->latest()->first();
+        $this->assertNotNull($commande);
+        $this->assertEquals(StatutCommandeVente::FACTURATION, $commande->statut);
+
+        $this->assertDatabaseHas('factures_ventes', [
+            'commande_vente_id' => $commande->id,
+            'montant_net' => (int) $produit->prix_vente,
+        ]);
+    }
+
+    public function test_store_commande_logistique_ne_cree_pas_facture(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertRedirect();
+
+        $commande = CommandeVente::where('vehicule_id', $vehicule->id)->latest()->first();
+        $this->assertNotNull($commande);
+        $this->assertEquals(StatutCommandeVente::A_CHARGER, $commande->statut);
+
+        $this->assertDatabaseMissing('factures_ventes', [
+            'commande_vente_id' => $commande->id,
+        ]);
+    }
+
+    public function test_cloture_automatique_commande_directe_sur_paiement_complet(): void
+    {
+        ['client' => $client] = $this->makeContext($this->org);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'client_id' => $client->id,
+            'statut' => StatutCommandeVente::FACTURATION,
+            'total_commande' => 3000,
+        ]);
+
+        $facture = FactureVente::create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'commande_vente_id' => $commande->id,
+            'montant_brut' => 3000,
+            'montant_net' => 3000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('encaissements.store', $facture), [
+                'montant' => 3000,
+                'date_encaissement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
+            ])
+            ->assertRedirect();
+
+        $this->assertEquals(StatutCommandeVente::CLOTUREE, $commande->fresh()->statut);
     }
 
     public function test_store_fails_without_vehicule_or_client(): void
@@ -927,6 +1003,42 @@ class CommandeVenteTest extends TestCase
             'doublon' => ['doublon', 'Doublon'],
             'rupture_stock' => ['rupture_stock', 'Rupture de stock'],
         ];
+    }
+
+    public function test_annuler_returns_403_si_encaissement_existe(): void
+    {
+        ['client' => $client] = $this->makeContext($this->org);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'client_id' => $client->id,
+            'statut' => StatutCommandeVente::FACTURATION,
+            'total_commande' => 5000,
+        ]);
+
+        $facture = FactureVente::create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'commande_vente_id' => $commande->id,
+            'montant_brut' => 5000,
+            'montant_net' => 5000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('encaissements.store', $facture), [
+                'montant' => 2000,
+                'date_encaissement' => now()->toDateString(),
+                'mode_paiement' => 'especes',
+            ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('ventes.annuler', $commande), [
+                'motif_annulation_code' => 'erreur_saisie',
+            ])
+            ->assertStatus(422);
+
+        $this->assertNotEquals(StatutCommandeVente::ANNULEE, $commande->fresh()->statut);
     }
 
     public function test_annuler_returns_403_if_already_annulee(): void

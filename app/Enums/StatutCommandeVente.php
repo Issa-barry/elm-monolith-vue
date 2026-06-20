@@ -9,6 +9,7 @@ enum StatutCommandeVente: string
     case CHARGEMENT_EN_COURS = 'chargement_en_cours';
     case LIVRAISON_EN_COURS = 'livraison_en_cours';
     case LIVREE = 'livree';
+    case FACTURATION = 'facturation';
     case CLOTUREE = 'cloturee';
     case ANNULEE = 'annulee';
 
@@ -20,6 +21,7 @@ enum StatutCommandeVente: string
             self::CHARGEMENT_EN_COURS => 'Chargement en cours',
             self::LIVRAISON_EN_COURS => 'Livraison en cours',
             self::LIVREE => 'Livrée',
+            self::FACTURATION => 'À encaisser',
             self::CLOTUREE => 'Clôturée',
             self::ANNULEE => 'Annulée',
         };
@@ -33,6 +35,7 @@ enum StatutCommandeVente: string
             self::CHARGEMENT_EN_COURS => 'warn',
             self::LIVRAISON_EN_COURS => 'primary',
             self::LIVREE => 'success',
+            self::FACTURATION => 'primary',
             self::CLOTUREE => 'success',
             self::ANNULEE => 'danger',
         };
@@ -46,6 +49,7 @@ enum StatutCommandeVente: string
             self::CHARGEMENT_EN_COURS => 'bg-orange-500',
             self::LIVRAISON_EN_COURS => 'bg-blue-500',
             self::LIVREE => 'bg-teal-500',
+            self::FACTURATION => 'bg-violet-500',
             self::CLOTUREE => 'bg-emerald-500',
             self::ANNULEE => 'bg-red-400',
         };
@@ -63,10 +67,10 @@ enum StatutCommandeVente: string
         return in_array($this, [self::CLOTUREE, self::ANNULEE]);
     }
 
-    /** Annulable uniquement depuis BROUILLON ou A_CHARGER */
+    /** Annulable depuis BROUILLON, A_CHARGER ou FACTURATION (commande directe non encaissée) */
     public function isAnnulable(): bool
     {
-        return in_array($this, [self::BROUILLON, self::A_CHARGER]);
+        return in_array($this, [self::BROUILLON, self::A_CHARGER, self::FACTURATION]);
     }
 
     public static function options(): array

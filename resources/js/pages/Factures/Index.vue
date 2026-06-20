@@ -58,6 +58,7 @@ interface FactureItem {
     statut_label: string;
     is_annulee: boolean;
     is_payee: boolean;
+    is_encaissable: boolean;
     created_at: string;
     encaissements: EncaissementItem[];
 }
@@ -472,20 +473,29 @@ function _progressPercent(f: FactureItem): number {
                             class="text-xs text-muted-foreground tabular-nums"
                             >{{ f.created_at }}</span
                         >
-                        <Button
+                        <span
                             v-if="
                                 !f.is_annulee &&
                                 !f.is_payee &&
                                 can('ventes.update')
                             "
-                            size="sm"
-                            variant="outline"
-                            class="h-7 border-emerald-300 text-xs text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
-                            @click="openDialog(f)"
+                            :title="
+                                !f.is_encaissable
+                                    ? 'Encaissement possible uniquement après validation du chargement.'
+                                    : ''
+                            "
                         >
-                            <CreditCard class="mr-1 h-3.5 w-3.5" />
-                            Encaisser
-                        </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-7 border-emerald-300 text-xs text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
+                                :disabled="!f.is_encaissable"
+                                @click="openDialog(f)"
+                            >
+                                <CreditCard class="mr-1 h-3.5 w-3.5" />
+                                Encaisser
+                            </Button>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -894,7 +904,16 @@ function _progressPercent(f: FactureItem): number {
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem
                                                 class="cursor-pointer"
-                                                @click="openDialog(data)"
+                                                :disabled="!data.is_encaissable"
+                                                :title="
+                                                    !data.is_encaissable
+                                                        ? 'Encaissement possible uniquement après validation du chargement.'
+                                                        : ''
+                                                "
+                                                @click="
+                                                    data.is_encaissable &&
+                                                    openDialog(data)
+                                                "
                                             >
                                                 <CreditCard class="h-4 w-4" />
                                                 Encaisser

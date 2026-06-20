@@ -9,6 +9,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -47,7 +48,10 @@ interface Commande {
     statut_label: string;
     total_commande: number;
     vehicule_nom: string | null;
+    vehicule_immatriculation: string | null;
+    chauffeur_nom: string | null;
     client_nom: string | null;
+    client_telephone: string | null;
     site_nom: string | null;
     facture_id: number | null;
     facture_statut: string | null;
@@ -79,12 +83,33 @@ interface Totaux {
     montant_cloturees: number;
 }
 
+interface SiteOption {
+    id: string;
+    nom: string;
+}
+
+interface Filters {
+    site_id: string | null;
+    date_debut: string | null;
+    date_fin: string | null;
+    statut_facture: string | null;
+    statut_commission: string | null;
+    vehicule: string | null;
+    proprietaire: string | null;
+    livreur: string | null;
+    numero_commande: string | null;
+    client: string | null;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
     commandes: Commande[];
     totaux: Totaux;
     periode: string;
     statut: string;
+    sites: SiteOption[];
+    is_admin: boolean;
+    filters: Filters;
 }>();
 
 const { can } = usePermissions();
@@ -96,57 +121,112 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Ventes', href: '/ventes' },
 ];
 
-// ── Filtres (server-driven : période + statut) ────────────────────────────────
-const periodes = [
-    { value: 'today', label: "Aujourd'hui" },
-    { value: 'week', label: 'Cette semaine' },
-    { value: 'month', label: 'Ce mois' },
-    { value: 'all', label: 'Tout' },
-];
-
+// ── Options statique ──────────────────────────────────────────────────────────
 const filtresStatut = [
-    { value: 'tous', label: 'Toutes' },
-    { value: 'brouillon', label: 'Brouillons' },
+    { value: 'tous', label: 'Tous' },
+    { value: 'brouillon', label: 'Brouillon' },
     { value: 'a_charger', label: 'À charger' },
-    { value: 'chargement_en_cours', label: 'Chargement' },
+    { value: 'chargement_en_cours', label: 'Chargement en cours' },
     { value: 'livraison_en_cours', label: 'En livraison' },
-    { value: 'livree', label: 'Livrées' },
-    { value: 'cloturee', label: 'Clôturées' },
-    { value: 'annulee', label: 'Annulées' },
+    { value: 'livree', label: 'Livrée' },
+    { value: 'cloturee', label: 'Clôturée' },
+    { value: 'annulee', label: 'Annulée' },
 ];
 
+const filtresStatutFacture = [
+    { value: '', label: 'Tous' },
+    { value: 'creee', label: 'Créée' },
+    { value: 'impayee', label: 'Impayée' },
+    { value: 'partiel', label: 'Partiellement payée' },
+    { value: 'payee', label: 'Soldée' },
+    { value: 'annulee', label: 'Annulée' },
+];
+
+const filtresStatutCommission = [
+    { value: '', label: 'Tous' },
+    { value: 'creee', label: 'Créée' },
+    { value: 'impaye', label: 'Impayée' },
+    { value: 'partiel', label: 'Partiellement payée' },
+    { value: 'paye', label: 'Payée' },
+];
+
+const sitesOptions = computed(() => [
+    { id: '', nom: 'Toutes les agences' },
+    ...props.sites,
+]);
+
+// ── État des filtres locaux ────────────────────────────────────────────────────
 const filterDrawerOpen = ref(false);
-const localPeriode = ref(props.periode);
 const localStatut = ref(props.statut);
+const localStatutFacture = ref(props.filters.statut_facture ?? '');
+const localStatutCommission = ref(props.filters.statut_commission ?? '');
+const localSiteId = ref(props.filters.site_id ?? '');
+const localDateDebut = ref(props.filters.date_debut ?? '');
+const localDateFin = ref(props.filters.date_fin ?? '');
+const localVehicule = ref(props.filters.vehicule ?? '');
+const localProprietaire = ref(props.filters.proprietaire ?? '');
+const localLivreur = ref(props.filters.livreur ?? '');
+const localNumeroCommande = ref(props.filters.numero_commande ?? '');
+const localClient = ref(props.filters.client ?? '');
 
 function applyFilters() {
-    router.get(
-        '/ventes',
-        { periode: localPeriode.value, statut: localStatut.value },
-        { preserveScroll: true, replace: true },
-    );
+    const params: Record<string, string> = {
+        periode: 'all',
+        statut: localStatut.value,
+    };
+    if (localSiteId.value) params.site_id = localSiteId.value;
+    if (localDateDebut.value) params.date_debut = localDateDebut.value;
+    if (localDateFin.value) params.date_fin = localDateFin.value;
+    if (localStatutFacture.value)
+        params.statut_facture = localStatutFacture.value;
+    if (localStatutCommission.value)
+        params.statut_commission = localStatutCommission.value;
+    if (localVehicule.value) params.vehicule = localVehicule.value;
+    if (localProprietaire.value) params.proprietaire = localProprietaire.value;
+    if (localLivreur.value) params.livreur = localLivreur.value;
+    if (localNumeroCommande.value)
+        params.numero_commande = localNumeroCommande.value;
+    if (localClient.value) params.client = localClient.value;
+    router.get('/ventes', params, { preserveScroll: true, replace: true });
 }
 
 function resetFilters() {
-    localPeriode.value = 'today';
     localStatut.value = 'tous';
+    localStatutFacture.value = '';
+    localStatutCommission.value = '';
+    localSiteId.value = '';
+    localDateDebut.value = '';
+    localDateFin.value = '';
+    localVehicule.value = '';
+    localProprietaire.value = '';
+    localLivreur.value = '';
+    localNumeroCommande.value = '';
+    localClient.value = '';
     search.value = '';
     router.get(
         '/ventes',
-        { periode: 'today', statut: 'tous' },
+        { periode: 'all', statut: 'tous' },
         { preserveScroll: true, replace: true },
     );
 }
 
-const activeFilterCount = computed(() =>
-    localStatut.value !== 'tous' ? 1 : 0,
-);
+const activeFilterCount = computed(() => {
+    let n = 0;
+    if (localStatut.value !== 'tous') n++;
+    if (localStatutFacture.value) n++;
+    if (localStatutCommission.value) n++;
+    if (localSiteId.value) n++;
+    if (localDateDebut.value || localDateFin.value) n++;
+    if (localVehicule.value) n++;
+    if (localProprietaire.value) n++;
+    if (localLivreur.value) n++;
+    if (localNumeroCommande.value) n++;
+    if (localClient.value) n++;
+    return n;
+});
 
 const hasActiveFilters = computed(
-    () =>
-        localPeriode.value !== 'today' ||
-        activeFilterCount.value > 0 ||
-        !!search.value,
+    () => activeFilterCount.value > 0 || !!search.value,
 );
 
 // ── Recherche locale (client-side, immédiate) ─────────────────────────────────
@@ -159,7 +239,11 @@ const commandesFiltrees = computed(() => {
         (c) =>
             c.reference.toLowerCase().includes(q) ||
             (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
+            (c.vehicule_immatriculation &&
+                c.vehicule_immatriculation.toLowerCase().includes(q)) ||
             (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
+            (c.client_telephone &&
+                c.client_telephone.toLowerCase().includes(q)) ||
             (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
             (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
             (c.facture_statut_label &&
@@ -178,6 +262,8 @@ const mobileFiltered = computed(() => {
         (c) =>
             c.reference.toLowerCase().includes(q) ||
             (c.vehicule_nom && c.vehicule_nom.toLowerCase().includes(q)) ||
+            (c.vehicule_immatriculation &&
+                c.vehicule_immatriculation.toLowerCase().includes(q)) ||
             (c.client_nom && c.client_nom.toLowerCase().includes(q)) ||
             (c.site_nom && c.site_nom.toLowerCase().includes(q)) ||
             (c.statut_label && c.statut_label.toLowerCase().includes(q)) ||
@@ -196,13 +282,6 @@ const statutCommandeColor: Record<string, string> = {
     livree: 'bg-teal-500',
     cloturee: 'bg-emerald-500',
     annulee: 'bg-red-400',
-};
-
-const statutFactureColor: Record<string, string> = {
-    impayee: 'bg-amber-500',
-    partiel: 'bg-blue-500',
-    payee: 'bg-emerald-500',
-    annulee: 'bg-zinc-400 dark:bg-zinc-500',
 };
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
@@ -548,7 +627,7 @@ function confirmDelete(c: Commande) {
                     />
                     <input
                         v-model="search"
-                        type="search"
+                        type="text"
                         placeholder="Référence, véhicule, client…"
                         class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     />
@@ -569,25 +648,147 @@ function confirmDelete(c: Commande) {
                     @apply="applyFilters"
                     @reset="resetFilters"
                 >
-                    <div class="space-y-1.5">
-                        <Label>Statut</Label>
-                        <Select
-                            v-model="localStatut"
-                            :options="filtresStatut"
-                            option-label="label"
-                            option-value="value"
-                            class="w-full"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Période</Label>
-                        <Select
-                            v-model="localPeriode"
-                            :options="periodes"
-                            option-label="label"
-                            option-value="value"
-                            class="w-full"
-                        />
+                    <div
+                        @keydown.enter.prevent="applyFilters"
+                        class="space-y-5"
+                    >
+                        <!-- Agence / Site (Admin uniquement) -->
+                        <div v-if="is_admin" class="space-y-1.5">
+                            <Label>Agence / Site</Label>
+                            <select
+                                v-model="localSiteId"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            >
+                                <option
+                                    v-for="s in sitesOptions"
+                                    :key="s.id"
+                                    :value="s.id"
+                                >
+                                    {{ s.nom }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <!-- Statut commande -->
+                        <div class="space-y-1.5">
+                            <Label>Statut commande</Label>
+                            <select
+                                v-model="localStatut"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            >
+                                <option
+                                    v-for="s in filtresStatut"
+                                    :key="s.value"
+                                    :value="s.value"
+                                >
+                                    {{ s.label }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <!-- Statut facture -->
+                        <div class="space-y-1.5">
+                            <Label>Statut facture</Label>
+                            <select
+                                v-model="localStatutFacture"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            >
+                                <option
+                                    v-for="s in filtresStatutFacture"
+                                    :key="s.value"
+                                    :value="s.value"
+                                >
+                                    {{ s.label }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <!-- Statut commission -->
+                        <div class="space-y-1.5">
+                            <Label>Statut commission</Label>
+                            <select
+                                v-model="localStatutCommission"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            >
+                                <option
+                                    v-for="s in filtresStatutCommission"
+                                    :key="s.value"
+                                    :value="s.value"
+                                >
+                                    {{ s.label }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <!-- Dates -->
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="space-y-1.5">
+                                <Label>Date début</Label>
+                                <Input
+                                    v-model="localDateDebut"
+                                    type="date"
+                                    class="h-9"
+                                />
+                            </div>
+                            <div class="space-y-1.5">
+                                <Label>Date fin</Label>
+                                <Input
+                                    v-model="localDateFin"
+                                    type="date"
+                                    class="h-9"
+                                />
+                            </div>
+                        </div>
+
+                        <!-- Véhicule -->
+                        <div class="space-y-1.5">
+                            <Label>Véhicule</Label>
+                            <Input
+                                v-model="localVehicule"
+                                placeholder="Nom ou immatriculation…"
+                                class="h-9"
+                            />
+                        </div>
+
+                        <!-- Propriétaire -->
+                        <div class="space-y-1.5">
+                            <Label>Propriétaire</Label>
+                            <Input
+                                v-model="localProprietaire"
+                                placeholder="Nom, prénom ou téléphone…"
+                                class="h-9"
+                            />
+                        </div>
+
+                        <!-- Livreur -->
+                        <div class="space-y-1.5">
+                            <Label>Livreur</Label>
+                            <Input
+                                v-model="localLivreur"
+                                placeholder="Nom, prénom ou téléphone…"
+                                class="h-9"
+                            />
+                        </div>
+
+                        <!-- Client -->
+                        <div class="space-y-1.5">
+                            <Label>Client</Label>
+                            <Input
+                                v-model="localClient"
+                                placeholder="Nom, prénom ou téléphone…"
+                                class="h-9"
+                            />
+                        </div>
+
+                        <!-- Numéro de commande -->
+                        <div class="space-y-1.5">
+                            <Label>N° commande</Label>
+                            <Input
+                                v-model="localNumeroCommande"
+                                placeholder="CMD-…"
+                                class="h-9"
+                            />
+                        </div>
                     </div>
                 </FilterDrawer>
 
@@ -665,6 +866,18 @@ function confirmDelete(c: Commande) {
                         </template>
                     </Column>
 
+                    <!-- Chauffeur -->
+                    <Column header="Chauffeur" style="min-width: 130px">
+                        <template #body="{ data }">
+                            <span
+                                v-if="data.chauffeur_nom"
+                                class="text-muted-foreground"
+                                >{{ data.chauffeur_nom }}</span
+                            >
+                            <span v-else class="text-muted-foreground">—</span>
+                        </template>
+                    </Column>
+
                     <!-- Site -->
                     <Column
                         field="site_nom"
@@ -693,26 +906,6 @@ function confirmDelete(c: Commande) {
                         </template>
                     </Column>
 
-                    <!-- Encaissé -->
-                    <Column
-                        field="facture_montant_encaisse"
-                        header="Encaissé"
-                        sortable
-                        style="width: 140px"
-                    >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground tabular-nums">
-                                {{
-                                    data.facture_montant_encaisse !== null
-                                        ? formatGNF(
-                                              data.facture_montant_encaisse,
-                                          )
-                                        : '—'
-                                }}
-                            </span>
-                        </template>
-                    </Column>
-
                     <!-- Restant -->
                     <Column
                         field="facture_montant_restant"
@@ -735,24 +928,22 @@ function confirmDelete(c: Commande) {
                         </template>
                     </Column>
 
-                    <!-- Statut facture -->
+                    <!-- Statut commande -->
                     <Column
-                        field="facture_statut"
+                        field="statut"
                         header="Statut"
                         sortable
-                        style="width: 120px"
+                        style="width: 130px"
                     >
                         <template #body="{ data }">
                             <StatusDot
-                                v-if="data.facture_statut"
-                                :label="data.facture_statut_label ?? '—'"
+                                :label="data.statut_label"
                                 :dot-class="
-                                    statutFactureColor[data.facture_statut] ??
+                                    statutCommandeColor[data.statut] ??
                                     'bg-zinc-400 dark:bg-zinc-500'
                                 "
                                 class="text-muted-foreground"
                             />
-                            <span v-else class="text-muted-foreground">—</span>
                         </template>
                     </Column>
 

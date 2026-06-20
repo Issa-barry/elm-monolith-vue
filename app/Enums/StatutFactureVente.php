@@ -4,6 +4,7 @@ namespace App\Enums;
 
 enum StatutFactureVente: string
 {
+    case CREEE = 'creee';
     case IMPAYEE = 'impayee';
     case PARTIEL = 'partiel';
     case PAYEE = 'payee';
@@ -12,8 +13,9 @@ enum StatutFactureVente: string
     public function label(): string
     {
         return match ($this) {
+            self::CREEE => 'Créée',
             self::IMPAYEE => 'Impayée',
-            self::PARTIEL => 'Partiel',
+            self::PARTIEL => 'Partiellement payée',
             self::PAYEE => 'Payée',
             self::ANNULEE => 'Annulée',
         };

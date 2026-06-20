@@ -274,7 +274,9 @@ class CommissionProprietaireController extends Controller
         $totalBrut = (float) $allParts->sum('montant_brut');
         $totalNet = max(0.0, $totalBrut - $totalFraisDepenses);
         $totalVerse = (float) $allParts->sum('montant_verse');
-        $solde = max(0.0, $totalNet - $totalVerse);
+
+        $activeParts = $allParts->filter(fn ($p) => $p->statut !== StatutCommission::CREEE);
+        $solde = max(0.0, (float) $activeParts->sum('montant_brut') - $totalFraisDepenses - (float) $activeParts->sum('montant_verse'));
 
         $periodeFilter = $request->input('periode', '');
         $periodeCourante = PeriodeComptableService::periodeCouranteProprietaire();

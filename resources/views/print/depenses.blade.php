@@ -163,11 +163,11 @@
 
         <div class="header">
             <div>
-                <div class="org-name">{{ $org?->name ?? 'ELM' }}</div>
+                <div class="org-name">{!! $org?->name ?? 'ELM' !!}</div>
             </div>
             <div class="doc-title">
                 <div class="doc-type">Liste des dépenses{{ $siteData['site_nom'] ? ' — '.$siteData['site_nom'] : '' }}</div>
-                <div class="doc-date">Imprimé le {{ $generated_at->format('d/m/Y à H:i') }} par {{ $printed_by }}</div>
+                <div class="doc-date">Imprimé le {{ $generated_at->format('d/m/Y à H:i') }} par {!! $printed_by !!}</div>
             </div>
         </div>
 
@@ -217,7 +217,7 @@
                     <td>{{ $row['vehicule_nom'] ?? '—' }}</td>
                     <td class="right">{{ number_format((float)$row['montant'], 0, ',', ' ') }}</td>
                     <td>{{ $row['statut_label'] ?? ($row['statut'] ?? '—') }}</td>
-                    <td>{{ $row['user']['name'] ?? '—' }}</td>
+                    <td>{!! $row['user']['name'] ?? '—' !!}</td>
                     <td></td>
                 </tr>
                 @empty
@@ -239,7 +239,7 @@
         </table>
 
         <div class="footer">
-            <span>{{ $org?->name ?? 'ELM' }} — Document confidentiel</span>
+            <span>{!! $org?->name ?? 'ELM' !!} — Document confidentiel</span>
             <span class="footer-page"></span>
             <span>{{ $generated_at->format('d/m/Y H:i') }}{{ $siteData['site_nom'] ? ' — '.$siteData['site_nom'] : '' }}</span>
         </div>
