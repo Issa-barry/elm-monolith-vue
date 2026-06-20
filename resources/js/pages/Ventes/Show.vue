@@ -987,6 +987,9 @@ function connectorIsActive(idx: number): boolean {
                                 <ExternalLink class="h-3 w-3 shrink-0" />
                             </button>
                             <p v-else class="mt-0.5 font-medium">—</p>
+                            <p v-if="commande.vehicule_detail?.immatriculation" class="mt-0.5 text-xs text-muted-foreground">
+                                {{ commande.vehicule_detail.immatriculation }}
+                            </p>
                         </div>
                         <div v-if="commande.livreur_nom">
                             <p class="text-xs text-muted-foreground">Livreur</p>
@@ -1012,6 +1015,9 @@ function connectorIsActive(idx: number): boolean {
                                 <ExternalLink class="h-3 w-3 shrink-0" />
                             </button>
                             <p v-else class="mt-0.5 font-medium">—</p>
+                            <p v-if="commande.client_detail?.telephone" class="mt-0.5 text-xs text-muted-foreground">
+                                {{ formatPhone(commande.client_detail.telephone, commande.client_detail.code_phone_pays) }}
+                            </p>
                         </div>
                         <div>
                             <p class="text-xs text-muted-foreground">Site</p>

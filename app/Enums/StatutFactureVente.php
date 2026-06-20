@@ -16,7 +16,7 @@ enum StatutFactureVente: string
             self::CREEE => 'Créée',
             self::IMPAYEE => 'Impayée',
             self::PARTIEL => 'Partiellement payée',
-            self::PAYEE => 'Soldée',
+            self::PAYEE => 'Payée',
             self::ANNULEE => 'Annulée',
         };
     }
