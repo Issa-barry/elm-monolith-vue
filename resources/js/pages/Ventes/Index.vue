@@ -284,7 +284,6 @@ const statutCommandeColor: Record<string, string> = {
     annulee: 'bg-red-400',
 };
 
-
 // ── Formatage ─────────────────────────────────────────────────────────────────
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';

@@ -112,9 +112,9 @@ tbody td.mono   { font-family: monospace; }
 
 {{-- Pied de page global fixe --}}
 <div class="page-footer">
-    <span>{{ $org?->name ?? 'ELM' }} — Document confidentiel</span>
+    <span>{!! $org?->name ?? 'ELM' !!} — Document confidentiel</span>
     <span class="footer-center">Page <span class="page-num"></span> / <span class="page-total"></span></span>
-    <span>{{ count($sites) === 1 && $sites[0]['site_nom'] ? 'Agence : '.$sites[0]['site_nom'] : ($org?->name ?? 'ELM') }}</span>
+    <span>{!! count($sites) === 1 && $sites[0]['site_nom'] ? 'Agence : '.$sites[0]['site_nom'] : ($org?->name ?? 'ELM') !!}</span>
 </div>
 
 @foreach($sites as $siteData)
@@ -123,11 +123,11 @@ tbody td.mono   { font-family: monospace; }
 
     <div class="header">
         <div>
-            <div class="org-name">{{ $org?->name ?? 'ELM' }}</div>
+            <div class="org-name">{!! $org?->name ?? 'ELM' !!}</div>
         </div>
         <div class="doc-title">
             <div class="doc-type">Liste des dépenses{{ $siteData['site_nom'] ? ' — '.$siteData['site_nom'] : '' }}</div>
-            <div class="doc-date">Imprimé le {{ $generated_at->format('d/m/Y à H:i') }} par {{ $printed_by }}</div>
+            <div class="doc-date">Imprimé le {{ $generated_at->format('d/m/Y à H:i') }} par {!! $printed_by !!}</div>
         </div>
     </div>
 
@@ -177,7 +177,7 @@ tbody td.mono   { font-family: monospace; }
                 <td class="col-veh">{{ $row['vehicule_nom'] ?? '—' }}</td>
                 <td class="col-mnt right">{{ number_format((float)$row['montant'], 0, ',', ' ') }}</td>
                 <td class="col-sta">{{ $row['statut_label'] ?? ($row['statut'] ?? '—') }}</td>
-                <td class="col-saisi">{{ $row['user']['name'] ?? '—' }}</td>
+                <td class="col-saisi">{!! $row['user']['name'] ?? '—' !!}</td>
                 <td class="col-valid"></td>
             </tr>
             @empty
