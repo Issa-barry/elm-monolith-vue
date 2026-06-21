@@ -58,6 +58,12 @@ return [
             'ignore_exceptions' => false,
         ],
 
+        'sentry' => [
+            'driver' => 'sentry',
+            'level' => env('LOG_SENTRY_LEVEL', 'error'),
+            'bubble' => true,
+        ],
+
         'single' => [
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
