@@ -245,7 +245,7 @@ function formatMode(mode: string) {
 
             <template v-if="activeTab === 'informations'">
                 <!-- KPIs globaux -->
-                <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
                     <div class="rounded-lg border bg-card p-4 text-center">
                         <p class="text-base font-bold tabular-nums">
                             {{ fmt(resume_global.total_brut_cumule) }}
@@ -255,11 +255,23 @@ function formatMode(mode: string) {
                         </p>
                     </div>
                     <div class="rounded-lg border bg-card p-4 text-center">
+                        <p
+                            class="text-base font-bold text-red-600 tabular-nums dark:text-red-400"
+                        >
+                            {{
+                                resume_global.total_frais > 0
+                                    ? '-' + fmt(resume_global.total_frais)
+                                    : fmt(0)
+                            }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">Frais</p>
+                    </div>
+                    <div class="rounded-lg border bg-card p-4 text-center">
                         <p class="text-base font-bold tabular-nums">
                             {{ fmt(resume_global.total_net_cumule) }}
                         </p>
                         <p class="mt-1 text-xs text-muted-foreground">
-                            Net cumulé
+                            Net à payer
                         </p>
                     </div>
                     <div class="rounded-lg border bg-card p-4 text-center">

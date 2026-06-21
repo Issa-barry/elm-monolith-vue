@@ -5,8 +5,8 @@ import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useDebounceFn } from '@vueuse/core';
-import { router } from '@inertiajs/vue3';
-import { Search, X } from 'lucide-vue-next';
+import { router, usePage } from '@inertiajs/vue3';
+import { Lock, Search, X } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed, ref, watch } from 'vue';
 
@@ -34,6 +34,9 @@ export interface FilterField {
     placeholder?: string;
     startKey?: string;
     endKey?: string;
+    disabled?: boolean;
+    /** Affiche le champ dans la barre principale plutôt que dans le drawer */
+    inline?: boolean;
 }
 
 interface SiteOption {
@@ -54,6 +57,8 @@ const props = withDefaults(
         searchKey?: string;
         resultCount: number;
         fields: FilterField[];
+        /** Masque le sélecteur générique Agence/Site (ex: Logistique qui a ses propres filtres site) */
+        hideAgenceSelector?: boolean;
     }>(),
     {
         baseParams: () => ({}),
@@ -63,6 +68,7 @@ const props = withDefaults(
         searchPlaceholder: 'Rechercher…',
         searchKey: undefined,
         url: undefined,
+        hideAgenceSelector: false,
     },
 );
 
@@ -72,6 +78,46 @@ const emit = defineEmits<{
 }>();
 
 const search = defineModel<string>('search', { default: '' });
+
+// ── Détection admin ───────────────────────────────────────────────────────────
+
+const page = usePage();
+
+const ADMIN_ROLES = new Set(['super_admin', 'admin_entreprise']);
+
+const isAdmin = computed(() => {
+    const auth = (page.props as Record<string, unknown>).auth as Record<string, unknown> | undefined;
+    const roles = Array.isArray(auth?.roles) ? (auth.roles as string[]) : [];
+    return roles.some((r) => ADMIN_ROLES.has(r));
+});
+
+// Sites de l'utilisateur connecté (vide pour admin, non-vide pour non-admin)
+const authUserSites = computed<SiteOption[]>(() => {
+    const auth = (page.props as Record<string, unknown>).auth as Record<string, unknown> | undefined;
+    const us = auth?.user_sites;
+    return Array.isArray(us) ? (us as SiteOption[]) : [];
+});
+
+// ── Sites : prop locale ou prop globale du middleware ─────────────────────────
+
+const effectiveSites = computed<SiteOption[]>(() => {
+    if (props.sites.length > 0) return props.sites;
+    const global = (page.props as Record<string, unknown>).org_sites;
+    return Array.isArray(global) ? (global as SiteOption[]) : [];
+});
+
+// Options du sélecteur :
+// - admin → tous les sites de l'organisation
+// - non-admin → uniquement ses sites
+const siteOptions = computed(() => {
+    if (!isAdmin.value && authUserSites.value.length > 0) {
+        return authUserSites.value.map((s) => ({ value: s.id, label: s.nom }));
+    }
+    return effectiveSites.value.map((s) => ({ value: s.id, label: s.nom }));
+});
+
+// Non-admin : sélecteur verrouillé (périmètre imposé par le backend)
+const siteSelectorLocked = computed(() => !isAdmin.value);
 
 // ── État local ────────────────────────────────────────────────────────────────
 
@@ -91,7 +137,15 @@ function toArray(val: unknown): string[] {
 
 function initLocal() {
     const v = props.values ?? {};
-    localSiteIds.value = toArray(v.site_ids);
+
+    if (!isAdmin.value && authUserSites.value.length > 0) {
+        // Non-admin : périmètre verrouillé sur ses sites
+        localSiteIds.value = authUserSites.value.map((s) => s.id);
+    } else {
+        // Admin : reprendre la sélection serveur, ou [] (= toutes les agences)
+        localSiteIds.value = toArray(v.site_ids);
+    }
+
     const fresh: Record<string, unknown> = {};
     for (const field of props.fields) {
         if (field.type === 'date-range') {
@@ -106,6 +160,7 @@ function initLocal() {
         }
     }
     localValues.value = fresh;
+
     // Sync les snapshots avec l'état serveur reçu
     appliedSiteIds.value = [...localSiteIds.value];
     appliedValues.value = JSON.parse(JSON.stringify(fresh));
@@ -124,11 +179,17 @@ const pendingChange = computed(() => {
     return JSON.stringify(localValues.value) !== JSON.stringify(appliedValues.value);
 });
 
-// ── Sites options ─────────────────────────────────────────────────────────────
+// ── Helpers select/multi-select ───────────────────────────────────────────────
 
-const siteOptions = computed(() =>
-    props.sites.map((s) => ({ value: s.id, label: s.nom })),
-);
+const SENTINELS = new Set(['', 'tous', 'all']);
+
+function stripSentinels(arr: string[]): string[] {
+    return arr.filter((v) => !SENTINELS.has(v));
+}
+
+function meaningfulTotal(options?: FilterOption[]): number {
+    return (options ?? []).filter((o) => !SENTINELS.has(String(o.value))).length;
+}
 
 // ── Logique apply / reset ─────────────────────────────────────────────────────
 
@@ -139,19 +200,27 @@ function buildParams(): Record<string, string | string[]> {
         params[props.searchKey] = search.value;
     }
 
-    if (localSiteIds.value.length > 0) {
-        params.site_ids = localSiteIds.value;
+    // Filtre agence : seulement pour admin, et seulement si une sélection partielle
+    if (isAdmin.value && localSiteIds.value.length > 0) {
+        const totalSites = siteOptions.value.length;
+        // Ne pas envoyer si tous les sites sont sélectionnés (= pas de filtre)
+        if (localSiteIds.value.length < totalSites) {
+            params.site_ids = localSiteIds.value;
+        }
     }
+    // Non-admin : le backend applique automatiquement le périmètre — rien à envoyer
 
     for (const field of props.fields) {
+        if (field.disabled) continue;
         if (field.type === 'date-range') {
             const sk = field.startKey ?? `${field.key}_debut`;
             const ek = field.endKey ?? `${field.key}_fin`;
             if (localValues.value[sk]) params[sk] = localValues.value[sk] as string;
             if (localValues.value[ek]) params[ek] = localValues.value[ek] as string;
         } else if (field.type === 'multi-select' || field.type === 'select') {
-            const arr = (localValues.value[field.key] as string[]) ?? [];
-            const total = field.options?.length ?? 0;
+            const raw = (localValues.value[field.key] as string[]) ?? [];
+            const arr = stripSentinels(raw);
+            const total = meaningfulTotal(field.options);
             if (arr.length > 0 && arr.length < total) {
                 params[field.key] = arr;
             }
@@ -176,15 +245,20 @@ function applyFilters() {
         router.get(props.url, values, { preserveScroll: true, replace: true });
     }
     emit('apply', values);
-    // Mettre à jour les snapshots → pendingChange revient à false
     appliedSiteIds.value = [...localSiteIds.value];
     appliedValues.value = JSON.parse(JSON.stringify(localValues.value));
 }
 
 function resetFilters() {
-    localSiteIds.value = [];
+    // Admin → réinitialiser la sélection agence (= toutes)
+    // Non-admin → périmètre inchangé (ses sites, imposé par le backend)
+    if (isAdmin.value) {
+        localSiteIds.value = [];
+    }
+
     search.value = '';
     for (const field of props.fields) {
+        if (field.disabled) continue;
         if (field.type === 'date-range') {
             const sk = field.startKey ?? `${field.key}_debut`;
             const ek = field.endKey ?? `${field.key}_fin`;
@@ -196,8 +270,10 @@ function resetFilters() {
             localValues.value[field.key] = '';
         }
     }
-    appliedSiteIds.value = [];
+
+    appliedSiteIds.value = [...localSiteIds.value];
     appliedValues.value = JSON.parse(JSON.stringify(localValues.value));
+
     if (props.url) {
         router.get(props.url, props.baseParams, {
             preserveScroll: true,
@@ -215,18 +291,25 @@ const debouncedSearchApply = useDebounceFn(() => {
 
 watch(search, () => { debouncedSearchApply(); }, { immediate: false });
 
+// ── Champs inline vs drawer ───────────────────────────────────────────────────
+
+const inlineFields = computed(() => props.fields.filter((f) => f.inline));
+const drawerFields = computed(() => props.fields.filter((f) => !f.inline));
+
 // ── Compteurs ─────────────────────────────────────────────────────────────────
 
-const drawerFilterCount = computed(() => {
+function countActiveFields(fields: FilterField[]): number {
     let n = 0;
-    for (const field of props.fields) {
+    for (const field of fields) {
+        if (field.disabled) continue;
         if (field.type === 'date-range') {
             const sk = field.startKey ?? `${field.key}_debut`;
             const ek = field.endKey ?? `${field.key}_fin`;
             if (localValues.value[sk] || localValues.value[ek]) n++;
         } else if (field.type === 'multi-select' || field.type === 'select') {
-            const arr = (localValues.value[field.key] as string[]) ?? [];
-            const total = field.options?.length ?? 0;
+            const raw = (localValues.value[field.key] as string[]) ?? [];
+            const arr = stripSentinels(raw);
+            const total = meaningfulTotal(field.options);
             if (arr.length > 0 && arr.length < total) n++;
         } else if (field.type === 'boolean') {
             if (localValues.value[field.key] !== '') n++;
@@ -235,12 +318,17 @@ const drawerFilterCount = computed(() => {
         }
     }
     return n;
-});
+}
 
+// Badge du drawer : seulement les filtres non-inline
+const drawerFilterCount = computed(() => countActiveFields(drawerFields.value));
+
+// Les sites verrouillés du non-admin ne comptent pas comme filtre actif
 const hasActiveFilters = computed(
     () =>
         drawerFilterCount.value > 0 ||
-        localSiteIds.value.length > 0 ||
+        countActiveFields(inlineFields.value) > 0 ||
+        (isAdmin.value && localSiteIds.value.length > 0) ||
         !!search.value,
 );
 </script>
@@ -268,21 +356,50 @@ const hasActiveFilters = computed(
             </button>
         </div>
 
-        <!-- Agence / Site dans la barre principale (admin) -->
-        <div v-if="isAdmin && sites.length > 0" class="w-[220px] shrink-0">
+        <!-- Agence / Site générique (masqué quand la page gère ses propres filtres site) -->
+        <div
+            v-if="!hideAgenceSelector && siteOptions.length > 0"
+            class="relative w-[220px] shrink-0"
+        >
             <FilterMultiSelect
                 v-model="localSiteIds"
                 :options="siteOptions"
                 placeholder="Toutes les agences"
+                :empty-means-all="isAdmin"
+                :disabled="siteSelectorLocked"
+            />
+            <!-- Cadenas : indique au non-admin que le périmètre est verrouillé -->
+            <Lock
+                v-if="siteSelectorLocked"
+                class="pointer-events-none absolute top-1/2 right-8 -translate-y-1/2 h-3 w-3 text-muted-foreground opacity-50"
             />
         </div>
+
+        <!-- Champs inline : visibles directement dans la barre (ex: Site départ / Site arrivée) -->
+        <template v-for="field in inlineFields" :key="field.key">
+            <div
+                v-if="field.type === 'multi-select' || field.type === 'select'"
+                class="relative w-[200px] shrink-0"
+            >
+                <FilterMultiSelect
+                    v-model="localValues[field.key] as (string | number)[]"
+                    :options="field.options ?? []"
+                    :placeholder="field.placeholder ?? field.label"
+                    :disabled="field.disabled ?? false"
+                />
+                <Lock
+                    v-if="field.disabled"
+                    class="pointer-events-none absolute top-1/2 right-8 -translate-y-1/2 h-3 w-3 text-muted-foreground opacity-50"
+                />
+            </div>
+        </template>
 
         <!-- Slot pour contrôles inline additionnels -->
         <slot name="inline" />
 
-        <!-- Drawer filtres avancés -->
+        <!-- Drawer filtres avancés (uniquement les champs non-inline) -->
         <FilterDrawer
-            v-if="fields.length > 0"
+            v-if="drawerFields.length > 0"
             v-model:open="filterDrawerOpen"
             title="Filtres"
             :active-count="drawerFilterCount"
@@ -291,18 +408,22 @@ const hasActiveFilters = computed(
             @reset="resetFilters"
         >
             <div class="space-y-5">
-                <template v-for="field in fields" :key="field.key">
+                <template v-for="field in drawerFields" :key="field.key">
 
                     <!-- multi-select ou select -->
                     <div
                         v-if="field.type === 'multi-select' || field.type === 'select'"
                         class="space-y-1.5"
                     >
-                        <Label>{{ field.label }}</Label>
+                        <Label class="flex items-center gap-1.5">
+                            {{ field.label }}
+                            <Lock v-if="field.disabled" class="h-3 w-3 text-muted-foreground opacity-60" />
+                        </Label>
                         <FilterMultiSelect
                             v-model="localValues[field.key] as (string | number)[]"
                             :options="field.options ?? []"
                             :placeholder="field.placeholder ?? 'Tous'"
+                            :disabled="field.disabled ?? false"
                         />
                     </div>
 

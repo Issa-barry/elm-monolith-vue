@@ -95,11 +95,13 @@ const props = defineProps<{
     statuts: StatutOption[];
     sites: SiteOption[];
     filtre_statut: string | null;
-    filtre_site_source_id: number | null;
-    filtre_site_destination_id: number | null;
+    filtre_depart_site_ids: string[];
+    filtre_arrivee_site_ids: string[];
     vue: 'transferts' | 'receptions';
     can_create: boolean;
     types_ecart: StatutOption[];
+    is_admin: boolean;
+    user_site_ids: string[];
 }>();
 
 const { can } = usePermissions();
@@ -142,25 +144,33 @@ const filterFields = computed<FilterField[]>(() => [
         placeholder: 'Tous les statuts',
     },
     {
-        key: 'site_source_id',
+        key: 'depart_site_ids',
         label: 'Site de départ',
-        type: 'select',
+        type: 'multi-select',
+        inline: true,
         options: siteOptions.value,
-        placeholder: 'Tous les sites départ',
+        placeholder: 'Site départ',
+        disabled: !props.is_admin && props.vue === 'transferts',
     },
     {
-        key: 'site_destination_id',
+        key: 'arrivee_site_ids',
         label: "Site d'arrivée",
-        type: 'select',
+        type: 'multi-select',
+        inline: true,
         options: siteOptions.value,
-        placeholder: 'Tous les sites arrivée',
+        placeholder: "Site arrivée",
+        disabled: !props.is_admin && props.vue === 'receptions',
     },
 ]);
 
 const filterValues = computed(() => ({
     statut: props.filtre_statut ?? '',
-    site_source_id: props.filtre_site_source_id ? String(props.filtre_site_source_id) : '',
-    site_destination_id: props.filtre_site_destination_id ? String(props.filtre_site_destination_id) : '',
+    depart_site_ids: !props.is_admin && props.vue === 'transferts'
+        ? props.user_site_ids
+        : (props.filtre_depart_site_ids ?? []),
+    arrivee_site_ids: !props.is_admin && props.vue === 'receptions'
+        ? props.user_site_ids
+        : (props.filtre_arrivee_site_ids ?? []),
 }));
 
 const filteredTransferts = computed(() => props.transferts);
@@ -496,6 +506,7 @@ const commStatutDot: Record<string, string> = {
                 :result-count="filteredTransferts.length"
                 search-placeholder="Référence, site, véhicule…"
                 v-model:search="search"
+                :hide-agence-selector="true"
             />
 
             <!-- Tableau -->
@@ -527,20 +538,21 @@ const commStatutDot: Record<string, string> = {
                         </template>
                     </Column>
 
-                    <!-- Route -->
-                    <Column header="Trajet" style="min-width: 220px">
+                    <!-- Site départ -->
+                    <Column header="Site départ" style="min-width: 140px">
                         <template #body="{ data }">
-                            <div class="flex items-center gap-1 text-sm">
-                                <span class="font-medium">{{
-                                    data.site_source_nom ?? '—'
-                                }}</span>
-                                <ChevronRight
-                                    class="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                                />
-                                <span class="font-medium">{{
-                                    data.site_destination_nom ?? '—'
-                                }}</span>
-                            </div>
+                            <span class="text-sm font-medium">{{
+                                data.site_source_nom ?? '—'
+                            }}</span>
+                        </template>
+                    </Column>
+
+                    <!-- Site arrivée -->
+                    <Column header="Site arrivée" style="min-width: 140px">
+                        <template #body="{ data }">
+                            <span class="text-sm font-medium">{{
+                                data.site_destination_nom ?? '—'
+                            }}</span>
                         </template>
                     </Column>
 

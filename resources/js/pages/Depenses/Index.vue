@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
+import ConcerneDetailDialog from '@/components/Depenses/ConcerneDetailDialog.vue';
+import VehiculeDetailDialog from '@/components/Depenses/VehiculeDetailDialog.vue';
 import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,7 +31,6 @@ import {
     ChevronRight,
     Download,
     Eye,
-    FileText,
     History,
     MoreVertical,
     Pencil,
@@ -62,8 +63,12 @@ interface DepenseRow {
         categorie_label: string;
     } | null;
     beneficiaire_type: string | null;
+    beneficiaire_id: string | null;
     beneficiaire_label: string | null;
+    beneficiaire_telephone: string | null;
+    vehicule_id: string | null;
     vehicule_nom: string | null;
+    vehicule_immatriculation: string | null;
     site: { id: string; nom: string } | null;
     user: { id: string; name: string };
     validateur: { id: string; name: string } | null;
@@ -97,6 +102,9 @@ const props = defineProps<{
         site?: string;
         date_debut?: string;
         date_fin?: string;
+        vehicule?: string;
+        concerne?: string;
+        montant?: string;
     };
     stats: {
         total: number;
@@ -126,6 +134,9 @@ function currentParams() {
         site: props.filters.site || undefined,
         date_debut: props.filters.date_debut || undefined,
         date_fin: props.filters.date_fin || undefined,
+        vehicule: props.filters.vehicule || undefined,
+        concerne: props.filters.concerne || undefined,
+        montant: props.filters.montant || undefined,
     };
 }
 
@@ -137,6 +148,9 @@ const filterValues = computed(() => ({
     site: props.filters.site ?? '',
     date_debut: props.filters.date_debut ?? '',
     date_fin: props.filters.date_fin ?? '',
+    vehicule: props.filters.vehicule ?? '',
+    concerne: props.filters.concerne ?? '',
+    montant: props.filters.montant ?? '',
 }));
 
 const filterFields = computed<FilterField[]>(() => [
@@ -171,6 +185,24 @@ const filterFields = computed<FilterField[]>(() => [
         startKey: 'date_debut',
         endKey: 'date_fin',
     },
+    {
+        key: 'vehicule',
+        label: 'Véhicule',
+        type: 'text',
+        placeholder: 'Nom ou immatriculation…',
+    },
+    {
+        key: 'concerne',
+        label: 'Recherche concerné',
+        type: 'text',
+        placeholder: 'Nom, prénom ou téléphone…',
+    },
+    {
+        key: 'montant',
+        label: 'Montant exact (GNF)',
+        type: 'number',
+        placeholder: '0',
+    },
 ]);
 
 function exportExcel() {
@@ -182,15 +214,6 @@ function exportExcel() {
     window.location.href = `/depenses/export/excel?${params.toString()}`;
 }
 
-function exportPdf() {
-    const params = new URLSearchParams();
-    const p = currentParams();
-    Object.entries(p).forEach(([k, v]) => {
-        if (v) params.set(k, v);
-    });
-    window.location.href = `/depenses/export/pdf?${params.toString()}`;
-}
-
 function imprimer() {
     const params = new URLSearchParams();
     const p = currentParams();
@@ -200,6 +223,29 @@ function imprimer() {
     window.open(`/depenses/imprimer?${params.toString()}`, '_blank');
 }
 
+// ── Popup concerné ──────────────────────────────────────────────────────────
+const showConcerneDialog = ref(false);
+const popupConcerneType = ref<string | null>(null);
+const popupConcerneId = ref<string | null>(null);
+
+function openConcerneDialog(d: DepenseRow) {
+    if (!d.beneficiaire_id || !d.beneficiaire_type || d.beneficiaire_type === 'vehicule') return;
+    popupConcerneType.value = d.beneficiaire_type;
+    popupConcerneId.value = d.beneficiaire_id;
+    showConcerneDialog.value = true;
+}
+
+// ── Popup véhicule ──────────────────────────────────────────────────────────
+const showVehiculeDialog = ref(false);
+const popupVehiculeId = ref<string | null>(null);
+
+function openVehiculeDialog(d: DepenseRow) {
+    if (!d.vehicule_id) return;
+    popupVehiculeId.value = d.vehicule_id;
+    showVehiculeDialog.value = true;
+}
+
+// ── Rejet ──────────────────────────────────────────────────────────────────
 const rejectingDepenseId = ref<string | null>(null);
 const rejectMotif = ref('');
 const rejectCommentaire = ref('');
@@ -364,7 +410,6 @@ const categorieColors: Record<string, string> = {
     proprietaire: 'bg-purple-100 text-purple-700',
     vehicule: 'bg-green-100 text-green-700',
 };
-
 </script>
 
 <template>
@@ -388,10 +433,6 @@ const categorieColors: Record<string, string> = {
                     <Button variant="outline" size="sm" @click="exportExcel">
                         <Download class="mr-1.5 h-3.5 w-3.5" />
                         Excel
-                    </Button>
-                    <Button variant="outline" size="sm" @click="exportPdf">
-                        <FileText class="mr-1.5 h-3.5 w-3.5" />
-                        Télécharger PDF
                     </Button>
                     <Button variant="outline" size="sm" @click="imprimer">
                         <Printer class="mr-1.5 h-3.5 w-3.5" />
@@ -541,16 +582,48 @@ const categorieColors: Record<string, string> = {
 
                             <!-- Concerné -->
                             <td class="px-4 py-3">
-                                <div class="text-sm font-medium">
+                                <button
+                                    v-if="d.beneficiaire_id && d.beneficiaire_type !== 'vehicule'"
+                                    type="button"
+                                    class="group text-left"
+                                    @click="openConcerneDialog(d)"
+                                >
+                                    <div class="font-medium group-hover:underline">
+                                        {{ d.beneficiaire_label ?? '—' }}
+                                    </div>
+                                    <div
+                                        v-if="d.beneficiaire_telephone"
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        {{ d.beneficiaire_telephone }}
+                                    </div>
+                                </button>
+                                <div v-else class="text-sm font-medium">
                                     {{ d.beneficiaire_label ?? '—' }}
                                 </div>
                             </td>
 
                             <!-- Véhicule -->
                             <td
-                                class="hidden px-4 py-3 text-xs text-muted-foreground lg:table-cell"
+                                class="hidden px-4 py-3 lg:table-cell"
                             >
-                                {{ d.vehicule_nom ?? '—' }}
+                                <button
+                                    v-if="d.vehicule_id"
+                                    type="button"
+                                    class="group text-left"
+                                    @click="openVehiculeDialog(d)"
+                                >
+                                    <div class="font-medium text-sm group-hover:underline">
+                                        {{ d.vehicule_nom ?? '—' }}
+                                    </div>
+                                    <div
+                                        v-if="d.vehicule_immatriculation"
+                                        class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                    >
+                                        {{ d.vehicule_immatriculation }}
+                                    </div>
+                                </button>
+                                <span v-else class="text-xs text-muted-foreground">—</span>
                             </td>
 
                             <!-- Montant -->
@@ -797,6 +870,7 @@ const categorieColors: Record<string, string> = {
                 </template>
             </div>
         </div>
+
         <!-- Reject dialog -->
         <Dialog
             :open="!!rejectingDepenseId"
@@ -882,6 +956,19 @@ const categorieColors: Record<string, string> = {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        <!-- Popup concerné -->
+        <ConcerneDetailDialog
+            v-model:visible="showConcerneDialog"
+            :beneficiaire-type="popupConcerneType"
+            :beneficiaire-id="popupConcerneId"
+        />
+
+        <!-- Popup véhicule -->
+        <VehiculeDetailDialog
+            v-model:visible="showVehiculeDialog"
+            :vehicule-id="popupVehiculeId"
+        />
 
         <AuditDrawer
             v-model:visible="showAudit"

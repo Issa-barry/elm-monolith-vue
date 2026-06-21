@@ -93,7 +93,7 @@ const props = defineProps<{
     modes_paiement: ModePaiementOption[];
     periode: string;
     statut: string;
-    site_id: string;
+    site_ids?: string[];
     sites: SiteOption[];
     livreur_id?: string | null;
     livreur?: LivreurInfo | null;
@@ -137,7 +137,7 @@ const filterBaseParams = computed(() => {
 const filterValues = computed(() => ({
     periode: props.periode,
     statut: props.statut,
-    site_id: props.site_id,
+    site_ids: props.site_ids ?? [],
     vehicule: props.vehicule ?? '',
     chauffeur: props.chauffeur ?? '',
     convoyeur: props.convoyeur ?? '',
@@ -149,12 +149,6 @@ const filterValues = computed(() => ({
 const filterFields = computed<FilterField[]>(() => [
     { key: 'periode', label: 'Période', type: 'select', options: periodes },
     { key: 'statut', label: 'Statut', type: 'select', options: filtres },
-    {
-        key: 'site_id',
-        label: 'Agence / Site',
-        type: 'select',
-        options: [{ value: 'tous', label: 'Toutes' }, ...props.sites.map((s) => ({ value: s.value, label: s.label }))],
-    },
     { key: 'vehicule', label: 'Véhicule', type: 'text', placeholder: 'Nom ou immatriculation…' },
     { key: 'chauffeur', label: 'Chauffeur', type: 'text', placeholder: 'Nom ou téléphone…' },
     { key: 'convoyeur', label: 'Convoyeur', type: 'text', placeholder: 'Nom ou téléphone…' },
@@ -567,7 +561,6 @@ function _progressPercent(f: FactureItem): number {
                 :values="filterValues"
                 :result-count="facturesFiltrees.length"
                 :fields="filterFields"
-                :is-admin="false"
                 search-placeholder="Référence, véhicule, client…"
                 v-model:search="search"
             />

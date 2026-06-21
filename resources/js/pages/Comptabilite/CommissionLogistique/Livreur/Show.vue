@@ -55,7 +55,14 @@ interface ModePaiement {
 
 const props = defineProps<{
     livreur: { id: string; nom: string; telephone: string | null };
-    kpis: { impaye: number; paye: number };
+    kpis: {
+        total_brut: number;
+        total_frais: number;
+        total_net: number;
+        total_verse: number;
+        impaye: number;
+        paye: number;
+    };
     parts: PartRow[];
     periode_stats: PeriodeStats | null;
     payments: PaymentRow[];
@@ -215,7 +222,7 @@ function formatMode(mode: string) {
                         <p
                             class="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase"
                         >
-                            Livreur
+                            Livreur — Logistique
                         </p>
                         <p class="mt-0.5 text-xl font-semibold">
                             {{ livreur.nom }}
@@ -286,116 +293,64 @@ function formatMode(mode: string) {
             </div>
 
             <template v-if="activeTab === 'informations'">
-                <!-- KPIs -->
-                <div class="grid grid-cols-3 gap-3">
-                    <template v-if="periode_stats">
-                        <div
-                            class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                <!-- KPIs — 5 cartes uniformes -->
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                    <div class="rounded-lg border bg-card p-4 text-center">
+                        <p class="text-base font-bold tabular-nums">
+                            {{ fmt(kpis.total_brut) }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Brut cumulé
+                        </p>
+                    </div>
+                    <div class="rounded-lg border bg-card p-4 text-center">
+                        <p
+                            class="text-base font-bold text-red-600 tabular-nums dark:text-red-400"
                         >
-                            <p
-                                class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
-                            >
-                                Commission période
-                            </p>
-                            <p
-                                class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
-                            >
-                                {{ fmt(periode_stats.total_commission) }}
-                            </p>
-                        </div>
-                        <div
-                            class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                            {{ kpis.total_frais > 0 ? '-' + fmt(kpis.total_frais) : fmt(0) }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">Frais</p>
+                    </div>
+                    <div class="rounded-lg border bg-card p-4 text-center">
+                        <p class="text-base font-bold tabular-nums">
+                            {{ fmt(kpis.total_net) }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Net à payer
+                        </p>
+                    </div>
+                    <div class="rounded-lg border bg-card p-4 text-center">
+                        <p
+                            class="text-base font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
                         >
-                            <p
-                                class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
-                            >
-                                Déjà payé
-                            </p>
-                            <p
-                                class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
-                            >
-                                {{ fmt(periode_stats.total_verse) }}
-                            </p>
-                        </div>
-                        <div
-                            class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
-                            :class="
-                                periode_stats.reste > 0
-                                    ? 'border-amber-200 dark:border-amber-900'
-                                    : ''
-                            "
-                        >
-                            <p
-                                class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
-                            >
-                                Reste à payer
-                            </p>
-                            <p
-                                class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
-                                :class="
-                                    periode_stats.reste > 0
-                                        ? 'text-amber-600 dark:text-amber-400'
-                                        : ''
-                                "
-                            >
-                                {{ fmt(periode_stats.reste) }}
-                            </p>
-                        </div>
-                    </template>
-                    <template v-else>
-                        <div
-                            class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
-                        >
-                            <p
-                                class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
-                            >
-                                Total cumulé
-                            </p>
-                            <p
-                                class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
-                            >
-                                {{ fmt(kpis.impaye + kpis.paye) }}
-                            </p>
-                        </div>
-                        <div
-                            class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                            {{ fmt(kpis.total_verse) }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Déjà payé
+                        </p>
+                    </div>
+                    <div
+                        class="rounded-lg border bg-card p-4 text-center"
+                        :class="
+                            kpis.impaye > 0
+                                ? 'border-amber-200 dark:border-amber-900'
+                                : ''
+                        "
+                    >
+                        <p
+                            class="text-base font-bold tabular-nums"
                             :class="
                                 kpis.impaye > 0
-                                    ? 'border-amber-200 dark:border-amber-900'
+                                    ? 'text-amber-600 dark:text-amber-400'
                                     : ''
                             "
                         >
-                            <p
-                                class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
-                            >
-                                Reste à payer
-                            </p>
-                            <p
-                                class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
-                                :class="
-                                    kpis.impaye > 0
-                                        ? 'text-amber-600 dark:text-amber-400'
-                                        : ''
-                                "
-                            >
-                                {{ fmt(kpis.impaye) }}
-                            </p>
-                        </div>
-                        <div
-                            class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
-                        >
-                            <p
-                                class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
-                            >
-                                Déjà payé
-                            </p>
-                            <p
-                                class="mt-0.5 text-sm font-semibold tabular-nums sm:text-base"
-                            >
-                                {{ fmt(kpis.paye) }}
-                            </p>
-                        </div>
-                    </template>
+                            {{ fmt(kpis.impaye) }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Reste à payer
+                        </p>
+                    </div>
                 </div>
 
                 <!-- Tableau des parts -->

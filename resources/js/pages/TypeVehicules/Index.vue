@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2 } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 interface TypeVehiculeRow {
     id: string;
@@ -15,7 +16,7 @@ interface TypeVehiculeRow {
     vehicules_count: number;
 }
 
-defineProps<{ types: TypeVehiculeRow[] }>();
+const props = defineProps<{ types: TypeVehiculeRow[] }>();
 
 const page = usePage();
 const flash = computed(
@@ -26,6 +27,26 @@ const flash = computed(
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Types de véhicules', href: '/type-vehicules' },
+];
+
+const search = ref('');
+
+const typesFiltres = computed(() => {
+    const q = search.value.toLowerCase().trim();
+    if (!q) return props.types;
+    return props.types.filter(
+        (t) =>
+            t.nom.toLowerCase().includes(q) ||
+            (t.description && t.description.toLowerCase().includes(q)),
+    );
+});
+
+const filterFields: FilterField[] = [
+    {
+        key: 'is_active',
+        label: 'Statut',
+        type: 'boolean',
+    },
 ];
 
 function destroy(id: string) {
@@ -73,6 +94,13 @@ function destroy(id: string) {
                 {{ flash.error }}
             </div>
 
+            <DataFilters
+                v-model:search="search"
+                search-placeholder="Nom, description…"
+                :result-count="typesFiltres.length"
+                :fields="filterFields"
+            />
+
             <div class="rounded-xl border bg-card shadow-sm">
                 <table class="w-full text-sm">
                     <thead>
@@ -90,7 +118,7 @@ function destroy(id: string) {
                     </thead>
                     <tbody>
                         <tr
-                            v-for="type in types"
+                            v-for="type in typesFiltres"
                             :key="type.id"
                             class="border-b last:border-0 hover:bg-muted/30"
                         >
@@ -147,12 +175,12 @@ function destroy(id: string) {
                                 </div>
                             </td>
                         </tr>
-                        <tr v-if="types.length === 0">
+                        <tr v-if="typesFiltres.length === 0">
                             <td
                                 colspan="5"
                                 class="px-4 py-10 text-center text-sm text-muted-foreground"
                             >
-                                Aucun type de véhicule défini.
+                                Aucun type de véhicule trouvé.
                             </td>
                         </tr>
                     </tbody>

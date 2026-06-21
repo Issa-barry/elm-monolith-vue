@@ -106,7 +106,7 @@ interface Filters {
     search?: string;
     type?: string;
     statut?: string;
-    site_id?: string;
+    site_ids?: string[];
 }
 
 const props = defineProps<{
@@ -141,10 +141,19 @@ function clearFilters() {
 }
 
 const currentSiteLabel = computed(() => {
-    const siteId = props.filters.site_id ?? '';
-    if (!siteId) return 'Toutes agences';
-    const site = props.sites.find((s) => s.id === siteId);
-    return site ? site.nom : 'Toutes agences';
+    const ids = props.filters.site_ids ?? [];
+    if (ids.length === 0) return 'Toutes agences';
+    if (ids.length === 1) {
+        return props.sites.find((s) => s.id === ids[0])?.nom ?? 'Toutes agences';
+    }
+    // 2-3 sites : noms concaténés ; 4+ : "N agences"
+    if (ids.length <= 3) {
+        const names = ids
+            .map((id) => props.sites.find((s) => s.id === id)?.nom)
+            .filter(Boolean);
+        return names.join(', ');
+    }
+    return `${ids.length} agences`;
 });
 
 const filterFields = computed<FilterField[]>(() => [
@@ -159,15 +168,6 @@ const filterFields = computed<FilterField[]>(() => [
         type: 'select',
         label: 'Statut',
         options: [{ value: '', label: 'Tous les statuts' }, ...props.statuts.map((s) => ({ value: s.value, label: s.label }))],
-    },
-    {
-        key: 'site_id',
-        type: 'select',
-        label: 'Agence',
-        options: [
-            { value: '', label: 'Toutes les agences' },
-            ...props.sites.map((s) => ({ value: s.id, label: s.nom + (s.code ? ` (${s.code})` : '') })),
-        ],
     },
 ]);
 
@@ -556,7 +556,7 @@ function confirmArchive(produit: Produit) {
                 v-model:search="searchInput"
                 search-key="search"
                 search-placeholder="Rechercher…"
-                :values="{ type: filters.type ?? '', statut: filters.statut ?? '', site_id: filters.site_id ?? '' }"
+                :values="{ type: filters.type ?? '', statut: filters.statut ?? '', site_ids: filters.site_ids ?? [] }"
                 :fields="filterFields"
                 :result-count="filteredProduits.length"
                 @reset="clearFilters"

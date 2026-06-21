@@ -43,6 +43,7 @@ interface StaffUser {
     is_active: boolean;
     roles: string[];
     site: string | null;
+    site_id: string | null;
     is_me: boolean;
 }
 
@@ -120,6 +121,7 @@ const inactiveUsers = computed(
 
 const search = ref('');
 const statut = ref<string>('tous');
+const siteIds = ref<string[]>([]);
 
 const filterFields: FilterField[] = [
     {
@@ -136,6 +138,9 @@ const filterFields: FilterField[] = [
 
 const filteredUsers = computed(() => {
     let list = props.users;
+    if (siteIds.value.length > 0) {
+        list = list.filter((u) => u.site_id && siteIds.value.includes(u.site_id));
+    }
     if (statut.value !== 'tous') {
         list = list.filter((u) => u.is_active === (statut.value === 'actif'));
     }
@@ -154,11 +159,13 @@ const filteredUsers = computed(() => {
 
 function handleApply(values: Record<string, unknown>) {
     statut.value = (values.statut as string) || 'tous';
+    siteIds.value = (values.site_ids as string[]) ?? [];
 }
 
 function resetFilters() {
     search.value = '';
     statut.value = 'tous';
+    siteIds.value = [];
 }
 
 const breadcrumbs: BreadcrumbItem[] = [

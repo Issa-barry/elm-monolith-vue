@@ -11,42 +11,43 @@ const props = withDefaults(
     defineProps<{
         options: MultiSelectOption[];
         placeholder?: string;
+        disabled?: boolean;
+        // Quand true, un model vide = "tous sélectionnés" (admin : toutes les agences)
+        emptyMeansAll?: boolean;
     }>(),
-    { placeholder: 'Tous' },
+    { placeholder: 'Tous', disabled: false, emptyMeansAll: false },
 );
 
 const model = defineModel<(string | number)[]>({ default: () => [] });
 
 const allValues = computed(() => props.options.map((o) => String(o.value)));
 
-const isAllSelected = computed(
-    () =>
-        allValues.value.length > 0 &&
-        allValues.value.every((v) => (model.value ?? []).map(String).includes(v)),
-);
-
-const displayValue = computed(() => {
+const isAllSelected = computed(() => {
     const vals = (model.value ?? []).map(String);
-    if (vals.length === 0) return [];
-    return vals;
+    if (props.emptyMeansAll && vals.length === 0) return true;
+    return allValues.value.length > 0 && allValues.value.every((v) => vals.includes(v));
 });
 
 function toggleAll() {
-    if (isAllSelected.value) {
-        model.value = [];
+    if (props.disabled) return;
+    if (props.emptyMeansAll) {
+        // En mode emptyMeansAll : vide = Tous. Clic Tous depuis une sélection → vide.
+        // Clic Tous depuis vide → sélection explicite de tout (pour décocher ensuite).
+        model.value = (model.value ?? []).length === 0 ? allValues.value : [];
     } else {
-        model.value = allValues.value;
+        model.value = isAllSelected.value ? [] : allValues.value;
     }
 }
 
 function handleChange(newVal: (string | number)[]) {
+    if (props.disabled) return;
     model.value = newVal;
 }
 </script>
 
 <template>
     <MultiSelect
-        :model-value="displayValue"
+        :model-value="model"
         :options="options"
         option-label="label"
         option-value="value"
@@ -56,11 +57,13 @@ function handleChange(newVal: (string | number)[]) {
         display="chip"
         :show-toggle-all="false"
         append-to="self"
+        :disabled="disabled"
         @update:model-value="handleChange"
     >
         <template #header>
             <div
-                class="flex cursor-pointer items-center gap-2 border-b px-3 py-2 hover:bg-muted/50"
+                class="flex items-center gap-2 border-b px-3 py-2"
+                :class="disabled ? 'cursor-default opacity-50' : 'cursor-pointer hover:bg-muted/50'"
                 @click.stop="toggleAll"
             >
                 <div
