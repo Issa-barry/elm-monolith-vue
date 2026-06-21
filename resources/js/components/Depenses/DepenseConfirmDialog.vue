@@ -46,7 +46,11 @@ function fmt(n: number | '') {
 <template>
     <Dialog
         :open="visible"
-        @update:open="(v) => { if (!v && !processing) emit('update:visible', false); }"
+        @update:open="
+            (v) => {
+                if (!v && !processing) emit('update:visible', false);
+            }
+        "
     >
         <DialogContent class="sm:max-w-md">
             <DialogHeader>
@@ -58,7 +62,8 @@ function fmt(n: number | '') {
 
             <div class="py-2">
                 <p class="mb-4 text-sm text-muted-foreground">
-                    Vérifiez les informations avant de soumettre pour validation.
+                    Vérifiez les informations avant de soumettre pour
+                    validation.
                 </p>
 
                 <dl class="divide-y rounded-lg border text-sm">

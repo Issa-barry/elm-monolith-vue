@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -224,7 +226,10 @@ const categorieColors: Record<string, string> = {
                 <!-- Filtres -->
                 <DataFilters
                     :fields="filterFields"
-                    :values="{ categorie: selectedCategorie, statut: selectedStatut }"
+                    :values="{
+                        categorie: selectedCategorie,
+                        statut: selectedStatut,
+                    }"
                     :result-count="filtered.length"
                     search-placeholder="Rechercher…"
                     v-model:search="search"

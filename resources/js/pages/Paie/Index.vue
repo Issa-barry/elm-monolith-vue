@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';

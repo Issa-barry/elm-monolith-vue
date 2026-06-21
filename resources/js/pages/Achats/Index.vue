@@ -2,7 +2,6 @@
 import DataFilters from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -10,6 +9,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -292,7 +292,11 @@ function confirmDelete(c: Commande) {
                 search-placeholder="Rechercher..."
                 :fields="[]"
                 :result-count="desktopFiltered.length"
-                @reset="() => { search = '' }"
+                @reset="
+                    () => {
+                        search = '';
+                    }
+                "
             />
 
             <!-- Tableau -->

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
@@ -92,7 +94,10 @@ const filterFields = computed((): FilterField[] => [
                   key: 'site_id',
                   label: 'Agence',
                   type: 'select' as const,
-                  options: props.sites.map((s) => ({ value: s.id, label: s.nom })),
+                  options: props.sites.map((s) => ({
+                      value: s.id,
+                      label: s.nom,
+                  })),
               },
           ]
         : []),
@@ -106,7 +111,10 @@ const filterFields = computed((): FilterField[] => [
         key: 'periode_id',
         label: 'Période',
         type: 'select' as const,
-        options: props.periodes.map((p) => ({ value: p.id, label: p.reference })),
+        options: props.periodes.map((p) => ({
+            value: p.id,
+            label: p.reference,
+        })),
     },
 ]);
 
@@ -127,7 +135,8 @@ function exportExcel() {
     params.set('type', props.type);
     if (props.filters.site_id) params.set('site_id', props.filters.site_id);
     if (props.filters.statut) params.set('statut', props.filters.statut);
-    if (props.filters.periode_id) params.set('periode_id', props.filters.periode_id);
+    if (props.filters.periode_id)
+        params.set('periode_id', props.filters.periode_id);
     window.open(
         '/comptabilite/fiches/export/excel?' + params.toString(),
         '_blank',

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/vue3';

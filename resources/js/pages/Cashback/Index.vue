@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -103,7 +105,10 @@ const filterFields = computed<FilterField[]>(() => [
         type: 'select',
         label: 'Client',
         placeholder: 'Tous les clients',
-        options: props.clients.map((c) => ({ value: String(c.id), label: c.nom_complet })),
+        options: props.clients.map((c) => ({
+            value: String(c.id),
+            label: c.nom_complet,
+        })),
     },
 ]);
 
@@ -493,7 +498,10 @@ function formatPhone(phone: string | null): string {
                 url="/cashback"
                 v-model:search="search"
                 search-placeholder="Client, téléphone…"
-                :values="{ statut: filters.statut ?? 'tous', client_id: filters.client_id ?? '' }"
+                :values="{
+                    statut: filters.statut ?? 'tous',
+                    client_id: filters.client_id ?? '',
+                }"
                 :fields="filterFields"
                 :result-count="filtered.length"
             />

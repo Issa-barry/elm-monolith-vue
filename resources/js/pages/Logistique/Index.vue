@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -158,19 +160,21 @@ const filterFields = computed<FilterField[]>(() => [
         type: 'multi-select',
         inline: true,
         options: siteOptions.value,
-        placeholder: "Site arrivée",
+        placeholder: 'Site arrivée',
         disabled: !props.is_admin && props.vue === 'receptions',
     },
 ]);
 
 const filterValues = computed(() => ({
     statut: props.filtre_statut ?? '',
-    depart_site_ids: !props.is_admin && props.vue === 'transferts'
-        ? props.user_site_ids
-        : (props.filtre_depart_site_ids ?? []),
-    arrivee_site_ids: !props.is_admin && props.vue === 'receptions'
-        ? props.user_site_ids
-        : (props.filtre_arrivee_site_ids ?? []),
+    depart_site_ids:
+        !props.is_admin && props.vue === 'transferts'
+            ? props.user_site_ids
+            : (props.filtre_depart_site_ids ?? []),
+    arrivee_site_ids:
+        !props.is_admin && props.vue === 'receptions'
+            ? props.user_site_ids
+            : (props.filtre_arrivee_site_ids ?? []),
 }));
 
 const filteredTransferts = computed(() => props.transferts);

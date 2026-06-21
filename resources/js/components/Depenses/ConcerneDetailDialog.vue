@@ -66,10 +66,7 @@ const typeLabel: Record<string, string> = {
 </script>
 
 <template>
-    <Dialog
-        :open="visible"
-        @update:open="(v) => emit('update:visible', v)"
-    >
+    <Dialog :open="visible" @update:open="(v) => emit('update:visible', v)">
         <DialogContent class="sm:max-w-sm">
             <DialogHeader>
                 <DialogTitle class="flex items-center gap-2">
@@ -104,10 +101,14 @@ const typeLabel: Record<string, string> = {
                     </div>
 
                     <div class="grid grid-cols-3 gap-1 py-2">
-                        <dt class="flex items-center gap-1 text-muted-foreground">
+                        <dt
+                            class="flex items-center gap-1 text-muted-foreground"
+                        >
                             <Phone class="h-3 w-3" /> Téléphone
                         </dt>
-                        <dd class="col-span-2">{{ formatPhoneDisplay(detail.telephone) }}</dd>
+                        <dd class="col-span-2">
+                            {{ formatPhoneDisplay(detail.telephone) }}
+                        </dd>
                     </div>
 
                     <div

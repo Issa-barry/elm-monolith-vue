@@ -2,7 +2,9 @@
 import AuditDrawer from '@/components/AuditDrawer.vue';
 import ConcerneDetailDialog from '@/components/Depenses/ConcerneDetailDialog.vue';
 import VehiculeDetailDialog from '@/components/Depenses/VehiculeDetailDialog.vue';
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,8 +23,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
-import { formatPhoneDisplay } from '@/lib/utils';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
@@ -159,25 +161,40 @@ const filterFields = computed<FilterField[]>(() => [
         key: 'type',
         label: 'Type de dépense',
         type: 'select',
-        options: [{ value: '', label: 'Tous les types' }, ...props.types.map((t) => ({ value: t.id, label: t.libelle }))],
+        options: [
+            { value: '', label: 'Tous les types' },
+            ...props.types.map((t) => ({ value: t.id, label: t.libelle })),
+        ],
     },
     {
         key: 'categorie',
         label: 'Concerné',
         type: 'select',
-        options: [{ value: '', label: 'Tous les concernés' }, ...props.categories.map((c) => ({ value: c.value, label: c.label }))],
+        options: [
+            { value: '', label: 'Tous les concernés' },
+            ...props.categories.map((c) => ({
+                value: c.value,
+                label: c.label,
+            })),
+        ],
     },
     {
         key: 'statut',
         label: 'Statut',
         type: 'select',
-        options: [{ value: '', label: 'Tous les statuts' }, ...props.statuts.map((s) => ({ value: s.value, label: s.label }))],
+        options: [
+            { value: '', label: 'Tous les statuts' },
+            ...props.statuts.map((s) => ({ value: s.value, label: s.label })),
+        ],
     },
     {
         key: 'site',
         label: 'Site',
         type: 'select',
-        options: [{ value: '', label: 'Tous les sites' }, ...props.sites.map((s) => ({ value: s.id, label: s.nom }))],
+        options: [
+            { value: '', label: 'Tous les sites' },
+            ...props.sites.map((s) => ({ value: s.id, label: s.nom })),
+        ],
     },
     {
         key: 'date',
@@ -230,7 +247,12 @@ const popupConcerneType = ref<string | null>(null);
 const popupConcerneId = ref<string | null>(null);
 
 function openConcerneDialog(d: DepenseRow) {
-    if (!d.beneficiaire_id || !d.beneficiaire_type || d.beneficiaire_type === 'vehicule') return;
+    if (
+        !d.beneficiaire_id ||
+        !d.beneficiaire_type ||
+        d.beneficiaire_type === 'vehicule'
+    )
+        return;
     popupConcerneType.value = d.beneficiaire_type;
     popupConcerneId.value = d.beneficiaire_id;
     showConcerneDialog.value = true;
@@ -584,19 +606,28 @@ const categorieColors: Record<string, string> = {
                             <!-- Concerné -->
                             <td class="px-4 py-3">
                                 <button
-                                    v-if="d.beneficiaire_id && d.beneficiaire_type !== 'vehicule'"
+                                    v-if="
+                                        d.beneficiaire_id &&
+                                        d.beneficiaire_type !== 'vehicule'
+                                    "
                                     type="button"
                                     class="group text-left"
                                     @click="openConcerneDialog(d)"
                                 >
-                                    <div class="font-medium group-hover:underline">
+                                    <div
+                                        class="font-medium group-hover:underline"
+                                    >
                                         {{ d.beneficiaire_label ?? '—' }}
                                     </div>
                                     <div
                                         v-if="d.beneficiaire_telephone"
                                         class="mt-0.5 text-xs text-muted-foreground"
                                     >
-                                        {{ formatPhoneDisplay(d.beneficiaire_telephone) }}
+                                        {{
+                                            formatPhoneDisplay(
+                                                d.beneficiaire_telephone,
+                                            )
+                                        }}
                                     </div>
                                 </button>
                                 <div v-else class="text-sm font-medium">
@@ -605,16 +636,16 @@ const categorieColors: Record<string, string> = {
                             </td>
 
                             <!-- Véhicule -->
-                            <td
-                                class="hidden px-4 py-3 lg:table-cell"
-                            >
+                            <td class="hidden px-4 py-3 lg:table-cell">
                                 <button
                                     v-if="d.vehicule_id"
                                     type="button"
                                     class="group text-left"
                                     @click="openVehiculeDialog(d)"
                                 >
-                                    <div class="font-medium text-sm group-hover:underline">
+                                    <div
+                                        class="text-sm font-medium group-hover:underline"
+                                    >
                                         {{ d.vehicule_nom ?? '—' }}
                                     </div>
                                     <div
@@ -624,7 +655,11 @@ const categorieColors: Record<string, string> = {
                                         {{ d.vehicule_immatriculation }}
                                     </div>
                                 </button>
-                                <span v-else class="text-xs text-muted-foreground">—</span>
+                                <span
+                                    v-else
+                                    class="text-xs text-muted-foreground"
+                                    >—</span
+                                >
                             </td>
 
                             <!-- Montant -->

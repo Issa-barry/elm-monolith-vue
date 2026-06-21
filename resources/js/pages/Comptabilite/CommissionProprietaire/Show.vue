@@ -326,7 +326,8 @@ function formatMode(mode: string) {
                         >
                             {{
                                 resume_global.total_frais_depenses > 0
-                                    ? '-' + fmt(resume_global.total_frais_depenses)
+                                    ? '-' +
+                                      fmt(resume_global.total_frais_depenses)
                                     : fmt(0)
                             }}
                         </p>
@@ -521,7 +522,9 @@ function formatMode(mode: string) {
             </template>
 
             <template v-if="activeTab === 'depenses'">
-                <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+                <div
+                    class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                >
                     <div class="border-b px-4 py-3">
                         <div class="flex items-center gap-2">
                             <h2

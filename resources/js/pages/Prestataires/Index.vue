@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -347,10 +349,32 @@ function confirmDelete(p: Prestataire) {
                 v-model:search="search"
                 search-placeholder="Rechercher..."
                 :values="{ statut: statusFilter }"
-                :fields="([{ key: 'statut', type: 'select', label: 'Statut', options: [{ value: 'tous', label: 'Tous' }, { value: 'actif', label: 'Actif' }, { value: 'inactif', label: 'Inactif' }] }] as FilterField[])"
+                :fields="
+                    [
+                        {
+                            key: 'statut',
+                            type: 'select',
+                            label: 'Statut',
+                            options: [
+                                { value: 'tous', label: 'Tous' },
+                                { value: 'actif', label: 'Actif' },
+                                { value: 'inactif', label: 'Inactif' },
+                            ],
+                        },
+                    ] as FilterField[]
+                "
                 :result-count="filteredPrestataires.length"
-                @apply="(vals) => { statusFilter = (vals.statut as string) || 'tous' }"
-                @reset="() => { search = ''; statusFilter = 'tous' }"
+                @apply="
+                    (vals) => {
+                        statusFilter = (vals.statut as string) || 'tous';
+                    }
+                "
+                @reset="
+                    () => {
+                        search = '';
+                        statusFilter = 'tous';
+                    }
+                "
             />
 
             <!-- Tableau -->
@@ -369,7 +393,6 @@ function confirmDelete(p: Prestataire) {
                         tbody: { class: 'divide-y' },
                     }"
                 >
-
                     <!-- Référence -->
                     <Column
                         field="reference"

@@ -307,7 +307,11 @@ function formatMode(mode: string) {
                         <p
                             class="text-base font-bold text-red-600 tabular-nums dark:text-red-400"
                         >
-                            {{ kpis.total_frais > 0 ? '-' + fmt(kpis.total_frais) : fmt(0) }}
+                            {{
+                                kpis.total_frais > 0
+                                    ? '-' + fmt(kpis.total_frais)
+                                    : fmt(0)
+                            }}
                         </p>
                         <p class="mt-1 text-xs text-muted-foreground">Frais</p>
                     </div>

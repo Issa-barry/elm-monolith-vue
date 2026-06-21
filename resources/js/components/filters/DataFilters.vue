@@ -4,8 +4,8 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useDebounceFn } from '@vueuse/core';
 import { router, usePage } from '@inertiajs/vue3';
+import { useDebounceFn } from '@vueuse/core';
 import { Lock, Search, X } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed, ref, watch } from 'vue';
@@ -86,14 +86,18 @@ const page = usePage();
 const ADMIN_ROLES = new Set(['super_admin', 'admin_entreprise']);
 
 const isAdmin = computed(() => {
-    const auth = (page.props as Record<string, unknown>).auth as Record<string, unknown> | undefined;
+    const auth = (page.props as Record<string, unknown>).auth as
+        | Record<string, unknown>
+        | undefined;
     const roles = Array.isArray(auth?.roles) ? (auth.roles as string[]) : [];
     return roles.some((r) => ADMIN_ROLES.has(r));
 });
 
 // Sites de l'utilisateur connecté (vide pour admin, non-vide pour non-admin)
 const authUserSites = computed<SiteOption[]>(() => {
-    const auth = (page.props as Record<string, unknown>).auth as Record<string, unknown> | undefined;
+    const auth = (page.props as Record<string, unknown>).auth as
+        | Record<string, unknown>
+        | undefined;
     const us = auth?.user_sites;
     return Array.isArray(us) ? (us as SiteOption[]) : [];
 });
@@ -176,7 +180,10 @@ const pendingChange = computed(() => {
         JSON.stringify([...localSiteIds.value].sort()) !==
         JSON.stringify([...appliedSiteIds.value].sort());
     if (siteChanged) return true;
-    return JSON.stringify(localValues.value) !== JSON.stringify(appliedValues.value);
+    return (
+        JSON.stringify(localValues.value) !==
+        JSON.stringify(appliedValues.value)
+    );
 });
 
 // ── Helpers select/multi-select ───────────────────────────────────────────────
@@ -188,7 +195,8 @@ function stripSentinels(arr: string[]): string[] {
 }
 
 function meaningfulTotal(options?: FilterOption[]): number {
-    return (options ?? []).filter((o) => !SENTINELS.has(String(o.value))).length;
+    return (options ?? []).filter((o) => !SENTINELS.has(String(o.value)))
+        .length;
 }
 
 // ── Logique apply / reset ─────────────────────────────────────────────────────
@@ -215,8 +223,10 @@ function buildParams(): Record<string, string | string[]> {
         if (field.type === 'date-range') {
             const sk = field.startKey ?? `${field.key}_debut`;
             const ek = field.endKey ?? `${field.key}_fin`;
-            if (localValues.value[sk]) params[sk] = localValues.value[sk] as string;
-            if (localValues.value[ek]) params[ek] = localValues.value[ek] as string;
+            if (localValues.value[sk])
+                params[sk] = localValues.value[sk] as string;
+            if (localValues.value[ek])
+                params[ek] = localValues.value[ek] as string;
         } else if (field.type === 'multi-select' || field.type === 'select') {
             const raw = (localValues.value[field.key] as string[]) ?? [];
             const arr = stripSentinels(raw);
@@ -289,7 +299,13 @@ const debouncedSearchApply = useDebounceFn(() => {
     if (props.url || emit) applyFilters();
 }, 500);
 
-watch(search, () => { debouncedSearchApply(); }, { immediate: false });
+watch(
+    search,
+    () => {
+        debouncedSearchApply();
+    },
+    { immediate: false },
+);
 
 // ── Champs inline vs drawer ───────────────────────────────────────────────────
 
@@ -372,7 +388,7 @@ const hasActiveFilters = computed(
             <!-- Cadenas : indique au non-admin que le périmètre est verrouillé -->
             <Lock
                 v-if="siteSelectorLocked"
-                class="pointer-events-none absolute top-1/2 right-8 -translate-y-1/2 h-3 w-3 text-muted-foreground opacity-50"
+                class="pointer-events-none absolute top-1/2 right-8 h-3 w-3 -translate-y-1/2 text-muted-foreground opacity-50"
             />
         </div>
 
@@ -390,7 +406,7 @@ const hasActiveFilters = computed(
                 />
                 <Lock
                     v-if="field.disabled"
-                    class="pointer-events-none absolute top-1/2 right-8 -translate-y-1/2 h-3 w-3 text-muted-foreground opacity-50"
+                    class="pointer-events-none absolute top-1/2 right-8 h-3 w-3 -translate-y-1/2 text-muted-foreground opacity-50"
                 />
             </div>
         </template>
@@ -410,18 +426,25 @@ const hasActiveFilters = computed(
         >
             <div class="space-y-5">
                 <template v-for="field in drawerFields" :key="field.key">
-
                     <!-- multi-select ou select -->
                     <div
-                        v-if="field.type === 'multi-select' || field.type === 'select'"
+                        v-if="
+                            field.type === 'multi-select' ||
+                            field.type === 'select'
+                        "
                         class="space-y-1.5"
                     >
                         <Label class="flex items-center gap-1.5">
                             {{ field.label }}
-                            <Lock v-if="field.disabled" class="h-3 w-3 text-muted-foreground opacity-60" />
+                            <Lock
+                                v-if="field.disabled"
+                                class="h-3 w-3 text-muted-foreground opacity-60"
+                            />
                         </Label>
                         <FilterMultiSelect
-                            v-model="localValues[field.key] as (string | number)[]"
+                            v-model="
+                                localValues[field.key] as (string | number)[]
+                            "
                             :options="field.options ?? []"
                             :placeholder="field.placeholder ?? 'Tous'"
                             :disabled="field.disabled ?? false"
@@ -436,7 +459,11 @@ const hasActiveFilters = computed(
                         <div class="space-y-1.5">
                             <Label>Date début</Label>
                             <Input
-                                v-model="localValues[field.startKey ?? `${field.key}_debut`]"
+                                v-model="
+                                    localValues[
+                                        field.startKey ?? `${field.key}_debut`
+                                    ]
+                                "
                                 type="date"
                                 class="h-9"
                             />
@@ -444,7 +471,11 @@ const hasActiveFilters = computed(
                         <div class="space-y-1.5">
                             <Label>Date fin</Label>
                             <Input
-                                v-model="localValues[field.endKey ?? `${field.key}_fin`]"
+                                v-model="
+                                    localValues[
+                                        field.endKey ?? `${field.key}_fin`
+                                    ]
+                                "
                                 type="date"
                                 class="h-9"
                             />
@@ -462,7 +493,10 @@ const hasActiveFilters = computed(
                     </div>
 
                     <!-- number -->
-                    <div v-else-if="field.type === 'number'" class="space-y-1.5">
+                    <div
+                        v-else-if="field.type === 'number'"
+                        class="space-y-1.5"
+                    >
                         <Label>{{ field.label }}</Label>
                         <Input
                             v-model.number="localValues[field.key]"
@@ -473,7 +507,10 @@ const hasActiveFilters = computed(
                     </div>
 
                     <!-- boolean -->
-                    <div v-else-if="field.type === 'boolean'" class="space-y-1.5">
+                    <div
+                        v-else-if="field.type === 'boolean'"
+                        class="space-y-1.5"
+                    >
                         <Label>{{ field.label }}</Label>
                         <Select
                             v-model="localValues[field.key]"
@@ -499,13 +536,14 @@ const hasActiveFilters = computed(
                             class="h-9"
                         />
                     </div>
-
                 </template>
             </div>
         </FilterDrawer>
 
         <template #actions>
-            <span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground">
+            <span
+                class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+            >
                 {{ resultCount }} résultat{{ resultCount !== 1 ? 's' : '' }}
             </span>
             <button
@@ -520,9 +558,11 @@ const hasActiveFilters = computed(
                 type="button"
                 :disabled="!pendingChange"
                 class="h-9 shrink-0 rounded-md px-4 text-sm font-medium transition-colors"
-                :class="pendingChange
-                    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                    : 'cursor-not-allowed bg-muted text-muted-foreground'"
+                :class="
+                    pendingChange
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                        : 'cursor-not-allowed bg-muted text-muted-foreground'
+                "
                 @click="applyFilters"
             >
                 Appliquer

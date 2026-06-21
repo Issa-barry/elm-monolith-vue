@@ -25,7 +25,10 @@ const allValues = computed(() => props.options.map((o) => String(o.value)));
 const isAllSelected = computed(() => {
     const vals = (model.value ?? []).map(String);
     if (props.emptyMeansAll && vals.length === 0) return true;
-    return allValues.value.length > 0 && allValues.value.every((v) => vals.includes(v));
+    return (
+        allValues.value.length > 0 &&
+        allValues.value.every((v) => vals.includes(v))
+    );
 });
 
 function toggleAll() {
@@ -63,7 +66,11 @@ function handleChange(newVal: (string | number)[]) {
         <template #header>
             <div
                 class="flex items-center gap-2 border-b px-3 py-2"
-                :class="disabled ? 'cursor-default opacity-50' : 'cursor-pointer hover:bg-muted/50'"
+                :class="
+                    disabled
+                        ? 'cursor-default opacity-50'
+                        : 'cursor-pointer hover:bg-muted/50'
+                "
                 @click.stop="toggleAll"
             >
                 <div

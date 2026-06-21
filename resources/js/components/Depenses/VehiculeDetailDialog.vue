@@ -54,10 +54,7 @@ watch(
 </script>
 
 <template>
-    <Dialog
-        :open="visible"
-        @update:open="(v) => emit('update:visible', v)"
-    >
+    <Dialog :open="visible" @update:open="(v) => emit('update:visible', v)">
         <DialogContent class="sm:max-w-sm">
             <DialogHeader>
                 <DialogTitle class="flex items-center gap-2">

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -106,13 +108,19 @@ const filterFields = computed((): FilterField[] => [
         key: 'mois',
         label: 'Mois',
         type: 'select',
-        options: MOIS_OPTIONS.map((m) => ({ value: String(m.value), label: m.label })),
+        options: MOIS_OPTIONS.map((m) => ({
+            value: String(m.value),
+            label: m.label,
+        })),
     },
     {
         key: 'annee',
         label: 'Année',
         type: 'select',
-        options: ANNEES.map((a) => ({ value: String(a.value), label: a.label })),
+        options: ANNEES.map((a) => ({
+            value: String(a.value),
+            label: a.label,
+        })),
     },
     ...(props.is_admin && props.sites.length > 1
         ? [
@@ -120,7 +128,10 @@ const filterFields = computed((): FilterField[] => [
                   key: 'site_id',
                   label: 'Agence',
                   type: 'select' as const,
-                  options: props.sites.map((s) => ({ value: s.value, label: s.label })),
+                  options: props.sites.map((s) => ({
+                      value: s.value,
+                      label: s.label,
+                  })),
               },
           ]
         : []),

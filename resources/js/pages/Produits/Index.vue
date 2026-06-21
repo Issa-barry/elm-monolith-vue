@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -144,7 +146,9 @@ const currentSiteLabel = computed(() => {
     const ids = props.filters.site_ids ?? [];
     if (ids.length === 0) return 'Toutes agences';
     if (ids.length === 1) {
-        return props.sites.find((s) => s.id === ids[0])?.nom ?? 'Toutes agences';
+        return (
+            props.sites.find((s) => s.id === ids[0])?.nom ?? 'Toutes agences'
+        );
     }
     // 2-3 sites : noms concaténés ; 4+ : "N agences"
     if (ids.length <= 3) {
@@ -161,13 +165,19 @@ const filterFields = computed<FilterField[]>(() => [
         key: 'type',
         type: 'select',
         label: 'Type',
-        options: [{ value: '', label: 'Tous les types' }, ...props.types.map((t) => ({ value: t.value, label: t.label }))],
+        options: [
+            { value: '', label: 'Tous les types' },
+            ...props.types.map((t) => ({ value: t.value, label: t.label })),
+        ],
     },
     {
         key: 'statut',
         type: 'select',
         label: 'Statut',
-        options: [{ value: '', label: 'Tous les statuts' }, ...props.statuts.map((s) => ({ value: s.value, label: s.label }))],
+        options: [
+            { value: '', label: 'Tous les statuts' },
+            ...props.statuts.map((s) => ({ value: s.value, label: s.label })),
+        ],
     },
 ]);
 
@@ -556,7 +566,11 @@ function confirmArchive(produit: Produit) {
                 v-model:search="searchInput"
                 search-key="search"
                 search-placeholder="Rechercher…"
-                :values="{ type: filters.type ?? '', statut: filters.statut ?? '', site_ids: filters.site_ids ?? [] }"
+                :values="{
+                    type: filters.type ?? '',
+                    statut: filters.statut ?? '',
+                    site_ids: filters.site_ids ?? [],
+                }"
                 :fields="filterFields"
                 :result-count="filteredProduits.length"
                 @reset="clearFilters"

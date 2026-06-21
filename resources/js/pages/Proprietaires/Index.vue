@@ -25,7 +25,9 @@ import {
     Trash2,
 } from 'lucide-vue-next';
 
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { useConfirm } from 'primevue/useconfirm';
@@ -412,7 +414,11 @@ function confirmDelete(p: Proprietaire) {
                 :values="{ statut: statut }"
                 :fields="filterFields"
                 :result-count="filteredProprietaires.length"
-                @apply="(vals) => { statut.value = (vals.statut as string) || 'tous' }"
+                @apply="
+                    (vals) => {
+                        statut.value = (vals.statut as string) || 'tous';
+                    }
+                "
                 @reset="resetFilters"
             />
 

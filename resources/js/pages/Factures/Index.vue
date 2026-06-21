@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -149,12 +151,42 @@ const filterValues = computed(() => ({
 const filterFields = computed<FilterField[]>(() => [
     { key: 'periode', label: 'Période', type: 'select', options: periodes },
     { key: 'statut', label: 'Statut', type: 'select', options: filtres },
-    { key: 'vehicule', label: 'Véhicule', type: 'text', placeholder: 'Nom ou immatriculation…' },
-    { key: 'chauffeur', label: 'Chauffeur', type: 'text', placeholder: 'Nom ou téléphone…' },
-    { key: 'convoyeur', label: 'Convoyeur', type: 'text', placeholder: 'Nom ou téléphone…' },
-    { key: 'proprietaire', label: 'Propriétaire', type: 'text', placeholder: 'Nom ou téléphone…' },
-    { key: 'client', label: 'Client', type: 'text', placeholder: 'Nom ou téléphone…' },
-    { key: 'reference', label: 'Référence', type: 'text', placeholder: 'FAC-…' },
+    {
+        key: 'vehicule',
+        label: 'Véhicule',
+        type: 'text',
+        placeholder: 'Nom ou immatriculation…',
+    },
+    {
+        key: 'chauffeur',
+        label: 'Chauffeur',
+        type: 'text',
+        placeholder: 'Nom ou téléphone…',
+    },
+    {
+        key: 'convoyeur',
+        label: 'Convoyeur',
+        type: 'text',
+        placeholder: 'Nom ou téléphone…',
+    },
+    {
+        key: 'proprietaire',
+        label: 'Propriétaire',
+        type: 'text',
+        placeholder: 'Nom ou téléphone…',
+    },
+    {
+        key: 'client',
+        label: 'Client',
+        type: 'text',
+        placeholder: 'Nom ou téléphone…',
+    },
+    {
+        key: 'reference',
+        label: 'Référence',
+        type: 'text',
+        placeholder: 'FAC-…',
+    },
 ]);
 
 // ── Recherche locale (client-side, immédiate) ─────────────────────────────────

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
@@ -156,7 +158,16 @@ function approuver(livreur: Livreur) {
                 :values="{ statut: statutFilter }"
                 :fields="filterFields"
                 :result-count="livreursFiltres.length"
-                @apply="(vals) => { statutFilter.value = (vals.statut as 'tous' | 'actif' | 'inactif' | 'pending') || 'tous' }"
+                @apply="
+                    (vals) => {
+                        statutFilter.value =
+                            (vals.statut as
+                                | 'tous'
+                                | 'actif'
+                                | 'inactif'
+                                | 'pending') || 'tous';
+                    }
+                "
                 @reset="resetFilters"
             />
 

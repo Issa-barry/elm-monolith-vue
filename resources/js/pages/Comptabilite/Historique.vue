@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/vue3';
@@ -69,25 +71,37 @@ const filterFields: FilterField[] = [
         key: 'module',
         label: 'Module',
         type: 'select',
-        options: props.modules.map((m) => ({ value: m.value ?? '', label: m.label })),
+        options: props.modules.map((m) => ({
+            value: m.value ?? '',
+            label: m.label,
+        })),
     },
     {
         key: 'event_code',
         label: 'Action',
         type: 'select',
-        options: props.event_codes.map((e) => ({ value: e.value ?? '', label: e.label })),
+        options: props.event_codes.map((e) => ({
+            value: e.value ?? '',
+            label: e.label,
+        })),
     },
     {
         key: 'actor_id',
         label: 'Utilisateur',
         type: 'select',
-        options: props.acteurs.map((a) => ({ value: a.value ?? '', label: a.label })),
+        options: props.acteurs.map((a) => ({
+            value: a.value ?? '',
+            label: a.label,
+        })),
     },
     {
         key: 'site_id',
         label: 'Site',
         type: 'select',
-        options: props.sites.map((s) => ({ value: s.value ?? '', label: s.label })),
+        options: props.sites.map((s) => ({
+            value: s.value ?? '',
+            label: s.label,
+        })),
     },
     {
         key: 'date',

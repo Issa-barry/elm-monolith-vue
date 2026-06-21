@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -78,7 +80,10 @@ const filterFields = computed((): FilterField[] => [
                   key: 'site',
                   label: 'Agence',
                   type: 'select' as const,
-                  options: props.sites.map((s) => ({ value: s.value, label: s.label })),
+                  options: props.sites.map((s) => ({
+                      value: s.value,
+                      label: s.label,
+                  })),
               },
           ]
         : []),
@@ -95,7 +100,10 @@ const filterFields = computed((): FilterField[] => [
         key: 'periode',
         label: 'Période',
         type: 'select' as const,
-        options: props.periodes_disponibles.map((p) => ({ value: p.code, label: p.label })),
+        options: props.periodes_disponibles.map((p) => ({
+            value: p.code,
+            label: p.label,
+        })),
     },
 ]);
 

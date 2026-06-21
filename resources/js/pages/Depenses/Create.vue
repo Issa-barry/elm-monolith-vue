@@ -321,8 +321,8 @@ function submitBrouillon() {
                                 "
                                 class="mt-1 text-xs text-amber-600"
                             >
-                                Aucun type actif pour ce concerné.
-                                Ajoutez-en dans les paramètres.
+                                Aucun type actif pour ce concerné. Ajoutez-en
+                                dans les paramètres.
                             </p>
                         </div>
                     </div>
@@ -356,8 +356,7 @@ function submitBrouillon() {
                                 class="w-full"
                                 input-class="w-full"
                                 :class="{
-                                    'p-invalid':
-                                        form.errors.beneficiaire_id,
+                                    'p-invalid': form.errors.beneficiaire_id,
                                 }"
                                 dropdown
                                 force-selection
@@ -374,9 +373,7 @@ function submitBrouillon() {
                             >
                                 <template #option="{ option }">
                                     <div class="py-0.5">
-                                        <div
-                                            class="leading-tight font-medium"
-                                        >
+                                        <div class="leading-tight font-medium">
                                             {{ option.nom_vehicule }}
                                         </div>
                                         <div
@@ -386,20 +383,15 @@ function submitBrouillon() {
                                         </div>
                                         <div
                                             v-if="
-                                                option.categorie ===
-                                                'interne'
+                                                option.categorie === 'interne'
                                             "
                                             class="mt-0.5 text-xs text-blue-600"
                                         >
                                             ELM —
-                                            {{
-                                                option.site_nom ?? 'interne'
-                                            }}
+                                            {{ option.site_nom ?? 'interne' }}
                                         </div>
                                         <div
-                                            v-else-if="
-                                                option.has_proprietaire
-                                            "
+                                            v-else-if="option.has_proprietaire"
                                             class="mt-0.5 text-xs text-emerald-600"
                                         >
                                             ✓ {{ option.proprietaire_nom }}
@@ -456,9 +448,7 @@ function submitBrouillon() {
                                 >
                                     {{ e.nom_complet
                                     }}{{
-                                        e.matricule
-                                            ? ` — ${e.matricule}`
-                                            : ''
+                                        e.matricule ? ` — ${e.matricule}` : ''
                                     }}
                                 </option>
                             </select>
@@ -641,9 +631,7 @@ function submitBrouillon() {
                             >
                                 Commentaire
                                 <span
-                                    v-if="
-                                        selectedType.commentaire_obligatoire
-                                    "
+                                    v-if="selectedType.commentaire_obligatoire"
                                     class="text-destructive"
                                     >*</span
                                 >
@@ -717,7 +705,9 @@ function submitBrouillon() {
             :concerne-label="beneficiaireLabel"
             :type="selectedType"
             :vehicule-nom="vehiculeSelected?.nom_vehicule ?? null"
-            :vehicule-immatriculation="vehiculeSelected?.immatriculation ?? null"
+            :vehicule-immatriculation="
+                vehiculeSelected?.immatriculation ?? null
+            "
             :montant="form.montant"
             :site-nom="siteNom"
             :commentaire="form.commentaire"

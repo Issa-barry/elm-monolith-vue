@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -139,7 +141,9 @@ const filterFields: FilterField[] = [
 const filteredUsers = computed(() => {
     let list = props.users;
     if (siteIds.value.length > 0) {
-        list = list.filter((u) => u.site_id && siteIds.value.includes(u.site_id));
+        list = list.filter(
+            (u) => u.site_id && siteIds.value.includes(u.site_id),
+        );
     }
     if (statut.value !== 'tous') {
         list = list.filter((u) => u.is_active === (statut.value === 'actif'));

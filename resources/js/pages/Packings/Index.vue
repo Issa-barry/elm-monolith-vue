@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -387,10 +389,31 @@ function confirmDelete(packing: Packing) {
                 v-model:search="search"
                 search-placeholder="Rechercher un packing…"
                 :values="{ statut: statutFilter }"
-                :fields="([{ key: 'statut', type: 'select', label: 'Statut', options: statutOptions.map(o => ({ value: o.value, label: o.label })) }] as FilterField[])"
+                :fields="
+                    [
+                        {
+                            key: 'statut',
+                            type: 'select',
+                            label: 'Statut',
+                            options: statutOptions.map((o) => ({
+                                value: o.value,
+                                label: o.label,
+                            })),
+                        },
+                    ] as FilterField[]
+                "
                 :result-count="desktopFiltered.length"
-                @apply="(vals) => { statutFilter = (vals.statut as string) || 'tous' }"
-                @reset="() => { search = ''; statutFilter = 'tous' }"
+                @apply="
+                    (vals) => {
+                        statutFilter = (vals.statut as string) || 'tous';
+                    }
+                "
+                @reset="
+                    () => {
+                        search = '';
+                        statutFilter = 'tous';
+                    }
+                "
             />
 
             <!-- Tableau ──────────────────────────────────────────────────────── -->

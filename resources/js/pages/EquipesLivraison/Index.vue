@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -167,10 +169,18 @@ function confirmDelete(equipe: Equipe) {
                 :values="{ statut: statut, categorie: categorie }"
                 :fields="filterFields"
                 :result-count="equipesFiltrees.length"
-                @apply="(vals) => {
-                    statut.value = (vals.statut as 'tous' | 'actif' | 'inactif') || 'tous';
-                    categorie.value = (vals.categorie as 'tous' | 'interne' | 'externe') || 'tous';
-                }"
+                @apply="
+                    (vals) => {
+                        statut.value =
+                            (vals.statut as 'tous' | 'actif' | 'inactif') ||
+                            'tous';
+                        categorie.value =
+                            (vals.categorie as
+                                | 'tous'
+                                | 'interne'
+                                | 'externe') || 'tous';
+                    }
+                "
                 @reset="resetFilters"
             />
 
