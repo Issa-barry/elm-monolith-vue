@@ -44,7 +44,6 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        Integration::handles($exceptions);
         // Forcer JSON sur /api/* quel que soit le header Accept,
         // et respecter Accept: application/json sur les routes web (ex: postJson en tests).
         $exceptions->shouldRenderJsonWhen(
