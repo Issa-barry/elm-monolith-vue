@@ -34,7 +34,6 @@ import {
     onMounted,
     ref,
     watch,
-    type Component,
 } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -803,14 +802,22 @@ function activiteDotClass(action: string): string {
             <div class="flex border-b">
                 <button
                     class="px-4 py-2 text-sm font-medium transition-colors"
-                    :class="activeDetailTab === 'informations' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'"
+                    :class="
+                        activeDetailTab === 'informations'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
                     @click="setActiveDetailTab('informations')"
                 >
                     Informations
                 </button>
                 <button
                     class="px-4 py-2 text-sm font-medium transition-colors"
-                    :class="activeDetailTab === 'lignes' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'"
+                    :class="
+                        activeDetailTab === 'lignes'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
                     @click="setActiveDetailTab('lignes')"
                 >
                     Lignes produits
@@ -818,8 +825,12 @@ function activiteDotClass(action: string): string {
                 <button
                     class="px-4 py-2 text-sm font-medium transition-colors"
                     :class="[
-                        activeDetailTab === 'commission' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground',
-                        !showCommissionSection ? 'cursor-not-allowed opacity-40' : '',
+                        activeDetailTab === 'commission'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground',
+                        !showCommissionSection
+                            ? 'cursor-not-allowed opacity-40'
+                            : '',
                     ]"
                     :disabled="!showCommissionSection"
                     @click="setActiveDetailTab('commission')"
