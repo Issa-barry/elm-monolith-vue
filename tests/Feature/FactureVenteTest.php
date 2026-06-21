@@ -218,21 +218,11 @@ class FactureVenteTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('statut', 'tous'));
     }
 
-    // ── filtre site = "tous les sites" ───────────────────────────────────────
+    // ── filtre site_ids ───────────────────────────────────────────────────────
+    // Couverture des règles de scope (admin vs non-admin, bypass) : voir SiteFilterTest.
 
-    public function test_site_id_tous_explicit_is_preserved_and_not_reverted_to_default_site(): void
+    public function test_site_ids_prop_reflects_the_submitted_filter(): void
     {
-        // Régression : le frontend doit toujours envoyer site_id=tous explicitement
-        // (jamais omis), sinon le backend retombe sur le site par défaut de l'utilisateur.
-        $this->actingAs($this->user)
-            ->get(route('factures.index', ['periode' => 'all', 'site_id' => 'tous']))
-            ->assertStatus(200)
-            ->assertInertia(fn ($page) => $page->where('site_id', 'tous'));
-    }
-
-    public function test_admin_with_site_id_tous_sees_factures_from_every_site(): void
-    {
-        // L'utilisateur de test (HasOrgAndUser) a le rôle admin_entreprise.
         $autreSite = Site::create([
             'organization_id' => $this->org->id,
             'nom' => 'Site Secondaire',
@@ -240,41 +230,18 @@ class FactureVenteTest extends TestCase
             'localisation' => 'Kindia',
         ]);
 
-        $this->makeFacture(['montant_net' => 10000]);
-        $this->makeFacture(['montant_net' => 5000, 'site_id' => $autreSite->id]);
-
         $this->actingAs($this->user)
-            ->get(route('factures.index', ['periode' => 'all', 'site_id' => 'tous']))
+            ->get(route('factures.index', ['periode' => 'all', 'site_ids' => [$autreSite->id]]))
             ->assertStatus(200)
-            ->assertInertia(fn ($page) => $page
-                ->where('site_id', 'tous')
-                ->has('factures', 2)
-            );
+            ->assertInertia(fn ($page) => $page->where('site_ids', [(string) $autreSite->id]));
     }
 
-    public function test_non_admin_with_site_id_tous_only_sees_factures_from_authorized_sites(): void
+    public function test_site_ids_prop_is_empty_by_default(): void
     {
-        $siteAutorise = $this->user->sites()->first(['sites.id']);
-        $siteNonAutorise = Site::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Site Non Autorisé',
-            'type' => 'depot',
-            'localisation' => 'Kindia',
-        ]);
-
-        $nonAdmin = $this->makeNonAdminUser([$siteAutorise->id]);
-
-        $this->makeFacture(['montant_net' => 10000, 'site_id' => $siteAutorise->id]);
-        $this->makeFacture(['montant_net' => 5000, 'site_id' => $siteNonAutorise->id]);
-
-        $this->actingAs($nonAdmin)
-            ->get(route('factures.index', ['periode' => 'all', 'site_id' => 'tous']))
+        $this->actingAs($this->user)
+            ->get(route('factures.index', ['periode' => 'all']))
             ->assertStatus(200)
-            ->assertInertia(fn ($page) => $page
-                ->where('site_id', 'tous')
-                ->has('factures', 1)
-                ->where('factures.0.montant_net', fn ($v) => (float) $v === 10000.0)
-            );
+            ->assertInertia(fn ($page) => $page->where('site_ids', []));
     }
 
     public function test_non_admin_sites_filter_options_exclude_unauthorized_sites(): void
@@ -290,7 +257,7 @@ class FactureVenteTest extends TestCase
         $nonAdmin = $this->makeNonAdminUser([$siteAutorise->id]);
 
         $this->actingAs($nonAdmin)
-            ->get(route('factures.index', ['periode' => 'all', 'site_id' => 'tous']))
+            ->get(route('factures.index', ['periode' => 'all']))
             ->assertStatus(200)
             ->assertInertia(fn ($page) => $page
                 ->where('sites', fn ($sites) => collect($sites)

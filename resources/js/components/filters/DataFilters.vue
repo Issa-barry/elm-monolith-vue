@@ -359,6 +359,7 @@ const hasActiveFilters = computed(
         <!-- Agence / Site générique (masqué quand la page gère ses propres filtres site) -->
         <div
             v-if="!hideAgenceSelector && siteOptions.length > 0"
+            data-testid="agency-filter"
             class="relative w-[220px] shrink-0"
         >
             <FilterMultiSelect

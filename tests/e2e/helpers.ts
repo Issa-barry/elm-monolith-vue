@@ -238,6 +238,29 @@ export async function login(page: Page): Promise<void> {
         : new Error(message);
 }
 
+/**
+ * Closes the DataFilters drawer (Sheet) if it is currently open, and waits
+ * for its overlay to disappear so it can no longer intercept clicks on
+ * elements behind it (e.g. the inline agence MultiSelect in the toolbar).
+ */
+export async function closeFilterDrawerIfOpen(page: Page): Promise<void> {
+    const overlay = page.locator('[data-slot="sheet-overlay"]').first();
+    if (!(await overlay.isVisible({ timeout: 1_000 }).catch(() => false))) {
+        return;
+    }
+
+    const closeBtn = page.getByTestId('filters-drawer-close').first();
+    if (await closeBtn.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        await closeBtn.click();
+    } else {
+        await page.keyboard.press('Escape');
+    }
+
+    await overlay
+        .waitFor({ state: 'detached', timeout: 5_000 })
+        .catch(() => undefined);
+}
+
 export function getVisibleSearchInput(page: Page): Locator {
     return page
         .locator(

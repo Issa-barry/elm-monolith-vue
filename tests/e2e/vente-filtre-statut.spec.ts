@@ -1,7 +1,13 @@
 import { expect, test } from '@playwright/test';
-import { login } from './helpers';
+import { closeFilterDrawerIfOpen, login } from './helpers';
 
 test.setTimeout(90_000);
+
+test.beforeEach(async ({ page }) => {
+    // Un test précédent peut avoir laissé le drawer de filtres ouvert ;
+    // son overlay bloquerait alors les clics sur la barre d'outils.
+    await closeFilterDrawerIfOpen(page);
+});
 
 async function openFilterDrawer(page: any) {
     const btn = page.getByRole('button', { name: /filtres/i }).first();
@@ -115,9 +121,11 @@ test.describe('Ventes — filtre multi-statut', () => {
         await page.goto('/ventes');
         await expect(page).toHaveURL(/\/ventes/, { timeout: 15_000 });
 
-        await openFilterDrawer(page);
-
+        // Le sélecteur agence est affiché inline dans la barre d'outils (pas
+        // dans le drawer de filtres) : ne pas ouvrir le drawer ici, sinon son
+        // overlay intercepte les clics sur ce sélecteur.
         const agenceMultiselect = page
+            .getByTestId('agency-filter')
             .locator('[data-pc-name="multiselect"]')
             .filter({ hasText: /toutes les agences/i })
             .first();
