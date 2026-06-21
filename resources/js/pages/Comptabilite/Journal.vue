@@ -152,7 +152,6 @@ function fmt(n: number) {
                 :values="filters"
                 :fields="filterFields"
                 :sites="journalSites"
-                :is-admin="is_admin"
                 :result-count="lignes.data.length"
                 search-placeholder="Rechercher une référence, un libellé..."
                 v-model:search="search"

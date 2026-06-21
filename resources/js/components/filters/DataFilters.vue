@@ -52,7 +52,6 @@ const props = withDefaults(
         baseParams?: Record<string, string | string[]>;
         values?: Record<string, unknown>;
         sites?: SiteOption[];
-        isAdmin?: boolean;
         searchPlaceholder?: string;
         searchKey?: string;
         resultCount: number;
@@ -64,7 +63,6 @@ const props = withDefaults(
         baseParams: () => ({}),
         values: () => ({}),
         sites: () => [],
-        isAdmin: false,
         searchPlaceholder: 'Rechercher…',
         searchKey: undefined,
         url: undefined,

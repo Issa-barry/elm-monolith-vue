@@ -608,7 +608,6 @@ function confirmDelete(c: Commande) {
                 :base-params="{ periode: 'all' }"
                 :values="filterValues"
                 :sites="sites"
-                :is-admin="is_admin"
                 v-model:search="search"
                 search-placeholder="Référence, véhicule, client…"
                 :result-count="commandesFiltrees.length"

@@ -14,7 +14,7 @@ interface TypeInfo {
     categorie_label: string;
 }
 
-const props = defineProps<{
+defineProps<{
     visible: boolean;
     processing: boolean;
     concerneLabel: string | null;
