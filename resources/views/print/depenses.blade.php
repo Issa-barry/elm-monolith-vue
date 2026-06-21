@@ -200,7 +200,7 @@
                     <th class="right" style="width:10%">Montant (GNF)</th>
                     <th style="width:9%">Statut</th>
                     <th style="width:12%">Saisi par</th>
-                    <th style="width:13%">Signature</th>
+                    <th style="width:13%">Validé par</th>
                 </tr>
             </thead>
             <tbody>
@@ -218,7 +218,7 @@
                     <td class="right">{{ number_format((float)$row['montant'], 0, ',', ' ') }}</td>
                     <td>{{ $row['statut_label'] ?? ($row['statut'] ?? '—') }}</td>
                     <td>{!! $row['user']['name'] ?? '—' !!}</td>
-                    <td></td>
+                    <td>{!! $row['validateur']['name'] ?? '—' !!}</td>
                 </tr>
                 @empty
                 <tr>

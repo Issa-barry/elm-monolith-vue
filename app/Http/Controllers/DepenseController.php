@@ -601,13 +601,13 @@ class DepenseController extends Controller
             $like = '%'.$filters['search'].'%';
             $query->where(function ($w) use ($like) {
                 $w->where('commentaire', 'LIKE', $like)
+                    ->orWhere('montant', 'LIKE', $like)
                     ->orWhereHas('depenseType', fn ($q) => $q->where('libelle', 'LIKE', $like))
-                    ->orWhereHas('site', fn ($q) => $q->where('nom', 'LIKE', $like))
-                    ->orWhereHas('user', fn ($q) => $q->where('name', 'LIKE', $like))
                     ->orWhere(fn ($w2) => $w2
                         ->where('beneficiaire_type', 'vehicule')
                         ->whereHas('vehiculeBeneficiaire', fn ($q) => $q
                             ->where('nom_vehicule', 'LIKE', $like)
+                            ->orWhere('immatriculation', 'LIKE', $like)
                             ->orWhereHas('proprietaire', fn ($q) => $q
                                 ->where('nom', 'LIKE', $like)
                                 ->orWhere('prenom', 'LIKE', $like)
@@ -619,6 +619,7 @@ class DepenseController extends Controller
                         ->whereHas('employeBeneficiaire', fn ($q) => $q
                             ->where('nom', 'LIKE', $like)
                             ->orWhere('prenom', 'LIKE', $like)
+                            ->orWhere('telephone', 'LIKE', $like)
                         )
                     )
                     ->orWhere(fn ($w2) => $w2
@@ -626,6 +627,7 @@ class DepenseController extends Controller
                         ->whereHas('livreurBeneficiaire', fn ($q) => $q
                             ->where('nom', 'LIKE', $like)
                             ->orWhere('prenom', 'LIKE', $like)
+                            ->orWhere('telephone', 'LIKE', $like)
                         )
                     )
                     ->orWhere(fn ($w2) => $w2
@@ -633,6 +635,7 @@ class DepenseController extends Controller
                         ->whereHas('proprietaireBeneficiaire', fn ($q) => $q
                             ->where('nom', 'LIKE', $like)
                             ->orWhere('prenom', 'LIKE', $like)
+                            ->orWhere('telephone', 'LIKE', $like)
                         )
                     );
             });

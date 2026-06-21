@@ -5,6 +5,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { Phone, User } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
 
@@ -106,7 +107,7 @@ const typeLabel: Record<string, string> = {
                         <dt class="flex items-center gap-1 text-muted-foreground">
                             <Phone class="h-3 w-3" /> Téléphone
                         </dt>
-                        <dd class="col-span-2">{{ detail.telephone }}</dd>
+                        <dd class="col-span-2">{{ formatPhoneDisplay(detail.telephone) }}</dd>
                     </div>
 
                     <div

@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
+import { formatPhoneDisplay } from '@/lib/utils';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -595,7 +596,7 @@ const categorieColors: Record<string, string> = {
                                         v-if="d.beneficiaire_telephone"
                                         class="mt-0.5 text-xs text-muted-foreground"
                                     >
-                                        {{ d.beneficiaire_telephone }}
+                                        {{ formatPhoneDisplay(d.beneficiaire_telephone) }}
                                     </div>
                                 </button>
                                 <div v-else class="text-sm font-medium">

@@ -507,6 +507,175 @@ class DepenseTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
 
+    public function test_search_finds_by_vehicule_nom(): void
+    {
+        $typeVehicule = DepenseType::factory()->vehicule()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'nom_vehicule' => 'Camion ELM 12']);
+        $autreVehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'nom_vehicule' => 'Moto 7']);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeVehicule->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $vehicule->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeVehicule->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $autreVehicule->id,
+        ]);
+
+        $this->get('/depenses?search=Camion')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    public function test_search_finds_by_vehicule_immatriculation(): void
+    {
+        $typeVehicule = DepenseType::factory()->vehicule()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'immatriculation' => 'ELM-001-GN']);
+        $autreVehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'immatriculation' => 'ELM-999-GN']);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeVehicule->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $vehicule->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeVehicule->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $autreVehicule->id,
+        ]);
+
+        $this->get('/depenses?search=ELM-001')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    public function test_search_finds_by_concerne_nom(): void
+    {
+        $typeEmploye = DepenseType::factory()->employe()->create(['organization_id' => $this->org->id]);
+        $employe = Employe::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => 'actif',
+            'nom' => 'Diallo',
+            'prenom' => 'Amadou',
+        ]);
+        $autreEmploye = Employe::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => 'actif',
+            'nom' => 'Camara',
+            'prenom' => 'Fatou',
+        ]);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeEmploye->id,
+            'beneficiaire_type' => CategorieDepense::EMPLOYE->value,
+            'beneficiaire_id' => $employe->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeEmploye->id,
+            'beneficiaire_type' => CategorieDepense::EMPLOYE->value,
+            'beneficiaire_id' => $autreEmploye->id,
+        ]);
+
+        $this->get('/depenses?search=Diallo')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    public function test_search_finds_by_concerne_telephone(): void
+    {
+        $typeLivreur = DepenseType::factory()->livreur()->create([
+            'organization_id' => $this->org->id,
+        ]);
+        $livreur = \App\Models\Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224611223344',
+        ]);
+        $autreLivreur = \App\Models\Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224699887766',
+        ]);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeLivreur->id,
+            'beneficiaire_type' => CategorieDepense::LIVREUR->value,
+            'beneficiaire_id' => $livreur->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeLivreur->id,
+            'beneficiaire_type' => CategorieDepense::LIVREUR->value,
+            'beneficiaire_id' => $autreLivreur->id,
+        ]);
+
+        $this->get('/depenses?search=611223344')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    public function test_search_with_nonexistent_value_returns_empty_without_error(): void
+    {
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'commentaire' => 'Achat materiel',
+        ]);
+
+        $this->get('/depenses?search=zzzzznotfound')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 0));
+    }
+
+    public function test_search_empty_does_not_crash_and_returns_all(): void
+    {
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $this->get('/depenses?search=')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 2));
+    }
+
+    public function test_search_does_not_crash_when_no_depenses_have_vehicule_beneficiaire(): void
+    {
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'beneficiaire_type' => null,
+            'beneficiaire_id' => null,
+        ]);
+
+        $this->get('/depenses?search=ELM-001')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 0));
+    }
+
     public function test_index_includes_vehicule_nom_in_data(): void
     {
         $typeVehicule = DepenseType::factory()->vehicule()->create(['organization_id' => $this->org->id]);
