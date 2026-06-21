@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Client;
 use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
 use App\Enums\StatutPropositionVehicule;
-use App\Enums\TypeVehicule;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\CommissionLogistiquePart;
@@ -16,6 +15,7 @@ use App\Models\Organization;
 use App\Models\PropositionVehicule;
 use App\Models\Proprietaire;
 use App\Models\User;
+use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use App\Services\ImageService;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
@@ -194,13 +194,12 @@ class ClientDashboardController extends Controller
             'marque' => ['nullable', 'string', 'max:100'],
             'modele' => ['nullable', 'string', 'max:100'],
             'immatriculation' => ['required', 'string', 'max:30'],
-            'type_vehicule' => ['required', Rule::in(TypeVehicule::allowedValues())],
+            'type_vehicule' => ['required', 'string', 'max:30'],
             'commentaire' => ['nullable', 'string', 'max:500'],
             'photo' => ['required', 'image', 'max:5120'],
         ], [
             'immatriculation.required' => "L'immatriculation est obligatoire.",
             'type_vehicule.required' => 'Le type de vehicule est obligatoire.',
-            'type_vehicule.in' => 'Le type de vehicule est invalide.',
             'photo.required' => 'La photo du vehicule est obligatoire.',
             'photo.image' => 'Le fichier doit etre une image.',
             'photo.max' => 'La photo ne doit pas depasser 5 Mo.',
@@ -240,7 +239,6 @@ class ClientDashboardController extends Controller
             'modele' => $this->nullableTrim($validated['modele'] ?? null),
             'immatriculation' => $immatriculation,
             'type_vehicule' => $validated['type_vehicule'],
-            'capacite_packs' => TypeVehicule::from($validated['type_vehicule'])->defaultCapacitePacks(),
             'commentaire' => $this->nullableTrim($validated['commentaire'] ?? null),
             'photo_path' => $photoPath,
             'statut' => StatutPropositionVehicule::PENDING->value,
@@ -347,7 +345,13 @@ class ClientDashboardController extends Controller
                 'proprietaire_id' => $proprietaire?->id,
                 'livreur_id' => $livreur?->id,
             ],
-            'type_vehicule_options' => TypeVehicule::options(),
+            'type_vehicule_options' => TypeVehicule::where('organization_id', $organizationId)
+                ->where('is_active', true)
+                ->orderBy('nom')
+                ->get()
+                ->map(fn (TypeVehicule $t) => ['value' => $t->nom, 'label' => $t->nom])
+                ->values()
+                ->all(),
             'vehicules' => $mappedVehicules,
             'owner_vehicules' => $mappedOwnerVehicules,
             'earnings' => $this->calculateEarnings($partsVentes, $partsLogistiques, $fraisTotal),

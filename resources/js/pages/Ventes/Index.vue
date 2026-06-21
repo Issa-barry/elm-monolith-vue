@@ -34,6 +34,7 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import InputNumber from 'primevue/inputnumber';
+import MultiSelect from 'primevue/multiselect';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
@@ -89,7 +90,7 @@ interface SiteOption {
 }
 
 interface Filters {
-    site_id: string | null;
+    site_ids: string[];
     date_debut: string | null;
     date_fin: string | null;
     statut_facture: string | null;
@@ -106,7 +107,7 @@ const props = defineProps<{
     commandes: Commande[];
     totaux: Totaux;
     periode: string;
-    statut: string;
+    statuts_actifs: string[];
     sites: SiteOption[];
     is_admin: boolean;
     filters: Filters;
@@ -123,7 +124,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Options statique ──────────────────────────────────────────────────────────
 const filtresStatut = [
-    { value: 'tous', label: 'Tous' },
     { value: 'brouillon', label: 'Brouillon' },
     { value: 'a_charger', label: 'À charger' },
     { value: 'chargement_en_cours', label: 'Chargement en cours' },
@@ -150,17 +150,14 @@ const filtresStatutCommission = [
     { value: 'paye', label: 'Payée' },
 ];
 
-const sitesOptions = computed(() => [
-    { id: '', nom: 'Toutes les agences' },
-    ...props.sites,
-]);
+const sitesOptions = computed(() => props.sites);
 
 // ── État des filtres locaux ────────────────────────────────────────────────────
 const filterDrawerOpen = ref(false);
-const localStatut = ref(props.statut);
+const localStatuts = ref<string[]>(props.statuts_actifs ?? []);
 const localStatutFacture = ref(props.filters.statut_facture ?? '');
 const localStatutCommission = ref(props.filters.statut_commission ?? '');
-const localSiteId = ref(props.filters.site_id ?? '');
+const localSiteIds = ref<string[]>(props.filters.site_ids ?? []);
 const localDateDebut = ref(props.filters.date_debut ?? '');
 const localDateFin = ref(props.filters.date_fin ?? '');
 const localVehicule = ref(props.filters.vehicule ?? '');
@@ -170,11 +167,9 @@ const localNumeroCommande = ref(props.filters.numero_commande ?? '');
 const localClient = ref(props.filters.client ?? '');
 
 function applyFilters() {
-    const params: Record<string, string> = {
-        periode: 'all',
-        statut: localStatut.value,
-    };
-    if (localSiteId.value) params.site_id = localSiteId.value;
+    const params: Record<string, string | string[]> = { periode: 'all' };
+    if (localStatuts.value.length > 0) params.statuts = localStatuts.value;
+    if (localSiteIds.value.length > 0) params.site_ids = localSiteIds.value;
     if (localDateDebut.value) params.date_debut = localDateDebut.value;
     if (localDateFin.value) params.date_fin = localDateFin.value;
     if (localStatutFacture.value)
@@ -191,10 +186,10 @@ function applyFilters() {
 }
 
 function resetFilters() {
-    localStatut.value = 'tous';
+    localStatuts.value = [];
     localStatutFacture.value = '';
     localStatutCommission.value = '';
-    localSiteId.value = '';
+    localSiteIds.value = [];
     localDateDebut.value = '';
     localDateFin.value = '';
     localVehicule.value = '';
@@ -205,17 +200,17 @@ function resetFilters() {
     search.value = '';
     router.get(
         '/ventes',
-        { periode: 'all', statut: 'tous' },
+        { periode: 'all' },
         { preserveScroll: true, replace: true },
     );
 }
 
 const activeFilterCount = computed(() => {
     let n = 0;
-    if (localStatut.value !== 'tous') n++;
+    if (localStatuts.value.length > 0) n++;
     if (localStatutFacture.value) n++;
     if (localStatutCommission.value) n++;
-    if (localSiteId.value) n++;
+    if (localSiteIds.value.length > 0) n++;
     if (localDateDebut.value || localDateFin.value) n++;
     if (localVehicule.value) n++;
     if (localProprietaire.value) n++;
@@ -655,35 +650,33 @@ function confirmDelete(c: Commande) {
                         <!-- Agence / Site (Admin uniquement) -->
                         <div v-if="is_admin" class="space-y-1.5">
                             <Label>Agence / Site</Label>
-                            <select
-                                v-model="localSiteId"
-                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                            >
-                                <option
-                                    v-for="s in sitesOptions"
-                                    :key="s.id"
-                                    :value="s.id"
-                                >
-                                    {{ s.nom }}
-                                </option>
-                            </select>
+                            <MultiSelect
+                                v-model="localSiteIds"
+                                :options="sitesOptions"
+                                option-label="nom"
+                                option-value="id"
+                                placeholder="Toutes les agences"
+                                class="w-full"
+                                fluid
+                                display="chip"
+                                append-to="self"
+                            />
                         </div>
 
                         <!-- Statut commande -->
                         <div class="space-y-1.5">
                             <Label>Statut commande</Label>
-                            <select
-                                v-model="localStatut"
-                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                            >
-                                <option
-                                    v-for="s in filtresStatut"
-                                    :key="s.value"
-                                    :value="s.value"
-                                >
-                                    {{ s.label }}
-                                </option>
-                            </select>
+                            <MultiSelect
+                                v-model="localStatuts"
+                                :options="filtresStatut"
+                                option-label="label"
+                                option-value="value"
+                                placeholder="Tous les statuts"
+                                class="w-full"
+                                fluid
+                                display="chip"
+                                append-to="self"
+                            />
                         </div>
 
                         <!-- Statut facture -->

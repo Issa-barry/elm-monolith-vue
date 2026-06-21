@@ -162,7 +162,7 @@ class ParametreController extends Controller
                         'headers' => [
                             'nom_vehicule',
                             'immatriculation',
-                            'type_vehicule',
+                            'type_vehicule_id',
                             'capacite_packs',
                             'categorie',
                             'proprietaire_id',

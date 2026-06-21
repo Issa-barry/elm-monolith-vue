@@ -16,6 +16,8 @@ return new class extends Migration
             $table->string('description')->nullable();
             $table->boolean('requires_vehicle')->default(false);
             $table->boolean('requires_comment')->default(false);
+            $table->boolean('applique_aux_employes')->default(false);
+            $table->string('type_paie')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();

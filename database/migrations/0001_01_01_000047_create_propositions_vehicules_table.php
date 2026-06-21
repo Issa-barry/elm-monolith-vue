@@ -17,13 +17,14 @@ return new class extends Migration
             $table->foreignUlid('livreur_id')->nullable()->constrained('livreurs')->nullOnDelete();
             $table->string('nom_contact', 150)->nullable();
             $table->string('telephone_contact', 30)->nullable();
-            $table->string('nom_vehicule', 100);
+            $table->string('nom_vehicule', 100)->nullable();
             $table->string('marque', 100)->nullable();
             $table->string('modele', 100)->nullable();
             $table->string('immatriculation', 30);
             $table->string('type_vehicule', 30)->nullable();
             $table->unsignedInteger('capacite_packs')->nullable();
             $table->text('commentaire')->nullable();
+            $table->string('photo_path', 255)->nullable();
             $table->string('statut', 20)->default('pending');
             $table->text('decision_note')->nullable();
             $table->timestamp('traitee_at')->nullable();

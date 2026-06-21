@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
-use App\Enums\TypeVehicule;
 use App\Models\FactureVente;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -166,17 +165,21 @@ class DashboardController extends Controller
             ->join('vehicules', function ($join) {
                 $join->on('vehicules.id', '=', 'factures_ventes.vehicule_id')
                     ->whereNull('vehicules.deleted_at');
+            })
+            ->leftJoin('type_vehicules', function ($join) {
+                $join->on('type_vehicules.id', '=', 'vehicules.type_vehicule_id')
+                    ->whereNull('type_vehicules.deleted_at');
             });
         if ($start && $end) {
             $caParTypeVehicule->whereBetween('factures_ventes.created_at', [$start, $end]);
         }
         $caParTypeVehicule = $caParTypeVehicule
-            ->selectRaw('vehicules.type_vehicule, COALESCE(SUM(factures_ventes.montant_net), 0) as montant')
-            ->groupBy('vehicules.type_vehicule')
+            ->selectRaw('type_vehicules.nom as type_nom, COALESCE(SUM(factures_ventes.montant_net), 0) as montant')
+            ->groupBy('type_vehicules.id', 'type_vehicules.nom')
             ->orderByDesc('montant')
             ->get()
             ->map(fn ($r) => [
-                'label' => TypeVehicule::tryFrom($r->type_vehicule)?->label() ?? $r->type_vehicule,
+                'label' => $r->type_nom ?? '—',
                 'montant' => (float) $r->montant,
             ])
             ->values()
