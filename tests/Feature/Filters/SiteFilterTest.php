@@ -4,7 +4,6 @@ namespace Tests\Feature\Filters;
 
 use App\Models\CommandeVente;
 use App\Models\FactureVente;
-use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\ProduitStock;
 use App\Models\Site;
@@ -28,6 +27,7 @@ class SiteFilterTest extends TestCase
     use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
     private Site $siteA;
+
     private Site $siteB;
 
     protected function setUp(): void

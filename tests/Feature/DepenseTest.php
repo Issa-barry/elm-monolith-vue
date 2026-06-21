@@ -7,6 +7,7 @@ use App\Enums\StatutDepense;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Employe;
+use App\Models\Livreur;
 use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -600,11 +601,11 @@ class DepenseTest extends TestCase
         $typeLivreur = DepenseType::factory()->livreur()->create([
             'organization_id' => $this->org->id,
         ]);
-        $livreur = \App\Models\Livreur::factory()->create([
+        $livreur = Livreur::factory()->create([
             'organization_id' => $this->org->id,
             'telephone' => '+224611223344',
         ]);
-        $autreLivreur = \App\Models\Livreur::factory()->create([
+        $autreLivreur = Livreur::factory()->create([
             'organization_id' => $this->org->id,
             'telephone' => '+224699887766',
         ]);

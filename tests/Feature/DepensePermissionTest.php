@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\DepenseType;
+use App\Models\DroitCreationDepense;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
@@ -170,6 +171,14 @@ class DepensePermissionTest extends TestCase
     {
         $manager = $this->makeManager(['depenses.read', 'depenses.create']);
 
+        DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'manager',
+            'perimetre' => 'agences_selectionnees',
+            'sites' => [$this->site->id],
+            'is_actif' => true,
+        ]);
+
         $type = DepenseType::factory()->interne()->create([
             'organization_id' => $this->org->id,
             'libelle' => 'Carburant',
@@ -187,4 +196,3 @@ class DepensePermissionTest extends TestCase
             ->assertRedirect(route('depenses.index'));
     }
 }
-

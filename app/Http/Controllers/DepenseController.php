@@ -19,11 +19,11 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\DepenseImputationService;
+use App\Services\DroitCreationDepenseService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -34,6 +34,7 @@ class DepenseController extends Controller
     public function __construct(
         private DepenseImputationService $imputationService,
         private AuditLogService $audit,
+        private DroitCreationDepenseService $droitCreationDepense,
     ) {}
 
     public function index(Request $request): Response
@@ -372,13 +373,11 @@ class DepenseController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
 
-        if (! $user->isAdmin()) {
-            abort_unless(
-                $user->isAssignedToSite($request->site_id ?? ''),
-                403,
-                'Vous n\'êtes pas autorisé à saisir une dépense sur cette agence.'
-            );
-        }
+        abort_unless(
+            $this->droitCreationDepense->peutCreerSurSite($user, $orgId, (string) ($request->site_id ?? '')),
+            403,
+            'Vous n\'êtes pas autorisé à saisir une dépense sur cette agence.'
+        );
 
         $type = DepenseType::where('organization_id', $orgId)->findOrFail($request->depense_type_id);
 
