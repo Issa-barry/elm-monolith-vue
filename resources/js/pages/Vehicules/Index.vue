@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import FilterDrawer from '@/components/FilterDrawer.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,7 +9,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -27,7 +26,6 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
@@ -72,7 +70,6 @@ const mobileFilterCategorie = ref('');
 const mobileFilterAgence = ref('');
 
 // Desktop
-const filterDrawerOpen = ref(false);
 const search = ref('');
 const filterType = ref<string | null>(null);
 const filterStatut = ref<string | null>(null);
@@ -86,20 +83,6 @@ function resetFilters() {
     filterCategorie.value = null;
     filterAgence.value = null;
 }
-
-const activeFilterCount = computed(
-    () =>
-        [
-            !!filterType.value,
-            !!filterStatut.value,
-            !!filterCategorie.value,
-            !!filterAgence.value,
-        ].filter(Boolean).length,
-);
-
-const hasActiveFilters = computed(
-    () => !!search.value || activeFilterCount.value > 0,
-);
 
 const typeOptions = computed(() =>
     [...new Set(props.vehicules.map((v) => v.type_label))].sort(),
@@ -115,9 +98,40 @@ const agenceOptions = computed(() =>
     ].sort((a, b) => a.localeCompare(b)),
 );
 
-const desktopAgenceOptions = computed(() => [
-    ...agenceOptions.value.map((a) => ({ value: a, label: a })),
-    { value: '__none__', label: 'Non rattachée' },
+const filterFields = computed<FilterField[]>(() => [
+    {
+        key: 'type',
+        label: 'Type',
+        type: 'select',
+        options: typeOptions.value.map((t) => ({ value: t, label: t })),
+    },
+    {
+        key: 'categorie',
+        label: 'Catégorie',
+        type: 'select',
+        options: [
+            { value: 'interne', label: 'Interne' },
+            { value: 'externe', label: 'Externe' },
+        ],
+    },
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: [
+            { value: 'actif', label: 'Actif' },
+            { value: 'inactif', label: 'Inactif' },
+        ],
+    },
+    {
+        key: 'agence',
+        label: 'Agence',
+        type: 'select',
+        options: [
+            ...agenceOptions.value.map((a) => ({ value: a, label: a })),
+            { value: '__none__', label: 'Non rattachée' },
+        ],
+    },
 ]);
 
 const filteredVehicules = computed(() =>
@@ -452,104 +466,25 @@ function confirmDelete(v: Vehicule) {
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <div class="relative w-[260px] shrink-0">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                        v-model="search"
-                        type="search"
-                        placeholder="Nom, immatriculation, propriétaire…"
-                        data-testid="search-input"
-                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    />
-                    <button
-                        v-if="search"
-                        type="button"
-                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        @click="search = ''"
-                    >
-                        <X class="h-3.5 w-3.5" />
-                    </button>
-                </div>
-
-                <FilterDrawer
-                    v-model:open="filterDrawerOpen"
-                    title="Filtres"
-                    :active-count="activeFilterCount"
-                    @reset="resetFilters"
-                >
-                    <div class="space-y-1.5">
-                        <Label>Type</Label>
-                        <Select
-                            v-model="filterType"
-                            :options="typeOptions"
-                            placeholder="Tous les types"
-                            show-clear
-                            class="w-full"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Catégorie</Label>
-                        <Select
-                            v-model="filterCategorie"
-                            :options="[
-                                { value: 'interne', label: 'Interne' },
-                                { value: 'externe', label: 'Externe' },
-                            ]"
-                            option-label="label"
-                            option-value="value"
-                            placeholder="Toutes catégories"
-                            show-clear
-                            class="w-full"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Statut</Label>
-                        <Select
-                            v-model="filterStatut"
-                            :options="[
-                                { value: 'actif', label: 'Actif' },
-                                { value: 'inactif', label: 'Inactif' },
-                            ]"
-                            option-label="label"
-                            option-value="value"
-                            placeholder="Tous les statuts"
-                            show-clear
-                            class="w-full"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Agence</Label>
-                        <Select
-                            v-model="filterAgence"
-                            :options="desktopAgenceOptions"
-                            option-label="label"
-                            option-value="value"
-                            placeholder="Toutes agences"
-                            show-clear
-                            class="w-full"
-                        />
-                    </div>
-                </FilterDrawer>
-
-                <span
-                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
-                >
-                    {{ filteredVehicules.length }} résultat{{
-                        filteredVehicules.length !== 1 ? 's' : ''
-                    }}
-                </span>
-                <button
-                    v-if="hasActiveFilters"
-                    type="button"
-                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                    @click="resetFilters"
-                >
-                    Réinitialiser
-                </button>
-            </div>
+            <DataFilters
+                v-model:search="search"
+                search-placeholder="Nom, immatriculation, propriétaire…"
+                :values="{
+                    type: filterType ?? '',
+                    categorie: filterCategorie ?? '',
+                    statut: filterStatut ?? '',
+                    agence: filterAgence ?? '',
+                }"
+                :fields="filterFields"
+                :result-count="filteredVehicules.length"
+                @apply="(vals) => {
+                    filterType.value = (vals.type as string) || null;
+                    filterCategorie.value = (vals.categorie as string) || null;
+                    filterStatut.value = (vals.statut as string) || null;
+                    filterAgence.value = (vals.agence as string) || null;
+                }"
+                @reset="resetFilters"
+            />
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">

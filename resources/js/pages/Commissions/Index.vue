@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    ChevronRight,
     HandCoins,
     MoreHorizontal,
     Search,
@@ -94,13 +95,6 @@ function setPeriode(p: string) {
 
 // ── Filtres locaux (client-side) ──────────────────────────────────────────────
 
-const filtresStatut = [
-    { value: 'all', label: 'Tous statuts' },
-    { value: 'impaye', label: 'Impayé' },
-    { value: 'partiel', label: 'Partiel' },
-    { value: 'paye', label: 'Payé' },
-];
-
 const periodes = [
     { value: 'today', label: "Aujourd'hui" },
     { value: 'week', label: 'Cette semaine' },
@@ -112,9 +106,27 @@ const filtreStatut = ref(props.filtre_statut || 'all');
 const search = ref(props.search ?? '');
 const mobileSearch = ref('');
 
-const hasActiveFilters = computed(
-    () => !!search.value || filtreStatut.value !== 'all',
-);
+const filterFields: FilterField[] = [
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: [
+            { value: 'all', label: 'Tous statuts' },
+            { value: 'impaye', label: 'Impayé' },
+            { value: 'partiel', label: 'Partiel' },
+            { value: 'paye', label: 'Payé' },
+        ],
+    },
+];
+
+const localFilterValues = computed(() => ({
+    statut: filtreStatut.value,
+}));
+
+function handleApply(values: Record<string, unknown>) {
+    filtreStatut.value = (values.statut as string) || 'all';
+}
 
 function resetFilters() {
     search.value = '';
@@ -479,29 +491,26 @@ function detailUrl(b: BeneficiaireRow): string {
             </div>
 
             <!-- Filtres -->
-            <DataTableFilters
+            <DataFilters
                 v-model:search="search"
-                search-placeholder="Nom, téléphone, véhicule, montant…"
-                :has-active-filters="hasActiveFilters"
+                :values="localFilterValues"
+                :fields="filterFields"
                 :result-count="listeFiltree.length"
+                search-placeholder="Nom, téléphone, véhicule, montant…"
+                @apply="handleApply"
                 @reset="resetFilters"
             >
-                <Select
-                    v-model="filtreStatut"
-                    :options="filtresStatut"
-                    option-label="label"
-                    option-value="value"
-                    class="w-40"
-                />
-                <Select
-                    :model-value="periode"
-                    :options="periodes"
-                    option-label="label"
-                    option-value="value"
-                    class="w-44"
-                    @update:model-value="setPeriode($event)"
-                />
-            </DataTableFilters>
+                <template #inline>
+                    <Select
+                        :model-value="periode"
+                        :options="periodes"
+                        option-label="label"
+                        option-value="value"
+                        class="w-44"
+                        @update:model-value="setPeriode($event)"
+                    />
+                </template>
+            </DataFilters>
 
             <!-- Tableau Grand Livre -->
             <div class="overflow-hidden rounded-xl border bg-card">

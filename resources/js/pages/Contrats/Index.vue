@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -15,7 +15,6 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Briefcase, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
@@ -41,6 +40,7 @@ interface Option {
 interface Filters {
     statut_contrat?: string;
     type_contrat?: string;
+    search?: string;
 }
 
 const props = defineProps<{
@@ -59,57 +59,26 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Contrats', href: '/contrats' },
 ];
 
-// ── Filtres ───────────────────────────────────────────────────────────────────
-const search = ref('');
-const pendingStatut = ref<string | null>(props.filters.statut_contrat ?? null);
-const pendingType = ref<string | null>(props.filters.type_contrat ?? null);
+const search = ref(props.filters.search ?? '');
 
-function applyFilters() {
-    router.visit('/contrats', {
-        method: 'get',
-        data: {
-            statut_contrat: pendingStatut.value || undefined,
-            type_contrat: pendingType.value || undefined,
-        },
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-    });
-}
+const filterFields: FilterField[] = [
+    {
+        key: 'type_contrat',
+        label: 'Type',
+        type: 'select',
+        options: props.type_contrat_options,
+        placeholder: 'Tous types',
+    },
+    {
+        key: 'statut_contrat',
+        label: 'Statut',
+        type: 'select',
+        options: props.statut_contrat_options,
+        placeholder: 'Tous statuts',
+    },
+];
 
-function resetFilters() {
-    search.value = '';
-    pendingStatut.value = null;
-    pendingType.value = null;
-    router.visit('/contrats', {
-        method: 'get',
-        data: {},
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-    });
-}
-
-const hasActiveFilters = computed(
-    () =>
-        !!search.value ||
-        !!props.filters.statut_contrat ||
-        !!props.filters.type_contrat,
-);
-
-const filteredContrats = computed(() => {
-    const q = search.value.toLowerCase().trim();
-    if (!q) return props.contrats;
-    return props.contrats.filter(
-        (c) =>
-            (c.employe_nom_complet ?? '').toLowerCase().includes(q) ||
-            (c.employe_matricule ?? '').toLowerCase().includes(q) ||
-            c.type_contrat_label.toLowerCase().includes(q) ||
-            c.statut_contrat_label.toLowerCase().includes(q) ||
-            (c.date_debut ?? '').includes(q) ||
-            (c.date_fin ?? '').includes(q),
-    );
-});
+const filteredContrats = computed(() => props.contrats);
 
 // ── Styles badges ─────────────────────────────────────────────────────────────
 const TYPE_CONTRAT_CLASS: Record<string, string> = {
@@ -167,34 +136,15 @@ function confirmDelete(c: Contrat) {
             </div>
 
             <!-- Filtres -->
-            <DataTableFilters
-                v-model:search="search"
-                search-placeholder="Nom, matricule, type, statut, date…"
-                :has-active-filters="hasActiveFilters"
+            <DataFilters
+                url="/contrats"
+                :values="filters"
+                :fields="filterFields"
                 :result-count="filteredContrats.length"
-                @reset="resetFilters"
-            >
-                <Select
-                    v-model="pendingType"
-                    :options="type_contrat_options"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Tous types"
-                    show-clear
-                    class="w-44"
-                    @update:model-value="applyFilters"
-                />
-                <Select
-                    v-model="pendingStatut"
-                    :options="statut_contrat_options"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Tous statuts"
-                    show-clear
-                    class="w-44"
-                    @update:model-value="applyFilters"
-                />
-            </DataTableFilters>
+                search-placeholder="Nom, matricule, type, statut, date…"
+                search-key="search"
+                v-model:search="search"
+            />
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">

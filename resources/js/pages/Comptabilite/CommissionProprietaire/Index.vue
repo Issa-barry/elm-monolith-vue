@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -19,15 +20,13 @@ import {
     HandCoins,
     History,
     MoreHorizontal,
-    Search,
     Truck,
     User,
-    X,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref } from 'vue';
 
 interface BeneficiaireRow {
     beneficiaire_id: string;
@@ -79,54 +78,42 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-const searchVal = ref(props.search ?? '');
-const statutFiltre = ref(props.filtre_statut || '');
-const periodeFiltre = ref(props.selected_periode || '');
-const siteFiltre = ref(props.filtre_site || '');
+const search = ref(props.search ?? '');
 
-const activeFilterCount = computed(
-    () =>
-        [
-            !!statutFiltre.value,
-            !!periodeFiltre.value,
-            !!siteFiltre.value,
-        ].filter(Boolean).length,
-);
+const filterFields = computed((): FilterField[] => [
+    ...(props.is_admin && props.sites.length > 1
+        ? [
+              {
+                  key: 'site',
+                  label: 'Agence',
+                  type: 'select' as const,
+                  options: props.sites.map((s) => ({ value: s.value, label: s.label })),
+              },
+          ]
+        : []),
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select' as const,
+        options: [
+            { value: 'impaye', label: 'Impayé' },
+            { value: 'partiel', label: 'Partiel' },
+            { value: 'paye', label: 'Payé' },
+        ],
+    },
+    {
+        key: 'periode',
+        label: 'Période',
+        type: 'select' as const,
+        options: props.periodes_disponibles.map((p) => ({ value: p.code, label: p.label })),
+    },
+]);
 
-const hasActiveFilters = computed(
-    () => !!searchVal.value || activeFilterCount.value > 0,
-);
-
-function appliquerFiltres() {
-    router.get(
-        '/comptabilite/commissions/proprietaires',
-        {
-            search: searchVal.value || undefined,
-            statut: statutFiltre.value || undefined,
-            periode: periodeFiltre.value || undefined,
-            site: siteFiltre.value || undefined,
-        },
-        { preserveState: true, replace: true },
-    );
-}
-
-function resetFilters() {
-    searchVal.value = '';
-    statutFiltre.value = '';
-    periodeFiltre.value = '';
-    siteFiltre.value = '';
-    router.get(
-        '/comptabilite/commissions/proprietaires',
-        {},
-        { preserveState: true, replace: true },
-    );
-}
-
-let searchDebounce: ReturnType<typeof setTimeout> | null = null;
-watch(searchVal, () => {
-    if (searchDebounce) clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(appliquerFiltres, 400);
-});
+const currentFilters = computed(() => ({
+    site: props.filtre_site ?? '',
+    statut: props.filtre_statut ?? '',
+    periode: props.selected_periode ?? '',
+}));
 
 function statutClass(s: string) {
     return (
@@ -209,10 +196,10 @@ function submitPaiement() {
 
 function buildParams(): URLSearchParams {
     const params = new URLSearchParams();
-    if (periodeFiltre.value) params.set('periode', periodeFiltre.value);
-    if (statutFiltre.value) params.set('statut', statutFiltre.value);
-    if (siteFiltre.value) params.set('site', siteFiltre.value);
-    if (searchVal.value) params.set('search', searchVal.value);
+    if (props.selected_periode) params.set('periode', props.selected_periode);
+    if (props.filtre_statut) params.set('statut', props.filtre_statut);
+    if (props.filtre_site) params.set('site', props.filtre_site);
+    if (search.value) params.set('search', search.value);
     return params;
 }
 
@@ -353,93 +340,14 @@ function fmtTel(tel: string | null | undefined): string {
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <div class="relative w-[260px] shrink-0">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                        v-model="searchVal"
-                        type="search"
-                        placeholder="Rechercher un propriétaire, téléphone..."
-                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    />
-                    <button
-                        v-if="searchVal"
-                        type="button"
-                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        @click="searchVal = ''"
-                    >
-                        <X class="h-3.5 w-3.5" />
-                    </button>
-                </div>
-
-                <select
-                    v-if="is_admin && sites.length > 1"
-                    v-model="siteFiltre"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Toutes les agences</option>
-                    <option v-for="s in sites" :key="s.value" :value="s.value">
-                        {{ s.label }}
-                    </option>
-                </select>
-                <span
-                    v-else-if="!is_admin && sites.length >= 1"
-                    class="inline-flex h-9 items-center gap-1.5 rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground"
-                >
-                    <Building2 class="h-3.5 w-3.5" />
-                    {{ sites[0]?.label }}
-                </span>
-
-                <select
-                    v-model="statutFiltre"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Tous les statuts</option>
-                    <option value="impaye">Impayé</option>
-                    <option value="partiel">Partiel</option>
-                    <option value="paye">Payé</option>
-                </select>
-
-                <select
-                    v-model="periodeFiltre"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Toutes les périodes</option>
-                    <option
-                        v-for="p in periodes_disponibles"
-                        :key="p.code"
-                        :value="p.code"
-                    >
-                        {{ p.label }}
-                    </option>
-                </select>
-
-                <button
-                    type="button"
-                    class="h-9 rounded-md bg-primary px-3 text-sm text-primary-foreground hover:bg-primary/90"
-                    @click="appliquerFiltres"
-                >
-                    Appliquer
-                </button>
-
-                <span
-                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
-                >
-                    {{ beneficiaires.length }} résultat{{
-                        beneficiaires.length !== 1 ? 's' : ''
-                    }}
-                </span>
-                <button
-                    v-if="hasActiveFilters"
-                    type="button"
-                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                    @click="resetFilters"
-                >
-                    Réinitialiser
-                </button>
-            </div>
+            <DataFilters
+                url="/comptabilite/commissions/proprietaires"
+                :values="currentFilters"
+                :fields="filterFields"
+                :result-count="beneficiaires.length"
+                search-placeholder="Rechercher un propriétaire, téléphone..."
+                v-model:search="search"
+            />
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">

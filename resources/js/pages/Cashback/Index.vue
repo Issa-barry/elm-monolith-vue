@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     BadgeCheck,
@@ -88,43 +88,24 @@ const statutOptions = [
     { label: 'Partiel', value: 'partiel' },
     { label: 'Versé', value: 'verse' },
 ];
-const pendingStatut = ref(props.filters.statut ?? 'tous');
-const pendingClientId = ref<number | ''>(
-    props.filters.client_id ? Number(props.filters.client_id) : '',
-);
 const mobileSearch = ref('');
 const search = ref('');
 
-function applyFilters() {
-    router.get(
-        '/cashback',
-        {
-            statut:
-                pendingStatut.value !== 'tous'
-                    ? pendingStatut.value
-                    : undefined,
-            client_id:
-                pendingClientId.value !== ''
-                    ? pendingClientId.value
-                    : undefined,
-        },
-        { preserveState: true, replace: true },
-    );
-}
-
-function resetFilters() {
-    search.value = '';
-    pendingStatut.value = 'tous';
-    pendingClientId.value = '';
-    router.get('/cashback', {}, { preserveState: true, replace: true });
-}
-
-const hasActiveFilters = computed(
-    () =>
-        !!search.value ||
-        pendingStatut.value !== 'tous' ||
-        pendingClientId.value !== '',
-);
+const filterFields = computed<FilterField[]>(() => [
+    {
+        key: 'statut',
+        type: 'select',
+        label: 'Statut',
+        options: statutOptions.map((o) => ({ value: o.value, label: o.label })),
+    },
+    {
+        key: 'client_id',
+        type: 'select',
+        label: 'Client',
+        placeholder: 'Tous les clients',
+        options: props.clients.map((c) => ({ value: String(c.id), label: c.nom_complet })),
+    },
+]);
 
 const filtered = computed(() => {
     const q = search.value.toLowerCase();
@@ -508,32 +489,14 @@ function formatPhone(phone: string | null): string {
             </div>
 
             <!-- Filtres -->
-            <DataTableFilters
+            <DataFilters
+                url="/cashback"
                 v-model:search="search"
                 search-placeholder="Client, téléphone…"
-                :has-active-filters="hasActiveFilters"
+                :values="{ statut: filters.statut ?? 'tous', client_id: filters.client_id ?? '' }"
+                :fields="filterFields"
                 :result-count="filtered.length"
-                @reset="resetFilters"
-            >
-                <Select
-                    v-model="pendingStatut"
-                    :options="statutOptions"
-                    option-label="label"
-                    option-value="value"
-                    class="w-36"
-                    @update:model-value="applyFilters"
-                />
-                <Select
-                    v-model="pendingClientId"
-                    :options="clients"
-                    option-label="nom_complet"
-                    option-value="id"
-                    placeholder="Tous les clients"
-                    class="w-48"
-                    show-clear
-                    @update:model-value="applyFilters"
-                />
-            </DataTableFilters>
+            />
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">

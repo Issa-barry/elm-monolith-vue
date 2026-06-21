@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import FilterDrawer from '@/components/FilterDrawer.vue';
-import { Label } from '@/components/ui/label';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/vue3';
-import { Download, ReceiptText, Search, X } from 'lucide-vue-next';
+import { Head, Link } from '@inertiajs/vue3';
+import { Download, ReceiptText } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Fiche {
     id: string;
@@ -84,55 +83,32 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: typeTitle[props.type], href: typeRoute[props.type] },
 ];
 
-const filterDrawerOpen = ref(false);
-const searchInput = ref(props.filters.search ?? '');
-const selectedSite = ref(props.filters.site_id ?? '');
-const selectedStatut = ref(props.filters.statut ?? '');
-const selectedPeriode = ref(props.filters.periode_id ?? '');
+const search = ref(props.filters.search ?? '');
 
-const activeFilterCount = computed(
-    () =>
-        [
-            !!selectedSite.value,
-            !!selectedStatut.value,
-            !!selectedPeriode.value,
-        ].filter(Boolean).length,
-);
-
-const hasActiveFilters = computed(
-    () => !!searchInput.value || activeFilterCount.value > 0,
-);
-
-function applyFilters() {
-    router.get(
-        typeRoute[props.type],
-        {
-            search: searchInput.value || undefined,
-            site_id: selectedSite.value || undefined,
-            statut: selectedStatut.value || undefined,
-            periode_id: selectedPeriode.value || undefined,
-        },
-        { preserveState: true, replace: true },
-    );
-}
-
-function resetFilters() {
-    searchInput.value = '';
-    selectedSite.value = '';
-    selectedStatut.value = '';
-    selectedPeriode.value = '';
-    router.get(
-        typeRoute[props.type],
-        {},
-        { preserveState: true, replace: true },
-    );
-}
-
-let searchDebounce: ReturnType<typeof setTimeout> | null = null;
-watch(searchInput, () => {
-    if (searchDebounce) clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(applyFilters, 400);
-});
+const filterFields = computed((): FilterField[] => [
+    ...(props.sites.length > 0
+        ? [
+              {
+                  key: 'site_id',
+                  label: 'Agence',
+                  type: 'select' as const,
+                  options: props.sites.map((s) => ({ value: s.id, label: s.nom })),
+              },
+          ]
+        : []),
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select' as const,
+        options: props.statuts,
+    },
+    {
+        key: 'periode_id',
+        label: 'Période',
+        type: 'select' as const,
+        options: props.periodes.map((p) => ({ value: p.id, label: p.reference })),
+    },
+]);
 
 function fmt(n: number) {
     return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' GNF';
@@ -149,9 +125,9 @@ const ficheBadge = (s: string) =>
 function exportExcel() {
     const params = new URLSearchParams();
     params.set('type', props.type);
-    if (selectedSite.value) params.set('site_id', selectedSite.value);
-    if (selectedStatut.value) params.set('statut', selectedStatut.value);
-    if (selectedPeriode.value) params.set('periode_id', selectedPeriode.value);
+    if (props.filters.site_id) params.set('site_id', props.filters.site_id);
+    if (props.filters.statut) params.set('statut', props.filters.statut);
+    if (props.filters.periode_id) params.set('periode_id', props.filters.periode_id);
     window.open(
         '/comptabilite/fiches/export/excel?' + params.toString(),
         '_blank',
@@ -228,100 +204,13 @@ function exportExcel() {
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <div class="relative w-[260px] shrink-0">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                        v-model="searchInput"
-                        type="search"
-                        placeholder="Rechercher…"
-                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    />
-                    <button
-                        v-if="searchInput"
-                        type="button"
-                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        @click="searchInput = ''"
-                    >
-                        <X class="h-3.5 w-3.5" />
-                    </button>
-                </div>
-
-                <FilterDrawer
-                    v-model:open="filterDrawerOpen"
-                    title="Filtres"
-                    :active-count="activeFilterCount"
-                    @apply="applyFilters"
-                    @reset="resetFilters"
-                >
-                    <div v-if="sites.length > 0" class="space-y-1.5">
-                        <Label>Agence</Label>
-                        <select
-                            v-model="selectedSite"
-                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                            <option value="">Toutes les agences</option>
-                            <option
-                                v-for="s in sites"
-                                :key="s.id"
-                                :value="s.id"
-                            >
-                                {{ s.nom }}
-                            </option>
-                        </select>
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Statut</Label>
-                        <select
-                            v-model="selectedStatut"
-                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                            <option value="">Tous les statuts</option>
-                            <option
-                                v-for="s in statuts"
-                                :key="s.value"
-                                :value="s.value"
-                            >
-                                {{ s.label }}
-                            </option>
-                        </select>
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Période</Label>
-                        <select
-                            v-model="selectedPeriode"
-                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                            <option value="">Toutes les périodes</option>
-                            <option
-                                v-for="p in periodes"
-                                :key="p.id"
-                                :value="p.id"
-                            >
-                                {{ p.reference }}
-                            </option>
-                        </select>
-                    </div>
-                </FilterDrawer>
-
-                <span
-                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
-                >
-                    {{ fiches.data.length }} résultat{{
-                        fiches.data.length !== 1 ? 's' : ''
-                    }}
-                </span>
-                <button
-                    v-if="hasActiveFilters"
-                    type="button"
-                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                    @click="resetFilters"
-                >
-                    Réinitialiser
-                </button>
-            </div>
+            <DataFilters
+                :url="typeRoute[type]"
+                :values="filters"
+                :fields="filterFields"
+                :result-count="fiches.data.length"
+                v-model:search="search"
+            />
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">

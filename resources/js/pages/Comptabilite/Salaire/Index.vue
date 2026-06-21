@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,17 +14,14 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
 import {
-    Building2,
     Download,
     FileText,
     HandCoins,
     History,
     MoreHorizontal,
-    Search,
     Users,
-    X,
 } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface LignePaie {
     id: string;
@@ -101,66 +99,55 @@ const ANNEES = Array.from({ length: 5 }, (_, i) => {
     return { value: y, label: String(y) };
 });
 
-const selectedMois = ref(props.filtre_mois);
-const selectedAnnee = ref(props.filtre_annee);
-const filtreStatut = ref(props.filtre_statut ?? '');
-const filtreSite = ref(props.filtre_site ?? '');
-const searchVal = ref(props.search ?? '');
+const search = ref(props.search ?? '');
 
-const activeFilterCount = computed(
-    () =>
-        [
-            !!filtreStatut.value,
-            !!filtreSite.value,
-            selectedMois.value !== new Date().getMonth() + 1,
-            selectedAnnee.value !== new Date().getFullYear(),
-        ].filter(Boolean).length,
-);
+const filterFields = computed((): FilterField[] => [
+    {
+        key: 'mois',
+        label: 'Mois',
+        type: 'select',
+        options: MOIS_OPTIONS.map((m) => ({ value: String(m.value), label: m.label })),
+    },
+    {
+        key: 'annee',
+        label: 'Année',
+        type: 'select',
+        options: ANNEES.map((a) => ({ value: String(a.value), label: a.label })),
+    },
+    ...(props.is_admin && props.sites.length > 1
+        ? [
+              {
+                  key: 'site_id',
+                  label: 'Agence',
+                  type: 'select' as const,
+                  options: props.sites.map((s) => ({ value: s.value, label: s.label })),
+              },
+          ]
+        : []),
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select' as const,
+        options: [
+            { value: 'en_attente', label: 'En attente' },
+            { value: 'calcule', label: 'Calculé' },
+            { value: 'partiellement_paye', label: 'Part. payé' },
+            { value: 'paye', label: 'Payé' },
+        ],
+    },
+]);
 
-const hasActiveFilters = computed(
-    () => !!searchVal.value || activeFilterCount.value > 0,
-);
-
-function appliquerFiltres() {
-    router.get(
-        '/comptabilite/salaires',
-        {
-            mois: selectedMois.value,
-            annee: selectedAnnee.value,
-            statut: filtreStatut.value || undefined,
-            site_id: filtreSite.value || undefined,
-            search: searchVal.value || undefined,
-        },
-        { preserveState: true, replace: true },
-    );
-}
-
-function resetFilters() {
-    selectedMois.value = new Date().getMonth() + 1;
-    selectedAnnee.value = new Date().getFullYear();
-    filtreStatut.value = '';
-    filtreSite.value = '';
-    searchVal.value = '';
-    router.get(
-        '/comptabilite/salaires',
-        {
-            mois: new Date().getMonth() + 1,
-            annee: new Date().getFullYear(),
-        },
-        { preserveState: true, replace: true },
-    );
-}
-
-let searchDebounce: ReturnType<typeof setTimeout> | null = null;
-watch(searchVal, () => {
-    if (searchDebounce) clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(appliquerFiltres, 400);
-});
+const currentFilters = computed(() => ({
+    mois: String(props.filtre_mois),
+    annee: String(props.filtre_annee),
+    statut: props.filtre_statut ?? '',
+    site_id: props.filtre_site ?? '',
+}));
 
 function buildParams() {
     const p = new URLSearchParams();
-    p.set('mois', String(selectedMois.value));
-    p.set('annee', String(selectedAnnee.value));
+    p.set('mois', String(props.filtre_mois));
+    p.set('annee', String(props.filtre_annee));
     return p;
 }
 
@@ -247,7 +234,7 @@ const kpiDeductions = computed(() =>
 );
 
 const periodeCourante = computed(
-    () => `${MOIS_LABELS[selectedMois.value]} ${selectedAnnee.value}`,
+    () => `${MOIS_LABELS[props.filtre_mois]} ${props.filtre_annee}`,
 );
 </script>
 
@@ -352,102 +339,14 @@ const periodeCourante = computed(
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <div class="relative w-[260px] shrink-0">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                        v-model="searchVal"
-                        type="search"
-                        placeholder="Rechercher un salarié..."
-                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    />
-                    <button
-                        v-if="searchVal"
-                        type="button"
-                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        @click="searchVal = ''"
-                    >
-                        <X class="h-3.5 w-3.5" />
-                    </button>
-                </div>
-
-                <select
-                    v-model="selectedMois"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option
-                        v-for="m in MOIS_OPTIONS"
-                        :key="m.value"
-                        :value="m.value"
-                    >
-                        {{ m.label }}
-                    </option>
-                </select>
-
-                <select
-                    v-model="selectedAnnee"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option v-for="a in ANNEES" :key="a.value" :value="a.value">
-                        {{ a.label }}
-                    </option>
-                </select>
-
-                <select
-                    v-if="is_admin && sites.length > 1"
-                    v-model="filtreSite"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Toutes les agences</option>
-                    <option v-for="s in sites" :key="s.value" :value="s.value">
-                        {{ s.label }}
-                    </option>
-                </select>
-                <span
-                    v-else-if="!is_admin && sites.length >= 1"
-                    class="inline-flex h-9 items-center gap-1.5 rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground"
-                >
-                    <Building2 class="h-3.5 w-3.5" />
-                    {{ sites[0]?.label }}
-                </span>
-
-                <select
-                    v-model="filtreStatut"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="">Tous les statuts</option>
-                    <option value="en_attente">En attente</option>
-                    <option value="calcule">Calculé</option>
-                    <option value="partiellement_paye">Part. payé</option>
-                    <option value="paye">Payé</option>
-                </select>
-
-                <button
-                    type="button"
-                    class="h-9 rounded-md bg-primary px-3 text-sm text-primary-foreground hover:bg-primary/90"
-                    @click="appliquerFiltres"
-                >
-                    Appliquer
-                </button>
-
-                <span
-                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
-                >
-                    {{ lignes.length }} résultat{{
-                        lignes.length !== 1 ? 's' : ''
-                    }}
-                </span>
-                <button
-                    v-if="hasActiveFilters"
-                    type="button"
-                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                    @click="resetFilters"
-                >
-                    Réinitialiser
-                </button>
-            </div>
+            <DataFilters
+                url="/comptabilite/salaires"
+                :values="currentFilters"
+                :fields="filterFields"
+                :result-count="lignes.length"
+                search-placeholder="Rechercher un salarié..."
+                v-model:search="search"
+            />
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -623,7 +522,7 @@ const periodeCourante = computed(
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem as-child>
                                                 <a
-                                                    :href="`/comptabilite/salaires/export/pdf?mois=${selectedMois}&annee=${selectedAnnee}`"
+                                                    :href="`/comptabilite/salaires/export/pdf?mois=${filtre_mois}&annee=${filtre_annee}`"
                                                     target="_blank"
                                                     class="flex w-full cursor-pointer items-center"
                                                 >

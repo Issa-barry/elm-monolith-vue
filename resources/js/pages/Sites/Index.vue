@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,7 +27,6 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
@@ -67,20 +66,28 @@ const typeOptions = computed(() => {
     props.sites.forEach((s) => {
         if (s.type) map.set(s.type, s.type_label);
     });
-    return [
-        { label: 'Tous les types', value: '' },
-        ...Array.from(map.entries())
-            .map(([value, label]) => ({ value, label }))
-            .sort((a, b) => a.label.localeCompare(b.label, 'fr')),
-    ];
+    return Array.from(map.entries())
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
 });
+
+const filterFields = computed((): FilterField[] => [
+    {
+        key: 'type',
+        label: 'Type',
+        type: 'select',
+        options: typeOptions.value,
+    },
+]);
+
+function handleApply(values: Record<string, unknown>) {
+    type.value = (values.type as string) || '';
+}
 
 function resetFilters() {
     search.value = '';
     type.value = '';
 }
-
-const hasActiveFilters = computed(() => !!search.value || !!type.value);
 
 const desktopTypeFiltered = computed(() => {
     let list = props.sites;
@@ -424,22 +431,15 @@ function confirmDelete(s: Site) {
                 </div>
             </div>
 
-            <!-- Tableau -->
-            <DataTableFilters
-                v-model:search="search"
-                search-placeholder="Rechercher…"
-                :has-active-filters="hasActiveFilters"
+            <DataFilters
+                :fields="filterFields"
+                :values="{ type }"
                 :result-count="desktopTypeFiltered.length"
+                search-placeholder="Rechercher…"
+                v-model:search="search"
+                @apply="handleApply"
                 @reset="resetFilters"
-            >
-                <Select
-                    v-model="type"
-                    :options="typeOptions"
-                    option-label="label"
-                    option-value="value"
-                    class="w-44"
-                />
-            </DataTableFilters>
+            />
 
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable

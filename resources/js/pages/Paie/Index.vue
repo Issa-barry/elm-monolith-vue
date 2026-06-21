@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -8,9 +8,8 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { CalendarDays, Plus } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Select from 'primevue/select';
 import Tag from 'primevue/tag';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Periode {
     id: string;
@@ -50,47 +49,31 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Paie', href: '/paie' },
 ];
 
-const anneeFilter = ref<string | null>(props.filters.annee ?? null);
-const statutFilter = ref<string | null>(props.filters.statut ?? null);
-const globalFilter = ref('');
-
-function applyFilters() {
-    router.get(
-        '/paie',
-        {
-            annee: anneeFilter.value ?? undefined,
-            statut: statutFilter.value ?? undefined,
-        },
-        { preserveState: true, replace: true },
-    );
-}
-
-watch([anneeFilter, statutFilter], applyFilters);
-
-const hasActiveFilters = computed(
-    () => !!globalFilter.value || !!anneeFilter.value || !!statutFilter.value,
-);
-
-function resetFilters() {
-    globalFilter.value = '';
-    anneeFilter.value = null;
-    statutFilter.value = null;
-}
-
-const periodesFiltrees = computed(() => {
-    const q = globalFilter.value.trim().toLowerCase();
-    if (!q) return props.periodes.data;
-    return props.periodes.data.filter(
-        (p) =>
-            p.label.toLowerCase().includes(q) ||
-            p.statut_label.toLowerCase().includes(q),
-    );
-});
+const search = ref('');
 
 const anneesOptions = Array.from({ length: 10 }, (_, i) => {
     const y = new Date().getFullYear() - i;
     return { value: String(y), label: String(y) };
 });
+
+const filterFields: FilterField[] = [
+    {
+        key: 'annee',
+        label: 'Année',
+        type: 'select',
+        options: anneesOptions,
+        placeholder: 'Année',
+    },
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: props.statut_options,
+        placeholder: 'Statut',
+    },
+];
+
+const periodesFiltrees = computed(() => props.periodes.data);
 
 function statutSeverity(statut: string) {
     const map: Record<string, string> = {
@@ -124,32 +107,13 @@ function statutSeverity(statut: string) {
             </div>
 
             <!-- Filtres -->
-            <DataTableFilters
-                v-model:search="globalFilter"
-                search-placeholder="Rechercher…"
-                :has-active-filters="hasActiveFilters"
+            <DataFilters
+                url="/paie"
+                :values="filters"
+                :fields="filterFields"
                 :result-count="periodesFiltrees.length"
-                @reset="resetFilters"
-            >
-                <Select
-                    v-model="anneeFilter"
-                    :options="anneesOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Année"
-                    show-clear
-                    class="w-36"
-                />
-                <Select
-                    v-model="statutFilter"
-                    :options="statut_options"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Statut"
-                    show-clear
-                    class="w-44"
-                />
-            </DataTableFilters>
+                v-model:search="search"
+            />
 
             <!-- Table -->
             <DataTable

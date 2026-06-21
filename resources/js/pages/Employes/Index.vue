@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,10 +23,9 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { ref } from 'vue';
 
 interface ContratActif {
     id: string;
@@ -81,70 +80,28 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Employés', href: '/employes' },
 ];
 
-// ── Filtres ───────────────────────────────────────────────────────────────────
 const search = ref(props.filters.search ?? '');
-const pendingStatut = ref(props.filters.statut ?? '');
-const pendingTypeEmploye = ref(props.filters.type_employe ?? '');
-const pendingTypeContrat = ref(props.filters.type_contrat ?? '');
 
-function applyFilters() {
-    router.visit('/employes', {
-        method: 'get',
-        data: {
-            search: search.value || undefined,
-            statut: pendingStatut.value || undefined,
-            type_employe: pendingTypeEmploye.value || undefined,
-            type_contrat: pendingTypeContrat.value || undefined,
-        },
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-    });
-}
-
-function resetFilters() {
-    search.value = '';
-    pendingStatut.value = '';
-    pendingTypeEmploye.value = '';
-    pendingTypeContrat.value = '';
-    router.visit('/employes', {
-        method: 'get',
-        data: {},
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-    });
-}
-
-let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
-watch(search, () => {
-    if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
-    searchDebounceTimeout = setTimeout(applyFilters, 400);
-});
-
-const hasActiveFilters = computed(
-    () =>
-        !!search.value ||
-        !!pendingStatut.value ||
-        !!pendingTypeEmploye.value ||
-        !!pendingTypeContrat.value,
-);
-
-// ── Options avec "Tous" ───────────────────────────────────────────────────────
-const statutOptions = computed(() => [
-    { value: '', label: 'Tous les statuts' },
-    ...props.statut_options,
-]);
-
-const typeEmployeOptions = computed(() => [
-    { value: '', label: 'Tous types' },
-    ...props.type_employe_options,
-]);
-
-const typeContratOptions = computed(() => [
-    { value: '', label: 'Tous contrats' },
-    ...props.type_contrat_options,
-]);
+const filterFields: FilterField[] = [
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: props.statut_options,
+    },
+    {
+        key: 'type_employe',
+        label: 'Type',
+        type: 'select',
+        options: props.type_employe_options,
+    },
+    {
+        key: 'type_contrat',
+        label: 'Contrat',
+        type: 'select',
+        options: props.type_contrat_options,
+    },
+];
 
 // ── Couleurs ──────────────────────────────────────────────────────────────────
 const STATUT_DOT: Record<string, string> = {
@@ -230,41 +187,14 @@ function confirmDelete(e: Employe) {
             </div>
 
             <!-- Filtres -->
-            <DataTableFilters
-                v-model:search="search"
-                search-placeholder="Matricule, nom, téléphone, email…"
-                :has-active-filters="hasActiveFilters"
+            <DataFilters
+                url="/employes"
+                :values="filters"
+                :fields="filterFields"
                 :result-count="employes.length"
-                @reset="resetFilters"
-            >
-                <Select
-                    v-model="pendingStatut"
-                    :options="statutOptions"
-                    option-label="label"
-                    option-value="value"
-                    class="w-44"
-                    placeholder="Statut"
-                    @update:model-value="applyFilters"
-                />
-                <Select
-                    v-model="pendingTypeEmploye"
-                    :options="typeEmployeOptions"
-                    option-label="label"
-                    option-value="value"
-                    class="w-40"
-                    placeholder="Type"
-                    @update:model-value="applyFilters"
-                />
-                <Select
-                    v-model="pendingTypeContrat"
-                    :options="typeContratOptions"
-                    option-label="label"
-                    option-value="value"
-                    class="w-40"
-                    placeholder="Contrat"
-                    @update:model-value="applyFilters"
-                />
-            </DataTableFilters>
+                search-placeholder="Matricule, nom, téléphone, email…"
+                v-model:search="search"
+            />
 
             <!-- Table -->
             <div class="overflow-hidden rounded-xl border bg-card">

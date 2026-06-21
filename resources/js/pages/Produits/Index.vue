@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import FilterDrawer from '@/components/FilterDrawer.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,7 +9,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -26,17 +25,15 @@ import {
     Package,
     Pencil,
     Plus,
-    Search,
     Sliders,
     Trash2,
     X,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Dropdown from 'primevue/dropdown';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
 import HistoriqueModal from './partials/HistoriqueModal.vue';
 import ProduitsMobile from './partials/ProduitsMobile.vue';
@@ -130,86 +127,48 @@ const toast = useToast();
 
 // ── Filtres serveur ───────────────────────────────────────────────────────────
 
-const filterDrawerOpen = ref(false);
 const searchInput = ref(props.filters.search ?? '');
-const selectedType = ref(props.filters.type ?? '');
-const selectedStatut = ref(props.filters.statut ?? '');
-const selectedSite = ref(props.filters.site_id ?? '');
-
-function applyFilters(overrides: Partial<Filters> = {}) {
-    const params: Record<string, string | undefined> = {
-        search: searchInput.value || undefined,
-        type: selectedType.value || undefined,
-        statut: selectedStatut.value || undefined,
-        site_id: selectedSite.value || undefined,
-        ...overrides,
-    };
-    router.get('/produits', params as Record<string, string>, {
-        preserveState: true,
-        replace: true,
-    });
-}
-
-const activeFilterCount = computed(
-    () =>
-        [
-            !!selectedType.value,
-            !!selectedStatut.value,
-            !!selectedSite.value,
-        ].filter(Boolean).length,
-);
 
 const hasActiveFilters = computed(
-    () =>
-        !!searchInput.value ||
-        activeFilterCount.value > 0 ||
-        showOnlyRuptures.value ||
-        showOnlyFaibles.value,
+    () => showOnlyRuptures.value || showOnlyFaibles.value,
 );
 
 function clearFilters() {
     searchInput.value = '';
-    selectedType.value = '';
-    selectedStatut.value = '';
-    selectedSite.value = '';
     showOnlyRuptures.value = false;
     showOnlyFaibles.value = false;
-    applyFilters({
-        search: undefined,
-        type: undefined,
-        statut: undefined,
-        site_id: undefined,
-    });
+    router.get('/produits', {}, { preserveState: true, replace: true });
 }
 
-let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
-watch(searchInput, () => {
-    if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
-    searchDebounceTimeout = setTimeout(() => applyFilters(), 400);
-});
-
-const siteOptions = computed(() => [
-    { label: 'Toutes les agences', value: '' },
-    ...props.sites.map((s) => ({
-        label: s.nom + (s.code ? ` (${s.code})` : ''),
-        value: s.id,
-    })),
-]);
-
 const currentSiteLabel = computed(() => {
-    if (!selectedSite.value) return 'Toutes agences';
-    const site = props.sites.find((s) => s.id === selectedSite.value);
+    const siteId = props.filters.site_id ?? '';
+    if (!siteId) return 'Toutes agences';
+    const site = props.sites.find((s) => s.id === siteId);
     return site ? site.nom : 'Toutes agences';
 });
 
-const typeOptions = computed(() => [
-    { label: 'Tous les types', value: '' },
-    ...props.types,
-]);
-
-const statutOptions = computed(() => [
-    { label: 'Tous les statuts', value: '' },
-    ...props.statuts,
+const filterFields = computed<FilterField[]>(() => [
+    {
+        key: 'type',
+        type: 'select',
+        label: 'Type',
+        options: [{ value: '', label: 'Tous les types' }, ...props.types.map((t) => ({ value: t.value, label: t.label }))],
+    },
+    {
+        key: 'statut',
+        type: 'select',
+        label: 'Statut',
+        options: [{ value: '', label: 'Tous les statuts' }, ...props.statuts.map((s) => ({ value: s.value, label: s.label }))],
+    },
+    {
+        key: 'site_id',
+        type: 'select',
+        label: 'Agence',
+        options: [
+            { value: '', label: 'Toutes les agences' },
+            ...props.sites.map((s) => ({ value: s.id, label: s.nom + (s.code ? ` (${s.code})` : '') })),
+        ],
+    },
 ]);
 
 // ── Filtres client (rupture / stock faible) ───────────────────────────────────
@@ -592,78 +551,18 @@ function confirmArchive(produit: Produit) {
             </div>
 
             <!-- Barre de filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <div class="relative w-[260px] shrink-0">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                        v-model="searchInput"
-                        type="search"
-                        placeholder="Rechercher…"
-                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    />
-                    <button
-                        v-if="searchInput"
-                        type="button"
-                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        @click="searchInput = ''"
-                    >
-                        <X class="h-3.5 w-3.5" />
-                    </button>
-                </div>
-
-                <FilterDrawer
-                    v-model:open="filterDrawerOpen"
-                    title="Filtres"
-                    :active-count="activeFilterCount"
-                    @apply="applyFilters()"
-                    @reset="clearFilters"
-                >
-                    <div class="space-y-1.5">
-                        <Label>Agence</Label>
-                        <Dropdown
-                            v-model="selectedSite"
-                            :options="siteOptions"
-                            option-label="label"
-                            option-value="value"
-                            placeholder="Agence"
-                            class="w-full text-sm"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Type</Label>
-                        <Dropdown
-                            v-model="selectedType"
-                            :options="typeOptions"
-                            option-label="label"
-                            option-value="value"
-                            placeholder="Type"
-                            class="w-full text-sm"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Statut</Label>
-                        <Dropdown
-                            v-model="selectedStatut"
-                            :options="statutOptions"
-                            option-label="label"
-                            option-value="value"
-                            placeholder="Statut"
-                            class="w-full text-sm"
-                        />
-                    </div>
-                </FilterDrawer>
-
-                <span
-                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
-                >
-                    {{ filteredProduits.length }} résultat{{
-                        filteredProduits.length !== 1 ? 's' : ''
-                    }}
-                </span>
+            <DataFilters
+                url="/produits"
+                v-model:search="searchInput"
+                search-key="search"
+                search-placeholder="Rechercher…"
+                :values="{ type: filters.type ?? '', statut: filters.statut ?? '', site_id: filters.site_id ?? '' }"
+                :fields="filterFields"
+                :result-count="filteredProduits.length"
+                @reset="clearFilters"
+            />
+            <div v-if="hasActiveFilters" class="flex items-center gap-2">
                 <button
-                    v-if="hasActiveFilters"
                     type="button"
                     class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                     @click="clearFilters"

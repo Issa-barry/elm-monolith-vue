@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,6 @@ import { Pencil, Plus, Power, Tags, Trash2 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
-import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
@@ -47,44 +46,45 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Types de dépense', href: '/settings/depense-types' },
 ];
 
-// ── Filtres ───────────────────────────────────────────────────────────────────
-
 const search = ref('');
+const selectedCategorie = ref('');
+const selectedStatut = ref('');
 
-const ALL = '__all__';
-const selectedCategorie = ref<string>(ALL);
-const selectedStatut = ref<string>(ALL);
-
-const categorieOptions = computed(() => [
-    { value: ALL, label: 'Tous les concernés' },
-    ...props.categories,
+const filterFields = computed((): FilterField[] => [
+    {
+        key: 'categorie',
+        label: 'Concerné',
+        type: 'select',
+        options: props.categories,
+    },
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: [
+            { value: 'actif', label: 'Actif' },
+            { value: 'inactif', label: 'Inactif' },
+        ],
+    },
 ]);
 
-const statutOptions = [
-    { value: ALL, label: 'Tous les statuts' },
-    { value: 'actif', label: 'Actif' },
-    { value: 'inactif', label: 'Inactif' },
-];
-
-const hasActiveFilters = computed(
-    () =>
-        !!search.value ||
-        selectedCategorie.value !== ALL ||
-        selectedStatut.value !== ALL,
-);
+function handleApply(values: Record<string, unknown>) {
+    selectedCategorie.value = (values.categorie as string) || '';
+    selectedStatut.value = (values.statut as string) || '';
+}
 
 function resetFilters() {
     search.value = '';
-    selectedCategorie.value = ALL;
-    selectedStatut.value = ALL;
+    selectedCategorie.value = '';
+    selectedStatut.value = '';
 }
 
 const filtered = computed(() => {
     let data = props.types;
-    if (selectedCategorie.value !== ALL) {
+    if (selectedCategorie.value) {
         data = data.filter((t) => t.categorie === selectedCategorie.value);
     }
-    if (selectedStatut.value !== ALL) {
+    if (selectedStatut.value) {
         data = data.filter((t) =>
             selectedStatut.value === 'actif' ? t.is_active : !t.is_active,
         );
@@ -222,28 +222,15 @@ const categorieColors: Record<string, string> = {
                 </div>
 
                 <!-- Filtres -->
-                <DataTableFilters
-                    v-model:search="search"
-                    search-placeholder="Rechercher…"
-                    :has-active-filters="hasActiveFilters"
+                <DataFilters
+                    :fields="filterFields"
+                    :values="{ categorie: selectedCategorie, statut: selectedStatut }"
                     :result-count="filtered.length"
+                    search-placeholder="Rechercher…"
+                    v-model:search="search"
+                    @apply="handleApply"
                     @reset="resetFilters"
-                >
-                    <Select
-                        v-model="selectedCategorie"
-                        :options="categorieOptions"
-                        option-label="label"
-                        option-value="value"
-                        class="w-56"
-                    />
-                    <Select
-                        v-model="selectedStatut"
-                        :options="statutOptions"
-                        option-label="label"
-                        option-value="value"
-                        class="w-40"
-                    />
-                </DataTableFilters>
+                />
 
                 <!-- DataTable -->
                 <div class="overflow-hidden rounded-xl border bg-card">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
@@ -10,7 +10,6 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { CheckCircle, Users } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Select from 'primevue/select';
 import { computed, ref } from 'vue';
 
 interface EquipeRef {
@@ -43,14 +42,24 @@ const breadcrumbs: BreadcrumbItem[] = [
 const search = ref('');
 const statutFilter = ref<'tous' | 'actif' | 'inactif' | 'pending'>('tous');
 
+const filterFields: FilterField[] = [
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: [
+            { value: 'tous', label: 'Tous' },
+            { value: 'actif', label: 'Actifs' },
+            { value: 'inactif', label: 'Inactifs' },
+            { value: 'pending', label: 'En attente' },
+        ],
+    },
+];
+
 function resetFilters() {
     search.value = '';
     statutFilter.value = 'tous';
 }
-
-const hasActiveFilters = computed(
-    () => !!search.value || statutFilter.value !== 'tous',
-);
 
 const pendingCount = computed(
     () => props.livreurs.filter((l) => l.has_account && !l.is_active).length,
@@ -141,26 +150,15 @@ function approuver(livreur: Livreur) {
             </div>
 
             <!-- Filtres -->
-            <DataTableFilters
+            <DataFilters
                 v-model:search="search"
                 search-placeholder="Nom, téléphone…"
-                :has-active-filters="hasActiveFilters"
+                :values="{ statut: statutFilter }"
+                :fields="filterFields"
                 :result-count="livreursFiltres.length"
+                @apply="(vals) => { statutFilter.value = (vals.statut as 'tous' | 'actif' | 'inactif' | 'pending') || 'tous' }"
                 @reset="resetFilters"
-            >
-                <Select
-                    v-model="statutFilter"
-                    :options="[
-                        { value: 'tous', label: 'Tous' },
-                        { value: 'actif', label: 'Actif' },
-                        { value: 'inactif', label: 'Inactif' },
-                        { value: 'pending', label: 'En attente' },
-                    ]"
-                    option-label="label"
-                    option-value="value"
-                    class="w-36"
-                />
-            </DataTableFilters>
+            />
 
             <!-- Tableau -->
             <DataTable

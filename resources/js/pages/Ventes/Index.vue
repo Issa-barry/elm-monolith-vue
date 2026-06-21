@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import FilterDrawer from '@/components/FilterDrawer.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,8 +9,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -27,14 +25,12 @@ import {
     Search,
     ShoppingCart,
     Trash2,
-    X,
     XCircle,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import InputNumber from 'primevue/inputnumber';
-import MultiSelect from 'primevue/multiselect';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
@@ -150,82 +146,72 @@ const filtresStatutCommission = [
     { value: 'paye', label: 'Payée' },
 ];
 
-const sitesOptions = computed(() => props.sites);
-
-// ── État des filtres locaux ────────────────────────────────────────────────────
-const filterDrawerOpen = ref(false);
-const localStatuts = ref<string[]>(props.statuts_actifs ?? []);
-const localStatutFacture = ref(props.filters.statut_facture ?? '');
-const localStatutCommission = ref(props.filters.statut_commission ?? '');
-const localSiteIds = ref<string[]>(props.filters.site_ids ?? []);
-const localDateDebut = ref(props.filters.date_debut ?? '');
-const localDateFin = ref(props.filters.date_fin ?? '');
-const localVehicule = ref(props.filters.vehicule ?? '');
-const localProprietaire = ref(props.filters.proprietaire ?? '');
-const localLivreur = ref(props.filters.livreur ?? '');
-const localNumeroCommande = ref(props.filters.numero_commande ?? '');
-const localClient = ref(props.filters.client ?? '');
-
-function applyFilters() {
-    const params: Record<string, string | string[]> = { periode: 'all' };
-    if (localStatuts.value.length > 0) params.statuts = localStatuts.value;
-    if (localSiteIds.value.length > 0) params.site_ids = localSiteIds.value;
-    if (localDateDebut.value) params.date_debut = localDateDebut.value;
-    if (localDateFin.value) params.date_fin = localDateFin.value;
-    if (localStatutFacture.value)
-        params.statut_facture = localStatutFacture.value;
-    if (localStatutCommission.value)
-        params.statut_commission = localStatutCommission.value;
-    if (localVehicule.value) params.vehicule = localVehicule.value;
-    if (localProprietaire.value) params.proprietaire = localProprietaire.value;
-    if (localLivreur.value) params.livreur = localLivreur.value;
-    if (localNumeroCommande.value)
-        params.numero_commande = localNumeroCommande.value;
-    if (localClient.value) params.client = localClient.value;
-    router.get('/ventes', params, { preserveScroll: true, replace: true });
-}
-
-function resetFilters() {
-    localStatuts.value = [];
-    localStatutFacture.value = '';
-    localStatutCommission.value = '';
-    localSiteIds.value = [];
-    localDateDebut.value = '';
-    localDateFin.value = '';
-    localVehicule.value = '';
-    localProprietaire.value = '';
-    localLivreur.value = '';
-    localNumeroCommande.value = '';
-    localClient.value = '';
-    search.value = '';
-    router.get(
-        '/ventes',
-        { periode: 'all' },
-        { preserveScroll: true, replace: true },
-    );
-}
-
-const activeFilterCount = computed(() => {
-    let n = 0;
-    if (localStatuts.value.length > 0) n++;
-    if (localStatutFacture.value) n++;
-    if (localStatutCommission.value) n++;
-    if (localSiteIds.value.length > 0) n++;
-    if (localDateDebut.value || localDateFin.value) n++;
-    if (localVehicule.value) n++;
-    if (localProprietaire.value) n++;
-    if (localLivreur.value) n++;
-    if (localNumeroCommande.value) n++;
-    if (localClient.value) n++;
-    return n;
-});
-
-const hasActiveFilters = computed(
-    () => activeFilterCount.value > 0 || !!search.value,
-);
-
-// ── Recherche locale (client-side, immédiate) ─────────────────────────────────
+// ── Filtres ───────────────────────────────────────────────────────────────────
 const search = ref('');
+
+const filterFields: FilterField[] = [
+    {
+        key: 'statuts',
+        label: 'Statut commande',
+        type: 'multi-select',
+        options: filtresStatut,
+        placeholder: 'Tous les statuts',
+    },
+    {
+        key: 'statut_facture',
+        label: 'Statut facture',
+        type: 'select',
+        options: filtresStatutFacture,
+    },
+    {
+        key: 'statut_commission',
+        label: 'Statut commission',
+        type: 'select',
+        options: filtresStatutCommission,
+    },
+    {
+        key: 'date',
+        label: 'Période',
+        type: 'date-range',
+        startKey: 'date_debut',
+        endKey: 'date_fin',
+    },
+    {
+        key: 'vehicule',
+        label: 'Véhicule',
+        type: 'text',
+        placeholder: 'Nom ou immatriculation…',
+    },
+    {
+        key: 'proprietaire',
+        label: 'Propriétaire',
+        type: 'text',
+        placeholder: 'Nom, prénom ou téléphone…',
+    },
+    {
+        key: 'livreur',
+        label: 'Livreur',
+        type: 'text',
+        placeholder: 'Nom, prénom ou téléphone…',
+    },
+    {
+        key: 'client',
+        label: 'Client',
+        type: 'text',
+        placeholder: 'Nom, prénom ou téléphone…',
+    },
+    {
+        key: 'numero_commande',
+        label: 'N° commande',
+        type: 'text',
+        placeholder: 'CMD-…',
+    },
+];
+
+const filterValues = computed(() => ({
+    statuts: props.statuts_actifs ?? [],
+    ...props.filters,
+}));
 
 const commandesFiltrees = computed(() => {
     const q = search.value.toLowerCase().trim();
@@ -615,192 +601,17 @@ function confirmDelete(c: Commande) {
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <div class="relative w-[260px] shrink-0">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                        v-model="search"
-                        type="text"
-                        placeholder="Référence, véhicule, client…"
-                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    />
-                    <button
-                        v-if="search"
-                        type="button"
-                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        @click="search = ''"
-                    >
-                        <X class="h-3.5 w-3.5" />
-                    </button>
-                </div>
-
-                <FilterDrawer
-                    v-model:open="filterDrawerOpen"
-                    title="Filtres"
-                    :active-count="activeFilterCount"
-                    @apply="applyFilters"
-                    @reset="resetFilters"
-                >
-                    <div
-                        @keydown.enter.prevent="applyFilters"
-                        class="space-y-5"
-                    >
-                        <!-- Agence / Site (Admin uniquement) -->
-                        <div v-if="is_admin" class="space-y-1.5">
-                            <Label>Agence / Site</Label>
-                            <MultiSelect
-                                v-model="localSiteIds"
-                                :options="sitesOptions"
-                                option-label="nom"
-                                option-value="id"
-                                placeholder="Toutes les agences"
-                                class="w-full"
-                                fluid
-                                display="chip"
-                                append-to="self"
-                            />
-                        </div>
-
-                        <!-- Statut commande -->
-                        <div class="space-y-1.5">
-                            <Label>Statut commande</Label>
-                            <MultiSelect
-                                v-model="localStatuts"
-                                :options="filtresStatut"
-                                option-label="label"
-                                option-value="value"
-                                placeholder="Tous les statuts"
-                                class="w-full"
-                                fluid
-                                display="chip"
-                                append-to="self"
-                            />
-                        </div>
-
-                        <!-- Statut facture -->
-                        <div class="space-y-1.5">
-                            <Label>Statut facture</Label>
-                            <select
-                                v-model="localStatutFacture"
-                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                            >
-                                <option
-                                    v-for="s in filtresStatutFacture"
-                                    :key="s.value"
-                                    :value="s.value"
-                                >
-                                    {{ s.label }}
-                                </option>
-                            </select>
-                        </div>
-
-                        <!-- Statut commission -->
-                        <div class="space-y-1.5">
-                            <Label>Statut commission</Label>
-                            <select
-                                v-model="localStatutCommission"
-                                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                            >
-                                <option
-                                    v-for="s in filtresStatutCommission"
-                                    :key="s.value"
-                                    :value="s.value"
-                                >
-                                    {{ s.label }}
-                                </option>
-                            </select>
-                        </div>
-
-                        <!-- Dates -->
-                        <div class="grid grid-cols-2 gap-2">
-                            <div class="space-y-1.5">
-                                <Label>Date début</Label>
-                                <Input
-                                    v-model="localDateDebut"
-                                    type="date"
-                                    class="h-9"
-                                />
-                            </div>
-                            <div class="space-y-1.5">
-                                <Label>Date fin</Label>
-                                <Input
-                                    v-model="localDateFin"
-                                    type="date"
-                                    class="h-9"
-                                />
-                            </div>
-                        </div>
-
-                        <!-- Véhicule -->
-                        <div class="space-y-1.5">
-                            <Label>Véhicule</Label>
-                            <Input
-                                v-model="localVehicule"
-                                placeholder="Nom ou immatriculation…"
-                                class="h-9"
-                            />
-                        </div>
-
-                        <!-- Propriétaire -->
-                        <div class="space-y-1.5">
-                            <Label>Propriétaire</Label>
-                            <Input
-                                v-model="localProprietaire"
-                                placeholder="Nom, prénom ou téléphone…"
-                                class="h-9"
-                            />
-                        </div>
-
-                        <!-- Livreur -->
-                        <div class="space-y-1.5">
-                            <Label>Livreur</Label>
-                            <Input
-                                v-model="localLivreur"
-                                placeholder="Nom, prénom ou téléphone…"
-                                class="h-9"
-                            />
-                        </div>
-
-                        <!-- Client -->
-                        <div class="space-y-1.5">
-                            <Label>Client</Label>
-                            <Input
-                                v-model="localClient"
-                                placeholder="Nom, prénom ou téléphone…"
-                                class="h-9"
-                            />
-                        </div>
-
-                        <!-- Numéro de commande -->
-                        <div class="space-y-1.5">
-                            <Label>N° commande</Label>
-                            <Input
-                                v-model="localNumeroCommande"
-                                placeholder="CMD-…"
-                                class="h-9"
-                            />
-                        </div>
-                    </div>
-                </FilterDrawer>
-
-                <span
-                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
-                >
-                    {{ commandesFiltrees.length }} résultat{{
-                        commandesFiltrees.length !== 1 ? 's' : ''
-                    }}
-                </span>
-                <button
-                    v-if="hasActiveFilters"
-                    type="button"
-                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                    @click="resetFilters"
-                >
-                    Réinitialiser
-                </button>
-            </div>
+            <DataFilters
+                url="/ventes"
+                :base-params="{ periode: 'all' }"
+                :values="filterValues"
+                :sites="sites"
+                :is-admin="is_admin"
+                v-model:search="search"
+                search-placeholder="Référence, véhicule, client…"
+                :result-count="commandesFiltrees.length"
+                :fields="filterFields"
+            />
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import FilterDrawer from '@/components/FilterDrawer.vue';
+import DataFilters, { type FilterField } from '@/components/filters/DataFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -10,8 +10,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -28,7 +26,6 @@ import {
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
-import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
@@ -116,88 +113,12 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Factures', href: '/factures' },
 ];
 
-// ── Filtre par période ───────────────────────────────────────────────────────
 const periodes = [
     { value: 'today', label: "Aujourd'hui" },
     { value: 'week', label: 'Cette semaine' },
     { value: 'month', label: 'Ce mois' },
     { value: 'all', label: 'Tout' },
 ];
-
-function baseParams(): Record<string, string> {
-    const p: Record<string, string> = {};
-    if (props.livreur_id) p.livreur_id = props.livreur_id;
-    return p;
-}
-
-// ── Filtres avancés (panneau latéral, appliqués uniquement au clic "Appliquer") ─
-const filterDrawerOpen = ref(false);
-const localPeriode = ref(props.periode);
-const localStatut = ref(props.statut);
-const localSiteId = ref(props.site_id);
-const localVehicule = ref(props.vehicule ?? '');
-const localChauffeur = ref(props.chauffeur ?? '');
-const localConvoyeur = ref(props.convoyeur ?? '');
-const localProprietaire = ref(props.proprietaire ?? '');
-const localClient = ref(props.client ?? '');
-const localReference = ref(props.reference ?? '');
-
-function applyFilters() {
-    const params: Record<string, string> = {
-        ...baseParams(),
-        periode: localPeriode.value,
-        statut: localStatut.value,
-        // Toujours envoyé explicitement (y compris "tous") pour ne pas retomber
-        // sur le site par défaut côté backend après un rechargement.
-        site_id: localSiteId.value,
-    };
-    if (localVehicule.value) params.vehicule = localVehicule.value;
-    if (localChauffeur.value) params.chauffeur = localChauffeur.value;
-    if (localConvoyeur.value) params.convoyeur = localConvoyeur.value;
-    if (localProprietaire.value) params.proprietaire = localProprietaire.value;
-    if (localClient.value) params.client = localClient.value;
-    if (localReference.value) params.reference = localReference.value;
-    router.get('/factures', params, { preserveScroll: true, replace: true });
-}
-
-function resetFilters() {
-    localPeriode.value = 'today';
-    localStatut.value = 'tous';
-    localSiteId.value = 'tous';
-    localVehicule.value = '';
-    localChauffeur.value = '';
-    localConvoyeur.value = '';
-    localProprietaire.value = '';
-    localClient.value = '';
-    localReference.value = '';
-    search.value = '';
-    router.get(
-        '/factures',
-        { ...baseParams(), periode: 'today', statut: 'tous', site_id: 'tous' },
-        { preserveScroll: true, replace: true },
-    );
-}
-
-const activeFilterCount = computed(
-    () =>
-        [
-            localStatut.value !== 'tous',
-            localSiteId.value !== 'tous',
-            !!localVehicule.value,
-            !!localChauffeur.value,
-            !!localConvoyeur.value,
-            !!localProprietaire.value,
-            !!localClient.value,
-            !!localReference.value,
-        ].filter(Boolean).length,
-);
-
-const hasActiveFilters = computed(
-    () =>
-        localPeriode.value !== 'today' ||
-        activeFilterCount.value > 0 ||
-        !!search.value,
-);
 
 const filtres = [
     { value: 'tous', label: 'Toutes' },
@@ -206,6 +127,41 @@ const filtres = [
     { value: 'payee', label: 'Payées' },
     { value: 'annulee', label: 'Annulées' },
 ];
+
+const filterBaseParams = computed(() => {
+    const p: Record<string, string> = {};
+    if (props.livreur_id) p.livreur_id = props.livreur_id;
+    return p;
+});
+
+const filterValues = computed(() => ({
+    periode: props.periode,
+    statut: props.statut,
+    site_id: props.site_id,
+    vehicule: props.vehicule ?? '',
+    chauffeur: props.chauffeur ?? '',
+    convoyeur: props.convoyeur ?? '',
+    proprietaire: props.proprietaire ?? '',
+    client: props.client ?? '',
+    reference: props.reference ?? '',
+}));
+
+const filterFields = computed<FilterField[]>(() => [
+    { key: 'periode', label: 'Période', type: 'select', options: periodes },
+    { key: 'statut', label: 'Statut', type: 'select', options: filtres },
+    {
+        key: 'site_id',
+        label: 'Agence / Site',
+        type: 'select',
+        options: [{ value: 'tous', label: 'Toutes' }, ...props.sites.map((s) => ({ value: s.value, label: s.label }))],
+    },
+    { key: 'vehicule', label: 'Véhicule', type: 'text', placeholder: 'Nom ou immatriculation…' },
+    { key: 'chauffeur', label: 'Chauffeur', type: 'text', placeholder: 'Nom ou téléphone…' },
+    { key: 'convoyeur', label: 'Convoyeur', type: 'text', placeholder: 'Nom ou téléphone…' },
+    { key: 'proprietaire', label: 'Propriétaire', type: 'text', placeholder: 'Nom ou téléphone…' },
+    { key: 'client', label: 'Client', type: 'text', placeholder: 'Nom ou téléphone…' },
+    { key: 'reference', label: 'Référence', type: 'text', placeholder: 'FAC-…' },
+]);
 
 // ── Recherche locale (client-side, immédiate) ─────────────────────────────────
 const search = ref('');
@@ -605,124 +561,16 @@ function _progressPercent(f: FactureItem): number {
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <div class="relative w-[260px] shrink-0">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                        v-model="search"
-                        type="search"
-                        placeholder="Référence, véhicule, client…"
-                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    />
-                    <button
-                        v-if="search"
-                        type="button"
-                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        @click="search = ''"
-                    >
-                        <X class="h-3.5 w-3.5" />
-                    </button>
-                </div>
-
-                <FilterDrawer
-                    v-model:open="filterDrawerOpen"
-                    title="Filtres"
-                    :active-count="activeFilterCount"
-                    @apply="applyFilters"
-                    @reset="resetFilters"
-                >
-                    <div class="space-y-1.5">
-                        <Label>Site</Label>
-                        <Select
-                            v-model="localSiteId"
-                            :options="sites"
-                            option-label="label"
-                            option-value="value"
-                            class="w-full"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Statut</Label>
-                        <Select
-                            v-model="localStatut"
-                            :options="filtres"
-                            option-label="label"
-                            option-value="value"
-                            class="w-full"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Période</Label>
-                        <Select
-                            v-model="localPeriode"
-                            :options="periodes"
-                            option-label="label"
-                            option-value="value"
-                            class="w-full"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>N° de commande / facture</Label>
-                        <Input
-                            v-model="localReference"
-                            placeholder="Ex. CMD-190626-008"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Véhicule (nom ou immatriculation)</Label>
-                        <Input
-                            v-model="localVehicule"
-                            placeholder="Ex. Conakry 2 ou RC-1234"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Chauffeur</Label>
-                        <Input
-                            v-model="localChauffeur"
-                            placeholder="Nom, prénom ou téléphone"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Convoyeur</Label>
-                        <Input
-                            v-model="localConvoyeur"
-                            placeholder="Nom, prénom ou téléphone"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Propriétaire</Label>
-                        <Input
-                            v-model="localProprietaire"
-                            placeholder="Nom ou prénom"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>Client</Label>
-                        <Input
-                            v-model="localClient"
-                            placeholder="Nom, prénom ou téléphone"
-                        />
-                    </div>
-                </FilterDrawer>
-
-                <span
-                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
-                >
-                    {{ facturesFiltrees.length }} résultat{{
-                        facturesFiltrees.length !== 1 ? 's' : ''
-                    }}
-                </span>
-                <button
-                    v-if="hasActiveFilters"
-                    type="button"
-                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                    @click="resetFilters"
-                >
-                    Réinitialiser
-                </button>
-            </div>
+            <DataFilters
+                url="/factures"
+                :base-params="filterBaseParams"
+                :values="filterValues"
+                :result-count="facturesFiltrees.length"
+                :fields="filterFields"
+                :is-admin="false"
+                search-placeholder="Référence, véhicule, client…"
+                v-model:search="search"
+            />
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
