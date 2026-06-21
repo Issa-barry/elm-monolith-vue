@@ -4,6 +4,7 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useDebounceFn } from '@vueuse/core';
 import { router } from '@inertiajs/vue3';
 import { Search, X } from 'lucide-vue-next';
 import Select from 'primevue/select';
@@ -78,6 +79,10 @@ const filterDrawerOpen = ref(false);
 const localSiteIds = ref<string[]>([]);
 const localValues = ref<Record<string, unknown>>({});
 
+// Snapshots de l'état au dernier apply (pour calculer pendingChange)
+const appliedSiteIds = ref<string[]>([]);
+const appliedValues = ref<Record<string, unknown>>({});
+
 function toArray(val: unknown): string[] {
     if (Array.isArray(val)) return val.map(String);
     if (typeof val === 'string' && val) return [val];
@@ -101,12 +106,25 @@ function initLocal() {
         }
     }
     localValues.value = fresh;
+    // Sync les snapshots avec l'état serveur reçu
+    appliedSiteIds.value = [...localSiteIds.value];
+    appliedValues.value = JSON.parse(JSON.stringify(fresh));
 }
 
 initLocal();
 watch(() => props.values, initLocal, { deep: true });
 
-// ── Sites options avec "Toutes les agences" ───────────────────────────────────
+// ── Détection de changements en attente ───────────────────────────────────────
+
+const pendingChange = computed(() => {
+    const siteChanged =
+        JSON.stringify([...localSiteIds.value].sort()) !==
+        JSON.stringify([...appliedSiteIds.value].sort());
+    if (siteChanged) return true;
+    return JSON.stringify(localValues.value) !== JSON.stringify(appliedValues.value);
+});
+
+// ── Sites options ─────────────────────────────────────────────────────────────
 
 const siteOptions = computed(() =>
     props.sites.map((s) => ({ value: s.id, label: s.nom })),
@@ -158,6 +176,9 @@ function applyFilters() {
         router.get(props.url, values, { preserveScroll: true, replace: true });
     }
     emit('apply', values);
+    // Mettre à jour les snapshots → pendingChange revient à false
+    appliedSiteIds.value = [...localSiteIds.value];
+    appliedValues.value = JSON.parse(JSON.stringify(localValues.value));
 }
 
 function resetFilters() {
@@ -175,6 +196,8 @@ function resetFilters() {
             localValues.value[field.key] = '';
         }
     }
+    appliedSiteIds.value = [];
+    appliedValues.value = JSON.parse(JSON.stringify(localValues.value));
     if (props.url) {
         router.get(props.url, props.baseParams, {
             preserveScroll: true,
@@ -184,7 +207,15 @@ function resetFilters() {
     emit('reset');
 }
 
-// ── Compteur filtres actifs (drawer uniquement, pas le site de la barre) ──────
+// ── Recherche — debounce 500ms, auto-apply ────────────────────────────────────
+
+const debouncedSearchApply = useDebounceFn(() => {
+    if (props.url || emit) applyFilters();
+}, 500);
+
+watch(search, () => { debouncedSearchApply(); }, { immediate: false });
+
+// ── Compteurs ─────────────────────────────────────────────────────────────────
 
 const drawerFilterCount = computed(() => {
     let n = 0;
@@ -212,12 +243,11 @@ const hasActiveFilters = computed(
         localSiteIds.value.length > 0 ||
         !!search.value,
 );
-
 </script>
 
 <template>
     <FilterBar>
-        <!-- Recherche -->
+        <!-- Recherche (auto-apply 500ms) -->
         <div class="relative w-[260px] shrink-0">
             <Search
                 class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -227,7 +257,6 @@ const hasActiveFilters = computed(
                 type="text"
                 :placeholder="searchPlaceholder"
                 class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                @keydown.enter.prevent="applyFilters"
             />
             <button
                 v-if="search"
@@ -251,29 +280,20 @@ const hasActiveFilters = computed(
         <!-- Slot pour contrôles inline additionnels -->
         <slot name="inline" />
 
-        <!-- Bouton Appliquer (barre principale) -->
-        <button
-            type="button"
-            class="h-9 shrink-0 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            @click="applyFilters"
-        >
-            Appliquer
-        </button>
-
         <!-- Drawer filtres avancés -->
         <FilterDrawer
             v-if="fields.length > 0"
             v-model:open="filterDrawerOpen"
             title="Filtres"
             :active-count="drawerFilterCount"
+            :apply-disabled="!pendingChange"
             @apply="applyFilters"
             @reset="resetFilters"
         >
-            <div @keydown.enter.prevent="applyFilters" class="space-y-5">
-                <!-- Champs dynamiques -->
+            <div class="space-y-5">
                 <template v-for="field in fields" :key="field.key">
 
-                    <!-- multi-select ou select → FilterMultiSelect avec toggle Tous -->
+                    <!-- multi-select ou select -->
                     <div
                         v-if="field.type === 'multi-select' || field.type === 'select'"
                         class="space-y-1.5"
@@ -363,9 +383,7 @@ const hasActiveFilters = computed(
         </FilterDrawer>
 
         <template #actions>
-            <span
-                class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
-            >
+            <span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground">
                 {{ resultCount }} résultat{{ resultCount !== 1 ? 's' : '' }}
             </span>
             <button
@@ -375,6 +393,17 @@ const hasActiveFilters = computed(
                 @click="resetFilters"
             >
                 Réinitialiser
+            </button>
+            <button
+                type="button"
+                :disabled="!pendingChange"
+                class="h-9 shrink-0 rounded-md px-4 text-sm font-medium transition-colors"
+                :class="pendingChange
+                    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                    : 'cursor-not-allowed bg-muted text-muted-foreground'"
+                @click="applyFilters"
+            >
+                Appliquer
             </button>
         </template>
     </FilterBar>
