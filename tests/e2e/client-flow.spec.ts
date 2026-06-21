@@ -272,3 +272,42 @@ test('create client without required fields -> stays on create page', async ({
 
     await expect(page).toHaveURL(/\/clients\/create$/);
 });
+
+test('stat cards reflect active search filter', async ({ page }) => {
+    await login(page);
+    await page.goto('/clients');
+    await page.waitForLoadState('networkidle');
+
+    const totalCard = page
+        .locator('p', { hasText: /total clients/i })
+        .locator('xpath=following-sibling::p')
+        .first();
+
+    const totalBefore = parseInt(
+        (await totalCard.textContent()) ?? '0',
+        10,
+    );
+    expect(totalBefore).toBeGreaterThan(0);
+
+    const searchInput = page
+        .locator('input[placeholder*="recherch" i]:visible')
+        .first();
+    await searchInput.fill('ZZZZNO_MATCH_9999');
+
+    await expect(totalCard).toHaveText('0', { timeout: 5_000 });
+
+    const activeCard = page
+        .locator('p', { hasText: /clients actifs/i })
+        .locator('xpath=following-sibling::p')
+        .first();
+    await expect(activeCard).toHaveText('0');
+
+    const inactiveCard = page
+        .locator('p', { hasText: /clients inactifs/i })
+        .locator('xpath=following-sibling::p')
+        .first();
+    await expect(inactiveCard).toHaveText('0');
+
+    await searchInput.fill('');
+    await expect(totalCard).not.toHaveText('0', { timeout: 5_000 });
+});

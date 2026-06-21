@@ -4,6 +4,7 @@ namespace App\Enums;
 
 enum StatutCommission: string
 {
+    case CREEE = 'creee';
     case IMPAYE = 'impaye';
     case PARTIEL = 'partiel';
     case PAYE = 'paye';
@@ -11,15 +12,17 @@ enum StatutCommission: string
     public function label(): string
     {
         return match ($this) {
-            self::IMPAYE => 'Impayé',
-            self::PARTIEL => 'Partiel',
-            self::PAYE => 'Payé',
+            self::CREEE => 'Créée',
+            self::IMPAYE => 'Impayée',
+            self::PARTIEL => 'Partiellement payée',
+            self::PAYE => 'Payée',
         };
     }
 
     public function dotClass(): string
     {
         return match ($this) {
+            self::CREEE => 'bg-zinc-400',
             self::IMPAYE => 'bg-red-500',
             self::PARTIEL => 'bg-amber-500',
             self::PAYE => 'bg-emerald-500',
@@ -29,6 +32,7 @@ enum StatutCommission: string
     public function color(): string
     {
         return match ($this) {
+            self::CREEE => 'secondary',
             self::IMPAYE => 'danger',
             self::PARTIEL => 'warn',
             self::PAYE => 'success',

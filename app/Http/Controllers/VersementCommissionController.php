@@ -23,6 +23,13 @@ class VersementCommissionController extends Controller
         abort_unless($part->commission_vente_id === $commission->id, 403, 'Part invalide.');
         abort_if($part->isPaye(), 422, 'Cette part est déjà entièrement versée.');
 
+        $commandeCommission = $commission->commande;
+        abort_unless(
+            ! $commandeCommission || $commandeCommission->isEncaissable(),
+            422,
+            'Le chargement doit être validé avant tout encaissement ou paiement.'
+        );
+
         // ── Frais véhicule : déduction automatique au 1er versement ─────────────
         $fraisAAppliquer = 0.0;
         $totalFraisVehicule = 0.0;

@@ -96,6 +96,10 @@ class CommissionVente extends Model
      */
     public function recalculStatutGlobal(): bool
     {
+        if ($this->statut === StatutCommission::CREEE) {
+            return false;
+        }
+
         $parts = $this->parts()->get();
 
         $totalVerse = $parts->sum('montant_verse');

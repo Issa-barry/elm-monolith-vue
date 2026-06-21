@@ -10,11 +10,11 @@ export PHP=/opt/alt/php84/usr/bin/php
 composer2 update
 $PHP artisan migrate:fresh --seed
 $PHP artisan optimize:clear
-$PHP artisan optimize
+$PHP artisan optimize 
 
 /opt/alt/php84/usr/bin/php artisan up
  
-VFg
+test3
  
 # Sur ton PC
 npm run build
@@ -115,10 +115,6 @@ npx playwright test tests/e2e/vehicule-flow.spec.ts
 Variables d'environnement E2E utiles (optionnelles) :
 
 ```bash
-E2E_BASE_URL=http://127.0.0.1:8000
-E2E_PHONE=+33758855039
-E2E_PASSWORD=Staff@2025
-E2E_EMAIL=superadmin@admin.com
 ```
 
  

@@ -73,12 +73,12 @@ const filterDrawerOpen = ref(false);
 const search = ref('');
 const statut = ref<string>('tous');
 
-const totalClients = computed(() => props.clients.length);
+const totalClients = computed(() => filteredClients.value.length);
 const activeClients = computed(
-    () => props.clients.filter((c) => c.is_active).length,
+    () => filteredClients.value.filter((c) => c.is_active).length,
 );
 const inactiveClients = computed(
-    () => props.clients.filter((c) => !c.is_active).length,
+    () => filteredClients.value.filter((c) => !c.is_active).length,
 );
 
 function resetFilters() {

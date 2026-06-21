@@ -32,6 +32,13 @@ class EncaissementVenteController extends Controller
             'Acces refuse.'
         );
 
+        $commande = $facture_vente->commande;
+        abort_unless(
+            ! $commande || $commande->isEncaissable(),
+            422,
+            'Le chargement doit être validé avant tout encaissement ou paiement.'
+        );
+
         $montantRestant = $facture_vente->montant_restant;
 
         $data = $request->validate([
@@ -58,7 +65,6 @@ class EncaissementVenteController extends Controller
         ]);
 
         // Audit: log on the parent commande
-        $commande = $facture_vente->commande;
         if ($commande) {
             $this->auditService->record(
                 $commande,

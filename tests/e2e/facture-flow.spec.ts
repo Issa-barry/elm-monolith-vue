@@ -85,6 +85,27 @@ test('commande -> confirmation -> chargement -> encaissement facture -> visible 
         },
     );
 
+    // ── 3b. Valider le chargement (CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS) ──
+    const validerChargementBtn = page
+        .getByRole('button', { name: /valider le chargement/i })
+        .first();
+    await expect(validerChargementBtn).toBeVisible({ timeout: 20_000 });
+    await validerChargementBtn.click();
+
+    // Le dialog s'ouvre avec les quantités pré-remplies — soumettre directement
+    const chargementDialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /renseignez les quantités/i });
+    await expect(chargementDialog).toBeVisible({ timeout: 10_000 });
+    await chargementDialog
+        .getByRole('button', { name: /valider le chargement/i })
+        .click();
+
+    await expect(page.locator('body')).toContainText(
+        /chargement validé|livraison/i,
+        { timeout: 30_000 },
+    );
+
     // ── 4. Aller sur /factures et encaisser ────────────────────────────────────
     await page.goto('/factures');
     await expect(page).toHaveURL(/\/factures/, { timeout: 20_000 });

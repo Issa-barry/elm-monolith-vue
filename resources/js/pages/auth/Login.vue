@@ -142,7 +142,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
         <Head title="Connexion" />
 
         <Card
-            class="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col border-0 bg-transparent shadow-none md:min-h-0 md:rounded-2xl md:border md:border-border/80 md:bg-card/95 md:shadow-2xl md:shadow-black/8 md:dark:shadow-black/35"
+            class="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col border-0 bg-transparent shadow-none md:min-h-0 md:rounded-2xl md:border md:border-border/80 md:bg-card/95 md:shadow-2xl md:shadow-foreground/8 md:dark:shadow-foreground/30"
         >
             <CardHeader
                 class="px-4 pt-10 pb-2 text-center sm:px-6 md:px-8 md:pt-8 md:pb-0"
@@ -151,7 +151,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                     :href="home()"
                     class="mx-auto mb-2 flex h-10 w-12 items-center justify-center rounded-md"
                 >
-                    <AppLogoIcon class="size-10 fill-current text-foreground" />
+                    <AppLogoIcon class="size-10 fill-current text-primary" />
                     <span class="sr-only">Accueil</span>
                 </Link>
                 <CardTitle class="text-2xl font-semibold">Connexion</CardTitle>
