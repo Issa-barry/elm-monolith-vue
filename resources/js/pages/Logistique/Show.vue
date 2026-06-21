@@ -34,7 +34,6 @@ import {
     onMounted,
     ref,
     watch,
-    type Component,
 } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -614,55 +613,9 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
 type DetailTabKey = 'informations' | 'lignes' | 'commission';
 const activeDetailTab = ref<DetailTabKey>('informations');
 
-interface DetailMenuItem {
-    key: DetailTabKey;
-    label: string;
-    icon: Component;
-    disabled?: boolean;
-    command: () => void;
-}
-
 function setActiveDetailTab(tab: DetailTabKey) {
     if (tab === 'commission' && !showCommissionSection.value) return;
     activeDetailTab.value = tab;
-}
-
-function isDetailTabActive(key: DetailTabKey): boolean {
-    return activeDetailTab.value === key;
-}
-
-const detailMenuItems = computed<DetailMenuItem[]>(() => [
-    {
-        key: 'informations',
-        label: 'Informations',
-        icon: FileEdit,
-        command: () => setActiveDetailTab('informations'),
-    },
-    {
-        key: 'lignes',
-        label: 'Lignes produits',
-        icon: Package,
-        command: () => setActiveDetailTab('lignes'),
-    },
-    {
-        key: 'commission',
-        label: 'Commission logistique',
-        icon: ShieldCheck,
-        disabled: !showCommissionSection.value,
-        command: () => setActiveDetailTab('commission'),
-    },
-]);
-
-function detailMenuItemClass(item: DetailMenuItem): string {
-    if (item.disabled) {
-        return 'cursor-not-allowed border border-transparent bg-transparent text-muted-foreground/55 opacity-80';
-    }
-
-    if (isDetailTabActive(item.key)) {
-        return 'border border-primary/20 bg-primary text-primary-foreground shadow-sm';
-    }
-
-    return 'border border-transparent bg-transparent text-foreground/75 hover:border-primary/20 hover:bg-primary/10 hover:text-primary';
 }
 
 watch(showCommissionSection, (visible) => {
@@ -845,22 +798,45 @@ function activiteDotClass(action: string): string {
                 </div>
             </div>
 
-            <!-- ══ Contenu principal (2 colonnes) ═════════════════════════════ -->
-            <div class="rounded-xl border bg-card p-1.5 shadow-sm">
-                <div class="flex flex-wrap items-center gap-1">
-                    <button
-                        v-for="item in detailMenuItems"
-                        :key="item.key"
-                        type="button"
-                        class="inline-flex w-auto items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors"
-                        :class="detailMenuItemClass(item)"
-                        :disabled="item.disabled"
-                        @click="item.command()"
-                    >
-                        <component :is="item.icon" class="h-4 w-4 shrink-0" />
-                        <span>{{ item.label }}</span>
-                    </button>
-                </div>
+            <!-- Navigation par onglets ──────────────────────────────────────── -->
+            <div class="flex border-b">
+                <button
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="
+                        activeDetailTab === 'informations'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="setActiveDetailTab('informations')"
+                >
+                    Informations
+                </button>
+                <button
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="
+                        activeDetailTab === 'lignes'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="setActiveDetailTab('lignes')"
+                >
+                    Lignes produits
+                </button>
+                <button
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="[
+                        activeDetailTab === 'commission'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground',
+                        !showCommissionSection
+                            ? 'cursor-not-allowed opacity-40'
+                            : '',
+                    ]"
+                    :disabled="!showCommissionSection"
+                    @click="setActiveDetailTab('commission')"
+                >
+                    Commission logistique
+                </button>
             </div>
 
             <div class="space-y-4">
