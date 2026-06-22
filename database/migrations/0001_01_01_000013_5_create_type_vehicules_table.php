@@ -8,6 +8,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Ce fichier a été renommé depuis 2026_06_13_100001_..., déjà exécuté
+        // en production sous l'ancien nom. Schema::hasTable évite l'erreur
+        // "table already exists" quand Laravel le rejoue sous le nouveau nom.
+        if (Schema::hasTable('type_vehicules')) {
+            return;
+        }
+
         Schema::create('type_vehicules', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
