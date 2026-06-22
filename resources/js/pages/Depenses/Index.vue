@@ -507,6 +507,7 @@ const categorieColors: Record<string, string> = {
                 search-key="search"
                 search-placeholder="Rechercher…"
                 v-model:search="filterSearch"
+                :hide-agence-selector="true"
             />
 
             <!-- Tableau -->
@@ -630,8 +631,20 @@ const categorieColors: Record<string, string> = {
                                         }}
                                     </div>
                                 </button>
-                                <div v-else class="text-sm font-medium">
-                                    {{ d.beneficiaire_label ?? '—' }}
+                                <div v-else>
+                                    <div class="text-sm font-medium">
+                                        {{ d.beneficiaire_label ?? '—' }}
+                                    </div>
+                                    <div
+                                        v-if="d.beneficiaire_telephone"
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        {{
+                                            formatPhoneDisplay(
+                                                d.beneficiaire_telephone,
+                                            )
+                                        }}
+                                    </div>
                                 </div>
                             </td>
 

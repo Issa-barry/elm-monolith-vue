@@ -729,6 +729,7 @@ class DepenseController extends Controller
             $extra = $vehiculeInfoCache[$d->beneficiaire_id] ?? null;
             if ($extra) {
                 $vehiculeImmatriculation = $extra['immatriculation'] ?? null;
+                $beneficiaireTelephone = $extra['telephone'] ?? null;
             }
         } else {
             $beneficiaireTelephone = $labelCache["tel:{$d->beneficiaire_type}:{$d->beneficiaire_id}"] ?? null;
@@ -776,7 +777,7 @@ class DepenseController extends Controller
             $ids = $items->pluck('beneficiaire_id')->unique()->values()->all();
 
             if ($type === 'vehicule') {
-                $models = Vehicule::with('proprietaire:id,nom,prenom')
+                $models = Vehicule::with('proprietaire:id,nom,prenom,telephone')
                     ->findMany($ids, ['id', 'nom_vehicule', 'immatriculation', 'proprietaire_id']);
 
                 foreach ($models as $model) {
@@ -788,12 +789,14 @@ class DepenseController extends Controller
                             'concerne_reel_label' => $propNom,
                             'impact_message' => "Cette dépense sera déduite de la commission de {$propNom}.",
                             'immatriculation' => $model->immatriculation,
+                            'telephone' => $model->proprietaire->telephone,
                         ];
                     } else {
                         $vehiculeInfoCache[$model->id] = [
                             'concerne_reel_label' => 'Agence ELM',
                             'impact_message' => 'Ce véhicule est interne ELM. La dépense sera comptabilisée comme charge entreprise.',
                             'immatriculation' => $model->immatriculation,
+                            'telephone' => null,
                         ];
                     }
                 }

@@ -279,3 +279,48 @@ test('stat cards reflect active filters', async ({ page }) => {
         .click();
     await page.waitForLoadState('networkidle');
 });
+
+test('filtre site dans le drawer persiste après Appliquer (pas de sélecteur agence générique en doublon)', async ({
+    page,
+}) => {
+    await page.goto('/depenses');
+    await expect(page).toHaveURL(/\/depenses$/, { timeout: 15_000 });
+
+    // Le sélecteur "agence" générique (toolbar) doit être masqué sur cette
+    // page : Dépenses a son propre filtre "Site" dédié dans le drawer, qui
+    // seul est branché sur le backend (paramètre `site`, pas `site_ids`).
+    await expect(page.getByTestId('agency-filter')).toHaveCount(0);
+
+    const filtresBtn = page.getByRole('button', { name: /filtres/i }).first();
+    await expect(filtresBtn).toBeVisible({ timeout: 10_000 });
+    await filtresBtn.click();
+
+    const siteField = page.getByTestId('filter-field-site');
+    await expect(siteField).toBeVisible({ timeout: 5_000 });
+
+    const siteMultiselect = siteField
+        .locator('[data-pc-name="multiselect"]')
+        .first();
+    await siteMultiselect.click();
+
+    const option = page.locator('[role="option"]:visible').first();
+    await expect(option).toBeVisible({ timeout: 5_000 });
+    const optionLabel = (await option.textContent())?.trim();
+    await option.click();
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('button', { name: /appliquer/i }).first().click();
+    await expect(page).toHaveURL(/site=/, { timeout: 10_000 });
+    await page.waitForLoadState('networkidle');
+
+    // Rouvrir le drawer : la sélection ne doit pas avoir été effacée par le
+    // round-trip serveur (régression : le filtre agence générique, mal
+    // câblé, écrasait visuellement cette sélection après Appliquer).
+    await filtresBtn.click();
+    await expect(siteField).toBeVisible({ timeout: 5_000 });
+    if (optionLabel) {
+        await expect(siteMultiselect).toContainText(optionLabel, {
+            timeout: 5_000,
+        });
+    }
+});
