@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+    applyDrawerFilterOption,
     createUser,
     escapeRegExp,
     fillUserInfoAndAdvance,
@@ -9,7 +10,6 @@ import {
     openRowActions,
     randomDigits,
     registerCleanup,
-    selectOptionFromCombobox,
 } from './helpers';
 
 const PREFIX = 'e2eusrqual';
@@ -106,8 +106,7 @@ test('inactive filter shows only inactive users', async ({ page }) => {
 
     // Vérifier le filtre "Inactif" sur la liste
     await page.goto('/users');
-    const statusSelect = page.locator('[role="combobox"]:visible').first();
-    await selectOptionFromCombobox(page, statusSelect, /^inactif$/i);
+    await applyDrawerFilterOption(page, 'statut', /^inactif$/i);
 
     const rows = page.locator('[data-testid="staff-users-table"] tbody tr:visible');
     const count = await rows.count();

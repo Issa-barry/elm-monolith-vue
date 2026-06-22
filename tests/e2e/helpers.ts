@@ -261,6 +261,26 @@ export async function closeFilterDrawerIfOpen(page: Page): Promise<void> {
         .catch(() => undefined);
 }
 
+/**
+ * Opens the DataFilters drawer, selects an option in the multi-select for the
+ * given field key, then clicks "Appliquer les filtres" (which also closes the
+ * drawer). Mirrors the pattern used by tests/e2e/vente-filtre-statut.spec.ts.
+ */
+export async function applyDrawerFilterOption(
+    page: Page,
+    fieldKey: string,
+    optionName: string | RegExp,
+): Promise<void> {
+    await page.getByRole('button', { name: /filtres/i }).first().click();
+    const combobox = page
+        .getByTestId(`filter-field-${fieldKey}`)
+        .locator('[data-pc-name="multiselect"]')
+        .first();
+    await selectOptionFromCombobox(page, combobox, optionName);
+    await page.keyboard.press('Escape');
+    await page.getByTestId('filters-apply').click();
+}
+
 export function getVisibleSearchInput(page: Page): Locator {
     return page
         .locator(

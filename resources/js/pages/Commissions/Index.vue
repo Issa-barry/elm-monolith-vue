@@ -127,7 +127,7 @@ const localFilterValues = computed(() => ({
 }));
 
 function handleApply(values: Record<string, unknown>) {
-    filtreStatut.value = (values.statut as string) || 'all';
+    filtreStatut.value = (values.statut as string[])?.[0] ?? 'all';
 }
 
 function resetFilters() {

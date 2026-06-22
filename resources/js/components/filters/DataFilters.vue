@@ -357,6 +357,7 @@ const hasActiveFilters = computed(
             <input
                 v-model="search"
                 type="text"
+                data-testid="search-input"
                 :placeholder="searchPlaceholder"
                 class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             />

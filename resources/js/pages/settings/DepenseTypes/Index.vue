@@ -71,8 +71,8 @@ const filterFields = computed((): FilterField[] => [
 ]);
 
 function handleApply(values: Record<string, unknown>) {
-    selectedCategorie.value = (values.categorie as string) || '';
-    selectedStatut.value = (values.statut as string) || '';
+    selectedCategorie.value = (values.categorie as string[])?.[0] ?? '';
+    selectedStatut.value = (values.statut as string[])?.[0] ?? '';
 }
 
 function resetFilters() {

@@ -2,6 +2,7 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 import {
     ensureModuleEnabled,
     escapeRegExp,
+    getVisibleSearchInput,
     login,
     randomDigits,
 } from './helpers';
@@ -244,9 +245,7 @@ test('stat cards reflect active filters', async ({ page }) => {
     );
     expect(totalBefore).toBeGreaterThan(0);
 
-    const searchInput = page
-        .locator('input[type="search"]')
-        .first();
+    const searchInput = getVisibleSearchInput(page);
     await searchInput.fill('ZZZZNO_MATCH_9999');
     await page.waitForLoadState('networkidle');
 

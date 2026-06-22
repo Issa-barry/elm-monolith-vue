@@ -83,7 +83,7 @@ const filterFields = computed((): FilterField[] => [
 ]);
 
 function handleApply(values: Record<string, unknown>) {
-    type.value = (values.type as string) || '';
+    type.value = (values.type as string[])?.[0] ?? '';
 }
 
 function resetFilters() {

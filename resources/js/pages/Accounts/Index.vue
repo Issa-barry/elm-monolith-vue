@@ -123,8 +123,8 @@ const filteredAccounts = computed(() => {
 });
 
 function handleApply(values: Record<string, unknown>) {
-    typeFilter.value = (values.type as string) || 'tous';
-    statusFilter.value = (values.statut as string) || 'tous';
+    typeFilter.value = (values.type as string[])?.[0] ?? 'tous';
+    statusFilter.value = (values.statut as string[])?.[0] ?? 'tous';
 }
 
 function resetFilters() {
