@@ -61,6 +61,7 @@ class DepenseController extends Controller
             ->get(['id', 'nom']);
 
         $statsRow = $this->buildQuery($filters, $orgId)
+            ->reorder()
             ->selectRaw(
                 'COUNT(*) as total,
                 COALESCE(SUM(montant), 0) as montant_total,
