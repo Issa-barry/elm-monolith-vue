@@ -18,6 +18,16 @@ async function openFilterDrawer(page: any) {
     });
 }
 
+// Locator stable (data-testid), indépendant du texte affiché — qui change
+// dès qu'une option est sélectionnée (placeholder -> chip), ce qui invalide
+// tout locator basé sur .filter({ hasText: ... }) une fois la sélection faite.
+function statutMultiselect(page: any) {
+    return page
+        .getByTestId('filter-field-statuts')
+        .locator('[data-pc-name="multiselect"]')
+        .first();
+}
+
 async function selectMultiSelectOption(page: any, optionLabel: string) {
     const panel = page
         .locator('.p-multiselect-overlay:visible, [data-pc-name="multiselect"] .p-overlay:visible')
@@ -43,11 +53,9 @@ test.describe('Ventes — filtre multi-statut', () => {
 
         await openFilterDrawer(page);
 
-        const multiselect = page
-            .locator('[data-pc-name="multiselect"]')
-            .filter({ hasText: /tous les statuts/i })
-            .first();
+        const multiselect = statutMultiselect(page);
         await expect(multiselect).toBeVisible({ timeout: 5_000 });
+        await expect(multiselect).toContainText(/tous les statuts/i);
     });
 
     test('sélectionner un statut filtre les commandes et met à jour l\'URL', async ({ page }) => {
@@ -58,10 +66,7 @@ test.describe('Ventes — filtre multi-statut', () => {
         await openFilterDrawer(page);
 
         // Ouvrir le MultiSelect statut
-        const multiselect = page
-            .locator('[data-pc-name="multiselect"]')
-            .filter({ hasText: /tous les statuts/i })
-            .first();
+        const multiselect = statutMultiselect(page);
         await multiselect.click();
 
         // Sélectionner "Brouillon"
@@ -84,10 +89,7 @@ test.describe('Ventes — filtre multi-statut', () => {
 
         await openFilterDrawer(page);
 
-        const multiselect = page
-            .locator('[data-pc-name="multiselect"]')
-            .filter({ hasText: /tous les statuts/i })
-            .first();
+        const multiselect = statutMultiselect(page);
         await multiselect.click();
 
         await selectMultiSelectOption(page, 'Brouillon');
@@ -95,7 +97,9 @@ test.describe('Ventes — filtre multi-statut', () => {
 
         await page.keyboard.press('Escape');
 
-        // Vérifier que 2 chips sont affichées
+        // Vérifier que 2 chips sont affichées. `multiselect` est un locator
+        // stable (data-testid) qui reste valide même si le texte affiché
+        // change (placeholder -> chips) après la sélection.
         const chips = multiselect.locator('.p-multiselect-chip, [data-pc-section="chip"]');
         await expect(chips).toHaveCount(2, { timeout: 5_000 });
 
@@ -124,10 +128,12 @@ test.describe('Ventes — filtre multi-statut', () => {
         // Le sélecteur agence est affiché inline dans la barre d'outils (pas
         // dans le drawer de filtres) : ne pas ouvrir le drawer ici, sinon son
         // overlay intercepte les clics sur ce sélecteur.
+        // Locator stable (data-testid), sans .filter({ hasText }) : le texte
+        // affiché passe de "Toutes les agences" à la puce sélectionnée dès le
+        // clic sur une option, ce qui invaliderait un locator filtré par texte.
         const agenceMultiselect = page
             .getByTestId('agency-filter')
             .locator('[data-pc-name="multiselect"]')
-            .filter({ hasText: /toutes les agences/i })
             .first();
 
         // Si le filtre agence existe (admin), il doit être un MultiSelect
@@ -136,6 +142,10 @@ test.describe('Ventes — filtre multi-statut', () => {
             test.skip();
             return;
         }
+
+        await expect(agenceMultiselect).toContainText(/toutes les agences/i, {
+            timeout: 3_000,
+        });
 
         await agenceMultiselect.click();
         const options = page.locator('[role="option"]:visible');

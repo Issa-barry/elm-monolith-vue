@@ -430,6 +430,7 @@ const hasActiveFilters = computed(
                             field.type === 'multi-select' ||
                             field.type === 'select'
                         "
+                        :data-testid="`filter-field-${field.key}`"
                         class="space-y-1.5"
                     >
                         <Label class="flex items-center gap-1.5">
