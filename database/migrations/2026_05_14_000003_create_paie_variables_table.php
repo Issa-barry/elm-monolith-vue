@@ -11,6 +11,7 @@ return new class extends Migration
         Schema::create('paie_variables', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->foreignUlid('paie_ligne_id')->constrained('paie_lignes')->cascadeOnDelete();
+            $table->foreignUlid('depense_id')->nullable()->constrained('depenses')->nullOnDelete();
             $table->string('type', 30); // prime|avance|retenue|absence|autre_gain|autre_deduction
             $table->string('libelle', 150);
             $table->decimal('montant', 15, 2);

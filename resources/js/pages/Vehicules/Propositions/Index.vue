@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { CheckCircle, Eye, Filter, X } from 'lucide-vue-next';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { CheckCircle, Eye } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Proposition {
@@ -46,32 +49,24 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Propositions', href: '#' },
 ];
 
-const filterStatut = ref(props.filters.statut ?? '');
-const filterDateDebut = ref(props.filters.date_debut ?? '');
-const filterDateFin = ref(props.filters.date_fin ?? '');
+const search = ref('');
 
-function applyFilters() {
-    router.get(
-        '/vehicules/propositions',
-        {
-            statut: filterStatut.value || undefined,
-            date_debut: filterDateDebut.value || undefined,
-            date_fin: filterDateFin.value || undefined,
-        },
-        { preserveState: true, replace: true },
-    );
-}
-
-function resetFilters() {
-    filterStatut.value = '';
-    filterDateDebut.value = '';
-    filterDateFin.value = '';
-    router.get(
-        '/vehicules/propositions',
-        {},
-        { preserveState: true, replace: true },
-    );
-}
+const filterFields: FilterField[] = [
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: props.statuts.map((s) => ({ value: s.value, label: s.label })),
+        placeholder: 'Tous',
+    },
+    {
+        key: 'date',
+        label: 'Date',
+        type: 'date-range',
+        startKey: 'date_debut',
+        endKey: 'date_fin',
+    },
+];
 
 const colorClasses: Record<string, string> = {
     amber: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
@@ -110,71 +105,13 @@ const colorClasses: Record<string, string> = {
             </div>
 
             <!-- Filtres -->
-            <div class="rounded-xl border bg-card p-4 shadow-sm">
-                <div class="flex flex-wrap items-end gap-3">
-                    <Filter
-                        class="mb-1 h-4 w-4 shrink-0 text-muted-foreground"
-                    />
-
-                    <div class="flex flex-col gap-1">
-                        <label class="text-xs font-medium text-muted-foreground"
-                            >Statut</label
-                        >
-                        <select
-                            v-model="filterStatut"
-                            class="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                        >
-                            <option value="">Tous</option>
-                            <option
-                                v-for="s in statuts"
-                                :key="s.value"
-                                :value="s.value"
-                            >
-                                {{ s.label }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <div class="flex flex-col gap-1">
-                        <label class="text-xs font-medium text-muted-foreground"
-                            >Du</label
-                        >
-                        <input
-                            v-model="filterDateDebut"
-                            type="date"
-                            class="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                        />
-                    </div>
-
-                    <div class="flex flex-col gap-1">
-                        <label class="text-xs font-medium text-muted-foreground"
-                            >Au</label
-                        >
-                        <input
-                            v-model="filterDateFin"
-                            type="date"
-                            class="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                        />
-                    </div>
-
-                    <button
-                        type="button"
-                        class="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
-                        @click="applyFilters"
-                    >
-                        Filtrer
-                    </button>
-                    <button
-                        v-if="filterStatut || filterDateDebut || filterDateFin"
-                        type="button"
-                        class="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm text-muted-foreground hover:bg-muted"
-                        @click="resetFilters"
-                    >
-                        <X class="h-3.5 w-3.5" />
-                        Réinitialiser
-                    </button>
-                </div>
-            </div>
+            <DataFilters
+                url="/vehicules/propositions"
+                :values="filters"
+                :fields="filterFields"
+                :result-count="propositions.length"
+                v-model:search="search"
+            />
 
             <!-- Table -->
             <div class="rounded-xl border bg-card shadow-sm">

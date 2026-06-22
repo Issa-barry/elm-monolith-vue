@@ -102,6 +102,7 @@ class VehiculesController extends Controller
         }
 
         return Vehicule::query()
+            ->with('typeVehicule')
             ->where('organization_id', $organizationId)
             ->where(function ($query) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {

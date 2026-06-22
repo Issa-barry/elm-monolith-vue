@@ -17,6 +17,7 @@ withDefaults(
         side?: 'left' | 'right';
         applyLabel?: string;
         resetLabel?: string;
+        applyDisabled?: boolean;
     }>(),
     {
         title: 'Filtres',
@@ -24,6 +25,7 @@ withDefaults(
         side: 'right',
         applyLabel: 'Appliquer les filtres',
         resetLabel: 'Réinitialiser',
+        applyDisabled: false,
     },
 );
 
@@ -41,6 +43,7 @@ function handleApply() {
 
 function handleReset() {
     emit('reset');
+    open.value = false;
 }
 </script>
 
@@ -60,6 +63,8 @@ function handleReset() {
         </SheetTrigger>
         <SheetContent
             :side="side"
+            data-testid="filters-drawer"
+            close-test-id="filters-drawer-close"
             class="flex w-full flex-col gap-0 sm:max-w-md"
         >
             <SheetHeader class="border-b">
@@ -77,7 +82,13 @@ function handleReset() {
                 >
                     {{ resetLabel }}
                 </Button>
-                <Button type="button" class="flex-1" @click="handleApply">
+                <Button
+                    type="button"
+                    data-testid="filters-apply"
+                    class="flex-1"
+                    :disabled="applyDisabled"
+                    @click="handleApply"
+                >
                     {{ applyLabel }}
                 </Button>
             </SheetFooter>

@@ -35,8 +35,20 @@ class ProduitController extends Controller
     {
         $this->authorize('viewAny', Produit::class);
 
-        $orgId = auth()->user()->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'site_id']);
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+        $isAdmin = $user->isAdmin();
+
+        $filters = $request->only(['search', 'type', 'statut']);
+        $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
+
+        // Non-admin sans filtre explicite → ses sites (pour l'affichage du stock par site)
+        if (empty($siteIds) && ! $isAdmin) {
+            $siteIds = $user->sites()
+                ->pluck('sites.id')
+                ->map(fn ($id) => (string) $id)
+                ->toArray();
+        }
 
         $query = Produit::where('organization_id', $orgId)->orderBy('nom');
 
@@ -67,27 +79,30 @@ class ProduitController extends Controller
             ->merge(DB::table('commande_achat_lignes')->whereIn('produit_id', $produitIds)->whereNotNull('produit_id')->pluck('produit_id'))
             ->unique()->flip()->all();
 
-        $filteredSiteId = $filters['site_id'] ?? null;
-
-        // Dernier mouvement par produit (filtré par site si filtre actif)
+        // Dernier mouvement par produit (filtré aux sites sélectionnés si applicable)
         $lastMouvements = MouvementStock::whereIn('produit_id', $produitIds)
-            ->when($filteredSiteId, fn ($q) => $q->where('site_id', $filteredSiteId))
+            ->when(! empty($siteIds), fn ($q) => $q->whereIn('site_id', $siteIds))
             ->orderByDesc('created_at')
             ->get(['produit_id', 'type', 'quantite'])
             ->groupBy('produit_id')
             ->map(fn ($ms) => $ms->first());
 
-        $mapped = $produits->map(function (Produit $p) use ($allProduitStocks, $filteredSiteId, $usedIds, $lastMouvements) {
+        $mapped = $produits->map(function (Produit $p) use ($allProduitStocks, $siteIds, $usedIds, $lastMouvements) {
             $siteStocks = $allProduitStocks->get($p->id, collect());
             $hasStock = $p->type?->hasStock() ?? true;
 
-            if ($filteredSiteId) {
-                $siteStock = $siteStocks->firstWhere('site_id', $filteredSiteId);
-                $qteDisplay = $siteStock?->qte_stock ?? 0;
-                $seuilDisplay = $siteStock?->seuil_alerte_stock ?? $p->seuil_alerte_stock;
+            if (! empty($siteIds)) {
+                // Stock = somme des sites sélectionnés uniquement
+                $filteredStocks = $siteStocks->filter(fn ($s) => in_array((string) $s->site_id, $siteIds, true));
+                $qteDisplay = (int) $filteredStocks->sum('qte_stock');
+                // Seuil : pertinent uniquement si 1 seul site sélectionné
+                $seuilDisplay = count($siteIds) === 1
+                    ? ($filteredStocks->first()?->seuil_alerte_stock ?? $p->seuil_alerte_stock)
+                    : $p->seuil_alerte_stock;
             } else {
+                // Toutes les agences : agrégat complet
                 $qteDisplay = $siteStocks->isNotEmpty()
-                    ? $siteStocks->sum('qte_stock')
+                    ? (int) $siteStocks->sum('qte_stock')
                     : (int) ($p->qte_stock ?? 0);
                 $seuilDisplay = $p->seuil_alerte_stock;
             }
@@ -136,7 +151,6 @@ class ProduitController extends Controller
             ->orderBy('nom')
             ->get(['id', 'nom', 'code']);
 
-        $user = auth()->user();
         $canAjuster = $this->droitService->canAjuster($user, $orgId);
         $sitesAutorisesRaw = $canAjuster
             ? ($this->droitService->sitesAutorises($user, $orgId) ?? $allSites)
@@ -151,7 +165,7 @@ class ProduitController extends Controller
             'sites_autorises' => $sitesAutorisesRaw->values(),
             'types' => ProduitType::options(),
             'statuts' => ProduitStatut::options(),
-            'filters' => $filters,
+            'filters' => array_merge($filters, ['site_ids' => $siteIds]),
         ]);
     }
 

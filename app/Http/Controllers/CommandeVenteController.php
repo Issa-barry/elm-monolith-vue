@@ -124,10 +124,10 @@ class CommandeVenteController extends Controller
         $orgId = $user->organization_id;
 
         $periode = $request->input('periode', 'all');
-        $statut = $request->input('statut', 'tous');
+        $statuts = array_values(array_filter((array) $request->input('statuts', [])));
         $statutFacture = $request->input('statut_facture');
         $statutCommission = $request->input('statut_commission');
-        $siteId = $request->input('site_id');
+        $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
         $dateDebut = $request->input('date_debut');
         $dateFin = $request->input('date_fin');
         $vehicule = $request->input('vehicule');
@@ -147,8 +147,8 @@ class CommandeVenteController extends Controller
             ->orderByDesc('created_at');
 
         if ($user->isAdmin()) {
-            if ($siteId) {
-                $query->where('site_id', $siteId);
+            if (! empty($siteIds)) {
+                $query->whereIn('site_id', $siteIds);
             }
         } else {
             $userSiteIds = $user->sites()->pluck('sites.id');
@@ -173,8 +173,8 @@ class CommandeVenteController extends Controller
             };
         }
 
-        if ($statut !== 'tous') {
-            $query->where('statut', $statut);
+        if (! empty($statuts)) {
+            $query->whereIn('statut', $statuts);
         }
 
         if ($statutFacture) {
@@ -290,12 +290,12 @@ class CommandeVenteController extends Controller
             'commandes' => $mapped->values(),
             'totaux' => $totaux,
             'periode' => $periode,
-            'statut' => $statut,
+            'statuts_actifs' => $statuts,
             'statuts' => StatutCommandeVente::options(),
             'sites' => $sites,
             'is_admin' => $user->isAdmin(),
             'filters' => [
-                'site_id' => $siteId,
+                'site_ids' => $siteIds,
                 'date_debut' => $dateDebut,
                 'date_fin' => $dateFin,
                 'statut_facture' => $statutFacture,
@@ -450,7 +450,7 @@ class CommandeVenteController extends Controller
                 'vehicule_detail' => $vehicule ? [
                     'nom' => $vehicule->nom_vehicule,
                     'immatriculation' => $vehicule->immatriculation,
-                    'type' => $vehicule->typeVehicule?->nom ?? $vehicule->type_vehicule,
+                    'type' => $vehicule->typeVehicule?->nom,
                     'capacite_packs' => $vehicule->capacite_packs,
                     'proprietaire_nom' => $vehicule->proprietaire
                         ? trim($vehicule->proprietaire->prenom.' '.$vehicule->proprietaire->nom)

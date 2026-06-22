@@ -24,10 +24,17 @@ return new class extends Migration
 
             $table->unique(['organization_id', 'matricule'], 'employes_org_matricule_unique');
         });
+
+        Schema::table('depenses', function (Blueprint $table) {
+            $table->foreign('employe_id')->references('id')->on('employes')->nullOnDelete();
+        });
     }
 
     public function down(): void
     {
+        Schema::table('depenses', function (Blueprint $table) {
+            $table->dropForeign(['employe_id']);
+        });
         Schema::dropIfExists('employes');
     }
 };

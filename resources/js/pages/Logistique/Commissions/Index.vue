@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -13,9 +16,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { HandCoins, MoreHorizontal, Truck, User } from 'lucide-vue-next';
-import PvDropdown from 'primevue/dropdown';
-import InputText from 'primevue/inputtext';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -32,11 +33,6 @@ interface Kpis {
     nb_livreurs: number;
     total_impaye: number;
     total_paye: number;
-}
-
-interface SelectOption {
-    value: string | null;
-    label: string;
 }
 
 interface SiteOption {
@@ -72,51 +68,50 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Filtres ───────────────────────────────────────────────────────────────────
 
-const searchVal = ref(props.search ?? '');
-const statutFiltre = ref<string | null>(props.filtre_statut || null);
-const periodeFiltre = ref<string | null>(props.selected_periode || null);
-const siteFiltre = ref<string | null>(props.filtre_site || null);
+const search = ref(props.search ?? '');
 
-const STATUT_OPTIONS: SelectOption[] = [
-    { value: null, label: 'Tous les statuts' },
-    { value: 'impaye', label: 'Impayé' },
-    { value: 'paye', label: 'Payé' },
-];
-
-const PERIODE_OPTIONS = computed<SelectOption[]>(() => [
-    { value: null, label: 'Toutes les périodes' },
-    ...(props.periodes_disponibles ?? []).map((p) => ({
-        value: p.code,
-        label: p.label,
-    })),
+const filterFields = computed<FilterField[]>(() => [
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: [
+            { value: 'impaye', label: 'Impayé' },
+            { value: 'paye', label: 'Payé' },
+        ],
+        placeholder: 'Tous les statuts',
+    },
+    {
+        key: 'periode',
+        label: 'Période',
+        type: 'select',
+        options: (props.periodes_disponibles ?? []).map((p) => ({
+            value: p.code,
+            label: p.label,
+        })),
+        placeholder: 'Toutes les périodes',
+    },
+    ...(props.sites && props.sites.length > 0
+        ? [
+              {
+                  key: 'site',
+                  label: 'Agence',
+                  type: 'select' as const,
+                  options: props.sites.map((s) => ({
+                      value: s.value,
+                      label: s.label,
+                  })),
+                  placeholder: 'Toutes les agences',
+              },
+          ]
+        : []),
 ]);
 
-const SITE_OPTIONS = computed<SelectOption[]>(() => [
-    { value: null, label: 'Toutes les agences' },
-    ...(props.sites ?? []).map((s) => ({ value: s.value, label: s.label })),
-]);
-
-function appliquerFiltres() {
-    router.get(
-        '/logistique/commissions',
-        {
-            search: searchVal.value || undefined,
-            statut: statutFiltre.value ?? undefined,
-            periode: periodeFiltre.value ?? undefined,
-            site: siteFiltre.value ?? undefined,
-        },
-        { preserveState: true, replace: true },
-    );
-}
-
-let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-watch(searchVal, () => {
-    if (searchTimeout) clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(appliquerFiltres, 300);
-});
-watch(statutFiltre, appliquerFiltres);
-watch(periodeFiltre, appliquerFiltres);
-watch(siteFiltre, appliquerFiltres);
+const filterValues = computed(() => ({
+    statut: props.filtre_statut || '',
+    periode: props.selected_periode || '',
+    site: props.filtre_site || '',
+}));
 
 // ── KPIs calculés ─────────────────────────────────────────────────────────────
 
@@ -270,46 +265,15 @@ function formatPhone(tel: string | null): string {
             </div>
 
             <!-- ── Filtres ────────────────────────────────────────────────────── -->
-            <div class="flex flex-wrap items-center gap-3">
-                <InputText
-                    v-model="searchVal"
-                    placeholder="Nom, téléphone, véhicule, immatriculation, montant, statut…"
-                    class="w-72 text-sm"
-                />
-                <PvDropdown
-                    :options="STATUT_OPTIONS"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="statutFiltre"
-                    placeholder="Tous les statuts"
-                    class="w-52 text-sm"
-                    @change="(e) => (statutFiltre = e.value)"
-                />
-                <PvDropdown
-                    :options="PERIODE_OPTIONS"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="periodeFiltre"
-                    placeholder="Toutes les périodes"
-                    class="w-72 text-sm"
-                    @change="(e) => (periodeFiltre = e.value)"
-                />
-                <PvDropdown
-                    v-if="sites && sites.length > 0"
-                    :options="SITE_OPTIONS"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="siteFiltre"
-                    placeholder="Toutes les agences"
-                    class="w-52 text-sm"
-                    @change="(e) => (siteFiltre = e.value)"
-                />
-                <span class="text-xs text-muted-foreground">
-                    {{ livreurs.length }} résultat{{
-                        livreurs.length !== 1 ? 's' : ''
-                    }}
-                </span>
-            </div>
+            <DataFilters
+                url="/logistique/commissions"
+                :values="filterValues"
+                :fields="filterFields"
+                :result-count="livreurs.length"
+                search-placeholder="Nom, téléphone, véhicule, immatriculation, montant, statut…"
+                search-key="search"
+                v-model:search="search"
+            />
 
             <!-- ── Tableau livreurs ──────────────────────────────────────────── -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">

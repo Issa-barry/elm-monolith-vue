@@ -7,6 +7,7 @@ use App\Enums\StatutDepense;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Employe;
+use App\Models\Livreur;
 use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -507,6 +508,175 @@ class DepenseTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
 
+    public function test_search_finds_by_vehicule_nom(): void
+    {
+        $typeVehicule = DepenseType::factory()->vehicule()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'nom_vehicule' => 'Camion ELM 12']);
+        $autreVehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'nom_vehicule' => 'Moto 7']);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeVehicule->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $vehicule->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeVehicule->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $autreVehicule->id,
+        ]);
+
+        $this->get('/depenses?search=Camion')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    public function test_search_finds_by_vehicule_immatriculation(): void
+    {
+        $typeVehicule = DepenseType::factory()->vehicule()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'immatriculation' => 'ELM-001-GN']);
+        $autreVehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'immatriculation' => 'ELM-999-GN']);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeVehicule->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $vehicule->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeVehicule->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $autreVehicule->id,
+        ]);
+
+        $this->get('/depenses?search=ELM-001')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    public function test_search_finds_by_concerne_nom(): void
+    {
+        $typeEmploye = DepenseType::factory()->employe()->create(['organization_id' => $this->org->id]);
+        $employe = Employe::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => 'actif',
+            'nom' => 'Diallo',
+            'prenom' => 'Amadou',
+        ]);
+        $autreEmploye = Employe::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => 'actif',
+            'nom' => 'Camara',
+            'prenom' => 'Fatou',
+        ]);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeEmploye->id,
+            'beneficiaire_type' => CategorieDepense::EMPLOYE->value,
+            'beneficiaire_id' => $employe->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeEmploye->id,
+            'beneficiaire_type' => CategorieDepense::EMPLOYE->value,
+            'beneficiaire_id' => $autreEmploye->id,
+        ]);
+
+        $this->get('/depenses?search=Diallo')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    public function test_search_finds_by_concerne_telephone(): void
+    {
+        $typeLivreur = DepenseType::factory()->livreur()->create([
+            'organization_id' => $this->org->id,
+        ]);
+        $livreur = Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224611223344',
+        ]);
+        $autreLivreur = Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224699887766',
+        ]);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeLivreur->id,
+            'beneficiaire_type' => CategorieDepense::LIVREUR->value,
+            'beneficiaire_id' => $livreur->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeLivreur->id,
+            'beneficiaire_type' => CategorieDepense::LIVREUR->value,
+            'beneficiaire_id' => $autreLivreur->id,
+        ]);
+
+        $this->get('/depenses?search=611223344')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    public function test_search_with_nonexistent_value_returns_empty_without_error(): void
+    {
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'commentaire' => 'Achat materiel',
+        ]);
+
+        $this->get('/depenses?search=zzzzznotfound')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 0));
+    }
+
+    public function test_search_empty_does_not_crash_and_returns_all(): void
+    {
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+        ]);
+
+        $this->get('/depenses?search=')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 2));
+    }
+
+    public function test_search_does_not_crash_when_no_depenses_have_vehicule_beneficiaire(): void
+    {
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'beneficiaire_type' => null,
+            'beneficiaire_id' => null,
+        ]);
+
+        $this->get('/depenses?search=ELM-001')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 0));
+    }
+
     public function test_index_includes_vehicule_nom_in_data(): void
     {
         $typeVehicule = DepenseType::factory()->vehicule()->create(['organization_id' => $this->org->id]);
@@ -665,180 +835,250 @@ class DepenseTest extends TestCase
         $this->assertStringContainsString($depense->id, $content);
     }
 
-    public function test_export_pdf_with_site_filter_returns_single_pdf(): void
+    public function test_export_excel_has_telephone_concerne_column(): void
     {
-        $site = Site::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Matoto']);
+        $response = $this->get('/depenses/export/excel');
+        $response->assertOk();
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('Téléphone concerné', $content);
+    }
+
+    public function test_export_excel_has_frais_column(): void
+    {
+        $response = $this->get('/depenses/export/excel');
+        $response->assertOk();
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('Frais', $content);
+    }
+
+    public function test_export_excel_includes_telephone_for_employe_beneficiaire(): void
+    {
+        $typeEmploye = DepenseType::factory()->employe()->create(['organization_id' => $this->org->id]);
+        $employe = Employe::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => 'actif',
+            'telephone' => '+224600000000',
+        ]);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeEmploye->id,
+            'beneficiaire_type' => CategorieDepense::EMPLOYE->value,
+            'beneficiaire_id' => $employe->id,
+        ]);
+
+        $response = $this->get('/depenses/export/excel');
+        $response->assertOk();
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('+224600000000', $content);
+    }
+
+    public function test_pdf_route_no_longer_exists(): void
+    {
+        $this->get('/depenses/export/pdf')->assertNotFound();
+    }
+
+    // ── Filtre véhicule ──────────────────────────────────────────────────────
+
+    public function test_filtre_vehicule_par_nom(): void
+    {
+        $typeVehicule = DepenseType::factory()->vehicule()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'nom_vehicule' => 'Camion ELM 12']);
+        $autreVehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'nom_vehicule' => 'Moto 7']);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeVehicule->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $vehicule->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeVehicule->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $autreVehicule->id,
+        ]);
+
+        $this->get('/depenses?vehicule=Camion')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    public function test_filtre_vehicule_par_immatriculation(): void
+    {
+        $typeVehicule = DepenseType::factory()->vehicule()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'immatriculation' => 'ELM-001-GN']);
+        $autreVehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'immatriculation' => 'ELM-999-GN']);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeVehicule->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $vehicule->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeVehicule->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $autreVehicule->id,
+        ]);
+
+        $this->get('/depenses?vehicule=ELM-001')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    // ── Filtre concerné ──────────────────────────────────────────────────────
+
+    public function test_filtre_concerne_par_nom(): void
+    {
+        $typeEmploye = DepenseType::factory()->employe()->create(['organization_id' => $this->org->id]);
+        $employe = Employe::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => 'actif',
+            'nom' => 'Diallo',
+            'prenom' => 'Amadou',
+        ]);
+        $autreEmploye = Employe::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => 'actif',
+            'nom' => 'Camara',
+            'prenom' => 'Fatou',
+        ]);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeEmploye->id,
+            'beneficiaire_type' => CategorieDepense::EMPLOYE->value,
+            'beneficiaire_id' => $employe->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeEmploye->id,
+            'beneficiaire_type' => CategorieDepense::EMPLOYE->value,
+            'beneficiaire_id' => $autreEmploye->id,
+        ]);
+
+        $this->get('/depenses?concerne=Diallo')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    public function test_filtre_concerne_par_telephone(): void
+    {
+        $typeEmploye = DepenseType::factory()->employe()->create(['organization_id' => $this->org->id]);
+        $employe = Employe::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => 'actif',
+            'telephone' => '+224611223344',
+        ]);
+        $autreEmploye = Employe::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => 'actif',
+            'telephone' => '+224699887766',
+        ]);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeEmploye->id,
+            'beneficiaire_type' => CategorieDepense::EMPLOYE->value,
+            'beneficiaire_id' => $employe->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $typeEmploye->id,
+            'beneficiaire_type' => CategorieDepense::EMPLOYE->value,
+            'beneficiaire_id' => $autreEmploye->id,
+        ]);
+
+        $this->get('/depenses?concerne=611223344')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
+    }
+
+    // ── Filtre montant ───────────────────────────────────────────────────────
+
+    public function test_filtre_montant_exact(): void
+    {
         Depense::factory()->create([
             'organization_id' => $this->org->id,
             'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
-            'site_id' => $site->id,
-        ]);
-
-        $response = $this->get("/depenses/export/pdf?site={$site->id}");
-
-        $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
-        $this->assertStringContainsString('matoto', $response->headers->get('Content-Disposition') ?? '');
-    }
-
-    public function test_export_pdf_without_site_filter_returns_single_pdf_when_one_site(): void
-    {
-        $site = Site::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Dabompa']);
-        Depense::factory()->create([
-            'organization_id' => $this->org->id,
-            'user_id' => $this->user->id,
-            'depense_type_id' => $this->typeInterne->id,
-            'site_id' => $site->id,
-        ]);
-
-        $response = $this->get('/depenses/export/pdf');
-
-        $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
-    }
-
-    public function test_export_pdf_with_multiple_sites_returns_single_pdf(): void
-    {
-        $site1 = Site::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Matoto']);
-        $site2 = Site::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Dabompa']);
-        Depense::factory()->create([
-            'organization_id' => $this->org->id,
-            'user_id' => $this->user->id,
-            'depense_type_id' => $this->typeInterne->id,
-            'site_id' => $site1->id,
+            'montant' => 75000,
         ]);
         Depense::factory()->create([
             'organization_id' => $this->org->id,
             'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
-            'site_id' => $site2->id,
+            'montant' => 30000,
         ]);
 
-        $response = $this->get('/depenses/export/pdf');
-
-        $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
-        // Fichier unique — pas de ZIP dans le nom
-        $disposition = $response->headers->get('Content-Disposition') ?? '';
-        $this->assertStringContainsString('depenses', $disposition);
-        $this->assertStringNotContainsString('.zip', $disposition);
+        $this->get('/depenses?montant=75000')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('depenses.data', 1)
+                ->where('depenses.data.0.montant', 75000)
+            );
     }
 
-    public function test_export_pdf_multi_site_template_has_page_break(): void
-    {
-        $html = view('pdf.depenses_multi', [
-            'sites' => collect([
-                ['site_nom' => 'Matoto',  'rows' => collect([]), 'total' => 0],
-                ['site_nom' => 'Dabompa', 'rows' => collect([]), 'total' => 0],
-            ]),
-            'filters' => [],
-            'org' => $this->org,
-            'printed_by' => $this->user->name,
-            'generated_at' => now(),
-        ])->render();
+    // ── Popups détail ────────────────────────────────────────────────────────
 
-        $this->assertStringContainsString('page-break-before', $html);
+    public function test_concerne_detail_endpoint_returns_employe_info(): void
+    {
+        $employe = Employe::factory()->create([
+            'organization_id' => $this->org->id,
+            'statut' => 'actif',
+            'nom' => 'Diallo',
+            'prenom' => 'Amadou',
+            'telephone' => '+224600000000',
+        ]);
+
+        $response = $this->getJson("/depenses/concerne-detail?type=employe&id={$employe->id}");
+
+        $response->assertOk()
+            ->assertJson([
+                'type' => 'employe',
+                'nom' => 'Amadou Diallo',
+                'telephone' => '+224600000000',
+            ]);
     }
 
-    public function test_export_pdf_multi_site_template_has_signature_column(): void
+    public function test_concerne_detail_endpoint_returns_404_for_unknown_id(): void
     {
-        $html = view('pdf.depenses_multi', [
-            'sites' => collect([['site_nom' => 'Matoto', 'rows' => collect([]), 'total' => 0]]),
-            'filters' => [],
-            'org' => $this->org,
-            'printed_by' => $this->user->name,
-            'generated_at' => now(),
-        ])->render();
-
-        $this->assertStringContainsString('Signature', $html);
+        $this->getJson('/depenses/concerne-detail?type=employe&id=unknown')
+            ->assertNotFound();
     }
 
-    public function test_export_pdf_multi_site_template_has_no_valide_par_column(): void
+    public function test_vehicule_detail_endpoint_returns_vehicule_info(): void
     {
-        $html = view('pdf.depenses_multi', [
-            'sites' => collect([['site_nom' => 'Matoto', 'rows' => collect([]), 'total' => 0]]),
-            'filters' => [],
-            'org' => $this->org,
-            'printed_by' => $this->user->name,
-            'generated_at' => now(),
-        ])->render();
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom_vehicule' => 'Camion ELM 12',
+            'immatriculation' => 'ELM-001-GN',
+        ]);
 
-        $this->assertStringNotContainsString('Validé par', $html);
+        $response = $this->getJson("/depenses/vehicule-detail?id={$vehicule->id}");
+
+        $response->assertOk()
+            ->assertJson([
+                'nom' => 'Camion ELM 12',
+                'immatriculation' => 'ELM-001-GN',
+            ]);
     }
 
-    public function test_pdf_template_excludes_valide_par_column(): void
+    public function test_vehicule_detail_endpoint_returns_404_for_unknown_id(): void
     {
-        $html = view('pdf.depenses', [
-            'rows' => collect([]),
-            'total' => 0,
-            'filters' => [],
-            'org' => $this->org,
-            'site_nom' => 'Matoto',
-            'printed_by' => $this->user->name,
-            'generated_at' => now(),
-        ])->render();
-
-        $this->assertStringNotContainsString('Validé par', $html);
-    }
-
-    public function test_pdf_template_has_signature_column(): void
-    {
-        $html = view('pdf.depenses', [
-            'rows' => collect([]),
-            'total' => 0,
-            'filters' => [],
-            'org' => $this->org,
-            'site_nom' => 'Matoto',
-            'printed_by' => $this->user->name,
-            'generated_at' => now(),
-        ])->render();
-
-        $this->assertStringContainsString('Signature', $html);
-    }
-
-    public function test_pdf_template_uses_org_name(): void
-    {
-        $html = view('pdf.depenses', [
-            'rows' => collect([]),
-            'total' => 0,
-            'filters' => [],
-            'org' => $this->org,
-            'site_nom' => 'Matoto',
-            'printed_by' => $this->user->name,
-            'generated_at' => now(),
-        ])->render();
-
-        $this->assertStringContainsString($this->org->name, $html);
-        $this->assertStringNotContainsString($this->org->slug, $html);
-    }
-
-    public function test_pdf_template_has_printed_by(): void
-    {
-        $html = view('pdf.depenses', [
-            'rows' => collect([]),
-            'total' => 0,
-            'filters' => [],
-            'org' => $this->org,
-            'site_nom' => 'Matoto',
-            'printed_by' => $this->user->name,
-            'generated_at' => now(),
-        ])->render();
-
-        $this->assertStringContainsString('Imprimé le', $html);
-        $this->assertStringContainsString($this->user->name, $html);
-    }
-
-    public function test_pdf_template_has_site_in_title(): void
-    {
-        $html = view('pdf.depenses', [
-            'rows' => collect([]),
-            'total' => 0,
-            'filters' => [],
-            'org' => $this->org,
-            'site_nom' => 'Matoto',
-            'printed_by' => $this->user->name,
-            'generated_at' => now(),
-        ])->render();
-
-        $this->assertStringContainsString('Matoto', $html);
+        $this->getJson('/depenses/vehicule-detail?id=unknown')
+            ->assertNotFound();
     }
 
     // ── Destroy ──────────────────────────────────────────────────────────────

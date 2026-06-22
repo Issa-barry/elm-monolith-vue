@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import AuditTimeline from '@/components/AuditTimeline.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,7 +22,7 @@ import {
     XCircle,
 } from 'lucide-vue-next';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface Imputation {
     id: string;
@@ -137,6 +136,45 @@ const rejectMotif = ref('');
 const rejectCommentaire = ref('');
 const rejectErrors = ref<{ motif?: string; commentaire?: string }>({});
 const processing = ref(false);
+
+// ── Historique ───────────────────────────────────────────────────────────────
+interface HistoriqueEntry {
+    id: string;
+    date: string;
+    acteur: string;
+    event_code: string;
+    action: string;
+    description: string;
+}
+
+const historiqueLogs = ref<HistoriqueEntry[]>([]);
+const historiqueLoading = ref(false);
+const historiqueError = ref(false);
+const historiqueLoaded = ref(false);
+
+async function fetchHistorique() {
+    historiqueLoading.value = true;
+    historiqueError.value = false;
+    try {
+        const res = await fetch(`/depenses/${props.depense.id}/historique`, {
+            headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        historiqueLogs.value = data.logs ?? [];
+        historiqueLoaded.value = true;
+    } catch {
+        historiqueError.value = true;
+    } finally {
+        historiqueLoading.value = false;
+    }
+}
+
+watch(activeTab, (tab) => {
+    if (tab === 'historique' && !historiqueLoaded.value) {
+        fetchHistorique();
+    }
+});
 
 function ouvrirDialogRejet() {
     rejectMotif.value = '';
@@ -549,12 +587,76 @@ function formatDate(iso: string | null): string {
                 </template>
 
                 <template v-if="activeTab === 'historique'">
-                    <div class="rounded-xl border bg-card p-5">
-                        <AuditTimeline
-                            auditable-type="App\Models\Depense"
-                            :auditable-id="depense.id"
-                            module="depenses"
-                        />
+                    <div class="overflow-hidden rounded-xl border bg-card">
+                        <div
+                            v-if="historiqueLoading"
+                            class="flex items-center justify-center py-12 text-sm text-muted-foreground"
+                        >
+                            Chargement…
+                        </div>
+
+                        <div
+                            v-else-if="historiqueError"
+                            class="p-4 text-sm text-destructive"
+                        >
+                            Impossible de charger l'historique.
+                        </div>
+
+                        <div
+                            v-else-if="historiqueLogs.length === 0"
+                            class="flex flex-col items-center gap-2 py-12 text-muted-foreground"
+                        >
+                            <p class="text-sm">Aucune action enregistrée.</p>
+                        </div>
+
+                        <table v-else class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b bg-muted/40">
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Date / Heure
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Action
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Utilisateur
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Détail
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="log in historiqueLogs"
+                                    :key="log.id"
+                                    class="border-b transition-colors last:border-b-0 hover:bg-muted/20"
+                                >
+                                    <td
+                                        class="px-4 py-3 whitespace-nowrap text-muted-foreground tabular-nums"
+                                    >
+                                        {{ log.date }}
+                                    </td>
+                                    <td class="px-4 py-3 font-medium">
+                                        {{ log.action }}
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        {{ log.acteur }}
+                                    </td>
+                                    <td class="px-4 py-3 text-muted-foreground">
+                                        {{ log.description }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </template>
             </div>

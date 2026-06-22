@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
-import FilterDrawer from '@/components/FilterDrawer.vue';
+import ConcerneDetailDialog from '@/components/Depenses/ConcerneDetailDialog.vue';
+import VehiculeDetailDialog from '@/components/Depenses/VehiculeDetailDialog.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +24,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
@@ -29,20 +34,18 @@ import {
     ChevronRight,
     Download,
     Eye,
-    FileText,
     History,
     MoreVertical,
     Pencil,
     Plus,
     Printer,
     Receipt,
-    Search,
     Send,
     Trash2,
     X,
 } from 'lucide-vue-next';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Option {
     value: string;
@@ -63,8 +66,12 @@ interface DepenseRow {
         categorie_label: string;
     } | null;
     beneficiaire_type: string | null;
+    beneficiaire_id: string | null;
     beneficiaire_label: string | null;
+    beneficiaire_telephone: string | null;
+    vehicule_id: string | null;
     vehicule_nom: string | null;
+    vehicule_immatriculation: string | null;
     site: { id: string; nom: string } | null;
     user: { id: string; name: string };
     validateur: { id: string; name: string } | null;
@@ -98,6 +105,9 @@ const props = defineProps<{
         site?: string;
         date_debut?: string;
         date_fin?: string;
+        vehicule?: string;
+        concerne?: string;
+        montant?: string;
     };
     stats: {
         total: number;
@@ -116,64 +126,102 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dépenses', href: '/depenses' },
 ];
 
-const filterDrawerOpen = ref(false);
 const filterSearch = ref(props.filters.search ?? '');
-const filterType = ref(props.filters.type ?? '');
-const filterStatut = ref(props.filters.statut ?? '');
-const filterCategorie = ref(props.filters.categorie ?? '');
-const filterSite = ref(props.filters.site ?? '');
-const filterDebut = ref(props.filters.date_debut ?? '');
-const filterFin = ref(props.filters.date_fin ?? '');
 
 function currentParams() {
     return {
         search: filterSearch.value || undefined,
-        type: filterType.value || undefined,
-        statut: filterStatut.value || undefined,
-        categorie: filterCategorie.value || undefined,
-        site: filterSite.value || undefined,
-        date_debut: filterDebut.value || undefined,
-        date_fin: filterFin.value || undefined,
+        type: props.filters.type || undefined,
+        statut: props.filters.statut || undefined,
+        categorie: props.filters.categorie || undefined,
+        site: props.filters.site || undefined,
+        date_debut: props.filters.date_debut || undefined,
+        date_fin: props.filters.date_fin || undefined,
+        vehicule: props.filters.vehicule || undefined,
+        concerne: props.filters.concerne || undefined,
+        montant: props.filters.montant || undefined,
     };
 }
 
-function applyFilters() {
-    router.get('/depenses', currentParams(), {
-        preserveScroll: true,
-        replace: true,
-    });
-}
+const filterValues = computed(() => ({
+    search: props.filters.search ?? '',
+    type: props.filters.type ?? '',
+    statut: props.filters.statut ?? '',
+    categorie: props.filters.categorie ?? '',
+    site: props.filters.site ?? '',
+    date_debut: props.filters.date_debut ?? '',
+    date_fin: props.filters.date_fin ?? '',
+    vehicule: props.filters.vehicule ?? '',
+    concerne: props.filters.concerne ?? '',
+    montant: props.filters.montant ?? '',
+}));
 
-function resetFilters() {
-    filterSearch.value = '';
-    filterType.value = '';
-    filterStatut.value = '';
-    filterCategorie.value = '';
-    filterSite.value = '';
-    filterDebut.value = '';
-    filterFin.value = '';
-    router.get('/depenses', {}, { preserveScroll: true, replace: true });
-}
-
-// Seule la recherche libre est envoyée automatiquement (debounce) ; les
-// filtres avancés du panneau ne sont appliqués qu'au clic sur "Appliquer".
-let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
-watch(filterSearch, () => {
-    if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
-    searchDebounceTimeout = setTimeout(applyFilters, 400);
-});
-
-const activeFilterCount = computed(
-    () =>
-        [
-            !!filterType.value,
-            !!filterStatut.value,
-            !!filterCategorie.value,
-            !!filterSite.value,
-            !!filterDebut.value,
-            !!filterFin.value,
-        ].filter(Boolean).length,
-);
+const filterFields = computed<FilterField[]>(() => [
+    {
+        key: 'type',
+        label: 'Type de dépense',
+        type: 'select',
+        options: [
+            { value: '', label: 'Tous les types' },
+            ...props.types.map((t) => ({ value: t.id, label: t.libelle })),
+        ],
+    },
+    {
+        key: 'categorie',
+        label: 'Concerné',
+        type: 'select',
+        options: [
+            { value: '', label: 'Tous les concernés' },
+            ...props.categories.map((c) => ({
+                value: c.value,
+                label: c.label,
+            })),
+        ],
+    },
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: [
+            { value: '', label: 'Tous les statuts' },
+            ...props.statuts.map((s) => ({ value: s.value, label: s.label })),
+        ],
+    },
+    {
+        key: 'site',
+        label: 'Site',
+        type: 'select',
+        options: [
+            { value: '', label: 'Tous les sites' },
+            ...props.sites.map((s) => ({ value: s.id, label: s.nom })),
+        ],
+    },
+    {
+        key: 'date',
+        label: 'Période',
+        type: 'date-range',
+        startKey: 'date_debut',
+        endKey: 'date_fin',
+    },
+    {
+        key: 'vehicule',
+        label: 'Véhicule',
+        type: 'text',
+        placeholder: 'Nom ou immatriculation…',
+    },
+    {
+        key: 'concerne',
+        label: 'Recherche concerné',
+        type: 'text',
+        placeholder: 'Nom, prénom ou téléphone…',
+    },
+    {
+        key: 'montant',
+        label: 'Montant exact (GNF)',
+        type: 'number',
+        placeholder: '0',
+    },
+]);
 
 function exportExcel() {
     const params = new URLSearchParams();
@@ -182,15 +230,6 @@ function exportExcel() {
         if (v) params.set(k, v);
     });
     window.location.href = `/depenses/export/excel?${params.toString()}`;
-}
-
-function exportPdf() {
-    const params = new URLSearchParams();
-    const p = currentParams();
-    Object.entries(p).forEach(([k, v]) => {
-        if (v) params.set(k, v);
-    });
-    window.location.href = `/depenses/export/pdf?${params.toString()}`;
 }
 
 function imprimer() {
@@ -202,6 +241,34 @@ function imprimer() {
     window.open(`/depenses/imprimer?${params.toString()}`, '_blank');
 }
 
+// ── Popup concerné ──────────────────────────────────────────────────────────
+const showConcerneDialog = ref(false);
+const popupConcerneType = ref<string | null>(null);
+const popupConcerneId = ref<string | null>(null);
+
+function openConcerneDialog(d: DepenseRow) {
+    if (
+        !d.beneficiaire_id ||
+        !d.beneficiaire_type ||
+        d.beneficiaire_type === 'vehicule'
+    )
+        return;
+    popupConcerneType.value = d.beneficiaire_type;
+    popupConcerneId.value = d.beneficiaire_id;
+    showConcerneDialog.value = true;
+}
+
+// ── Popup véhicule ──────────────────────────────────────────────────────────
+const showVehiculeDialog = ref(false);
+const popupVehiculeId = ref<string | null>(null);
+
+function openVehiculeDialog(d: DepenseRow) {
+    if (!d.vehicule_id) return;
+    popupVehiculeId.value = d.vehicule_id;
+    showVehiculeDialog.value = true;
+}
+
+// ── Rejet ──────────────────────────────────────────────────────────────────
 const rejectingDepenseId = ref<string | null>(null);
 const rejectMotif = ref('');
 const rejectCommentaire = ref('');
@@ -366,10 +433,6 @@ const categorieColors: Record<string, string> = {
     proprietaire: 'bg-purple-100 text-purple-700',
     vehicule: 'bg-green-100 text-green-700',
 };
-
-const hasActiveFilters = computed(
-    () => !!filterSearch.value || activeFilterCount.value > 0,
-);
 </script>
 
 <template>
@@ -393,10 +456,6 @@ const hasActiveFilters = computed(
                     <Button variant="outline" size="sm" @click="exportExcel">
                         <Download class="mr-1.5 h-3.5 w-3.5" />
                         Excel
-                    </Button>
-                    <Button variant="outline" size="sm" @click="exportPdf">
-                        <FileText class="mr-1.5 h-3.5 w-3.5" />
-                        Télécharger PDF
                     </Button>
                     <Button variant="outline" size="sm" @click="imprimer">
                         <Printer class="mr-1.5 h-3.5 w-3.5" />
@@ -440,137 +499,15 @@ const hasActiveFilters = computed(
             </div>
 
             <!-- Filtres -->
-            <div class="flex flex-wrap items-center gap-3">
-                <div class="relative w-[260px] shrink-0">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                        v-model="filterSearch"
-                        type="search"
-                        placeholder="Rechercher…"
-                        class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    />
-                    <button
-                        v-if="filterSearch"
-                        type="button"
-                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        @click="filterSearch = ''"
-                    >
-                        <X class="h-3.5 w-3.5" />
-                    </button>
-                </div>
-
-                <FilterDrawer
-                    v-model:open="filterDrawerOpen"
-                    title="Filtres"
-                    :active-count="activeFilterCount"
-                    @apply="applyFilters"
-                    @reset="resetFilters"
-                >
-                    <div class="space-y-1.5">
-                        <Label>Type</Label>
-                        <select
-                            v-model="filterType"
-                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                            <option value="">Tous les types</option>
-                            <option
-                                v-for="t in types"
-                                :key="t.id"
-                                :value="t.id"
-                            >
-                                {{ t.libelle }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <Label>Concerné</Label>
-                        <select
-                            v-model="filterCategorie"
-                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                            <option value="">Tous les concernés</option>
-                            <option
-                                v-for="c in categories"
-                                :key="c.value"
-                                :value="c.value"
-                            >
-                                {{ c.label }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <Label>Statut</Label>
-                        <select
-                            v-model="filterStatut"
-                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                            <option value="">Tous les statuts</option>
-                            <option
-                                v-for="s in statuts"
-                                :key="s.value"
-                                :value="s.value"
-                            >
-                                {{ s.label }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <Label>Site</Label>
-                        <select
-                            v-model="filterSite"
-                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        >
-                            <option value="">Tous les sites</option>
-                            <option
-                                v-for="s in sites"
-                                :key="s.id"
-                                :value="s.id"
-                            >
-                                {{ s.nom }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <Label>Date début</Label>
-                        <input
-                            v-model="filterDebut"
-                            type="date"
-                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        />
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <Label>Date fin</Label>
-                        <input
-                            v-model="filterFin"
-                            type="date"
-                            class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                        />
-                    </div>
-                </FilterDrawer>
-
-                <span
-                    class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
-                >
-                    {{ depenses.total }} résultat{{
-                        depenses.total !== 1 ? 's' : ''
-                    }}
-                </span>
-                <button
-                    v-if="hasActiveFilters"
-                    type="button"
-                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                    @click="resetFilters"
-                >
-                    Réinitialiser
-                </button>
-            </div>
+            <DataFilters
+                url="/depenses"
+                :values="filterValues"
+                :result-count="depenses.total"
+                :fields="filterFields"
+                search-key="search"
+                search-placeholder="Rechercher…"
+                v-model:search="filterSearch"
+            />
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
@@ -668,16 +605,61 @@ const hasActiveFilters = computed(
 
                             <!-- Concerné -->
                             <td class="px-4 py-3">
-                                <div class="text-sm font-medium">
+                                <button
+                                    v-if="
+                                        d.beneficiaire_id &&
+                                        d.beneficiaire_type !== 'vehicule'
+                                    "
+                                    type="button"
+                                    class="group text-left"
+                                    @click="openConcerneDialog(d)"
+                                >
+                                    <div
+                                        class="font-medium group-hover:underline"
+                                    >
+                                        {{ d.beneficiaire_label ?? '—' }}
+                                    </div>
+                                    <div
+                                        v-if="d.beneficiaire_telephone"
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        {{
+                                            formatPhoneDisplay(
+                                                d.beneficiaire_telephone,
+                                            )
+                                        }}
+                                    </div>
+                                </button>
+                                <div v-else class="text-sm font-medium">
                                     {{ d.beneficiaire_label ?? '—' }}
                                 </div>
                             </td>
 
                             <!-- Véhicule -->
-                            <td
-                                class="hidden px-4 py-3 text-xs text-muted-foreground lg:table-cell"
-                            >
-                                {{ d.vehicule_nom ?? '—' }}
+                            <td class="hidden px-4 py-3 lg:table-cell">
+                                <button
+                                    v-if="d.vehicule_id"
+                                    type="button"
+                                    class="group text-left"
+                                    @click="openVehiculeDialog(d)"
+                                >
+                                    <div
+                                        class="text-sm font-medium group-hover:underline"
+                                    >
+                                        {{ d.vehicule_nom ?? '—' }}
+                                    </div>
+                                    <div
+                                        v-if="d.vehicule_immatriculation"
+                                        class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                    >
+                                        {{ d.vehicule_immatriculation }}
+                                    </div>
+                                </button>
+                                <span
+                                    v-else
+                                    class="text-xs text-muted-foreground"
+                                    >—</span
+                                >
                             </td>
 
                             <!-- Montant -->
@@ -924,6 +906,7 @@ const hasActiveFilters = computed(
                 </template>
             </div>
         </div>
+
         <!-- Reject dialog -->
         <Dialog
             :open="!!rejectingDepenseId"
@@ -1009,6 +992,19 @@ const hasActiveFilters = computed(
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        <!-- Popup concerné -->
+        <ConcerneDetailDialog
+            v-model:visible="showConcerneDialog"
+            :beneficiaire-type="popupConcerneType"
+            :beneficiaire-id="popupConcerneId"
+        />
+
+        <!-- Popup véhicule -->
+        <VehiculeDetailDialog
+            v-model:visible="showVehiculeDialog"
+            :vehicule-id="popupVehiculeId"
+        />
 
         <AuditDrawer
             v-model:visible="showAudit"

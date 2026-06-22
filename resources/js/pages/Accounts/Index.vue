@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,19 +17,14 @@ import {
     CheckCircle,
     CircleOff,
     MoreVertical,
-    Search,
     ShieldCheck,
     Users,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
-import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Account {
     id: string;
@@ -74,15 +72,33 @@ const AVATAR_COLORS: Record<string, string> = {
         'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
 };
 
-// Filtres
 const search = ref('');
 const statusFilter = ref('tous');
 const typeFilter = ref('tous');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
 
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
+const filterFields: FilterField[] = [
+    {
+        key: 'type',
+        label: 'Type',
+        type: 'select',
+        options: [
+            { value: 'tous', label: 'Tous les types' },
+            { value: 'agent', label: 'Agents' },
+            { value: 'client', label: 'Clients' },
+            { value: 'inscrit', label: 'Inscrits' },
+        ],
+    },
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: [
+            { value: 'tous', label: 'Tous statuts' },
+            { value: 'actif', label: 'Actif' },
+            { value: 'inactif', label: 'Bloqué' },
+        ],
+    },
+];
 
 const filteredAccounts = computed(() => {
     return props.accounts.filter((a) => {
@@ -94,9 +110,28 @@ const filteredAccounts = computed(() => {
         const matchType =
             typeFilter.value === 'tous' || a.type === typeFilter.value;
 
-        return matchStatus && matchType;
+        if (!matchStatus || !matchType) return false;
+
+        const q = search.value.toLowerCase().trim();
+        if (!q) return true;
+        return (
+            a.nom_complet.toLowerCase().includes(q) ||
+            (a.email ?? '').toLowerCase().includes(q) ||
+            (a.telephone ?? '').includes(q)
+        );
     });
 });
+
+function handleApply(values: Record<string, unknown>) {
+    typeFilter.value = (values.type as string[])?.[0] ?? 'tous';
+    statusFilter.value = (values.statut as string[])?.[0] ?? 'tous';
+}
+
+function resetFilters() {
+    search.value = '';
+    typeFilter.value = 'tous';
+    statusFilter.value = 'tous';
+}
 
 // Stats
 const total = computed(() => props.accounts.length);
@@ -183,66 +218,29 @@ function confirmToggle(a: Account) {
                 </div>
             </div>
 
+            <!-- Filtres -->
+            <DataFilters
+                :fields="filterFields"
+                :values="{ type: typeFilter, statut: statusFilter }"
+                :result-count="filteredAccounts.length"
+                search-placeholder="Rechercher un compte..."
+                v-model:search="search"
+                @apply="handleApply"
+                @reset="resetFilters"
+            />
+
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="filteredAccounts"
                     :paginator="filteredAccounts.length > 25"
                     :rows="25"
-                    :global-filter-fields="[
-                        'nom_complet',
-                        'email',
-                        'telephone',
-                    ]"
-                    v-model:filters="filters"
                     data-key="id"
                     striped-rows
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
                 >
-                    <template #header>
-                        <div
-                            class="flex flex-wrap items-center gap-3 border-b border-border bg-muted/30 px-4 py-3"
-                        >
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Rechercher un compte..."
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Select
-                                v-model="typeFilter"
-                                :options="[
-                                    { value: 'tous', label: 'Tous les types' },
-                                    { value: 'agent', label: 'Agents' },
-                                    { value: 'client', label: 'Clients' },
-                                    { value: 'inscrit', label: 'Inscrits' },
-                                ]"
-                                option-label="label"
-                                option-value="value"
-                                class="w-40"
-                            />
-                            <Select
-                                v-model="statusFilter"
-                                :options="[
-                                    { value: 'tous', label: 'Tous statuts' },
-                                    { value: 'actif', label: 'Actif' },
-                                    { value: 'inactif', label: 'Bloqué' },
-                                ]"
-                                option-label="label"
-                                option-value="value"
-                                class="w-36"
-                            />
-                        </div>
-                    </template>
-
                     <!-- Utilisateur -->
                     <Column
                         field="nom_complet"

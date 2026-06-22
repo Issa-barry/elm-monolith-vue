@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('reference', 20)->unique();
             $table->decimal('total_commande', 12, 2)->default(0);
             $table->string('statut', 30)->default('brouillon');
+            $table->timestamp('validated_at')->nullable();
 
             // Timestamps de transition de statut
             $table->timestamp('a_charger_at')->nullable();         // BROUILLON → A_CHARGER

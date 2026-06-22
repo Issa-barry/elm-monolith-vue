@@ -15,6 +15,8 @@ return new class extends Migration
             $table->foreignUlid('produit_id')->constrained('produits')->cascadeOnDelete();
             $table->string('type');
             $table->integer('quantite');
+            $table->unsignedInteger('stock_avant')->nullable();
+            $table->unsignedInteger('stock_apres')->nullable();
             $table->nullableUlidMorphs('source');
             $table->text('notes')->nullable();
             $table->foreignUlid('created_by')->constrained('users')->cascadeOnDelete();

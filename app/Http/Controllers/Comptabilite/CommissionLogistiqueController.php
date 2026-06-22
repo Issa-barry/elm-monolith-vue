@@ -184,6 +184,11 @@ class CommissionLogistiqueController extends Controller
         $livreurNom = $allParts->first()?->beneficiaire_nom ?? '—';
         $livreurTelephone = Livreur::find($livreurId)?->telephone;
 
+        $totalBrut = (float) $allParts->sum('montant_brut');
+        $totalFrais = (float) $allParts->sum('frais_supplementaires');
+        $totalNet = (float) $allParts->sum('montant_net');
+        $totalVerse = (float) $allParts->sum('montant_verse');
+
         $totalImpaye = (float) $allParts
             ->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
             ->sum('montant_restant');
@@ -261,6 +266,10 @@ class CommissionLogistiqueController extends Controller
                 'telephone' => $livreurTelephone,
             ],
             'kpis' => [
+                'total_brut' => $totalBrut,
+                'total_frais' => $totalFrais,
+                'total_net' => $totalNet,
+                'total_verse' => $totalVerse,
                 'impaye' => $totalImpaye,
                 'paye' => $totalPaye,
             ],

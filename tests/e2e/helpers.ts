@@ -238,6 +238,49 @@ export async function login(page: Page): Promise<void> {
         : new Error(message);
 }
 
+/**
+ * Closes the DataFilters drawer (Sheet) if it is currently open, and waits
+ * for its overlay to disappear so it can no longer intercept clicks on
+ * elements behind it (e.g. the inline agence MultiSelect in the toolbar).
+ */
+export async function closeFilterDrawerIfOpen(page: Page): Promise<void> {
+    const overlay = page.locator('[data-slot="sheet-overlay"]').first();
+    if (!(await overlay.isVisible({ timeout: 1_000 }).catch(() => false))) {
+        return;
+    }
+
+    const closeBtn = page.getByTestId('filters-drawer-close').first();
+    if (await closeBtn.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        await closeBtn.click();
+    } else {
+        await page.keyboard.press('Escape');
+    }
+
+    await overlay
+        .waitFor({ state: 'detached', timeout: 5_000 })
+        .catch(() => undefined);
+}
+
+/**
+ * Opens the DataFilters drawer, selects an option in the multi-select for the
+ * given field key, then clicks "Appliquer les filtres" (which also closes the
+ * drawer). Mirrors the pattern used by tests/e2e/vente-filtre-statut.spec.ts.
+ */
+export async function applyDrawerFilterOption(
+    page: Page,
+    fieldKey: string,
+    optionName: string | RegExp,
+): Promise<void> {
+    await page.getByRole('button', { name: /filtres/i }).first().click();
+    const combobox = page
+        .getByTestId(`filter-field-${fieldKey}`)
+        .locator('[data-pc-name="multiselect"]')
+        .first();
+    await selectOptionFromCombobox(page, combobox, optionName);
+    await page.keyboard.press('Escape');
+    await page.getByTestId('filters-apply').click();
+}
+
 export function getVisibleSearchInput(page: Page): Locator {
     return page
         .locator(

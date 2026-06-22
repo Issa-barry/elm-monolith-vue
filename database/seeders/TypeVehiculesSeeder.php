@@ -9,9 +9,10 @@ use Illuminate\Database\Seeder;
 class TypeVehiculesSeeder extends Seeder
 {
     private const TYPES = [
-        ['nom' => 'Camion',   'capacite_defaut' => 1000],
-        ['nom' => 'Minibus',  'capacite_defaut' => 300],
-        ['nom' => 'Tricycle', 'capacite_defaut' => 150],
+        ['nom' => 'Camion',       'capacite_defaut' => 1000],
+        ['nom' => 'Minibus 200',  'capacite_defaut' => 200],
+        ['nom' => 'Minibus 270',  'capacite_defaut' => 270],
+        ['nom' => 'Tricycle moto', 'capacite_defaut' => 150],
     ];
 
     public function run(): void

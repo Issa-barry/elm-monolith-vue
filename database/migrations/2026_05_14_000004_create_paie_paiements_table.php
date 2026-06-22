@@ -13,6 +13,7 @@ return new class extends Migration
             $table->foreignUlid('paie_ligne_id')->constrained('paie_lignes')->cascadeOnDelete();
             $table->decimal('montant', 15, 2);
             $table->date('date_paiement');
+            $table->string('mode_paiement', 20)->default('especes');
             $table->text('note')->nullable();
             $table->timestamps();
 

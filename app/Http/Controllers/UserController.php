@@ -110,6 +110,7 @@ class UserController extends Controller
                     'is_active' => $u->is_active,
                     'roles' => $u->getRoleNames(),
                     'site' => $defaultSite ? "{$defaultSite->nom} ({$defaultSite->code})" : null,
+                    'site_id' => $defaultSite?->id,
                     'is_me' => $u->id === auth()->id(),
                 ];
             });

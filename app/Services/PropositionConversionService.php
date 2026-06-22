@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\StatutPropositionVehicule;
 use App\Models\PropositionVehicule;
 use App\Models\Proprietaire;
+use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Support\Facades\DB;
@@ -42,15 +43,15 @@ class PropositionConversionService
         return DB::transaction(function () use ($proposition, $agent, $orgId, $immatriculation) {
             [$proprietaire, $existait] = $this->resoudreProprietaire($proposition, $orgId);
 
+            $typeVehiculeId = $this->resoudreTypeVehicule($proposition->type_vehicule, $orgId);
+
             $vehicule = Vehicule::create([
                 'organization_id' => $orgId,
                 'nom_vehicule' => $proposition->nom_vehicule,
                 'marque' => $proposition->marque,
                 'modele' => $proposition->modele,
                 'immatriculation' => $immatriculation,
-                'type_vehicule' => $proposition->type_vehicule instanceof \BackedEnum
-                    ? $proposition->type_vehicule->value
-                    : $proposition->type_vehicule,
+                'type_vehicule_id' => $typeVehiculeId,
                 'categorie' => 'externe',
                 'capacite_packs' => $proposition->capacite_packs,
                 'proprietaire_id' => $proprietaire->id,
@@ -71,6 +72,20 @@ class PropositionConversionService
                 'proprietaire_existant' => $existait,
             ];
         });
+    }
+
+    private function resoudreTypeVehicule(?string $nomType, ?string $orgId): ?string
+    {
+        if (! $nomType || ! $orgId) {
+            return null;
+        }
+
+        $type = TypeVehicule::where('organization_id', $orgId)
+            ->whereRaw('LOWER(nom) = ?', [mb_strtolower(trim($nomType))])
+            ->whereNull('deleted_at')
+            ->value('id');
+
+        return $type;
     }
 
     /**

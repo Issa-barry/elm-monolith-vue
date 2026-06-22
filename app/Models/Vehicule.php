@@ -21,7 +21,6 @@ class Vehicule extends Model
         'marque',
         'modele',
         'immatriculation',
-        'type_vehicule',
         'type_vehicule_id',
         'categorie',
         'capacite_packs',

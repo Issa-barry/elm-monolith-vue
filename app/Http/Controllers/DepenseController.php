@@ -20,15 +20,11 @@ use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\DepenseImputationService;
 use App\Services\DroitCreationDepenseService;
-use Barryvdh\DomPDF\Facade\Pdf;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -38,7 +34,7 @@ class DepenseController extends Controller
     public function __construct(
         private DepenseImputationService $imputationService,
         private AuditLogService $audit,
-        private DroitCreationDepenseService $droitService,
+        private DroitCreationDepenseService $droitCreationDepense,
     ) {}
 
     public function index(Request $request): Response
@@ -47,7 +43,7 @@ class DepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'montant']);
 
         $paginator = $this->buildQuery($filters, $orgId)
             ->with(['depenseType', 'site', 'user', 'validateur'])
@@ -97,7 +93,7 @@ class DepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'montant']);
 
         $depenses = $this->buildQuery($filters, $orgId)
             ->with(['depenseType', 'site', 'user', 'validateur'])
@@ -112,8 +108,9 @@ class DepenseController extends Controller
             fwrite($handle, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel
 
             fputcsv($handle, [
-                'Référence', 'Date', 'Type', 'Catégorie', 'Concerné', 'Véhicule',
-                'Montant (GNF)', 'Statut', 'Site', 'Saisi par', 'Validé par', 'Commentaire',
+                'Référence', 'Date', 'Type', 'Catégorie', 'Concerné', 'Téléphone concerné',
+                'Véhicule', 'Montant (GNF)', 'Frais (GNF)', 'Statut', 'Site',
+                'Saisi par', 'Validé par', 'Commentaire',
             ], ';');
 
             foreach ($depenses as $d) {
@@ -124,8 +121,10 @@ class DepenseController extends Controller
                     $row['type']['libelle'] ?? '',
                     $row['type']['categorie_label'] ?? '',
                     $row['beneficiaire_label'] ?? '',
+                    $row['beneficiaire_telephone'] ?? '',
                     $row['vehicule_nom'] ?? '',
                     number_format((float) $row['montant'], 0, ',', ' '),
+                    '0',
                     $d->statut->label(),
                     $row['site']['nom'] ?? '',
                     $row['user']['name'] ?? '',
@@ -138,46 +137,107 @@ class DepenseController extends Controller
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
-    public function exportPdf(Request $request): \Symfony\Component\HttpFoundation\Response
+    public function concereneDetail(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Depense::class);
 
-        $user = auth()->user();
-        $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
-        $org = Organization::find($orgId);
-        $printedBy = $user->name;
-        $now = now();
-        $dateStr = $now->format('dmY');
+        $type = $request->query('type');
+        $id = $request->query('id');
+        $orgId = auth()->user()->organization_id;
 
-        $depenses = $this->buildQuery($filters, $orgId)
-            ->with(['depenseType', 'site', 'user', 'validateur'])
-            ->get();
+        $detail = match ($type) {
+            'proprietaire' => $this->buildProprietaireDetail($id, $orgId),
+            'livreur' => $this->buildLivreurDetail($id, $orgId),
+            'employe' => $this->buildEmployeDetail($id, $orgId),
+            default => null,
+        };
 
-        [$labelCache, $vehiculeInfoCache] = $this->preloadBeneficiaires($depenses->all());
-
-        $rows = $depenses->map(fn (Depense $d) => $this->transformDepense($d, $labelCache, $vehiculeInfoCache));
-
-        // Filtre site actif → un seul PDF pour ce site
-        if (! empty($filters['site'])) {
-            $site = Site::find($filters['site']);
-            $slug = $this->slugifySite($site?->nom ?? 'site');
-            $pdf = $this->buildSitePdf($rows, $org, $site, $filters, $printedBy, $now);
-
-            return $pdf->download("depenses-{$slug}-{$dateStr}.pdf");
+        if (! $detail) {
+            return response()->json(['error' => 'Not found'], 404);
         }
 
-        // Sans filtre site → PDF multi-sites avec saut de page entre chaque site
-        $grouped = $rows->groupBy(fn ($row) => $row['site']['id'] ?? 'sans-site');
+        return response()->json($detail);
+    }
 
-        $sites = $grouped->map(fn ($siteRows) => [
-            'site_nom' => $siteRows->first()['site']['nom'] ?? null,
-            'rows' => $siteRows,
-            'total' => $siteRows->sum('montant'),
-        ])->values();
+    public function vehiculeDetail(Request $request): JsonResponse
+    {
+        $this->authorize('viewAny', Depense::class);
 
-        return $this->buildMultiSitePdf($sites, $org, $filters, $printedBy, $now)
-            ->download("depenses-{$dateStr}.pdf");
+        $id = $request->query('id');
+        $orgId = auth()->user()->organization_id;
+
+        $vehicule = Vehicule::where('organization_id', $orgId)
+            ->with(['typeVehicule:id,nom', 'proprietaire:id,nom,prenom,telephone', 'site:id,nom'])
+            ->find($id, ['id', 'nom_vehicule', 'immatriculation', 'type_vehicule_id', 'proprietaire_id', 'site_id', 'categorie']);
+
+        if (! $vehicule) {
+            return response()->json(['error' => 'Not found'], 404);
+        }
+
+        return response()->json([
+            'nom' => $vehicule->nom_vehicule,
+            'immatriculation' => $vehicule->immatriculation,
+            'type' => $vehicule->typeVehicule?->nom ?? '—',
+            'proprietaire' => $vehicule->proprietaire
+                ? trim("{$vehicule->proprietaire->prenom} {$vehicule->proprietaire->nom}")
+                : '—',
+            'site' => $vehicule->site?->nom ?? '—',
+            'categorie' => $vehicule->categorie,
+        ]);
+    }
+
+    private function buildProprietaireDetail(string $id, string $orgId): ?array
+    {
+        $p = Proprietaire::where('organization_id', $orgId)->find($id, ['id', 'nom', 'prenom', 'telephone', 'adresse']);
+        if (! $p) {
+            return null;
+        }
+
+        return [
+            'type' => 'proprietaire',
+            'nom' => trim("{$p->prenom} {$p->nom}"),
+            'telephone' => $p->telephone ?? '—',
+            'adresse' => $p->adresse ?? '—',
+            'site' => '—',
+        ];
+    }
+
+    private function buildLivreurDetail(string $id, string $orgId): ?array
+    {
+        $l = Livreur::where('organization_id', $orgId)
+            ->with(['equipes:id,nom'])
+            ->find($id, ['id', 'nom', 'prenom', 'telephone']);
+
+        if (! $l) {
+            return null;
+        }
+
+        return [
+            'type' => 'livreur',
+            'nom' => trim("{$l->prenom} {$l->nom}"),
+            'telephone' => $l->telephone ?? '—',
+            'equipe' => $l->equipes->pluck('nom')->implode(', ') ?: '—',
+            'site' => '—',
+        ];
+    }
+
+    private function buildEmployeDetail(string $id, string $orgId): ?array
+    {
+        $e = Employe::where('organization_id', $orgId)
+            ->with(['site:id,nom', 'contratActif'])
+            ->find($id, ['id', 'nom', 'prenom', 'telephone', 'site_id', 'type_employe']);
+
+        if (! $e) {
+            return null;
+        }
+
+        return [
+            'type' => 'employe',
+            'nom' => trim("{$e->prenom} {$e->nom}"),
+            'telephone' => $e->telephone ?? '—',
+            'poste' => $e->type_employe?->label() ?? '—',
+            'site' => $e->site?->nom ?? '—',
+        ];
     }
 
     public function imprimer(Request $request): \Illuminate\Http\Response
@@ -186,7 +246,7 @@ class DepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin']);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'montant']);
         $org = Organization::find($orgId);
         $printedBy = $user->name;
         $now = now();
@@ -213,46 +273,6 @@ class DepenseController extends Controller
             'printed_by' => $printedBy,
             'generated_at' => $now,
         ]);
-    }
-
-    private function buildSitePdf(
-        Collection $rows,
-        ?Organization $org,
-        ?Site $site,
-        array $filters,
-        string $printedBy,
-        Carbon $generatedAt,
-    ): \Barryvdh\DomPDF\PDF {
-        return Pdf::loadView('pdf.depenses', [
-            'rows' => $rows,
-            'total' => $rows->sum('montant'),
-            'filters' => $filters,
-            'org' => $org,
-            'site_nom' => $site?->nom,
-            'printed_by' => $printedBy,
-            'generated_at' => $generatedAt,
-        ])->setPaper('a4', 'landscape');
-    }
-
-    private function buildMultiSitePdf(
-        Collection $sites,
-        ?Organization $org,
-        array $filters,
-        string $printedBy,
-        Carbon $generatedAt,
-    ): \Barryvdh\DomPDF\PDF {
-        return Pdf::loadView('pdf.depenses_multi', [
-            'sites' => $sites,
-            'filters' => $filters,
-            'org' => $org,
-            'printed_by' => $printedBy,
-            'generated_at' => $generatedAt,
-        ])->setPaper('a4', 'landscape');
-    }
-
-    private function slugifySite(string $nom): string
-    {
-        return Str::slug($nom);
     }
 
     public function show(Depense $depense): Response
@@ -326,10 +346,13 @@ class DepenseController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
 
-        $sitesAutorises = $this->droitService->sitesAutorises($user, $orgId);
-        $sites = $sitesAutorises === null
+        $sites = $user->isAdmin()
             ? $this->loadSites($orgId)
-            : $sitesAutorises->map(fn ($s) => ['id' => $s->id, 'nom' => $s->nom]);
+            : $user->sites()
+                ->where('sites.organization_id', $orgId)
+                ->orderBy('sites.nom')
+                ->get(['sites.id', 'sites.nom'])
+                ->map(fn ($s) => ['id' => $s->id, 'nom' => $s->nom]);
 
         return Inertia::render('Depenses/Create', [
             'types' => $this->loadTypes($orgId),
@@ -351,7 +374,7 @@ class DepenseController extends Controller
         $orgId = $user->organization_id;
 
         abort_unless(
-            $this->droitService->peutCreerSurSite($user, $orgId, $request->site_id ?? ''),
+            $this->droitCreationDepense->peutCreerSurSite($user, $orgId, (string) ($request->site_id ?? '')),
             403,
             'Vous n\'êtes pas autorisé à saisir une dépense sur cette agence.'
         );
@@ -577,13 +600,13 @@ class DepenseController extends Controller
             $like = '%'.$filters['search'].'%';
             $query->where(function ($w) use ($like) {
                 $w->where('commentaire', 'LIKE', $like)
+                    ->orWhere('montant', 'LIKE', $like)
                     ->orWhereHas('depenseType', fn ($q) => $q->where('libelle', 'LIKE', $like))
-                    ->orWhereHas('site', fn ($q) => $q->where('nom', 'LIKE', $like))
-                    ->orWhereHas('user', fn ($q) => $q->where('name', 'LIKE', $like))
                     ->orWhere(fn ($w2) => $w2
                         ->where('beneficiaire_type', 'vehicule')
                         ->whereHas('vehiculeBeneficiaire', fn ($q) => $q
                             ->where('nom_vehicule', 'LIKE', $like)
+                            ->orWhere('immatriculation', 'LIKE', $like)
                             ->orWhereHas('proprietaire', fn ($q) => $q
                                 ->where('nom', 'LIKE', $like)
                                 ->orWhere('prenom', 'LIKE', $like)
@@ -595,6 +618,7 @@ class DepenseController extends Controller
                         ->whereHas('employeBeneficiaire', fn ($q) => $q
                             ->where('nom', 'LIKE', $like)
                             ->orWhere('prenom', 'LIKE', $like)
+                            ->orWhere('telephone', 'LIKE', $like)
                         )
                     )
                     ->orWhere(fn ($w2) => $w2
@@ -602,6 +626,7 @@ class DepenseController extends Controller
                         ->whereHas('livreurBeneficiaire', fn ($q) => $q
                             ->where('nom', 'LIKE', $like)
                             ->orWhere('prenom', 'LIKE', $like)
+                            ->orWhere('telephone', 'LIKE', $like)
                         )
                     )
                     ->orWhere(fn ($w2) => $w2
@@ -609,6 +634,7 @@ class DepenseController extends Controller
                         ->whereHas('proprietaireBeneficiaire', fn ($q) => $q
                             ->where('nom', 'LIKE', $like)
                             ->orWhere('prenom', 'LIKE', $like)
+                            ->orWhere('telephone', 'LIKE', $like)
                         )
                     );
             });
@@ -633,6 +659,47 @@ class DepenseController extends Controller
             $query->where('date_depense', '<=', $filters['date_fin']);
         }
 
+        if (! empty($filters['vehicule'])) {
+            $like = '%'.$filters['vehicule'].'%';
+            $query->where('beneficiaire_type', 'vehicule')
+                ->whereHas('vehiculeBeneficiaire', fn ($q) => $q
+                    ->where('nom_vehicule', 'LIKE', $like)
+                    ->orWhere('immatriculation', 'LIKE', $like)
+                );
+        }
+
+        if (! empty($filters['concerne'])) {
+            $like = '%'.$filters['concerne'].'%';
+            $query->where(function ($w) use ($like) {
+                $w->where(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'employe')
+                    ->whereHas('employeBeneficiaire', fn ($q) => $q
+                        ->where('nom', 'LIKE', $like)
+                        ->orWhere('prenom', 'LIKE', $like)
+                        ->orWhere('telephone', 'LIKE', $like)
+                    )
+                )->orWhere(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'livreur')
+                    ->whereHas('livreurBeneficiaire', fn ($q) => $q
+                        ->where('nom', 'LIKE', $like)
+                        ->orWhere('prenom', 'LIKE', $like)
+                        ->orWhere('telephone', 'LIKE', $like)
+                    )
+                )->orWhere(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'proprietaire')
+                    ->whereHas('proprietaireBeneficiaire', fn ($q) => $q
+                        ->where('nom', 'LIKE', $like)
+                        ->orWhere('prenom', 'LIKE', $like)
+                        ->orWhere('telephone', 'LIKE', $like)
+                    )
+                );
+            });
+        }
+
+        if (isset($filters['montant']) && $filters['montant'] !== '') {
+            $query->where('montant', (float) $filters['montant']);
+        }
+
         return $query;
     }
 
@@ -654,6 +721,18 @@ class DepenseController extends Controller
             }
         }
 
+        $beneficiaireTelephone = null;
+        $vehiculeImmatriculation = null;
+
+        if ($d->beneficiaire_type === 'vehicule' && $d->beneficiaire_id) {
+            $extra = $vehiculeInfoCache[$d->beneficiaire_id] ?? null;
+            if ($extra) {
+                $vehiculeImmatriculation = $extra['immatriculation'] ?? null;
+            }
+        } else {
+            $beneficiaireTelephone = $labelCache["tel:{$d->beneficiaire_type}:{$d->beneficiaire_id}"] ?? null;
+        }
+
         return [
             'id' => $d->id,
             'montant' => (float) $d->montant,
@@ -671,8 +750,12 @@ class DepenseController extends Controller
                 'justificatif_obligatoire' => $d->depenseType->justificatif_obligatoire,
             ] : null,
             'beneficiaire_type' => $d->beneficiaire_type,
+            'beneficiaire_id' => $d->beneficiaire_id,
             'beneficiaire_label' => $concerneReelLabel,
+            'beneficiaire_telephone' => $beneficiaireTelephone,
             'vehicule_nom' => $vehiculeNom,
+            'vehicule_id' => ($d->beneficiaire_type === 'vehicule') ? $d->beneficiaire_id : null,
+            'vehicule_immatriculation' => $vehiculeImmatriculation,
             'site' => $d->site ? ['id' => $d->site->id, 'nom' => $d->site->nom] : null,
             'user' => ['id' => $d->user->id, 'name' => $d->user->name],
             'validateur' => $d->validateur ? ['id' => $d->validateur->id, 'name' => $d->validateur->name] : null,
@@ -693,7 +776,7 @@ class DepenseController extends Controller
 
             if ($type === 'vehicule') {
                 $models = Vehicule::with('proprietaire:id,nom,prenom')
-                    ->findMany($ids, ['id', 'nom_vehicule', 'proprietaire_id']);
+                    ->findMany($ids, ['id', 'nom_vehicule', 'immatriculation', 'proprietaire_id']);
 
                 foreach ($models as $model) {
                     $labelCache["vehicule:{$model->id}"] = $model->nom_vehicule;
@@ -703,24 +786,34 @@ class DepenseController extends Controller
                         $vehiculeInfoCache[$model->id] = [
                             'concerne_reel_label' => $propNom,
                             'impact_message' => "Cette dépense sera déduite de la commission de {$propNom}.",
+                            'immatriculation' => $model->immatriculation,
                         ];
                     } else {
                         $vehiculeInfoCache[$model->id] = [
                             'concerne_reel_label' => 'Agence ELM',
                             'impact_message' => 'Ce véhicule est interne ELM. La dépense sera comptabilisée comme charge entreprise.',
+                            'immatriculation' => $model->immatriculation,
                         ];
                     }
                 }
             } else {
+                $fields = match ($type) {
+                    'employe' => ['id', 'nom', 'prenom', 'telephone'],
+                    'livreur' => ['id', 'nom', 'prenom', 'telephone'],
+                    'proprietaire' => ['id', 'nom', 'prenom', 'telephone'],
+                    default => ['id', 'nom', 'prenom'],
+                };
+
                 $models = match ($type) {
-                    'employe' => Employe::findMany($ids, ['id', 'nom', 'prenom']),
-                    'livreur' => Livreur::findMany($ids, ['id', 'nom', 'prenom']),
-                    'proprietaire' => Proprietaire::findMany($ids, ['id', 'nom', 'prenom']),
+                    'employe' => Employe::findMany($ids, $fields),
+                    'livreur' => Livreur::findMany($ids, $fields),
+                    'proprietaire' => Proprietaire::findMany($ids, $fields),
                     default => collect(),
                 };
 
                 foreach ($models as $model) {
                     $labelCache["{$type}:{$model->id}"] = trim("{$model->prenom} {$model->nom}");
+                    $labelCache["tel:{$type}:{$model->id}"] = $model->telephone ?? null;
                 }
             }
         }
