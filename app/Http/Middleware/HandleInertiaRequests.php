@@ -6,6 +6,7 @@ use App\Enums\StatutTransfert;
 use App\Models\ContactMessage;
 use App\Models\Produit;
 use App\Models\PropositionVehicule;
+use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Services\ModuleService;
 use App\Support\AppVersion;
@@ -132,6 +133,36 @@ class HandleInertiaRequests extends Middleware
             ->count();
     }
 
+    private function orgSites(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user || ! $user->organization_id) {
+            return [];
+        }
+
+        return Site::where('organization_id', $user->organization_id)
+            ->orderBy('nom')
+            ->get(['id', 'nom'])
+            ->toArray();
+    }
+
+    private function userSites(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user || ! $user->organization_id) {
+            return [];
+        }
+        if ($user->isAdmin()) {
+            return []; // Admin = pas de restriction de périmètre
+        }
+
+        return $user->sites()
+            ->orderBy('nom')
+            ->get(['sites.id', 'sites.nom'])
+            ->map(fn ($s) => ['id' => (string) $s->id, 'nom' => $s->nom])
+            ->toArray();
+    }
+
     private function defaultSite(Request $request): ?array
     {
         $user = $request->user();
@@ -183,6 +214,7 @@ class HandleInertiaRequests extends Middleware
                 'permissions' => $request->user()?->permissionsMap() ?? [],
                 'roles' => $request->user()?->getRoleNames() ?? [],
                 'default_site' => $this->defaultSite($request),
+                'user_sites' => $this->userSites($request),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'stock_alertes' => $this->stockAlertes($request),
@@ -190,6 +222,7 @@ class HandleInertiaRequests extends Middleware
             'transferts_a_receptionner' => $this->transfertsAReceptionner($request),
             'propositions_a_traiter' => $this->propositionsATraiter($request),
             'module_flags' => $this->moduleFlags($request),
+            'org_sites' => $this->orgSites($request),
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),

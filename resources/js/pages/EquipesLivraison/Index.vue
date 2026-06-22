@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,7 +26,6 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
@@ -58,16 +59,34 @@ const search = ref('');
 const statut = ref<'tous' | 'actif' | 'inactif'>('tous');
 const categorie = ref<'tous' | 'interne' | 'externe'>('tous');
 
+const filterFields: FilterField[] = [
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: [
+            { value: 'tous', label: 'Tous' },
+            { value: 'actif', label: 'Actif' },
+            { value: 'inactif', label: 'Inactif' },
+        ],
+    },
+    {
+        key: 'categorie',
+        label: 'Catégorie véhicule',
+        type: 'select',
+        options: [
+            { value: 'tous', label: 'Tous véhicules' },
+            { value: 'interne', label: 'Interne' },
+            { value: 'externe', label: 'Externe' },
+        ],
+    },
+];
+
 function resetFilters() {
     search.value = '';
     statut.value = 'tous';
     categorie.value = 'tous';
 }
-
-const hasActiveFilters = computed(
-    () =>
-        !!search.value || statut.value !== 'tous' || categorie.value !== 'tous',
-);
 
 const equipesFiltrees = computed(() => {
     const q = search.value.toLowerCase().trim();
@@ -145,35 +164,25 @@ function confirmDelete(equipe: Equipe) {
             </div>
 
             <!-- Barre de recherche + filtres -->
-            <DataTableFilters
+            <DataFilters
                 v-model:search="search"
-                :has-active-filters="hasActiveFilters"
+                :values="{ statut: statut, categorie: categorie }"
+                :fields="filterFields"
                 :result-count="equipesFiltrees.length"
+                @apply="
+                    (vals) => {
+                        statut.value =
+                            (vals.statut as 'tous' | 'actif' | 'inactif') ||
+                            'tous';
+                        categorie.value =
+                            (vals.categorie as
+                                | 'tous'
+                                | 'interne'
+                                | 'externe') || 'tous';
+                    }
+                "
                 @reset="resetFilters"
-            >
-                <Select
-                    v-model="statut"
-                    :options="[
-                        { value: 'tous', label: 'Tous' },
-                        { value: 'actif', label: 'Actif' },
-                        { value: 'inactif', label: 'Inactif' },
-                    ]"
-                    option-label="label"
-                    option-value="value"
-                    class="w-32"
-                />
-                <Select
-                    v-model="categorie"
-                    :options="[
-                        { value: 'tous', label: 'Tous véhicules' },
-                        { value: 'interne', label: 'Interne' },
-                        { value: 'externe', label: 'Externe' },
-                    ]"
-                    option-label="label"
-                    option-value="value"
-                    class="w-40"
-                />
-            </DataTableFilters>
+            />
 
             <!-- Tableau -->
             <DataTable

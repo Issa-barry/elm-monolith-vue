@@ -59,8 +59,9 @@ test('default types appear in list', async ({ page }) => {
     await page.goto('/type-vehicules');
     await expect(page).toHaveURL(/\/type-vehicules$/);
 
-    // All default types (Camion, Minibus, Tricycle) should appear
+    // All default types (Camion, Minibus 200/270, Tricycle moto) should appear
     await expect(page.getByText('Camion')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Minibus')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Tricycle')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Minibus 200')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Minibus 270')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Tricycle moto')).toBeVisible({ timeout: 10_000 });
 });

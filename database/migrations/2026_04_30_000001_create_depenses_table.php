@@ -15,10 +15,12 @@ return new class extends Migration
             $table->foreignUlid('user_id')->constrained()->cascadeOnDelete();
             $table->foreignUlid('depense_type_id')->constrained('depense_types')->restrictOnDelete();
             $table->foreignUlid('vehicule_id')->nullable()->constrained()->nullOnDelete();
+            $table->ulid('employe_id')->nullable();
 
             $table->decimal('montant', 12, 2);
             $table->date('date_depense');
             $table->text('commentaire')->nullable();
+            $table->string('commentaire_rejet', 255)->nullable();
 
             $table->string('statut')->default('brouillon'); // brouillon | soumis | approuve | rejete
 

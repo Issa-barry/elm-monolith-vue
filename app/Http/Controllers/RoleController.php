@@ -87,19 +87,31 @@ class RoleController extends Controller
             'permissions.*' => 'string|exists:permissions,name',
         ])['permissions'] ?? [];
 
-        // admin_entreprise ne peut pas toucher les permissions users.* — on les préserve telles quelles
+        // Permissions hors matrice CRUD (workflow, standalone) → préservées telles quelles,
+        // car l'UI ne les affiche pas et syncPermissions les effacerait sinon.
+        $crudKeys = collect(self::RESOURCES)
+            ->flatMap(fn ($r) => collect(self::ACTIONS)->map(fn ($a) => "{$r}.{$a}"))
+            ->all();
+
+        $nonCrudFromRole = $role->permissions()
+            ->pluck('name')
+            ->reject(fn ($p) => in_array($p, $crudKeys, true))
+            ->values()
+            ->toArray();
+
+        // admin_entreprise ne peut pas toucher les permissions users.* (cachées de l'UI)
         if (! $user->isSuperAdmin()) {
-            $lockedPerms = $role->permissions()
+            $usersFromRole = $role->permissions()
                 ->pluck('name')
                 ->filter(fn ($p) => str_starts_with($p, 'users.'))
                 ->values()
                 ->toArray();
 
             $permissions = array_values(array_filter($permissions, fn ($p) => ! str_starts_with($p, 'users.')));
-            $permissions = array_merge($permissions, $lockedPerms);
+            $permissions = array_merge($permissions, $usersFromRole);
         }
 
-        $role->syncPermissions($permissions);
+        $role->syncPermissions(array_merge($permissions, $nonCrudFromRole));
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 

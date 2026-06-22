@@ -11,16 +11,21 @@ return new class extends Migration
         Schema::create('users', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->nullable()->constrained()->nullOnDelete();
+            $table->string('matricule', 6)->nullable();
+            $table->string('expo_push_token', 200)->nullable();
             $table->string('prenom', 100);
             $table->string('nom', 100);
             $table->string('email')->nullable()->unique();
             $table->string('telephone', 30)->nullable()->unique();
             $table->timestamp('email_verified_at')->nullable();
+            $table->string('email_verification_token', 64)->nullable()->unique();
+            $table->timestamp('email_verification_expires_at')->nullable();
             $table->string('password');
             $table->text('two_factor_secret')->nullable();
             $table->text('two_factor_recovery_codes')->nullable();
             $table->timestamp('two_factor_confirmed_at')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->string('status', 20)->default('active');
             $table->string('pays', 100)->nullable();
             $table->string('code_pays', 2)->nullable();
             $table->string('code_phone_pays', 10)->nullable();
@@ -28,6 +33,8 @@ return new class extends Migration
             $table->string('adresse', 255)->nullable();
             $table->rememberToken();
             $table->timestamps();
+
+            $table->unique(['organization_id', 'matricule'], 'users_org_matricule_unique');
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {

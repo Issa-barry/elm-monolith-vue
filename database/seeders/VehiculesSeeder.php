@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use App\Enums\TypeVehicule;
 use App\Models\EquipeLivraison;
 use App\Models\Organization;
 use App\Models\Site;
+use App\Models\TypeVehicule as TypeVehiculeModel;
 use App\Models\Vehicule;
 use Illuminate\Database\Seeder;
 
@@ -13,28 +13,35 @@ use Illuminate\Database\Seeder;
  * Crée 10 véhicules (5 externes + 5 internes) et les associe à leurs équipes.
  *
  * EXTERNES (appartiennent à un propriétaire privé) :
- * | Véhicule         | Type     | Équipe         | Immat      |
- * |------------------|----------|----------------|------------|
- * | Nen Dow          | camion   | Nen Dow        | RC-001-GN  |
- * | Kata Kata de Ali | tricycle | Auto Dogomet   | TC-001-GN  |
- * | Baba Ousou       | minibus  | Baba Ousou     | VN-001-GN  |
- * | Kaloum Express   | minibus  | Kaloum Express | KX-001-GN  |
- * | Conakry 2        | tricycle | Conakry 2      | TC-002-GN  |
+ * | Véhicule         | Type         | Équipe         | Immat      |
+ * |------------------|--------------|----------------|------------|
+ * | Nen Dow          | Camion       | Nen Dow        | RC-001-GN  |
+ * | Kata Kata de Ali | Tricycle moto| Auto Dogomet   | TC-001-GN  |
+ * | Baba Ousou       | Minibus 200  | Baba Ousou     | VN-001-GN  |
+ * | Kaloum Express   | Minibus 200  | Kaloum Express | KX-001-GN  |
+ * | Conakry 2        | Tricycle moto| Conakry 2      | TC-002-GN  |
  *
  * INTERNES (appartiennent à l'organisation — 100 % livreurs) :
- * | Véhicule | Type    | Équipe           | Immat      | Site   |
- * |----------|---------|------------------|------------|--------|
- * | elm-1    | minibus | ELM Logistique 1 | ELM-001-GN | Matoto |
- * | elm-2    | minibus | ELM Logistique 2 | ELM-002-GN | Matoto |
- * | elm-3    | camion  | ELM Logistique 3 | ELM-003-GN | Matoto |
- * | elm-4    | minibus | ELM Logistique 4 | ELM-004-GN | Matoto |
- * | Cousin   | —       | Cousin           | BK-4627-02 | Kouria |
+ * | Véhicule | Type        | Équipe           | Immat      | Site   |
+ * |----------|-------------|------------------|------------|--------|
+ * | elm-1    | Minibus 200 | ELM Logistique 1 | ELM-001-GN | Matoto |
+ * | elm-2    | Minibus 200 | ELM Logistique 2 | ELM-002-GN | Matoto |
+ * | elm-3    | Camion      | ELM Logistique 3 | ELM-003-GN | Matoto |
+ * | elm-4    | Minibus 200 | ELM Logistique 4 | ELM-004-GN | Matoto |
+ * | Cousin   | —           | Cousin           | BK-4627-02 | Kouria |
  */
 class VehiculesSeeder extends Seeder
 {
     public function run(): void
     {
         $org = Organization::where('slug', 'elm')->firstOrFail();
+
+        $typeIds = TypeVehiculeModel::where('organization_id', $org->id)
+            ->get()
+            ->keyBy(fn ($t) => mb_strtolower($t->nom))
+            ->map(fn ($t) => $t->id);
+
+        $type = fn (string $nom) => $typeIds[mb_strtolower($nom)] ?? null;
 
         $matoto = Site::where('organization_id', $org->id)
             ->where('nom', 'Matoto')
@@ -76,7 +83,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Mercedes',
                 'modele' => 'Actros',
                 'immatriculation' => 'RC-001-GN',
-                'type_vehicule' => TypeVehicule::CAMION->value,
+                'type_vehicule_id' => $type('Camion'),
                 'capacite_packs' => 500,
                 'categorie' => 'externe',
                 'proprietaire_id' => $eqNenDow->proprietaire_id,
@@ -89,7 +96,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Bajaj',
                 'modele' => 'RE',
                 'immatriculation' => 'TC-001-GN',
-                'type_vehicule' => TypeVehicule::TRICYCLE->value,
+                'type_vehicule_id' => $type('Tricycle moto'),
                 'capacite_packs' => 80,
                 'categorie' => 'externe',
                 'proprietaire_id' => $eqAutoDogomet->proprietaire_id,
@@ -102,7 +109,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Toyota',
                 'modele' => 'HiAce',
                 'immatriculation' => 'VN-001-GN',
-                'type_vehicule' => TypeVehicule::MINIBUS->value,
+                'type_vehicule_id' => $type('Minibus 200'),
                 'capacite_packs' => 150,
                 'categorie' => 'externe',
                 'proprietaire_id' => $eqBabaOusou->proprietaire_id,
@@ -115,7 +122,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Toyota',
                 'modele' => 'HiAce',
                 'immatriculation' => 'KX-001-GN',
-                'type_vehicule' => TypeVehicule::MINIBUS->value,
+                'type_vehicule_id' => $type('Minibus 200'),
                 'capacite_packs' => 120,
                 'categorie' => 'externe',
                 'proprietaire_id' => $eqKaloumExpress->proprietaire_id,
@@ -128,7 +135,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Bajaj',
                 'modele' => 'RE',
                 'immatriculation' => 'TC-002-GN',
-                'type_vehicule' => TypeVehicule::TRICYCLE->value,
+                'type_vehicule_id' => $type('Tricycle moto'),
                 'capacite_packs' => 60,
                 'categorie' => 'externe',
                 'proprietaire_id' => $eqConakry2->proprietaire_id,
@@ -143,7 +150,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Toyota',
                 'modele' => 'HiLux',
                 'immatriculation' => 'ELM-001-GN',
-                'type_vehicule' => TypeVehicule::MINIBUS->value,
+                'type_vehicule_id' => $type('Minibus 200'),
                 'capacite_packs' => 120,
                 'categorie' => 'interne',
                 'site_id' => $matoto->id,
@@ -157,7 +164,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Renault',
                 'modele' => 'Kangoo',
                 'immatriculation' => 'ELM-002-GN',
-                'type_vehicule' => TypeVehicule::MINIBUS->value,
+                'type_vehicule_id' => $type('Minibus 200'),
                 'capacite_packs' => 80,
                 'categorie' => 'interne',
                 'site_id' => $matoto->id,
@@ -171,7 +178,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Mercedes',
                 'modele' => 'Sprinter',
                 'immatriculation' => 'ELM-003-GN',
-                'type_vehicule' => TypeVehicule::CAMION->value,
+                'type_vehicule_id' => $type('Camion'),
                 'capacite_packs' => 300,
                 'categorie' => 'interne',
                 'site_id' => $matoto->id,
@@ -185,7 +192,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Toyota',
                 'modele' => 'HiLux',
                 'immatriculation' => 'ELM-004-GN',
-                'type_vehicule' => TypeVehicule::MINIBUS->value,
+                'type_vehicule_id' => $type('Minibus 200'),
                 'capacite_packs' => 100,
                 'categorie' => 'interne',
                 'site_id' => $matoto->id,
@@ -199,7 +206,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => null,
                 'modele' => null,
                 'immatriculation' => 'BK-4627-02',
-                'type_vehicule' => null,
+                'type_vehicule_id' => null,
                 'capacite_packs' => 200,
                 'categorie' => 'interne',
                 'site_id' => $kouria->id,

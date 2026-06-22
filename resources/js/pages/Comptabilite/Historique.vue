@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router } from '@inertiajs/vue3';
-import { Eye, History, Search } from 'lucide-vue-next';
+import { Head } from '@inertiajs/vue3';
+import { Eye, History } from 'lucide-vue-next';
 import PvDialog from 'primevue/dialog';
 import { ref } from 'vue';
 
@@ -61,54 +64,62 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Historique', href: '/comptabilite/historique' },
 ];
 
-const dateDebut = ref(props.filters.dateDebut ?? '');
-const dateFin = ref(props.filters.dateFin ?? '');
-const moduleFiltre = ref<string | null>(props.filters.module || null);
-const eventCodeFiltre = ref<string | null>(props.filters.eventCode || null);
-const actorFiltre = ref<string | null>(props.filters.actorId || null);
-const siteFiltre = ref<string | null>(props.filters.siteId || null);
-const searchQuery = ref(props.filters.search ?? '');
+const search = ref(props.filters.search ?? '');
 
-const ALL_MODULES = [
-    { value: null, label: 'Tous les modules' },
-    ...props.modules,
+const filterFields: FilterField[] = [
+    {
+        key: 'module',
+        label: 'Module',
+        type: 'select',
+        options: props.modules.map((m) => ({
+            value: m.value ?? '',
+            label: m.label,
+        })),
+    },
+    {
+        key: 'event_code',
+        label: 'Action',
+        type: 'select',
+        options: props.event_codes.map((e) => ({
+            value: e.value ?? '',
+            label: e.label,
+        })),
+    },
+    {
+        key: 'actor_id',
+        label: 'Utilisateur',
+        type: 'select',
+        options: props.acteurs.map((a) => ({
+            value: a.value ?? '',
+            label: a.label,
+        })),
+    },
+    {
+        key: 'site_id',
+        label: 'Site',
+        type: 'select',
+        options: props.sites.map((s) => ({
+            value: s.value ?? '',
+            label: s.label,
+        })),
+    },
+    {
+        key: 'date',
+        label: 'Période',
+        type: 'date-range',
+        startKey: 'date_debut',
+        endKey: 'date_fin',
+    },
 ];
-const ALL_EVENTS = [
-    { value: null, label: 'Toutes les actions' },
-    ...props.event_codes,
-];
-const ALL_ACTEURS = [
-    { value: null, label: 'Tous les utilisateurs' },
-    ...props.acteurs,
-];
-const ALL_SITES = [{ value: null, label: 'Tous les sites' }, ...props.sites];
 
-function appliquerFiltres() {
-    router.get(
-        '/comptabilite/historique',
-        {
-            date_debut: dateDebut.value || undefined,
-            date_fin: dateFin.value || undefined,
-            module: moduleFiltre.value ?? undefined,
-            event_code: eventCodeFiltre.value ?? undefined,
-            actor_id: actorFiltre.value ?? undefined,
-            site_id: siteFiltre.value ?? undefined,
-            search: searchQuery.value || undefined,
-        },
-        { preserveState: true, replace: true },
-    );
-}
-
-watch(moduleFiltre, appliquerFiltres);
-watch(eventCodeFiltre, appliquerFiltres);
-watch(actorFiltre, appliquerFiltres);
-watch(siteFiltre, appliquerFiltres);
-
-let debounceTimeout: ReturnType<typeof setTimeout> | null = null;
-watch([dateDebut, dateFin, searchQuery], () => {
-    if (debounceTimeout) clearTimeout(debounceTimeout);
-    debounceTimeout = setTimeout(appliquerFiltres, 400);
-});
+const historiqueFilters = {
+    module: props.filters.module ?? '',
+    event_code: props.filters.eventCode ?? '',
+    actor_id: props.filters.actorId ?? '',
+    site_id: props.filters.siteId ?? '',
+    date_debut: props.filters.dateDebut ?? '',
+    date_fin: props.filters.dateFin ?? '',
+};
 
 const selectedLog = ref<LogRow | null>(null);
 const showDetail = ref(false);
@@ -177,67 +188,14 @@ function formatJson(val: unknown): string {
             </div>
 
             <!-- Filtres -->
-            <FilterBar>
-                <PvDropdown
-                    :options="ALL_MODULES"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="moduleFiltre"
-                    placeholder="Tous les modules"
-                    class="w-[180px] text-sm"
-                    @change="(e) => (moduleFiltre = e.value)"
-                />
-                <PvDropdown
-                    :options="ALL_EVENTS"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="eventCodeFiltre"
-                    placeholder="Toutes les actions"
-                    class="w-[160px] text-sm"
-                    @change="(e) => (eventCodeFiltre = e.value)"
-                />
-                <PvDropdown
-                    :options="ALL_ACTEURS"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="actorFiltre"
-                    placeholder="Tous les utilisateurs"
-                    class="w-[180px] text-sm"
-                    @change="(e) => (actorFiltre = e.value)"
-                />
-                <PvDropdown
-                    :options="ALL_SITES"
-                    option-label="label"
-                    option-value="value"
-                    :model-value="siteFiltre"
-                    placeholder="Tous les sites"
-                    class="w-[170px] text-sm"
-                    @change="(e) => (siteFiltre = e.value)"
-                />
-                <InputText
-                    v-model="dateDebut"
-                    type="date"
-                    class="w-[140px] text-sm"
-                    placeholder="Du"
-                />
-                <InputText
-                    v-model="dateFin"
-                    type="date"
-                    class="w-[140px] text-sm"
-                    placeholder="Au"
-                />
-                <div class="relative w-[240px]">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <InputText
-                        v-model="searchQuery"
-                        type="text"
-                        class="w-full pl-8 text-sm"
-                        placeholder="Recherche libre…"
-                    />
-                </div>
-            </FilterBar>
+            <DataFilters
+                url="/comptabilite/historique"
+                :values="historiqueFilters"
+                :fields="filterFields"
+                :result-count="logs.total"
+                search-placeholder="Recherche libre…"
+                v-model:search="search"
+            />
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">

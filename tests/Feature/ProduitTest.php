@@ -929,7 +929,7 @@ class ProduitTest extends TestCase
 
         // Filtrer sur site1 → doit voir l'entrée de site1, pas la sortie de site2
         $response = $this->actingAs($this->user)
-            ->get(route('produits.index', ['site_id' => $site1->id]));
+            ->get(route('produits.index', ['site_ids' => [$site1->id]]));
 
         $produits = $response->original->getData()['page']['props']['produits'];
         $found = collect($produits)->firstWhere('id', $produit->id);

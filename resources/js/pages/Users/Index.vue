@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,7 +29,6 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
@@ -44,6 +45,7 @@ interface StaffUser {
     is_active: boolean;
     roles: string[];
     site: string | null;
+    site_id: string | null;
     is_me: boolean;
 }
 
@@ -121,18 +123,28 @@ const inactiveUsers = computed(
 
 const search = ref('');
 const statut = ref<string>('tous');
+const siteIds = ref<string[]>([]);
 
-function resetFilters() {
-    search.value = '';
-    statut.value = 'tous';
-}
-
-const hasActiveFilters = computed(
-    () => !!search.value || statut.value !== 'tous',
-);
+const filterFields: FilterField[] = [
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: [
+            { value: 'tous', label: 'Tous' },
+            { value: 'actif', label: 'Actif' },
+            { value: 'inactif', label: 'Inactif' },
+        ],
+    },
+];
 
 const filteredUsers = computed(() => {
     let list = props.users;
+    if (siteIds.value.length > 0) {
+        list = list.filter(
+            (u) => u.site_id && siteIds.value.includes(u.site_id),
+        );
+    }
     if (statut.value !== 'tous') {
         list = list.filter((u) => u.is_active === (statut.value === 'actif'));
     }
@@ -148,6 +160,17 @@ const filteredUsers = computed(() => {
     }
     return list;
 });
+
+function handleApply(values: Record<string, unknown>) {
+    statut.value = (values.statut as string[])?.[0] ?? 'tous';
+    siteIds.value = (values.site_ids as string[]) ?? [];
+}
+
+function resetFilters() {
+    search.value = '';
+    statut.value = 'tous';
+    siteIds.value = [];
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -234,25 +257,15 @@ function confirmDelete(u: StaffUser) {
                 </div>
             </div>
 
-            <DataTableFilters
-                v-model:search="search"
-                search-placeholder="Rechercher un utilisateur…"
-                :has-active-filters="hasActiveFilters"
+            <DataFilters
+                :fields="filterFields"
+                :values="{ statut }"
                 :result-count="filteredUsers.length"
+                search-placeholder="Rechercher un utilisateur…"
+                v-model:search="search"
+                @apply="handleApply"
                 @reset="resetFilters"
-            >
-                <Select
-                    v-model="statut"
-                    :options="[
-                        { value: 'tous', label: 'Tous' },
-                        { value: 'actif', label: 'Actif' },
-                        { value: 'inactif', label: 'Inactif' },
-                    ]"
-                    option-label="label"
-                    option-value="value"
-                    class="w-32"
-                />
-            </DataTableFilters>
+            />
 
             <div
                 class="overflow-hidden rounded-xl border bg-card"

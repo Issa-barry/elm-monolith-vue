@@ -58,6 +58,7 @@ return new class extends Migration
             $table->string('perimetre')->default('toutes_agences'); // toutes_agences | agences_selectionnees
             $table->json('sites')->nullable();
             $table->boolean('is_actif')->default(true);
+            $table->boolean('peut_valider')->default(false);
             $table->timestamps();
 
             $table->unique(['organization_id', 'role_name']);

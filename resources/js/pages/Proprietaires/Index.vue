@@ -25,10 +25,11 @@ import {
     Trash2,
 } from 'lucide-vue-next';
 
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
@@ -69,6 +70,19 @@ const mobileSearch = ref('');
 const search = ref('');
 const statut = ref<string>('tous');
 
+const filterFields: FilterField[] = [
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: [
+            { value: 'tous', label: 'Tous' },
+            { value: 'actif', label: 'Actifs' },
+            { value: 'inactif', label: 'Inactifs' },
+        ],
+    },
+];
+
 const totalProprietaires = computed(() => props.proprietaires.length);
 const activeProprietaires = computed(
     () => props.proprietaires.filter((p) => p.is_active).length,
@@ -81,10 +95,6 @@ function resetFilters() {
     search.value = '';
     statut.value = 'tous';
 }
-
-const hasActiveFilters = computed(
-    () => !!search.value || statut.value !== 'tous',
-);
 
 const filteredProprietaires = computed(() => {
     let list = props.proprietaires;
@@ -398,25 +408,19 @@ function confirmDelete(p: Proprietaire) {
             </div>
 
             <!-- Tableau -->
-            <DataTableFilters
+            <DataFilters
                 v-model:search="search"
                 search-placeholder="Rechercher…"
-                :has-active-filters="hasActiveFilters"
+                :values="{ statut: statut }"
+                :fields="filterFields"
                 :result-count="filteredProprietaires.length"
+                @apply="
+                    (vals) => {
+                        statut.value = (vals.statut as string) || 'tous';
+                    }
+                "
                 @reset="resetFilters"
-            >
-                <Select
-                    v-model="statut"
-                    :options="[
-                        { value: 'tous', label: 'Tous' },
-                        { value: 'actif', label: 'Actif' },
-                        { value: 'inactif', label: 'Inactif' },
-                    ]"
-                    option-label="label"
-                    option-value="value"
-                    class="w-32"
-                />
-            </DataTableFilters>
+            />
 
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable

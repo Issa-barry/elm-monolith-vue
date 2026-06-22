@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+    applyDrawerFilterOption,
     createUser,
     escapeRegExp,
     fillUserInfoAndAdvance,
@@ -162,8 +163,7 @@ test('status filter → shows only active users', async ({ page }) => {
     await login(page);
     await page.goto('/users');
 
-    const statusSelect = page.locator('[role="combobox"]:visible').first();
-    await selectOptionFromCombobox(page, statusSelect, /^actif$/i);
+    await applyDrawerFilterOption(page, 'statut', /^actif$/i);
 
     const rows = page.locator('[data-testid="staff-users-table"] tbody tr:visible');
     const count = await rows.count();
@@ -172,7 +172,7 @@ test('status filter → shows only active users', async ({ page }) => {
         await expect(rows.nth(i)).not.toContainText(/inactif/i);
     }
 
-    await selectOptionFromCombobox(page, statusSelect, /^tous$/i);
+    await applyDrawerFilterOption(page, 'statut', /^tous$/i);
     await expect(page.locator('[data-testid="staff-users-table"] tbody tr:visible').first()).toBeVisible();
 });
 

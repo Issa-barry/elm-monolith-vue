@@ -26,12 +26,9 @@ class FactureVenteController extends Controller
         // Sites auxquels l'utilisateur a accès (vide = tous, pour un admin)
         $authorizedSiteIds = $isAdmin ? collect() : $user->sites()->pluck('sites.id');
 
-        // Site par défaut = premier site de l'utilisateur
-        $userSiteId = $user->sites()->first(['sites.id'])?->id;
-
         $periode = $request->input('periode', 'month');
         $statut = $request->input('statut', 'tous');
-        $siteId = $request->input('site_id', $userSiteId ? (string) $userSiteId : 'tous');
+        $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
         $livreurId = $request->input('livreur_id');
         $vehiculeRecherche = $request->input('vehicule');
         $chauffeurRecherche = $request->input('chauffeur');
@@ -90,8 +87,8 @@ class FactureVenteController extends Controller
             $query->where('statut_facture', $statut);
         }
 
-        if ($siteId !== 'tous') {
-            $query->whereHas('commande', fn ($q) => $q->where('site_id', $siteId));
+        if ($isAdmin && ! empty($siteIds)) {
+            $query->whereHas('commande', fn ($q) => $q->whereIn('site_id', $siteIds));
         }
 
         if ($livreurId) {
@@ -199,7 +196,7 @@ class FactureVenteController extends Controller
             'modes_paiement' => ModePaiement::options(),
             'periode' => $periode,
             'statut' => $statut,
-            'site_id' => $siteId,
+            'site_ids' => $siteIds,
             'sites' => $sites,
             'livreur_id' => $livreurId,
             'livreur' => $livreurData,

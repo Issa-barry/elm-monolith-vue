@@ -12,7 +12,7 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignUlid('proprietaire_id')->nullable()->constrained('proprietaires')->nullOnDelete();
-            // vehicule_id ajouté après create_vehicules (migration suivante)
+            $table->ulid('vehicule_id')->nullable();
             $table->string('nom', 100);
             $table->decimal('commission_unitaire_par_pack', 10, 2)->default(0);
             $table->decimal('montant_par_pack_proprietaire', 10, 2)->nullable();

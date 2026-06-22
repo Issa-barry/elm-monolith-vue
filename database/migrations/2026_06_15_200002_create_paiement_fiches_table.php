@@ -12,7 +12,7 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained('organizations')->cascadeOnDelete();
             $table->foreignUlid('periode_id')->constrained('paiement_periodes')->cascadeOnDelete();
-            $table->string('reference', 20);
+            $table->string('reference', 40);
             $table->string('beneficiaire_type', 20);
             $table->ulid('beneficiaire_id');
             $table->string('beneficiaire_nom', 255);

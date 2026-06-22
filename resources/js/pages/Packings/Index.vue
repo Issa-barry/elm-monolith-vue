@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -68,15 +70,6 @@ const statutOptions = [
     { value: 'payee', label: 'Payée' },
     { value: 'annulee', label: 'Annulée' },
 ];
-
-const hasActiveFilters = computed(
-    () => !!search.value || statutFilter.value !== 'tous',
-);
-
-function resetFilters() {
-    search.value = '';
-    statutFilter.value = 'tous';
-}
 
 const baseFiltered = computed(() => {
     if (statutFilter.value === 'tous') return props.packings;
@@ -392,21 +385,36 @@ function confirmDelete(packing: Packing) {
             </div>
 
             <!-- Filtres ──────────────────────────────────────────────────────── -->
-            <DataTableFilters
+            <DataFilters
                 v-model:search="search"
                 search-placeholder="Rechercher un packing…"
-                :has-active-filters="hasActiveFilters"
+                :values="{ statut: statutFilter }"
+                :fields="
+                    [
+                        {
+                            key: 'statut',
+                            type: 'select',
+                            label: 'Statut',
+                            options: statutOptions.map((o) => ({
+                                value: o.value,
+                                label: o.label,
+                            })),
+                        },
+                    ] as FilterField[]
+                "
                 :result-count="desktopFiltered.length"
-                @reset="resetFilters"
-            >
-                <Dropdown
-                    v-model="statutFilter"
-                    :options="statutOptions"
-                    option-label="label"
-                    option-value="value"
-                    class="w-40"
-                />
-            </DataTableFilters>
+                @apply="
+                    (vals) => {
+                        statutFilter = (vals.statut as string) || 'tous';
+                    }
+                "
+                @reset="
+                    () => {
+                        search = '';
+                        statutFilter = 'tous';
+                    }
+                "
+            />
 
             <!-- Tableau ──────────────────────────────────────────────────────── -->
             <div class="overflow-hidden rounded-xl border bg-card">

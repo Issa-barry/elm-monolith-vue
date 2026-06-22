@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,13 +28,9 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import IconField from 'primevue/iconfield';
-import InputIcon from 'primevue/inputicon';
-import InputText from 'primevue/inputtext';
-import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 function initials(name: string | null | undefined): string {
     if (!name) return '?';
@@ -65,10 +64,6 @@ const toast = useToast();
 
 const search = ref('');
 const statusFilter = ref<string>('tous');
-const filters = ref({ global: { value: '', matchMode: 'contains' } });
-watch(search, (val) => {
-    filters.value.global.value = val;
-});
 
 const totalPrestataires = computed(() => props.prestataires.length);
 const activePrestataires = computed(
@@ -349,21 +344,45 @@ function confirmDelete(p: Prestataire) {
                 </div>
             </div>
 
+            <!-- Filtres -->
+            <DataFilters
+                v-model:search="search"
+                search-placeholder="Rechercher..."
+                :values="{ statut: statusFilter }"
+                :fields="
+                    [
+                        {
+                            key: 'statut',
+                            type: 'select',
+                            label: 'Statut',
+                            options: [
+                                { value: 'tous', label: 'Tous' },
+                                { value: 'actif', label: 'Actif' },
+                                { value: 'inactif', label: 'Inactif' },
+                            ],
+                        },
+                    ] as FilterField[]
+                "
+                :result-count="filteredPrestataires.length"
+                @apply="
+                    (vals) => {
+                        statusFilter = (vals.statut as string) || 'tous';
+                    }
+                "
+                @reset="
+                    () => {
+                        search = '';
+                        statusFilter = 'tous';
+                    }
+                "
+            />
+
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="filteredPrestataires"
                     :paginator="totalPrestataires > 20"
                     :rows="20"
-                    :global-filter-fields="[
-                        'nom_complet',
-                        'reference',
-                        'email',
-                        'phone',
-                        'type_label',
-                        'ville',
-                    ]"
-                    v-model:filters="filters"
                     data-key="id"
                     striped-rows
                     removable-sort
@@ -371,40 +390,9 @@ function confirmDelete(p: Prestataire) {
                     table-class="w-full"
                     :pt="{
                         root: { class: 'w-full' },
-                        header: { class: 'border-b bg-muted/30 px-4 py-3' },
                         tbody: { class: 'divide-y' },
                     }"
                 >
-                    <template #header>
-                        <div
-                            class="flex items-center gap-3 border-b border-border bg-muted/30 px-4 py-3"
-                        >
-                            <IconField class="max-w-sm flex-1">
-                                <InputIcon class="pointer-events-none">
-                                    <Search
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </InputIcon>
-                                <InputText
-                                    v-model="search"
-                                    placeholder="Rechercher..."
-                                    class="w-full text-sm"
-                                />
-                            </IconField>
-                            <Select
-                                v-model="statusFilter"
-                                :options="[
-                                    { value: 'tous', label: 'Tous' },
-                                    { value: 'actif', label: 'Actif' },
-                                    { value: 'inactif', label: 'Inactif' },
-                                ]"
-                                option-label="label"
-                                option-value="value"
-                                class="w-32"
-                            />
-                        </div>
-                    </template>
-
                     <!-- Référence -->
                     <Column
                         field="reference"

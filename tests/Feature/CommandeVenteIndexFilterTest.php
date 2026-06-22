@@ -79,7 +79,7 @@ class CommandeVenteIndexFilterTest extends TestCase
         $livree = $this->makeCommande(['statut' => StatutCommandeVente::LIVREE]);
         $this->makeCommande(['statut' => StatutCommandeVente::BROUILLON]);
 
-        $this->assertIndexReturnsOnly($livree, ['statut' => 'livree']);
+        $this->assertIndexReturnsOnly($livree, ['statuts' => ['livree']]);
     }
 
     // ── Site (admin) ──────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ class CommandeVenteIndexFilterTest extends TestCase
         $cmdIci = $this->makeCommande(['site_id' => $this->site->id]);
         $this->makeCommande(['site_id' => $autreAgence->id]);
 
-        $this->assertIndexReturnsOnly($cmdIci, ['site_id' => $this->site->id]);
+        $this->assertIndexReturnsOnly($cmdIci, ['site_ids' => [$this->site->id]]);
     }
 
     // ── Dates ─────────────────────────────────────────────────────────────────
@@ -331,7 +331,7 @@ class CommandeVenteIndexFilterTest extends TestCase
 
         $this->assertIndexReturnsOnly($match, [
             'client_nom' => 'Condé',
-            'statut' => 'a_charger',
+            'statuts' => ['a_charger'],
         ]);
     }
 }

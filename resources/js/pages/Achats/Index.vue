@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DataTableFilters from '@/components/DataTableFilters.vue';
+import DataFilters from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -61,12 +61,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Achats', href: '/achats' },
 ];
-
-const hasActiveFilters = computed(() => !!search.value);
-
-function resetFilters() {
-    search.value = '';
-}
 
 const desktopFiltered = computed(() => {
     const q = search.value.toLowerCase().trim();
@@ -293,12 +287,16 @@ function confirmDelete(c: Commande) {
             </div>
 
             <!-- Filtres -->
-            <DataTableFilters
+            <DataFilters
                 v-model:search="search"
                 search-placeholder="Rechercher..."
-                :has-active-filters="hasActiveFilters"
+                :fields="[]"
                 :result-count="desktopFiltered.length"
-                @reset="resetFilters"
+                @reset="
+                    () => {
+                        search = '';
+                    }
+                "
             />
 
             <!-- Tableau -->
