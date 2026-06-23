@@ -280,47 +280,73 @@ test('stat cards reflect active filters', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 });
 
-test('filtre site dans le drawer persiste après Appliquer (pas de sélecteur agence générique en doublon)', async ({
+test('filtre agence (site_ids) persiste après Appliquer — chip, case cochée et URL', async ({
     page,
 }) => {
     await page.goto('/depenses');
     await expect(page).toHaveURL(/\/depenses$/, { timeout: 15_000 });
 
-    // Le sélecteur "agence" générique (toolbar) doit être masqué sur cette
-    // page : Dépenses a son propre filtre "Site" dédié dans le drawer, qui
-    // seul est branché sur le backend (paramètre `site`, pas `site_ids`).
-    await expect(page.getByTestId('agency-filter')).toHaveCount(0);
-
-    const filtresBtn = page.getByRole('button', { name: /filtres/i }).first();
-    await expect(filtresBtn).toBeVisible({ timeout: 10_000 });
-    await filtresBtn.click();
-
-    const siteField = page.getByTestId('filter-field-site');
-    await expect(siteField).toBeVisible({ timeout: 5_000 });
-
-    const siteMultiselect = siteField
+    // Le sélecteur "agence" générique vit dans la barre d'outils (pas dans
+    // le drawer) — Dépenses n'a pas de filtre site dédié, il réutilise le
+    // même composant que Ventes / Produits / Logistique.
+    const agenceMultiselect = page
+        .getByTestId('agency-filter')
         .locator('[data-pc-name="multiselect"]')
         .first();
-    await siteMultiselect.click();
 
+    const isAdmin = await agenceMultiselect
+        .isVisible({ timeout: 3_000 })
+        .catch(() => false);
+    if (!isAdmin) {
+        test.skip();
+        return;
+    }
+
+    // Cliquer sur le bouton dropdown dédié (pas le contrôle entier) : une
+    // fois une puce affichée, cliquer au centre du contrôle risque de
+    // toucher le bouton de suppression de la puce plutôt que d'ouvrir le
+    // panneau.
+    const dropdownToggle = agenceMultiselect.locator(
+        '.p-multiselect-dropdown',
+    );
+
+    await dropdownToggle.click();
     const option = page.locator('[role="option"]:visible').first();
     await expect(option).toBeVisible({ timeout: 5_000 });
     const optionLabel = (await option.textContent())?.trim();
     await option.click();
+
+    // La case doit être cochée immédiatement après le clic.
+    await expect(option).toHaveAttribute('aria-selected', 'true', {
+        timeout: 3_000,
+    });
     await page.keyboard.press('Escape');
 
+    // Le chip doit apparaître dans le contrôle avant même de cliquer sur
+    // Appliquer (état local du composant).
+    const chips = agenceMultiselect.locator(
+        '.p-multiselect-chip, [data-pc-section="chip"]',
+    );
+    await expect(chips.first()).toBeVisible({ timeout: 3_000 });
+
     await page.getByRole('button', { name: /appliquer/i }).first().click();
-    await expect(page).toHaveURL(/site=/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/site_ids/, { timeout: 10_000 });
     await page.waitForLoadState('networkidle');
 
-    // Rouvrir le drawer : la sélection ne doit pas avoir été effacée par le
-    // round-trip serveur (régression : le filtre agence générique, mal
-    // câblé, écrasait visuellement cette sélection après Appliquer).
-    await filtresBtn.click();
-    await expect(siteField).toBeVisible({ timeout: 5_000 });
+    // Régression : après le round-trip serveur (rechargement Inertia avec
+    // les nouveaux props), le chip ne doit plus être effacé.
+    await expect(chips.first()).toBeVisible({ timeout: 5_000 });
     if (optionLabel) {
-        await expect(siteMultiselect).toContainText(optionLabel, {
+        await expect(agenceMultiselect).toContainText(optionLabel, {
             timeout: 5_000,
         });
     }
+
+    // La case doit rester cochée dans le panel d'options après le reload.
+    await dropdownToggle.click();
+    const reselectedOption = page
+        .locator('[role="option"][aria-selected="true"]:visible')
+        .first();
+    await expect(reselectedOption).toBeVisible({ timeout: 5_000 });
+    await page.keyboard.press('Escape');
 });

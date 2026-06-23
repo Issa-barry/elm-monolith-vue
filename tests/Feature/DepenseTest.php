@@ -1030,9 +1030,9 @@ class DepenseTest extends TestCase
             );
     }
 
-    // ── Filtre site ──────────────────────────────────────────────────────────
+    // ── Filtre agence (site_ids) ────────────────────────────────────────────
 
-    public function test_filtre_site_retourne_uniquement_depenses_du_site(): void
+    public function test_filtre_site_ids_retourne_uniquement_depenses_des_sites_selectionnes(): void
     {
         $site1 = $this->user->sites()->first();
         $site2 = Site::create([
@@ -1040,6 +1040,12 @@ class DepenseTest extends TestCase
             'nom' => 'Site 2',
             'type' => 'depot',
             'localisation' => 'Kindia',
+        ]);
+        $site3 = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Site 3',
+            'type' => 'depot',
+            'localisation' => 'Mamou',
         ]);
 
         Depense::factory()->create([
@@ -1054,23 +1060,56 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
             'site_id' => $site2->id,
         ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'site_id' => $site3->id,
+        ]);
 
-        $this->get("/depenses?site={$site1->id}")
+        $this->get('/depenses?'.http_build_query(['site_ids' => [$site1->id, $site2->id]]))
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page
-                ->has('depenses.data', 1)
-                ->where('depenses.data.0.site.id', $site1->id)
-            );
+            ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 2));
     }
 
-    public function test_filtre_site_est_renvoye_dans_les_filters_pour_persister_apres_apply(): void
+    public function test_filtre_site_ids_est_renvoye_dans_les_filters_pour_persister_apres_apply(): void
     {
         $site = $this->user->sites()->first();
 
-        $this->get("/depenses?site={$site->id}")
+        $this->get('/depenses?'.http_build_query(['site_ids' => [$site->id]]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->where('filters.site', $site->id)
+                ->where('filters.site_ids', [$site->id])
+            );
+    }
+
+    public function test_filtre_site_ids_vide_retourne_toutes_les_depenses(): void
+    {
+        $site2 = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Site 2',
+            'type' => 'depot',
+            'localisation' => 'Kindia',
+        ]);
+
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'site_id' => $this->user->sites()->first()->id,
+        ]);
+        Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $this->typeInterne->id,
+            'site_id' => $site2->id,
+        ]);
+
+        $this->get('/depenses')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('depenses.data', 2)
+                ->where('filters.site_ids', [])
             );
     }
 
@@ -1298,7 +1337,7 @@ class DepenseTest extends TestCase
             'site_id' => $site2->id,
         ]);
 
-        $content = $this->get("/depenses/imprimer?site={$site1->id}")->content();
+        $content = $this->get('/depenses/imprimer?'.http_build_query(['site_ids' => [$site1->id]]))->content();
         $this->assertStringContainsString('Conakry', $content);
         $this->assertStringNotContainsString('Kindia', $content);
     }

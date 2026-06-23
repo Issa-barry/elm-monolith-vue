@@ -71,7 +71,8 @@
       "Bash(mysql -u root -h 127.0.0.1 -e \"SELECT VERSION\\(\\);\")",
       "Bash(vendor/bin/pint --test tests/Feature/DepenseTest.php)",
       "Bash(npx vue-tsc *)",
-      "Bash(echo \"grep_exit:$?\")"
+      "Bash(echo \"grep_exit:$?\")",
+      "Bash(grep -v \"site_id\\\\|site_nom\\\\|\\\\.site\\\\b\\\\|site\\\\.id\\\\|site\\\\.nom\\\\|site_debut\\\\|site_fin\\\\|site,\\\\|sites\\\\b\\\\|sitesAutorisesRaw\\\\|Site \\\\|site :\\\\|opposite\\\\|website\\\\|deposit\\\\|Site$\")"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"

@@ -102,7 +102,7 @@ const props = defineProps<{
         type?: string;
         statut?: string;
         categorie?: string;
-        site?: string;
+        site_ids?: string[];
         date_debut?: string;
         date_fin?: string;
         vehicule?: string;
@@ -134,7 +134,6 @@ function currentParams() {
         type: props.filters.type || undefined,
         statut: props.filters.statut || undefined,
         categorie: props.filters.categorie || undefined,
-        site: props.filters.site || undefined,
         date_debut: props.filters.date_debut || undefined,
         date_fin: props.filters.date_fin || undefined,
         vehicule: props.filters.vehicule || undefined,
@@ -148,7 +147,7 @@ const filterValues = computed(() => ({
     type: props.filters.type ?? '',
     statut: props.filters.statut ?? '',
     categorie: props.filters.categorie ?? '',
-    site: props.filters.site ?? '',
+    site_ids: props.filters.site_ids ?? [],
     date_debut: props.filters.date_debut ?? '',
     date_fin: props.filters.date_fin ?? '',
     vehicule: props.filters.vehicule ?? '',
@@ -188,15 +187,6 @@ const filterFields = computed<FilterField[]>(() => [
         ],
     },
     {
-        key: 'site',
-        label: 'Site',
-        type: 'select',
-        options: [
-            { value: '', label: 'Tous les sites' },
-            ...props.sites.map((s) => ({ value: s.id, label: s.nom })),
-        ],
-    },
-    {
         key: 'date',
         label: 'Période',
         type: 'date-range',
@@ -223,21 +213,25 @@ const filterFields = computed<FilterField[]>(() => [
     },
 ]);
 
-function exportExcel() {
+function buildExportParams(): URLSearchParams {
     const params = new URLSearchParams();
     const p = currentParams();
     Object.entries(p).forEach(([k, v]) => {
         if (v) params.set(k, v);
     });
+    (props.filters.site_ids ?? []).forEach((id) => {
+        params.append('site_ids[]', id);
+    });
+    return params;
+}
+
+function exportExcel() {
+    const params = buildExportParams();
     window.location.href = `/depenses/export/excel?${params.toString()}`;
 }
 
 function imprimer() {
-    const params = new URLSearchParams();
-    const p = currentParams();
-    Object.entries(p).forEach(([k, v]) => {
-        if (v) params.set(k, v);
-    });
+    const params = buildExportParams();
     window.open(`/depenses/imprimer?${params.toString()}`, '_blank');
 }
 
@@ -502,12 +496,12 @@ const categorieColors: Record<string, string> = {
             <DataFilters
                 url="/depenses"
                 :values="filterValues"
+                :sites="sites"
                 :result-count="depenses.total"
                 :fields="filterFields"
                 search-key="search"
                 search-placeholder="Rechercher…"
                 v-model:search="filterSearch"
-                :hide-agence-selector="true"
             />
 
             <!-- Tableau -->
