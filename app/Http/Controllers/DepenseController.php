@@ -43,9 +43,10 @@ class DepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'montant']);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'montant']);
+        $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
-        $paginator = $this->buildQuery($filters, $orgId)
+        $paginator = $this->buildQuery($filters, $orgId, $siteIds)
             ->with(['depenseType', 'site', 'user', 'validateur'])
             ->paginate(30)
             ->withQueryString();
@@ -60,7 +61,7 @@ class DepenseController extends Controller
             ->orderBy('nom')
             ->get(['id', 'nom']);
 
-        $statsRow = $this->buildQuery($filters, $orgId)
+        $statsRow = $this->buildQuery($filters, $orgId, $siteIds)
             ->reorder()
             ->selectRaw(
                 'COUNT(*) as total,
@@ -77,7 +78,7 @@ class DepenseController extends Controller
             'sites' => $sites,
             'categories' => CategorieDepense::options(),
             'statuts' => StatutDepense::options(),
-            'filters' => $filters,
+            'filters' => array_merge($filters, ['site_ids' => $siteIds]),
             'stats' => [
                 'total' => (int) $statsRow->total,
                 'montant_total' => (float) $statsRow->montant_total,
@@ -94,9 +95,10 @@ class DepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'montant']);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'montant']);
+        $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
-        $depenses = $this->buildQuery($filters, $orgId)
+        $depenses = $this->buildQuery($filters, $orgId, $siteIds)
             ->with(['depenseType', 'site', 'user', 'validateur'])
             ->get();
 
@@ -247,12 +249,13 @@ class DepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'site', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'montant']);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'montant']);
+        $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
         $org = Organization::find($orgId);
         $printedBy = $user->name;
         $now = now();
 
-        $depenses = $this->buildQuery($filters, $orgId)
+        $depenses = $this->buildQuery($filters, $orgId, $siteIds)
             ->with(['depenseType', 'site', 'user', 'validateur'])
             ->get();
 
@@ -591,7 +594,7 @@ class DepenseController extends Controller
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    private function buildQuery(array $filters, string $orgId): Builder
+    private function buildQuery(array $filters, string $orgId, array $siteIds = []): Builder
     {
         $query = Depense::forOrg($orgId)
             ->orderByDesc('date_depense')
@@ -650,8 +653,8 @@ class DepenseController extends Controller
         if (! empty($filters['categorie'])) {
             $query->whereHas('depenseType', fn ($q) => $q->where('categorie', $filters['categorie']));
         }
-        if (! empty($filters['site'])) {
-            $query->where('site_id', $filters['site']);
+        if (! empty($siteIds)) {
+            $query->whereIn('site_id', $siteIds);
         }
         if (! empty($filters['date_debut'])) {
             $query->where('date_depense', '>=', $filters['date_debut']);
@@ -729,6 +732,7 @@ class DepenseController extends Controller
             $extra = $vehiculeInfoCache[$d->beneficiaire_id] ?? null;
             if ($extra) {
                 $vehiculeImmatriculation = $extra['immatriculation'] ?? null;
+                $beneficiaireTelephone = $extra['telephone'] ?? null;
             }
         } else {
             $beneficiaireTelephone = $labelCache["tel:{$d->beneficiaire_type}:{$d->beneficiaire_id}"] ?? null;
@@ -776,7 +780,7 @@ class DepenseController extends Controller
             $ids = $items->pluck('beneficiaire_id')->unique()->values()->all();
 
             if ($type === 'vehicule') {
-                $models = Vehicule::with('proprietaire:id,nom,prenom')
+                $models = Vehicule::with('proprietaire:id,nom,prenom,telephone')
                     ->findMany($ids, ['id', 'nom_vehicule', 'immatriculation', 'proprietaire_id']);
 
                 foreach ($models as $model) {
@@ -788,12 +792,14 @@ class DepenseController extends Controller
                             'concerne_reel_label' => $propNom,
                             'impact_message' => "Cette dépense sera déduite de la commission de {$propNom}.",
                             'immatriculation' => $model->immatriculation,
+                            'telephone' => $model->proprietaire->telephone,
                         ];
                     } else {
                         $vehiculeInfoCache[$model->id] = [
                             'concerne_reel_label' => 'Agence ELM',
                             'impact_message' => 'Ce véhicule est interne ELM. La dépense sera comptabilisée comme charge entreprise.',
                             'immatriculation' => $model->immatriculation,
+                            'telephone' => null,
                         ];
                     }
                 }
