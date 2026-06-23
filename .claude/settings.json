@@ -76,7 +76,11 @@
       "Bash(vendor/bin/pint --test app/Http/Controllers/Comptabilite/CommissionLogistiqueController.php)",
       "Bash(grep -rln '\\(string\\) $request->input\\\\|trim\\(\\(string\\) $request->input' app/Http/Controllers/)",
       "Bash(vendor/bin/pint --test tests/Feature/Comptabilite/CommissionLogistiqueFilterTest.php)",
-      "Bash(vendor/bin/pint app/Http/Controllers/Comptabilite/CommissionLogistiqueController.php app/Services/CommissionPaymentService.php tests/Feature/Comptabilite/CommissionLogistiqueFilterTest.php --test)"
+      "Bash(vendor/bin/pint app/Http/Controllers/Comptabilite/CommissionLogistiqueController.php app/Services/CommissionPaymentService.php tests/Feature/Comptabilite/CommissionLogistiqueFilterTest.php --test)",
+      "Bash(cat)",
+      "Bash(chmod +x /tmp/analyze_pages.sh)",
+      "Bash(/tmp/analyze_pages.sh)",
+      "Bash(vendor/bin/pint app/Http/Controllers/Comptabilite/JournalTresorerieController.php --test)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"

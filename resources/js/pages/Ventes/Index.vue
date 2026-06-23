@@ -691,9 +691,11 @@ function confirmDelete(c: Commande) {
                         style="min-width: 120px"
                     >
                         <template #body="{ data }">
-                            <span class="text-muted-foreground">{{
-                                data.site_nom ?? '—'
-                            }}</span>
+                            <span
+                                data-testid="row-site"
+                                class="text-muted-foreground"
+                                >{{ data.site_nom ?? '—' }}</span
+                            >
                         </template>
                     </Column>
 

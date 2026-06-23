@@ -557,6 +557,7 @@ const hasActiveFilters = computed(
             <button
                 v-if="hasActiveFilters"
                 type="button"
+                data-testid="filters-reset"
                 class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                 @click="resetFilters"
             >
@@ -564,6 +565,7 @@ const hasActiveFilters = computed(
             </button>
             <button
                 type="button"
+                data-testid="filters-search"
                 :disabled="!pendingChange"
                 class="h-9 shrink-0 rounded-md px-4 text-sm font-medium transition-colors"
                 :class="
