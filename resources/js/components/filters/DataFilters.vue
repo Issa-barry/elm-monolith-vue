@@ -573,7 +573,7 @@ const hasActiveFilters = computed(
                 "
                 @click="applyFilters"
             >
-                Appliquer
+                Rechercher
             </button>
         </template>
     </FilterBar>
