@@ -94,9 +94,13 @@ class CommissionPaymentService
     /**
      * Soldes agrégés par livreur pour toute une organisation.
      * Retourne les colonnes : livreur_id, beneficiaire_nom, impaye, paye.
+     *
+     * @param  string|array<int, string>|null  $siteId  Un ID de site (rétro-compat) ou un tableau d'IDs.
      */
-    public static function soldesParLivreur(string $orgId, ?string $periode = null, ?string $siteId = null): Collection
+    public static function soldesParLivreur(string $orgId, ?string $periode = null, string|array|null $siteId = null): Collection
     {
+        $siteIds = array_values(array_filter((array) $siteId));
+
         return CommissionLogistiquePart::query()
             ->selectRaw(
                 'livreur_id,
@@ -111,10 +115,10 @@ class CommissionPaymentService
             ->where('type_beneficiaire', 'livreur')
             ->whereNotNull('livreur_id')
             ->when($periode, fn ($q) => $q->where('periode', $periode))
-            ->whereHas('commission', function ($q) use ($orgId, $siteId) {
+            ->whereHas('commission', function ($q) use ($orgId, $siteIds) {
                 $q->where('organization_id', $orgId);
-                if ($siteId) {
-                    $q->whereHas('transfert', fn ($t) => $t->where('site_source_id', $siteId)->orWhere('site_destination_id', $siteId));
+                if (! empty($siteIds)) {
+                    $q->whereHas('transfert', fn ($t) => $t->whereIn('site_source_id', $siteIds)->orWhereIn('site_destination_id', $siteIds));
                 }
             })
             ->groupBy('livreur_id')

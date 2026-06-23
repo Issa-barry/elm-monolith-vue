@@ -54,11 +54,10 @@ const props = defineProps<{
     kpis: Kpis;
     search: string;
     filtre_statut: string;
-    filtre_site: string;
+    filtre_site_ids: string[];
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
-    is_admin: boolean;
-    sites: { value: string; label: string }[];
+    sites: { id: string; nom: string }[];
     can_payer: boolean;
 }>();
 
@@ -74,19 +73,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 const search = ref(props.search ?? '');
 
 const filterFields = computed((): FilterField[] => [
-    ...(props.is_admin && props.sites.length > 1
-        ? [
-              {
-                  key: 'site',
-                  label: 'Agence',
-                  type: 'select' as const,
-                  options: props.sites.map((s) => ({
-                      value: s.value,
-                      label: s.label,
-                  })),
-              },
-          ]
-        : []),
     {
         key: 'statut',
         label: 'Statut',
@@ -108,7 +94,7 @@ const filterFields = computed((): FilterField[] => [
 ]);
 
 const currentFilters = computed(() => ({
-    site: props.filtre_site ?? '',
+    site_ids: props.filtre_site_ids ?? [],
     statut: props.filtre_statut ?? '',
     periode: props.selected_periode ?? '',
 }));
@@ -187,7 +173,9 @@ function livreurStatuts(l: LivreurRow) {
 function buildParams(): URLSearchParams {
     const params = new URLSearchParams();
     if (props.selected_periode) params.set('periode', props.selected_periode);
-    if (props.filtre_site) params.set('site', props.filtre_site);
+    for (const id of props.filtre_site_ids ?? []) {
+        params.append('site_ids[]', id);
+    }
     if (props.filtre_statut) params.set('statut', props.filtre_statut);
     if (search.value) params.set('search', search.value);
     return params;
@@ -331,6 +319,7 @@ function fmtTel(tel: string | null | undefined): string {
                 url="/comptabilite/commissions/logistique"
                 :values="currentFilters"
                 :fields="filterFields"
+                :sites="sites"
                 :result-count="livreurs.length"
                 search-placeholder="Rechercher un livreur, téléphone, véhicule..."
                 v-model:search="search"

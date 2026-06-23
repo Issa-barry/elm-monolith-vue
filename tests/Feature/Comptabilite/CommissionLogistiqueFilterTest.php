@@ -42,9 +42,9 @@ class CommissionLogistiqueFilterTest extends TestCase
             ->assertOk();
     }
 
-    public function test_index_avec_site_envoye_en_tableau_ne_plante_pas(): void
+    public function test_index_avec_site_ids_envoyes_ne_plante_pas(): void
     {
-        $this->get('/comptabilite/commissions/logistique?'.http_build_query(['site' => [$this->user->sites()->first()->id]]))
+        $this->get('/comptabilite/commissions/logistique?'.http_build_query(['site_ids' => [$this->user->sites()->first()->id]]))
             ->assertOk();
     }
 
@@ -53,7 +53,7 @@ class CommissionLogistiqueFilterTest extends TestCase
         $this->get('/comptabilite/commissions/logistique/export/excel?'.http_build_query([
             'statut' => ['impaye'],
             'periode' => ['2026-06-P1'],
-            'site' => [$this->user->sites()->first()->id],
+            'site_ids' => [$this->user->sites()->first()->id],
         ]))->assertOk();
     }
 
@@ -62,7 +62,7 @@ class CommissionLogistiqueFilterTest extends TestCase
         $this->get('/comptabilite/commissions/logistique/export/pdf?'.http_build_query([
             'statut' => ['impaye'],
             'periode' => ['2026-06-P1'],
-            'site' => [$this->user->sites()->first()->id],
+            'site_ids' => [$this->user->sites()->first()->id],
         ]))->assertOk();
     }
 }
