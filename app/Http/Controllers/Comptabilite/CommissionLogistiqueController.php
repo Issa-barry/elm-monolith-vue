@@ -34,6 +34,18 @@ class CommissionLogistiqueController extends Controller
 
     public function __construct(private SiteScopeService $siteScope) {}
 
+    /**
+     * Les filtres "select" de DataFilters sont toujours envoyés en tableau
+     * (ex: statut[]=impaye), même pour un choix unique : extrait la première
+     * valeur pour éviter un "Array to string conversion".
+     */
+    private function scalarInput(Request $request, string $key): string
+    {
+        $value = $request->input($key, '');
+
+        return trim(is_array($value) ? (string) reset($value) : (string) $value);
+    }
+
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
@@ -41,13 +53,13 @@ class CommissionLogistiqueController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
         $search = trim((string) $request->input('search', ''));
-        $filtreStatut = (string) $request->input('statut', '');
-        $filtrePeriode = trim((string) $request->input('periode', ''));
+        $filtreStatut = $this->scalarInput($request, 'statut');
+        $filtrePeriode = $this->scalarInput($request, 'periode');
         if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
             $filtrePeriode = '';
         }
 
-        $siteProps = $this->siteScope->inertiaProps($user, $orgId, $request->input('site', ''));
+        $siteProps = $this->siteScope->inertiaProps($user, $orgId, $this->scalarInput($request, 'site'));
         $filtreSite = $siteProps['filtre_site'];
         $isAdmin = $siteProps['is_admin'];
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
@@ -342,9 +354,9 @@ class CommissionLogistiqueController extends Controller
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
         $orgId = auth()->user()->organization_id;
-        $filtrePeriode = trim((string) $request->input('periode', ''));
-        $filtreSite = trim((string) $request->input('site', ''));
-        $filtreStatut = trim((string) $request->input('statut', ''));
+        $filtrePeriode = $this->scalarInput($request, 'periode');
+        $filtreSite = $this->scalarInput($request, 'site');
+        $filtreStatut = $this->scalarInput($request, 'statut');
         $search = trim((string) $request->input('search', ''));
 
         $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSite);
@@ -382,9 +394,9 @@ class CommissionLogistiqueController extends Controller
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
         $orgId = auth()->user()->organization_id;
-        $filtrePeriode = trim((string) $request->input('periode', ''));
-        $filtreSite = trim((string) $request->input('site', ''));
-        $filtreStatut = trim((string) $request->input('statut', ''));
+        $filtrePeriode = $this->scalarInput($request, 'periode');
+        $filtreSite = $this->scalarInput($request, 'site');
+        $filtreStatut = $this->scalarInput($request, 'statut');
         $search = trim((string) $request->input('search', ''));
 
         $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSite);
