@@ -44,8 +44,6 @@ class VenteParametrageController extends Controller
 
         return Inertia::render('settings/Ventes', [
             'roles' => $roles,
-            'commission_generation_mode' => Parametre::getVentesCommissionMode($orgId),
-            'commission_options' => $this->commissionOptions(),
             'autoriser_saisie_dessous_qte_max' => Parametre::isVentesAutorisationSaisieDessousQteMax($orgId),
         ]);
     }
@@ -57,7 +55,6 @@ class VenteParametrageController extends Controller
         $this->ensureSalesPermissionsExist();
 
         $validated = $request->validate([
-            'commission_generation_mode' => ['required', Rule::in(Parametre::ventesCommissionModes())],
             'quantity_edit_role_names' => ['array'],
             'quantity_edit_role_names.*' => ['string', Rule::exists('roles', 'name')],
             'price_edit_role_names' => ['array'],
@@ -88,11 +85,6 @@ class VenteParametrageController extends Controller
             }
         }
 
-        Parametre::setVentesCommissionMode(
-            auth()->user()->organization_id,
-            $validated['commission_generation_mode'],
-        );
-
         Parametre::setVentesAutorisationSaisieDessousQteMax(
             auth()->user()->organization_id,
             (bool) $validated['autoriser_saisie_dessous_qte_max'],
@@ -115,22 +107,6 @@ class VenteParametrageController extends Controller
             'client' => 'Client',
             default => ucfirst(str_replace('_', ' ', $roleName)),
         };
-    }
-
-    private function commissionOptions(): array
-    {
-        return [
-            [
-                'value' => Parametre::COMMISSION_MODE_COMMANDE_VALIDEE,
-                'label' => 'A la validation de commande',
-                'description' => 'Les commissions sont generees des que la commande passe en cours.',
-            ],
-            [
-                'value' => Parametre::COMMISSION_MODE_FACTURE_PAYEE,
-                'label' => 'Apres encaissement complet',
-                'description' => 'Les commissions sont generees uniquement quand la facture est totalement payee.',
-            ],
-        ];
     }
 
     private function ensureSalesPermissionsExist(): void

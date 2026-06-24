@@ -52,7 +52,6 @@ class CommissionVenteController extends Controller
         if ($tab === 'livreurs') {
             $query
                 ->whereNotNull('cp.livreur_id')
-                ->where('cp.role', 'chauffeur')
                 ->leftJoin('livreurs', 'livreurs.id', '=', 'cp.livreur_id')
                 ->select(['cp.livreur_id AS beneficiaire_id'])
                 ->selectRaw(

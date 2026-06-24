@@ -58,7 +58,6 @@ class CommissionVenteController extends Controller
             ->where('cv.organization_id', $orgId)
             ->where('cp.type_beneficiaire', 'livreur')
             ->whereNotNull('cp.livreur_id')
-            ->where('cp.role', 'chauffeur')
             ->leftJoin('livreurs', 'livreurs.id', '=', 'cp.livreur_id')
             ->select(['cp.livreur_id AS beneficiaire_id'])
             ->selectRaw(
@@ -104,7 +103,6 @@ class CommissionVenteController extends Controller
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')
-            ->where('role', 'chauffeur')
             ->whereIn('livreur_id', $allLivreurIds)
             ->when($filtrePeriode !== '', function ($q) use ($filtrePeriode) {
                 [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
@@ -459,8 +457,7 @@ class CommissionVenteController extends Controller
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')
-            ->whereNotNull('livreur_id')
-            ->where('role', 'chauffeur');
+            ->whereNotNull('livreur_id');
 
         if ($filtrePeriode !== '') {
             [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);

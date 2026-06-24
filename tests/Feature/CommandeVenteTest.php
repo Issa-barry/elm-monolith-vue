@@ -176,7 +176,7 @@ class CommandeVenteTest extends TestCase
         ]);
     }
 
-    public function test_store_commande_logistique_ne_cree_pas_facture(): void
+    public function test_store_commande_logistique_cree_facture_en_statut_creee(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
 
@@ -193,8 +193,10 @@ class CommandeVenteTest extends TestCase
         $this->assertNotNull($commande);
         $this->assertEquals(StatutCommandeVente::A_CHARGER, $commande->statut);
 
-        $this->assertDatabaseMissing('factures_ventes', [
+        // La facture existe dès la création de la commande, mais pas encore encaissable.
+        $this->assertDatabaseHas('factures_ventes', [
             'commande_vente_id' => $commande->id,
+            'statut_facture' => 'creee',
         ]);
     }
 
@@ -870,7 +872,7 @@ class CommandeVenteTest extends TestCase
         $this->assertEquals(StatutCommandeVente::A_CHARGER, $commande->fresh()->statut);
     }
 
-    public function test_valider_does_not_create_facture(): void
+    public function test_valider_cree_la_facture_en_statut_creee(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
 
@@ -893,8 +895,9 @@ class CommandeVenteTest extends TestCase
             ->patch(route('ventes.valider', $commande))
             ->assertRedirect();
 
-        $this->assertDatabaseMissing('factures_ventes', [
+        $this->assertDatabaseHas('factures_ventes', [
             'commande_vente_id' => $commande->id,
+            'statut_facture' => 'creee',
         ]);
     }
 

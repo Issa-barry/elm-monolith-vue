@@ -49,13 +49,7 @@ class Parametre extends Model
 
     public const CLE_CASHBACK_MONTANT_GAIN = 'cashback_montant_gain';
 
-    public const CLE_VENTES_COMMISSION_MODE = 'ventes_commission_mode';
-
     public const CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX = 'ventes_autoriser_saisie_dessous_qte_max';
-
-    public const COMMISSION_MODE_COMMANDE_VALIDEE = 'commande_validee';
-
-    public const COMMISSION_MODE_FACTURE_PAYEE = 'facture_payee';
 
     protected $fillable = [
         'organization_id',
@@ -118,7 +112,6 @@ class Parametre extends Model
             self::CLE_TAUX_PROPRIETAIRE_DEFAUT,
             self::CLE_CASHBACK_SEUIL_ACHAT,
             self::CLE_CASHBACK_MONTANT_GAIN,
-            self::CLE_VENTES_COMMISSION_MODE,
             self::CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX,
         ] as $cle) {
             Cache::forget(self::cacheKey($orgId, $cle));
@@ -164,39 +157,6 @@ class Parametre extends Model
         return (int) self::get($orgId, self::CLE_CASHBACK_MONTANT_GAIN, 25000);
     }
 
-    public static function getVentesCommissionMode(string $orgId): string
-    {
-        $default = self::COMMISSION_MODE_COMMANDE_VALIDEE;
-        $mode = (string) self::get($orgId, self::CLE_VENTES_COMMISSION_MODE, $default);
-
-        if (! in_array($mode, self::ventesCommissionModes(), true)) {
-            return $default;
-        }
-
-        return $mode;
-    }
-
-    public static function setVentesCommissionMode(string $orgId, string $mode): void
-    {
-        if (! in_array($mode, self::ventesCommissionModes(), true)) {
-            throw new \InvalidArgumentException('Mode de commission de vente invalide.');
-        }
-
-        static::updateOrCreate(
-            ['organization_id' => $orgId, 'cle' => self::CLE_VENTES_COMMISSION_MODE],
-            [
-                'organization_id' => $orgId,
-                'cle' => self::CLE_VENTES_COMMISSION_MODE,
-                'valeur' => $mode,
-                'type' => self::TYPE_STRING,
-                'groupe' => self::GROUPE_VENTES,
-                'description' => 'Moment de génération des commissions de vente',
-            ],
-        );
-
-        Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_COMMISSION_MODE));
-    }
-
     public static function isVentesAutorisationSaisieDessousQteMax(string $orgId): bool
     {
         return (bool) self::get($orgId, self::CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX, true);
@@ -215,14 +175,6 @@ class Parametre extends Model
         );
 
         Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX));
-    }
-
-    public static function ventesCommissionModes(): array
-    {
-        return [
-            self::COMMISSION_MODE_COMMANDE_VALIDEE,
-            self::COMMISSION_MODE_FACTURE_PAYEE,
-        ];
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────
