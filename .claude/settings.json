@@ -80,7 +80,11 @@
       "Bash(cat)",
       "Bash(chmod +x /tmp/analyze_pages.sh)",
       "Bash(/tmp/analyze_pages.sh)",
-      "Bash(vendor/bin/pint app/Http/Controllers/Comptabilite/JournalTresorerieController.php --test)"
+      "Bash(vendor/bin/pint app/Http/Controllers/Comptabilite/JournalTresorerieController.php --test)",
+      "Bash(php -r \"echo json_encode\\(['a' => \\(float\\)120000]\\);\")",
+      "Bash(./vendor/bin/pint app/Services/CommissionVenteCalculatorService.php app/Http/Controllers/Comptabilite/CommissionVenteController.php app/Services/CommissionVentePaiementService.php tests/Feature/Comptabilite/CommissionVenteFraisTest.php)",
+      "Bash(git status *)",
+      "Bash(gh pr *)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"
