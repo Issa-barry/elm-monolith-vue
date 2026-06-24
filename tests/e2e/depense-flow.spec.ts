@@ -239,10 +239,7 @@ test('stat cards reflect active filters', async ({ page }) => {
         .locator('xpath=following-sibling::p')
         .first();
 
-    const totalBefore = parseInt(
-        (await totalCard.textContent()) ?? '0',
-        10,
-    );
+    const totalBefore = parseInt((await totalCard.textContent()) ?? '0', 10);
     expect(totalBefore).toBeGreaterThan(0);
 
     const searchInput = getVisibleSearchInput(page);
@@ -271,7 +268,10 @@ test('stat cards reflect active filters', async ({ page }) => {
     await page.goto('/depenses');
     const row = depenseRowByComment(page, comment);
     await expect(row).toBeVisible({ timeout: 10_000 });
-    await row.getByRole('button', { name: /actions/i }).first().click();
+    await row
+        .getByRole('button', { name: /actions/i })
+        .first()
+        .click();
     page.once('dialog', (d) => d.accept());
     await page
         .getByRole('menuitem', { name: /supprimer/i })
@@ -306,9 +306,7 @@ test('filtre agence (site_ids) persiste après Appliquer — chip, case cochée 
     // fois une puce affichée, cliquer au centre du contrôle risque de
     // toucher le bouton de suppression de la puce plutôt que d'ouvrir le
     // panneau.
-    const dropdownToggle = agenceMultiselect.locator(
-        '.p-multiselect-dropdown',
-    );
+    const dropdownToggle = agenceMultiselect.locator('.p-multiselect-dropdown');
 
     await dropdownToggle.click();
     const option = page.locator('[role="option"]:visible').first();
@@ -329,7 +327,7 @@ test('filtre agence (site_ids) persiste après Appliquer — chip, case cochée 
     );
     await expect(chips.first()).toBeVisible({ timeout: 3_000 });
 
-    await page.getByRole('button', { name: /appliquer/i }).first().click();
+    await page.getByTestId('filters-search').first().click();
     await expect(page).toHaveURL(/site_ids/, { timeout: 10_000 });
     await page.waitForLoadState('networkidle');
 
