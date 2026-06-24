@@ -550,6 +550,7 @@ const hasActiveFilters = computed(
 
         <template #actions>
             <span
+                data-testid="filters-result-count"
                 class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
             >
                 {{ resultCount }} résultat{{ resultCount !== 1 ? 's' : '' }}

@@ -29,6 +29,12 @@ test("filtre agence Kouria persiste après Rechercher, met à jour l'URL et filt
         return;
     }
 
+    // Référence avant filtrage — pour vérifier ensuite que la liste a bien
+    // changé, sans dépendre d'une hypothèse sur les données seedées pour
+    // Kouria (qui peut légitimement n'avoir aucune vente en CI).
+    const resultCount = page.getByTestId('filters-result-count');
+    const baselineText = (await resultCount.textContent()) ?? '';
+
     const dropdownToggle = agenceMultiselect.locator('.p-multiselect-dropdown');
 
     // 1. Sélectionner Kouria.
@@ -70,12 +76,17 @@ test("filtre agence Kouria persiste après Rechercher, met à jour l'URL et filt
     await expect(reselected).toBeVisible({ timeout: 5_000 });
     await page.keyboard.press('Escape');
 
-    // 5. Vérifier que la liste est filtrée : chaque ligne visible appartient
-    // au site Kouria (colonne "Site", data-testid stable indépendant du texte
-    // affiché par les autres colonnes).
+    // 5. Vérifier que la liste est filtrée :
+    //    - le compteur de résultats a changé par rapport à la référence
+    //      avant filtrage (preuve que le filtre a bien été appliqué) ;
+    //    - si des lignes restent affichées, chacune appartient à Kouria
+    //      (colonne "Site", data-testid stable indépendant du texte affiché
+    //      par les autres colonnes). Zéro résultat est un état valide : tous
+    //      les sites n'ont pas forcément de vente seedée en CI.
+    await expect(resultCount).not.toHaveText(baselineText, { timeout: 5_000 });
+
     const siteCells = page.getByTestId('row-site');
     const rowCount = await siteCells.count();
-    expect(rowCount).toBeGreaterThan(0);
     for (let i = 0; i < rowCount; i++) {
         await expect(siteCells.nth(i)).toHaveText('Kouria');
     }
