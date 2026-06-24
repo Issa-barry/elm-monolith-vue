@@ -11,6 +11,7 @@ use App\Models\CommissionPayment;
 use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Site;
 use App\Services\AuditLogService;
 use App\Services\CommissionPaymentService;
 use App\Services\CommissionSearchService;
@@ -34,6 +35,18 @@ class CommissionLogistiqueController extends Controller
 
     public function __construct(private SiteScopeService $siteScope) {}
 
+    /**
+     * Les filtres "select" de DataFilters sont toujours envoyés en tableau
+     * (ex: statut[]=impaye), même pour un choix unique : extrait la première
+     * valeur pour éviter un "Array to string conversion".
+     */
+    private function scalarInput(Request $request, string $key): string
+    {
+        $value = $request->input($key, '');
+
+        return trim(is_array($value) ? (string) reset($value) : (string) $value);
+    }
+
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
@@ -41,21 +54,21 @@ class CommissionLogistiqueController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
         $search = trim((string) $request->input('search', ''));
-        $filtreStatut = (string) $request->input('statut', '');
-        $filtrePeriode = trim((string) $request->input('periode', ''));
+        $filtreStatut = $this->scalarInput($request, 'statut');
+        $filtrePeriode = $this->scalarInput($request, 'periode');
         if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
             $filtrePeriode = '';
         }
 
-        $siteProps = $this->siteScope->inertiaProps($user, $orgId, $request->input('site', ''));
-        $filtreSite = $siteProps['filtre_site'];
-        $isAdmin = $siteProps['is_admin'];
+        $isAdmin = $user->isAdmin();
+        $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
+        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $rows = CommissionPaymentService::soldesParLivreur(
             $orgId,
             $filtrePeriode !== '' ? $filtrePeriode : null,
-            $isAdmin && $filtreSite !== '' ? $filtreSite : null
+            ! empty($filtreSiteIds) ? $filtreSiteIds : null
         );
 
         $periodesDisponibles = CommissionLogistiquePart::query()
@@ -100,9 +113,9 @@ class CommissionLogistiqueController extends Controller
             ->where('type_beneficiaire', 'livreur')
             ->whereNotNull('livreur_id')
             ->when($filtrePeriode !== '', fn ($q) => $q->where('periode', $filtrePeriode))
-            ->when($isAdmin && $filtreSite !== '', fn ($q) => $q->whereHas(
+            ->when($isAdmin && ! empty($filtreSiteIds), fn ($q) => $q->whereHas(
                 'commission.transfert',
-                fn ($t) => $t->where('site_source_id', $filtreSite)->orWhere('site_destination_id', $filtreSite)
+                fn ($t) => $t->whereIn('site_source_id', $filtreSiteIds)->orWhereIn('site_destination_id', $filtreSiteIds)
             ))
             ->when(! $isAdmin && ! empty($siteIds), fn ($q) => $q->whereHas(
                 'commission.transfert',
@@ -165,11 +178,10 @@ class CommissionLogistiqueController extends Controller
             'kpis' => $kpis,
             'search' => $search,
             'filtre_statut' => $filtreStatut,
-            'filtre_site' => $filtreSite,
+            'filtre_site_ids' => $filtreSiteIds,
             'selected_periode' => $filtrePeriode,
             'periodes_disponibles' => $periodesDisponibles,
-            'is_admin' => $isAdmin,
-            'sites' => $siteProps['sites'],
+            'sites' => $sites,
             'can_payer' => auth()->user()->can('comptabilite.payer'),
         ]);
     }
@@ -341,13 +353,17 @@ class CommissionLogistiqueController extends Controller
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
-        $orgId = auth()->user()->organization_id;
-        $filtrePeriode = trim((string) $request->input('periode', ''));
-        $filtreSite = trim((string) $request->input('site', ''));
-        $filtreStatut = trim((string) $request->input('statut', ''));
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+        $filtrePeriode = $this->scalarInput($request, 'periode');
+        $filtreStatut = $this->scalarInput($request, 'statut');
         $search = trim((string) $request->input('search', ''));
+        $isAdmin = $user->isAdmin();
+        $filtreSiteIds = $isAdmin
+            ? array_values(array_filter((array) $request->input('site_ids', [])))
+            : $this->siteScope->accessibleSiteIds($user)->all();
 
-        $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSite);
+        $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSiteIds);
         $rows = $this->buildExportRows($parts, $filtrePeriode, $filtreStatut, $search);
 
         $periodeLabel = $filtrePeriode !== '' ? PeriodeComptableService::labelForCode($filtrePeriode) : 'Toutes périodes';
@@ -381,13 +397,17 @@ class CommissionLogistiqueController extends Controller
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
-        $orgId = auth()->user()->organization_id;
-        $filtrePeriode = trim((string) $request->input('periode', ''));
-        $filtreSite = trim((string) $request->input('site', ''));
-        $filtreStatut = trim((string) $request->input('statut', ''));
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+        $filtrePeriode = $this->scalarInput($request, 'periode');
+        $filtreStatut = $this->scalarInput($request, 'statut');
         $search = trim((string) $request->input('search', ''));
+        $isAdmin = $user->isAdmin();
+        $filtreSiteIds = $isAdmin
+            ? array_values(array_filter((array) $request->input('site_ids', [])))
+            : $this->siteScope->accessibleSiteIds($user)->all();
 
-        $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSite);
+        $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSiteIds);
         $rows = $this->buildExportRows($parts, $filtrePeriode, $filtreStatut, $search);
         $siteGroups = $this->buildSiteGroups($rows);
 
@@ -407,7 +427,10 @@ class CommissionLogistiqueController extends Controller
         return $pdf->download('commissions-logistique-'.now()->format('Y-m-d').'.pdf');
     }
 
-    private function loadPartsForExport(string $orgId, string $filtrePeriode, string $filtreSite): Collection
+    /**
+     * @param  array<int, string>  $filtreSiteIds
+     */
+    private function loadPartsForExport(string $orgId, string $filtrePeriode, array $filtreSiteIds): Collection
     {
         return CommissionLogistiquePart::with([
             'commission.transfert.siteSource:id,nom',
@@ -418,9 +441,9 @@ class CommissionLogistiqueController extends Controller
             ->where('type_beneficiaire', 'livreur')
             ->whereNotNull('livreur_id')
             ->when($filtrePeriode !== '', fn ($q) => $q->where('periode', $filtrePeriode))
-            ->when($filtreSite !== '', fn ($q) => $q->whereHas(
+            ->when(! empty($filtreSiteIds), fn ($q) => $q->whereHas(
                 'commission.transfert',
-                fn ($t) => $t->where('site_source_id', $filtreSite)
+                fn ($t) => $t->whereIn('site_source_id', $filtreSiteIds)->orWhereIn('site_destination_id', $filtreSiteIds)
             ))
             ->get();
     }

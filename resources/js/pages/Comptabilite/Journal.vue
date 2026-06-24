@@ -43,7 +43,7 @@ const props = defineProps<{
         categorie?: string;
         date_from?: string;
         date_to?: string;
-        site_id?: string;
+        site_ids?: string[];
         search?: string;
     };
     kpis: { total_entrees: number; total_sorties: number; solde: number };

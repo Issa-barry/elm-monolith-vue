@@ -21,15 +21,17 @@ class JournalTresorerieController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['sens', 'categorie', 'date_from', 'date_to', 'site_id', 'search']);
+        $filters = $request->only(['sens', 'categorie', 'date_from', 'date_to', 'search']);
+        $isAdmin = $user->isAdmin();
+        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $query = JournalTresorerie::forOrg($orgId)->with('site');
 
-        if (! $user->isAdmin()) {
+        if (! $isAdmin) {
             $siteIds = $user->sites()->pluck('sites.id')->all();
             $query->whereIn('site_id', $siteIds);
-        } elseif (! empty($filters['site_id'])) {
-            $query->where('site_id', $filters['site_id']);
+        } elseif (! empty($filtreSiteIds)) {
+            $query->whereIn('site_id', $filtreSiteIds);
         }
 
         if (! empty($filters['sens'])) {
@@ -77,11 +79,11 @@ class JournalTresorerieController extends Controller
             'lignes' => $lignes,
             'sens_options' => SensJournal::options(),
             'categories' => CategorieJournal::options(),
-            'sites' => $user->isAdmin()
+            'sites' => $isAdmin
                 ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
                 : collect(),
-            'is_admin' => $user->isAdmin(),
-            'filters' => $filters,
+            'is_admin' => $isAdmin,
+            'filters' => array_merge($filters, ['site_ids' => $filtreSiteIds]),
             'kpis' => [
                 'total_entrees' => $totalEntrees,
                 'total_sorties' => $totalSorties,
