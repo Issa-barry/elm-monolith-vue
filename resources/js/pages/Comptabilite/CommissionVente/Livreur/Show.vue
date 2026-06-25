@@ -1,17 +1,15 @@
 <script setup lang="ts">
 import AuditTimeline from '@/components/AuditTimeline.vue';
+import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, HandCoins } from 'lucide-vue-next';
-import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
-import InputNumber from 'primevue/inputnumber';
-import { reactive, ref } from 'vue';
+import { ref } from 'vue';
 
 interface CommandeRow {
     commission_id: string;
@@ -109,47 +107,32 @@ function changePeriode(code: string) {
 
 // Dialog paiement
 const showPaiementDialog = ref(false);
-const paiementForm = reactive({
-    montant: null as number | null,
-    mode_paiement: 'especes',
-    note: '',
-    processing: false,
-    errors: {} as Record<string, string>,
-});
+const paiementProcessing = ref(false);
+const paiementErrors = ref<Record<string, string>>({});
 
 function openPaiement() {
-    paiementForm.montant =
-        props.resume_global.solde_global > 0
-            ? props.resume_global.solde_global
-            : null;
-    paiementForm.mode_paiement = 'especes';
-    paiementForm.note = '';
-    paiementForm.processing = false;
-    paiementForm.errors = {};
     showPaiementDialog.value = true;
 }
 
-function submitPaiement() {
-    if (!paiementForm.montant) return;
-    paiementForm.processing = true;
-    paiementForm.errors = {};
+function handlePaiementSubmit(payload: {
+    montant: number;
+    mode_paiement: string;
+}) {
+    paiementProcessing.value = true;
+    paiementErrors.value = {};
     router.post(
         `/comptabilite/commissions/vente/livreurs/${props.livreur.id}/paiements`,
-        {
-            montant: paiementForm.montant,
-            mode_paiement: paiementForm.mode_paiement,
-            note: paiementForm.note || null,
-        },
+        payload,
         {
             preserveScroll: true,
             onSuccess: () => {
                 showPaiementDialog.value = false;
             },
             onError: (e) => {
-                paiementForm.errors = e as Record<string, string>;
+                paiementErrors.value = e as Record<string, string>;
             },
             onFinish: () => {
-                paiementForm.processing = false;
+                paiementProcessing.value = false;
             },
         },
     );
@@ -624,76 +607,12 @@ const statutDepenseColors: Record<string, string> = {
         </div>
     </AppLayout>
 
-    <!-- Dialog paiement -->
-    <Dialog
+    <PaymentDialogCompact
         v-model:visible="showPaiementDialog"
-        modal
-        :style="{ width: '420px' }"
-        header="Enregistrer un paiement"
-    >
-        <div class="flex flex-col gap-4 py-2">
-            <div class="flex flex-col gap-1.5">
-                <Label>Montant (GNF)</Label>
-                <InputNumber
-                    v-model="paiementForm.montant"
-                    :min="1"
-                    :max="resume_global.solde_global"
-                    :use-grouping="true"
-                    class="w-full"
-                    input-class="w-full"
-                    suffix=" GNF"
-                    locale="fr-FR"
-                    autofocus
-                />
-                <p
-                    v-if="paiementForm.errors.montant"
-                    class="text-xs text-destructive"
-                >
-                    {{ paiementForm.errors.montant }}
-                </p>
-                <p class="text-xs text-muted-foreground">
-                    Disponible : {{ fmt(resume_global.solde_global) }}
-                </p>
-            </div>
-            <div class="flex flex-col gap-1.5">
-                <Label>Mode de paiement</Label>
-                <Dropdown
-                    v-model="paiementForm.mode_paiement"
-                    :options="modes_paiement"
-                    option-label="label"
-                    option-value="value"
-                    class="w-full text-sm"
-                />
-            </div>
-            <div class="flex flex-col gap-1.5">
-                <Label>Note (optionnel)</Label>
-                <textarea
-                    v-model="paiementForm.note"
-                    rows="2"
-                    class="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
-                />
-            </div>
-        </div>
-        <template #footer>
-            <div class="flex justify-end gap-2">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    @click="showPaiementDialog = false"
-                    >Annuler</Button
-                >
-                <Button
-                    size="sm"
-                    :disabled="paiementForm.processing || !paiementForm.montant"
-                    @click="submitPaiement"
-                >
-                    {{
-                        paiementForm.processing
-                            ? 'Enregistrement…'
-                            : 'Confirmer'
-                    }}
-                </Button>
-            </div>
-        </template>
-    </Dialog>
+        :title="`Payer — ${livreur.nom}`"
+        :solde="resume_global.solde_global"
+        :processing="paiementProcessing"
+        :errors="paiementErrors"
+        @submit="handlePaiementSubmit"
+    />
 </template>

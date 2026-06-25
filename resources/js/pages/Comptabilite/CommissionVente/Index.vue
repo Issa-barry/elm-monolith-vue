@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
+import ClickableTableRow from '@/components/ClickableTableRow.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -402,16 +403,12 @@ function fmtTel(tel: string | null | undefined): string {
                             </tr>
                         </thead>
                         <tbody class="divide-y">
-                            <tr
+                            <ClickableTableRow
                                 v-for="b in beneficiaires"
                                 :key="b.beneficiaire_id"
-                                class="cursor-pointer transition-colors even:bg-muted/20 hover:bg-muted/10"
-                                @click="
-                                    router.visit(
-                                        '/comptabilite/commissions/vente/livreurs/' +
-                                            b.beneficiaire_id,
-                                    )
-                                "
+                                :href="`/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}`"
+                                :aria-label="`Voir le détail de ${b.beneficiaire_nom}`"
+                                class="even:bg-muted/20"
                             >
                                 <td class="px-5 py-3">
                                     <div class="flex items-center gap-2.5">
@@ -561,7 +558,7 @@ function fmtTel(tel: string | null | undefined): string {
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </td>
-                            </tr>
+                            </ClickableTableRow>
                         </tbody>
                     </table>
                 </div>
