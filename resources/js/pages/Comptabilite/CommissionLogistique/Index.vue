@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
+import ClickableTableRow from '@/components/ClickableTableRow.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -27,11 +28,16 @@ import {
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
+interface VehiculeInfo {
+    nom: string;
+    immatriculation: string | null;
+}
+
 interface LivreurRow {
     livreur_id: string;
     nom: string;
     telephone: string | null;
-    vehicules: string | null;
+    vehicules: VehiculeInfo[];
     agence: string | null;
     frais_depenses: number;
     impaye: number;
@@ -380,16 +386,12 @@ function fmtTel(tel: string | null | undefined): string {
                             </tr>
                         </thead>
                         <tbody class="divide-y">
-                            <tr
+                            <ClickableTableRow
                                 v-for="l in livreurs"
                                 :key="l.livreur_id"
-                                class="cursor-pointer transition-colors even:bg-muted/20 hover:bg-muted/10"
-                                @click="
-                                    router.visit(
-                                        '/comptabilite/commissions/logistique/livreurs/' +
-                                            l.livreur_id,
-                                    )
-                                "
+                                :href="`/comptabilite/commissions/logistique/livreurs/${l.livreur_id}`"
+                                :aria-label="`Voir le détail de ${l.nom}`"
+                                class="even:bg-muted/20"
                             >
                                 <td class="px-5 py-3">
                                     <div class="flex items-center gap-2.5">
@@ -411,11 +413,27 @@ function fmtTel(tel: string | null | undefined): string {
                                 </td>
                                 <td class="px-5 py-3">
                                     <div
-                                        v-if="l.vehicules"
-                                        class="flex items-center gap-1.5 text-sm text-muted-foreground"
+                                        v-if="l.vehicules.length"
+                                        class="flex items-start gap-1.5 text-sm text-muted-foreground"
                                     >
-                                        <Truck class="h-3.5 w-3.5 shrink-0" />
-                                        <span>{{ l.vehicules }}</span>
+                                        <Truck
+                                            class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                                        />
+                                        <div>
+                                            <div
+                                                v-for="(v, idx) in l.vehicules"
+                                                :key="idx"
+                                            >
+                                                <span>{{ v.nom }}</span>
+                                                <span
+                                                    v-if="v.immatriculation"
+                                                    class="block text-xs text-muted-foreground/80"
+                                                    >{{
+                                                        v.immatriculation
+                                                    }}</span
+                                                >
+                                            </div>
+                                        </div>
                                     </div>
                                     <span
                                         v-else
@@ -521,7 +539,7 @@ function fmtTel(tel: string | null | undefined): string {
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </td>
-                            </tr>
+                            </ClickableTableRow>
                         </tbody>
                     </table>
                 </div>

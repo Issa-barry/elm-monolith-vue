@@ -127,8 +127,8 @@ class CommissionLogistiqueController extends Controller
         $vehiculesParLivreur = $partsParLivreur->map(fn ($parts) => $parts
             ->pluck('commission.vehicule')
             ->filter()->unique('id')
-            ->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))
-            ->values()->implode(' ')
+            ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+            ->values()
         );
 
         $agencesParLivreur = $partsParLivreur->map(fn ($parts) => $parts
@@ -144,7 +144,7 @@ class CommissionLogistiqueController extends Controller
                 'livreur_id' => $row->livreur_id,
                 'nom' => $row->beneficiaire_nom,
                 'telephone' => $telephones[$row->livreur_id] ?? null,
-                'vehicules' => $vehiculesParLivreur[$row->livreur_id] ?? null,
+                'vehicules' => $vehiculesParLivreur[$row->livreur_id]?->values()->all() ?? [],
                 'agence' => $agencesParLivreur[$row->livreur_id] ?? null,
                 'frais_depenses' => $frais,
                 'impaye' => $impaye,
@@ -372,17 +372,16 @@ class CommissionLogistiqueController extends Controller
         return response()->streamDownload(function () use ($rows, $periodeLabel) {
             $handle = fopen('php://output', 'w');
             fwrite($handle, "\xEF\xBB\xBF");
-            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Total cumulé (GNF)', 'Frais (GNF)', 'Motif de frais', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
+            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Total cumulé (GNF)', 'Frais (GNF)', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
             foreach ($rows as $row) {
                 fputcsv($handle, [
                     $row['beneficiaire_nom'],
                     $row['telephone'] ?? '',
-                    $row['vehicules'] ?? '',
+                    self::vehiculesEnTexte($row['vehicules'] ?? []),
                     $row['agence'] ?? '',
                     $periodeLabel,
                     number_format((float) $row['total_cumule'], 0, ',', ' '),
                     number_format((float) $row['frais'], 0, ',', ' '),
-                    $row['motifs_frais'] ?? '',
                     number_format((float) $row['deja_paye'], 0, ',', ' '),
                     number_format((float) $row['reste'], 0, ',', ' '),
                     $row['statut'],
@@ -460,16 +459,11 @@ class CommissionLogistiqueController extends Controller
 
             $vehicules = $livParts->pluck('commission.vehicule')
                 ->filter()->unique('id')
-                ->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))
-                ->implode(', ');
+                ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+                ->values();
 
             $agence = $livParts->pluck('commission.transfert.siteSource.nom')
                 ->filter()->unique()->sort()->implode(', ');
-
-            $motifs = $livParts->pluck('type_frais')
-                ->filter()->unique()
-                ->map(fn ($t) => self::labelTypeFrais($t))
-                ->implode(', ');
 
             $periodeLabel = $filtrePeriode !== ''
                 ? PeriodeComptableService::labelForCode($filtrePeriode)
@@ -487,12 +481,11 @@ class CommissionLogistiqueController extends Controller
                 'beneficiaire_id' => $first->livreur_id,
                 'beneficiaire_nom' => $first->beneficiaire_nom ?? '—',
                 'telephone' => $first->livreur?->telephone,
-                'vehicules' => $vehicules ?: null,
+                'vehicules' => $vehicules->all(),
                 'agence' => $agence ?: null,
                 'periode' => $periodeLabel,
-                'total_cumule' => $totalNet,
+                'total_cumule' => $totalBrut,
                 'frais' => $totalFrais,
-                'motifs_frais' => $motifs ?: null,
                 'deja_paye' => $totalVerse,
                 'reste' => $solde,
                 'statut' => $statut,
@@ -541,13 +534,12 @@ class CommissionLogistiqueController extends Controller
             : $grouped->values()->toArray();
     }
 
-    private static function labelTypeFrais(?string $type): string
+    /** @param  array<int, array{nom: string, immatriculation: ?string}>  $vehicules */
+    private static function vehiculesEnTexte(array $vehicules): string
     {
-        return match ($type) {
-            'carburant' => 'Carburant',
-            'reparation' => 'Réparation',
-            'autre' => 'Autre',
-            default => (string) $type,
-        };
+        return implode(' / ', array_map(
+            fn ($v) => trim($v['nom'].($v['immatriculation'] ? ' '.$v['immatriculation'] : '')),
+            $vehicules
+        ));
     }
 }

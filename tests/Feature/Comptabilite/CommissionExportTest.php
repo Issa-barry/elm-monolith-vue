@@ -227,11 +227,26 @@ class CommissionExportTest extends TestCase
         $this->assertStringContainsString('Agence', $content);
         $this->assertStringContainsString('Total cumulé', $content);
         $this->assertStringContainsString('Frais', $content);
-        $this->assertStringContainsString('Motif de frais', $content);
         $this->assertStringContainsString('Déjà payé', $content);
         $this->assertStringContainsString('Reste à payer', $content);
         $this->assertStringContainsString('Statut', $content);
         $this->assertStringContainsString('Signature', $content);
+    }
+
+    // ── Régression : "Motif de frais" retiré de l'export vente/logistique —
+    // seul le total des frais déduits est imprimé, pas son détail. ──────────
+
+    public function test_export_excel_logistique_ne_contient_plus_motif_de_frais(): void
+    {
+        $site = $this->makeSite();
+        $vehicule = $this->makeVehicule($site);
+        $livreur = $this->makeLivreur();
+        $this->makeLogistiquePart($livreur, $vehicule, $site);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.logistique.excel'));
+
+        $this->assertStringNotContainsString('Motif de frais', $response->streamedContent());
     }
 
     public function test_export_excel_logistique_pas_de_colonnes_techniques(): void
@@ -345,14 +360,13 @@ class CommissionExportTest extends TestCase
         $this->assertStringContainsString('Agence', $content);
         $this->assertStringContainsString('Total cumulé', $content);
         $this->assertStringContainsString('Frais', $content);
-        $this->assertStringContainsString('Motif de frais', $content);
         $this->assertStringContainsString('Déjà payé', $content);
         $this->assertStringContainsString('Reste à payer', $content);
         $this->assertStringContainsString('Statut', $content);
         $this->assertStringContainsString('Signature', $content);
     }
 
-    public function test_export_excel_vente_contient_frais_et_motif(): void
+    public function test_export_excel_vente_ne_contient_plus_motif_de_frais(): void
     {
         $site = $this->makeSite();
         $vehicule = $this->makeVehicule($site);
@@ -362,8 +376,7 @@ class CommissionExportTest extends TestCase
         $response = $this->actingAs($this->user)
             ->get(route('comptabilite.commissions.vente.excel'));
 
-        $content = $response->streamedContent();
-        $this->assertStringContainsString('Carburant', $content);
+        $this->assertStringNotContainsString('Motif de frais', $response->streamedContent());
     }
 
     public function test_export_excel_vente_pas_de_colonnes_techniques(): void

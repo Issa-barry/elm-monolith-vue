@@ -89,7 +89,7 @@ class CommissionSearchServiceTest extends TestCase
         return array_merge([
             'nom' => 'Mamadou Barry',
             'telephone' => '+224622000012',
-            'vehicules' => 'Camion Test RC-001-GN',
+            'vehicules' => [['nom' => 'Camion Test', 'immatriculation' => 'RC-001-GN']],
             'impaye' => 4800.0,
             'paye' => 0.0,
         ], $overrides);

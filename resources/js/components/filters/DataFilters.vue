@@ -209,8 +209,10 @@ function buildParams(): Record<string, string | string[]> {
     // Filtre agence : seulement pour admin, et seulement si une sélection partielle
     if (isAdmin.value && localSiteIds.value.length > 0) {
         const totalSites = siteOptions.value.length;
-        // Ne pas envoyer si tous les sites sont sélectionnés (= pas de filtre)
-        if (localSiteIds.value.length < totalSites) {
+        // Ne pas envoyer si tous les sites sont sélectionnés (= pas de filtre),
+        // sauf s'il n'y a qu'un seul site dispo : le sélectionner est alors un
+        // choix explicite, pas un "tout".
+        if (totalSites <= 1 || localSiteIds.value.length < totalSites) {
             params.site_ids = localSiteIds.value;
         }
     }
@@ -229,7 +231,12 @@ function buildParams(): Record<string, string | string[]> {
             const raw = (localValues.value[field.key] as string[]) ?? [];
             const arr = stripSentinels(raw);
             const total = meaningfulTotal(field.options);
-            if (arr.length > 0 && arr.length < total) {
+            // "Tout sélectionné = pas de filtre" n'a de sens que s'il y a
+            // plusieurs options à désélectionner. Avec une seule option
+            // dispo (ex: un seul "Période" existant), la sélectionner est un
+            // choix explicite et doit être envoyée, sinon elle disparaît
+            // silencieusement au clic sur "Appliquer".
+            if (arr.length > 0 && (total <= 1 || arr.length < total)) {
                 params[field.key] = arr;
             }
         } else if (field.type === 'boolean') {
@@ -324,7 +331,7 @@ function countActiveFields(fields: FilterField[]): number {
             const raw = (localValues.value[field.key] as string[]) ?? [];
             const arr = stripSentinels(raw);
             const total = meaningfulTotal(field.options);
-            if (arr.length > 0 && arr.length < total) n++;
+            if (arr.length > 0 && (total <= 1 || arr.length < total)) n++;
         } else if (field.type === 'boolean') {
             if (localValues.value[field.key] !== '') n++;
         } else {

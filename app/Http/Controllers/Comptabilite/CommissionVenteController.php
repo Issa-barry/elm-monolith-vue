@@ -7,6 +7,7 @@ use App\Enums\ModePaiement;
 use App\Enums\StatutCommission;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionPart;
+use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PaiementCommissionVente;
@@ -33,6 +34,18 @@ class CommissionVenteController extends Controller
 
     public function __construct(private SiteScopeService $siteScope) {}
 
+    /**
+     * Les filtres "select" de DataFilters sont toujours envoyés en tableau
+     * (ex: statut[]=impaye), même pour un choix unique : extrait la première
+     * valeur pour éviter un "Array to string conversion".
+     */
+    private function scalarInput(Request $request, string $key): string
+    {
+        $value = $request->input($key, '');
+
+        return trim(is_array($value) ? (string) reset($value) : (string) $value);
+    }
+
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
@@ -40,13 +53,13 @@ class CommissionVenteController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
         $search = trim((string) $request->input('search', ''));
-        $filtreStatut = (string) $request->input('statut', '');
-        $filtrePeriode = trim((string) $request->input('periode', ''));
+        $filtreStatut = $this->scalarInput($request, 'statut');
+        $filtrePeriode = $this->scalarInput($request, 'periode');
         if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
             $filtrePeriode = '';
         }
 
-        $siteProps = $this->siteScope->inertiaProps($user, $orgId, $request->input('site', ''));
+        $siteProps = $this->siteScope->inertiaProps($user, $orgId, $this->scalarInput($request, 'site'));
         $filtreSite = $siteProps['filtre_site'];
         $isAdmin = $siteProps['is_admin'];
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
@@ -57,6 +70,7 @@ class CommissionVenteController extends Controller
             ->where('cv.organization_id', $orgId)
             ->where('cp.type_beneficiaire', 'livreur')
             ->whereNotNull('cp.livreur_id')
+            ->where('cp.statut', '!=', StatutCommission::CREEE->value)
             ->leftJoin('livreurs', 'livreurs.id', '=', 'cp.livreur_id')
             ->select(['cp.livreur_id AS beneficiaire_id'])
             ->selectRaw(
@@ -109,8 +123,8 @@ class CommissionVenteController extends Controller
 
         $vehiculesParLivreur = $partsParLivreur->map(fn ($parts) => $parts
             ->pluck('commission.vehicule')->filter()->unique('id')
-            ->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))
-            ->implode(', ')
+            ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+            ->values()
         );
 
         $beneficiaires = $rows->map(function ($row) use ($agencesParLivreur, $vehiculesParLivreur, $fraisDepensesParLivreur) {
@@ -128,7 +142,7 @@ class CommissionVenteController extends Controller
                 'beneficiaire_nom' => $row->beneficiaire_nom ?? '—',
                 'telephone' => $row->telephone,
                 'agence' => $agencesParLivreur->get($livreurId),
-                'vehicules' => $vehiculesParLivreur->get($livreurId) ?: null,
+                'vehicules' => $vehiculesParLivreur->get($livreurId, collect())->values()->all(),
                 'total_brut_cumule' => $resume['brut'],
                 'total_frais' => $resume['frais'],
                 'total_net_cumule' => $resume['net'],
@@ -208,6 +222,7 @@ class CommissionVenteController extends Controller
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')
             ->where('livreur_id', $livreurId)
+            ->where('statut', '!=', StatutCommission::CREEE->value)
             ->orderByDesc('commission_vente_id')
             ->get();
 
@@ -298,6 +313,24 @@ class CommissionVenteController extends Controller
                 'created_by' => $p->creator?->name,
             ]);
 
+        $depenses = Depense::with(['user', 'validateur'])
+            ->where('organization_id', $orgId)
+            ->where('beneficiaire_type', 'livreur')
+            ->where('beneficiaire_id', $livreurId)
+            ->orderByDesc('date_depense')
+            ->get()
+            ->map(fn (Depense $d) => [
+                'id' => $d->id,
+                'date_depense' => $d->date_depense?->format(self::DATE_FORMAT),
+                'montant' => (float) $d->montant,
+                'statut' => $d->statut->value,
+                'statut_label' => $d->statut->label(),
+                'saisi_par' => $d->user?->name,
+                'validateur' => $d->validateur?->name,
+                'date_validation' => $d->date_validation?->format(self::DATE_FORMAT),
+                'commentaire' => $d->commentaire,
+            ]);
+
         return Inertia::render('Comptabilite/CommissionVente/Livreur/Show', [
             'livreur' => [
                 'id' => $livreurId,
@@ -313,6 +346,7 @@ class CommissionVenteController extends Controller
             ],
             'historique_commandes' => $historiqueCommandes,
             'historique_paiements' => $historiquePaiements,
+            'depenses' => $depenses,
             'modes_paiement' => ModePaiement::options(),
             'periode_courante' => $periodeCourante,
             'periode_courante_label' => PeriodeComptableService::labelForCode($periodeCourante),
@@ -366,8 +400,8 @@ class CommissionVenteController extends Controller
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
         $orgId = auth()->user()->organization_id;
-        $filtrePeriode = trim((string) $request->input('periode', ''));
-        $filtreStatut = trim((string) $request->input('statut', ''));
+        $filtrePeriode = $this->scalarInput($request, 'periode');
+        $filtreStatut = $this->scalarInput($request, 'statut');
         $search = trim((string) $request->input('search', ''));
 
         $parts = $this->loadPartsForExport($orgId, $filtrePeriode);
@@ -384,17 +418,16 @@ class CommissionVenteController extends Controller
         return response()->streamDownload(function () use ($rows, $periodeLabel) {
             $handle = fopen('php://output', 'w');
             fwrite($handle, "\xEF\xBB\xBF");
-            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Total cumulé (GNF)', 'Frais (GNF)', 'Motif de frais', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
+            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Total cumulé (GNF)', 'Frais (GNF)', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
             foreach ($rows as $row) {
                 fputcsv($handle, [
                     $row['beneficiaire_nom'],
                     $row['telephone'] ?? '',
-                    $row['vehicules'] ?? '',
+                    self::vehiculesEnTexte($row['vehicules'] ?? []),
                     $row['agence'] ?? '',
                     $periodeLabel,
                     number_format((float) $row['total_cumule'], 0, ',', ' '),
                     number_format((float) $row['frais'], 0, ',', ' '),
-                    $row['motifs_frais'] ?? '',
                     number_format((float) $row['deja_paye'], 0, ',', ' '),
                     number_format((float) $row['reste'], 0, ',', ' '),
                     $row['statut'],
@@ -410,8 +443,8 @@ class CommissionVenteController extends Controller
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
         $orgId = auth()->user()->organization_id;
-        $filtrePeriode = trim((string) $request->input('periode', ''));
-        $filtreStatut = trim((string) $request->input('statut', ''));
+        $filtrePeriode = $this->scalarInput($request, 'periode');
+        $filtreStatut = $this->scalarInput($request, 'statut');
         $search = trim((string) $request->input('search', ''));
 
         $parts = $this->loadPartsForExport($orgId, $filtrePeriode);
@@ -444,10 +477,12 @@ class CommissionVenteController extends Controller
         $query = CommissionPart::with([
             'commission.commande.site:id,nom',
             'commission.vehicule:id,nom_vehicule,immatriculation',
+            'livreur:id,telephone',
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')
-            ->whereNotNull('livreur_id');
+            ->whereNotNull('livreur_id')
+            ->where('statut', '!=', StatutCommission::CREEE->value);
 
         if ($filtrePeriode !== '') {
             [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
@@ -471,16 +506,11 @@ class CommissionVenteController extends Controller
 
             $vehicules = $livParts->pluck('commission.vehicule')
                 ->filter()->unique('id')
-                ->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))
-                ->implode(', ');
+                ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+                ->values();
 
             $agence = $livParts->pluck('commission.commande.site.nom')
                 ->filter()->unique()->sort()->implode(', ');
-
-            $motifs = $livParts->pluck('type_frais')
-                ->filter()->unique()
-                ->map(fn ($t) => self::labelTypeFrais($t))
-                ->implode(', ');
 
             $periodeLabel = $filtrePeriode !== ''
                 ? PeriodeComptableService::labelForCode($filtrePeriode)
@@ -494,13 +524,12 @@ class CommissionVenteController extends Controller
             return [
                 'beneficiaire_id' => $first->livreur_id,
                 'beneficiaire_nom' => $first->beneficiaire_nom ?? '—',
-                'telephone' => $first->telephone ?? null,
-                'vehicules' => $vehicules ?: null,
+                'telephone' => $first->livreur?->telephone,
+                'vehicules' => $vehicules->all(),
                 'agence' => $agence ?: null,
                 'periode' => $periodeLabel,
-                'total_cumule' => $resume['net'],
+                'total_cumule' => $resume['brut'],
                 'frais' => $resume['frais'],
-                'motifs_frais' => $motifs ?: null,
                 'deja_paye' => $resume['verse'],
                 'reste' => $resume['reste'],
                 'statut' => StatutCommission::from($resume['statut'])->label(),
@@ -549,13 +578,12 @@ class CommissionVenteController extends Controller
             : $grouped->values()->toArray();
     }
 
-    private static function labelTypeFrais(?string $type): string
+    /** @param  array<int, array{nom: string, immatriculation: ?string}>  $vehicules */
+    private static function vehiculesEnTexte(array $vehicules): string
     {
-        return match ($type) {
-            'carburant' => 'Carburant',
-            'reparation' => 'Réparation',
-            'autre' => 'Autre',
-            default => (string) $type,
-        };
+        return implode(' / ', array_map(
+            fn ($v) => trim($v['nom'].($v['immatriculation'] ? ' '.$v['immatriculation'] : '')),
+            $vehicules
+        ));
     }
 }
