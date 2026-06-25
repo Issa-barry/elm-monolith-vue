@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, HandCoins } from 'lucide-vue-next';
@@ -215,7 +216,7 @@ const statutDepenseColors: Record<string, string> = {
                             v-if="livreur.telephone"
                             class="text-sm text-muted-foreground"
                         >
-                            {{ livreur.telephone }}
+                            {{ formatPhoneDisplay(livreur.telephone) }}
                         </p>
                     </div>
                 </div>

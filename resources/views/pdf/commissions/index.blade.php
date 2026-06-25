@@ -5,34 +5,41 @@
 <title>{{ $title }}</title>
 <style>
 @page {
-    margin: 15mm 15mm 22mm 15mm;
+    /* Marges volontairement généreuses : beaucoup d'imprimantes ont une zone
+       non imprimable réelle plus large que ce qu'affiche un lecteur PDF à
+       l'écran — un contenu collé à la marge déclarée peut être rogné au
+       moment de l'impression physique même s'il paraît correct à l'écran. */
+    margin: 18mm 17mm 24mm 17mm;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
     font-family: DejaVu Sans, Arial, Helvetica, sans-serif;
-    font-size: 9pt;
+    font-size: 8pt;
     color: #000;
     background: #fff;
 }
 
 /* ── Pied de page fixe (répété sur toutes les pages) ─────────────── */
+/* Tableau plutôt que flexbox : le rendu flex de dompdf peut diverger entre
+   l'aperçu écran et l'impression physique (un bloc à largeur fixe et non
+   réductible peut déborder hors de la zone imprimable réelle de
+   l'imprimante et disparaître à l'impression). Les tableaux sont le mode
+   de mise en page le plus robuste et le mieux supporté par dompdf. */
 .page-footer {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    height: 16pt;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     font-size: 7pt;
     color: #333;
     border-top: 0.75pt solid #888;
-    padding-top: 3pt;
 }
-.footer-center { text-align: center; flex: 1; }
+.page-footer table { width: 100%; border-collapse: collapse; }
+.page-footer td { border: none; padding: 3pt 0 0; }
+.footer-center { text-align: center; }
+.footer-right { text-align: right; }
 .page-num:before   { content: counter(page); }
 .page-total:before { content: counter(pages); }
 
@@ -46,14 +53,12 @@ body {
 
 /* ── Ligne meta (filtres + total) ─────────────────────────────────── */
 .meta-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4pt 16pt;
     margin-bottom: 8pt;
     padding-left: 6pt;
     font-size: 8pt;
     color: #333;
 }
+.meta-row > div { display: inline-block; margin-right: 16pt; }
 .meta-row b { color: #000; }
 
 /* ── Véhicule(s) : nom puis immatriculation en dessous ────────────── */
@@ -63,31 +68,25 @@ body {
 
 /* ── En-tête ──────────────────────────────────────────────────────── */
 .header {
-    display: flex;
-    align-items: flex-start;
-    gap: 8pt;
     margin-bottom: 8pt;
     padding-bottom: 7pt;
     border-bottom: 1.5pt solid #000;
 }
-.header-left { flex: 0 0 70pt; }
+.header table { width: 100%; border-collapse: collapse; }
+.header td { border: none; vertical-align: top; padding: 0; }
+.header-left { width: 70pt; }
 .logo-box {
     border: 0.75pt solid #666;
     padding: 4pt 5pt;
     text-align: center;
     font-size: 7pt;
     color: #444;
-    min-height: 28pt;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
     line-height: 1.4;
 }
-.logo-box .logo-label { font-size: 6pt; color: #888; }
-.logo-box .logo-name  { font-size: 7.5pt; font-weight: 700; margin-top: 2pt; }
+.logo-box .logo-label { display: block; font-size: 6pt; color: #888; }
+.logo-box .logo-name  { display: block; font-size: 7.5pt; font-weight: 700; margin-top: 2pt; }
 
-.header-center { flex: 1; text-align: center; padding-top: 2pt; }
+.header-center { text-align: center; padding-top: 2pt; }
 .doc-type {
     font-size: 13pt;
     font-weight: 700;
@@ -97,7 +96,7 @@ body {
 .doc-sub { font-size: 9pt; margin-top: 3pt; color: #333; }
 
 .header-right {
-    flex: 0 0 125pt;
+    width: 130pt;
     font-size: 7.5pt;
     text-align: right;
     line-height: 1.7;
@@ -141,7 +140,7 @@ tbody td.right  { text-align: right; padding-right: 8pt; }
 tbody td.center { text-align: center; }
 
 /* Largeurs de colonnes fixes (A4 paysage ≈ 267mm utilisables avec marges 15mm) */
-.col-ben  { width: 17%; }
+.col-ben  { width: 16%; text-align: right; padding-right: 8pt; }
 .col-tel  { width: 9%; }
 .col-veh  { width: 13%; }
 .col-cum  { width: 10%; }
@@ -170,9 +169,13 @@ tbody td.center { text-align: center; }
 
 {{-- Pied de page global (position:fixed → présent sur chaque page physique) --}}
 <div class="page-footer">
-    <span>{{ $title }} – Document confidentiel</span>
-    <span class="footer-center">Page <span class="page-num"></span> / <span class="page-total"></span></span>
-    <span>{{ count($sites) === 1 && $sites[0]['site_nom'] ? 'Agence : '.$sites[0]['site_nom'] : ($org?->name ?? 'ELM') }}</span>
+    <table>
+        <tr>
+            <td>{{ $title }} – Document confidentiel</td>
+            <td class="footer-center">Page <span class="page-num"></span> / <span class="page-total"></span></td>
+            <td class="footer-right">{{ count($sites) === 1 && $sites[0]['site_nom'] ? 'Agence : '.$sites[0]['site_nom'] : ($org?->name ?? 'ELM') }}</td>
+        </tr>
+    </table>
 </div>
 
 @foreach($sites as $siteData)
@@ -181,26 +184,28 @@ tbody td.center { text-align: center; }
 
     {{-- En-tête 3 zones --}}
     <div class="header">
-        <div class="header-left">
-            <div class="logo-box">
-                <span class="logo-label">LOGO</span>
-                <span class="logo-name">{{ strtoupper($org?->name ?? 'ELM') }}</span>
-            </div>
-        </div>
-
-        <div class="header-center">
-            <div class="doc-type">{{ $title }}</div>
-            <div class="doc-sub">Rapport de commissions</div>
-        </div>
-
-        <div class="header-right">
-            @if($siteData['site_nom'])
-            <strong>Agence :</strong> {{ $siteData['site_nom'] }}<br>
-            @endif
-            <strong>Période :</strong> {{ $periode_label }}<br>
-            <strong>Imprimé le :</strong> {{ $generated_at->format('d/m/Y H:i') }}<br>
-            <strong>Imprimé par :</strong> {{ $printed_by }}
-        </div>
+        <table>
+            <tr>
+                <td class="header-left">
+                    <div class="logo-box">
+                        <span class="logo-label">LOGO</span>
+                        <span class="logo-name">{{ strtoupper($org?->name ?? 'ELM') }}</span>
+                    </div>
+                </td>
+                <td class="header-center">
+                    <div class="doc-type">{{ $title }}</div>
+                    <div class="doc-sub">Rapport de commissions</div>
+                </td>
+                <td class="header-right">
+                    @if($siteData['site_nom'])
+                    <strong>Agence :</strong> {{ $siteData['site_nom'] }}<br>
+                    @endif
+                    <strong>Période :</strong> {{ $periode_label }}<br>
+                    <strong>Imprimé le :</strong> {{ $generated_at->format('d/m/Y H:i') }}<br>
+                    <strong>Imprimé par :</strong> {{ $printed_by }}
+                </td>
+            </tr>
+        </table>
     </div>
 
     {{-- Ligne meta : filtres appliqués + total --}}

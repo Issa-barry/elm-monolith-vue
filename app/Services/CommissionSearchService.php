@@ -60,7 +60,7 @@ class CommissionSearchService
      * at least one field (name, vehicle, phone, amount, or statut keyword).
      * Multi-word search uses AND logic across tokens, OR across fields.
      *
-     * @param  array{nom:string,telephone:?string,vehicules:array<int, array{nom:string,immatriculation:?string}>,impaye:float,paye:float}  $livreur
+     * @param  array{nom:string,telephone:?string,vehicules:array<int, array{nom:string,immatriculation:?string}>|string|null,impaye:float,paye:float}  $livreur
      */
     public static function matches(array $livreur, string $search): bool
     {
@@ -104,9 +104,19 @@ class CommissionSearchService
             || self::matchesStatut($l, $normToken);
     }
 
-    /** @param  array<int, array{nom:string,immatriculation:?string}>  $vehicules */
-    private static function vehiculesText(array $vehicules): string
+    /**
+     * Accepte le nouveau format structuré (tableau de {nom, immatriculation})
+     * ainsi que l'ancien format texte (legacy, encore utilisé par certains
+     * contrôleurs non migrés) pour rester compatible avec tous les appelants.
+     *
+     * @param  array<int, array{nom:string,immatriculation:?string}>|string|null  $vehicules
+     */
+    private static function vehiculesText(array|string|null $vehicules): string
     {
+        if (! is_array($vehicules)) {
+            return (string) $vehicules;
+        }
+
         return implode(' ', array_map(
             fn ($v) => trim(($v['nom'] ?? '').' '.($v['immatriculation'] ?? '')),
             $vehicules
