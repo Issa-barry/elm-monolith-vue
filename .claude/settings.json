@@ -94,7 +94,23 @@
       "Bash(ls .claude/skills)",
       "Bash(./vendor/bin/pint app/Http/Controllers/Comptabilite/CommissionVenteController.php app/Http/Controllers/Comptabilite/CommissionLogistiqueController.php tests/Feature/Comptabilite/CommissionExportTest.php)",
       "Bash(ls resources/js/composables)",
-      "Bash(ls resources/js/lib)"
+      "Bash(ls resources/js/lib)",
+      "Bash(grep -n 'ptm\\\\|getRowPT\\\\|bodyRow\\\\|rowData\\\\|$attrSelector\\\\|onRowClick\\\\|emit\\(.row-click' node_modules/primevue/datatable/BodyRow.vue)",
+      "Bash(grep -n \"<DataTable\\\\|data-key\\\\|:value=\\\\|href=\\\\\"\\\\`\\\\|:href=\" resources/js/pages/Commissions/Beneficiaire/Show.vue)",
+      "Bash(grep -n \"<DataTable\\\\|data-key\\\\|:value=\\\\|href=\\\\\"\\\\`\\\\|:href=\" resources/js/pages/Commissions/Index.vue)",
+      "Bash(grep -n \"<DataTable\\\\|data-key\\\\|:value=\\\\|href=\\\\\"\\\\`\\\\|:href=\" resources/js/pages/Comptabilite/Fiches/Index.vue)",
+      "Bash(grep -n \"<DataTable\\\\|data-key\\\\|:value=\\\\|href=\\\\\"\\\\`\\\\|:href=\" resources/js/pages/Comptabilite/Journal.vue)",
+      "Bash(grep -n \"<DataTable\\\\|data-key\\\\|:value=\\\\|href=\\\\\"\\\\`\\\\|:href=\" resources/js/pages/Comptabilite/Periodes/Index.vue)",
+      "Bash(ls resources/js/pages/Employes/)",
+      "Bash(ls resources/js/pages/Livreurs/)",
+      "Bash(ls resources/js/pages/Factures/)",
+      "Bash(ls resources/js/pages/EquipesLivraison/)",
+      "Bash(ls resources/js/pages/Logistique/)",
+      "Bash(grep -n \"href=\\\\\"\\\\`\\\\|:href=\" resources/js/pages/Paie/Show.vue)",
+      "Bash(ls resources/js/pages/Produits/)",
+      "Bash(ls resources/js/pages/Proprietaires/)",
+      "Bash(grep -n \"<DataTable\\\\|href=\\\\\"\\\\`\\\\|:href=\" resources/js/pages/settings/DepenseParametrage.vue)",
+      "Bash(grep -n \"<DataTable\\\\|href=\\\\\"\\\\`\\\\|:href=\" resources/js/pages/settings/DepenseTypes/Index.vue)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"

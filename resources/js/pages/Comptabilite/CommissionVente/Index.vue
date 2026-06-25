@@ -5,6 +5,7 @@ import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -126,14 +127,13 @@ const currentFilters = computed(() => ({
     periode: props.selected_periode ?? '',
 }));
 
-function statutClass(s: string) {
+function statutDotClass(s: string) {
     return (
         {
-            impaye: 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400',
-            partiel:
-                'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
-            paye: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
-        }[s] ?? 'bg-muted text-muted-foreground'
+            impaye: 'bg-red-500',
+            partiel: 'bg-amber-500',
+            paye: 'bg-emerald-500',
+        }[s] ?? 'bg-zinc-400 dark:bg-zinc-500'
     );
 }
 
@@ -504,12 +504,12 @@ function fmtTel(tel: string | null | undefined): string {
                                     {{ fmt(b.solde_restant) }}
                                 </td>
                                 <td class="px-5 py-3">
-                                    <span
-                                        class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
-                                        :class="statutClass(b.statut_global)"
-                                    >
-                                        {{ statutLabel(b.statut_global) }}
-                                    </span>
+                                    <StatusDot
+                                        :label="statutLabel(b.statut_global)"
+                                        :dot-class="
+                                            statutDotClass(b.statut_global)
+                                        "
+                                    />
                                 </td>
                                 <td class="px-4 py-3 text-right" @click.stop>
                                     <DropdownMenu>

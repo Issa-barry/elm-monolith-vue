@@ -10,6 +10,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import ReceptionDialog from '@/pages/Logistique/partials/ReceptionDialog.vue';
@@ -18,7 +19,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     ChevronRight,
-    MoreVertical,
+    MoreHorizontal,
     PackageSearch,
     Pencil,
     Plus,
@@ -108,6 +109,10 @@ const props = defineProps<{
 
 const { can } = usePermissions();
 const toast = useToast();
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<Transfert>(
+    (transfert) => `/logistique/${transfert.id}`,
+);
 
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
 
@@ -524,6 +529,8 @@ const commStatutDot: Record<string, string> = {
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
+                    :pt="{ bodyRow: bodyRowPt }"
+                    @row-click="onRowClick"
                 >
                     <!-- Référence -->
                     <Column
@@ -637,7 +644,7 @@ const commStatutDot: Record<string, string> = {
                                             size="icon"
                                             class="h-8 w-8"
                                         >
-                                            <MoreVertical class="h-4 w-4" />
+                                            <MoreHorizontal class="h-4 w-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent

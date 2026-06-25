@@ -8,6 +8,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { showEntityStatsCards } from '@/composables/useEntityConfig';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -64,6 +65,10 @@ const props = defineProps<{ proprietaires: Proprietaire[] }>();
 
 const { can } = usePermissions();
 const confirm = useConfirm();
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<Proprietaire>(
+    (proprietaire) => `/proprietaires/${proprietaire.id}`,
+);
 const toast = useToast();
 
 const mobileSearch = ref('');
@@ -432,6 +437,8 @@ function confirmDelete(p: Proprietaire) {
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
+                    :pt="{ bodyRow: bodyRowPt }"
+                    @row-click="onRowClick"
                 >
                     <!-- Nom -->
                     <Column

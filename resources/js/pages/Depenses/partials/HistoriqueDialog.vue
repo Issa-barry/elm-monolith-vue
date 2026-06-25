@@ -60,7 +60,7 @@ const eventBadge: Record<string, string> = {
     updated: 'bg-amber-100 text-amber-700',
     submitted: 'bg-sky-100 text-sky-700',
     validated: 'bg-emerald-100 text-emerald-700',
-    rejected: 'bg-orange-100 text-orange-700',
+    rejected: 'bg-red-100 text-red-700',
     cancelled: 'bg-red-100 text-red-700',
     deleted: 'bg-red-100 text-red-700',
     exported: 'bg-slate-100 text-slate-600',
