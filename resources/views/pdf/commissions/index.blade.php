@@ -54,7 +54,7 @@ body {
 /* ── Ligne meta (filtres + total) ─────────────────────────────────── */
 .meta-row {
     margin-bottom: 8pt;
-    padding-left: 6pt;
+    padding-left: 16pt;
     font-size: 8pt;
     color: #333;
 }
@@ -96,11 +96,11 @@ body {
 .doc-sub { font-size: 9pt; margin-top: 3pt; color: #333; }
 
 .header-right {
-    width: 130pt;
+    width: 140pt;
     font-size: 7.5pt;
     text-align: right;
     line-height: 1.7;
-    padding-right: 6pt;
+    padding-right: 16pt;
 }
 .header-right strong { font-weight: 700; }
 
@@ -140,12 +140,11 @@ tbody td.right  { text-align: right; padding-right: 8pt; }
 tbody td.center { text-align: center; }
 
 /* Largeurs de colonnes fixes (A4 paysage ≈ 267mm utilisables avec marges 15mm) */
-.col-ben  { width: 16%; text-align: right; padding-right: 8pt; }
+.col-ben  { width: 21%; text-align: left; }
 .col-tel  { width: 9%; }
-.col-veh  { width: 13%; }
+.col-veh  { width: 19%; }
 .col-cum  { width: 10%; }
 .col-fra  { width: 7%; }
-.col-mot  { width: 10%; }
 .col-pay  { width: 10%; }
 .col-res  { width: 10%; }
 .col-sta  { width: 7%; }
@@ -236,7 +235,6 @@ tbody td.center { text-align: center; }
                 <th class="col-veh">Véhicule(s)</th>
                 <th class="col-cum right">Total cumulé (GNF)</th>
                 <th class="col-fra right">Frais (GNF)</th>
-                <th class="col-mot">Motif de frais</th>
                 <th class="col-pay right">Déjà payé (GNF)</th>
                 <th class="col-res right">Reste à payer (GNF)</th>
                 <th class="col-sta center">Statut</th>
@@ -262,7 +260,6 @@ tbody td.center { text-align: center; }
                 </td>
                 <td class="col-cum right">{{ number_format((float) $row['total_cumule'], 0, ',', "\xc2\xa0") }}</td>
                 <td class="col-fra right">{{ $row['frais'] > 0 ? number_format((float) $row['frais'], 0, ',', "\xc2\xa0") : '—' }}</td>
-                <td class="col-mot">{{ $row['motifs_frais'] ?? '—' }}</td>
                 <td class="col-pay right">{{ number_format((float) $row['deja_paye'], 0, ',', "\xc2\xa0") }}</td>
                 <td class="col-res right">{{ $row['reste'] > 0 ? number_format((float) $row['reste'], 0, ',', "\xc2\xa0") : '—' }}</td>
                 <td class="col-sta center">{{ $row['statut'] ?? '—' }}</td>
@@ -270,7 +267,7 @@ tbody td.center { text-align: center; }
             </tr>
             @empty
             <tr>
-                <td colspan="10" style="text-align:center; padding:12pt; color:#555;">Aucun résultat pour ces critères.</td>
+                <td colspan="9" style="text-align:center; padding:12pt; color:#555;">Aucun résultat pour ces critères.</td>
             </tr>
             @endforelse
 
@@ -279,7 +276,6 @@ tbody td.center { text-align: center; }
                 <td colspan="3" style="text-align:right; padding-right:5pt; font-size:8.5pt;">TOTAUX :</td>
                 <td class="right">{{ number_format((float) $siteData['totaux']['total_cumule'], 0, ',', "\xc2\xa0") }}</td>
                 <td class="right">{{ $siteData['totaux']['total_frais'] > 0 ? number_format((float) $siteData['totaux']['total_frais'], 0, ',', "\xc2\xa0") : '—' }}</td>
-                <td></td>
                 <td class="right">{{ number_format((float) $siteData['totaux']['total_deja_paye'], 0, ',', "\xc2\xa0") }}</td>
                 <td class="right">{{ number_format((float) $siteData['totaux']['total_reste'], 0, ',', "\xc2\xa0") }}</td>
                 <td colspan="2"></td>

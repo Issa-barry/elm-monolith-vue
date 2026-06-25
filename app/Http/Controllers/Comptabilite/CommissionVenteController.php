@@ -418,7 +418,7 @@ class CommissionVenteController extends Controller
         return response()->streamDownload(function () use ($rows, $periodeLabel) {
             $handle = fopen('php://output', 'w');
             fwrite($handle, "\xEF\xBB\xBF");
-            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Total cumulé (GNF)', 'Frais (GNF)', 'Motif de frais', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
+            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Total cumulé (GNF)', 'Frais (GNF)', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
             foreach ($rows as $row) {
                 fputcsv($handle, [
                     $row['beneficiaire_nom'],
@@ -428,7 +428,6 @@ class CommissionVenteController extends Controller
                     $periodeLabel,
                     number_format((float) $row['total_cumule'], 0, ',', ' '),
                     number_format((float) $row['frais'], 0, ',', ' '),
-                    $row['motifs_frais'] ?? '',
                     number_format((float) $row['deja_paye'], 0, ',', ' '),
                     number_format((float) $row['reste'], 0, ',', ' '),
                     $row['statut'],
@@ -513,11 +512,6 @@ class CommissionVenteController extends Controller
             $agence = $livParts->pluck('commission.commande.site.nom')
                 ->filter()->unique()->sort()->implode(', ');
 
-            $motifs = $livParts->pluck('type_frais')
-                ->filter()->unique()
-                ->map(fn ($t) => self::labelTypeFrais($t))
-                ->implode(', ');
-
             $periodeLabel = $filtrePeriode !== ''
                 ? PeriodeComptableService::labelForCode($filtrePeriode)
                 : $livParts->pluck('commission.created_at')
@@ -536,7 +530,6 @@ class CommissionVenteController extends Controller
                 'periode' => $periodeLabel,
                 'total_cumule' => $resume['brut'],
                 'frais' => $resume['frais'],
-                'motifs_frais' => $motifs ?: null,
                 'deja_paye' => $resume['verse'],
                 'reste' => $resume['reste'],
                 'statut' => StatutCommission::from($resume['statut'])->label(),
@@ -583,16 +576,6 @@ class CommissionVenteController extends Controller
         return $grouped->isEmpty()
             ? [['site_nom' => null, 'rows' => [], 'totaux' => ['total_cumule' => 0, 'total_frais' => 0, 'total_deja_paye' => 0, 'total_reste' => 0]]]
             : $grouped->values()->toArray();
-    }
-
-    private static function labelTypeFrais(?string $type): string
-    {
-        return match ($type) {
-            'carburant' => 'Carburant',
-            'reparation' => 'Réparation',
-            'autre' => 'Autre',
-            default => (string) $type,
-        };
     }
 
     /** @param  array<int, array{nom: string, immatriculation: ?string}>  $vehicules */
