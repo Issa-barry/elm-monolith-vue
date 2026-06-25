@@ -57,6 +57,7 @@ class CommissionVenteController extends Controller
             ->where('cv.organization_id', $orgId)
             ->where('cp.type_beneficiaire', 'livreur')
             ->whereNotNull('cp.livreur_id')
+            ->where('cp.statut', '!=', StatutCommission::CREEE->value)
             ->leftJoin('livreurs', 'livreurs.id', '=', 'cp.livreur_id')
             ->select(['cp.livreur_id AS beneficiaire_id'])
             ->selectRaw(
@@ -208,6 +209,7 @@ class CommissionVenteController extends Controller
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')
             ->where('livreur_id', $livreurId)
+            ->where('statut', '!=', StatutCommission::CREEE->value)
             ->orderByDesc('commission_vente_id')
             ->get();
 
@@ -447,7 +449,8 @@ class CommissionVenteController extends Controller
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')
-            ->whereNotNull('livreur_id');
+            ->whereNotNull('livreur_id')
+            ->where('statut', '!=', StatutCommission::CREEE->value);
 
         if ($filtrePeriode !== '') {
             [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
@@ -498,7 +501,7 @@ class CommissionVenteController extends Controller
                 'vehicules' => $vehicules ?: null,
                 'agence' => $agence ?: null,
                 'periode' => $periodeLabel,
-                'total_cumule' => $resume['net'],
+                'total_cumule' => $resume['brut'],
                 'frais' => $resume['frais'],
                 'motifs_frais' => $motifs ?: null,
                 'deja_paye' => $resume['verse'],

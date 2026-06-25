@@ -71,7 +71,7 @@ class CommissionVenteFraisTest extends TestCase
      * une dépense externe validée de 100 000 GNF : le reste à payer attendu
      * partout est donc 20 000 GNF.
      */
-    private function setupLivreurAvecFrais(): Livreur
+    private function setupLivreurAvecFrais(float $montantDepense = 100000): Livreur
     {
         $site = $this->makeSite();
         $vehicule = $this->makeVehicule($site);
@@ -126,7 +126,7 @@ class CommissionVenteFraisTest extends TestCase
             'depense_type_id' => $depenseType->id,
             'beneficiaire_type' => 'livreur',
             'beneficiaire_id' => $livreur->id,
-            'montant' => 100000,
+            'montant' => $montantDepense,
             'date_depense' => now()->toDateString(),
             'statut' => StatutDepense::VALIDE->value,
         ]);
@@ -192,5 +192,26 @@ class CommissionVenteFraisTest extends TestCase
             ])
             ->assertSessionHasNoErrors()
             ->assertSessionHas('success');
+    }
+
+    // ── Message d'erreur explicite quand le solde disponible est nul ─────────
+
+    public function test_message_explique_que_les_frais_ont_ramene_le_solde_a_zero(): void
+    {
+        // Frais (120 000) >= brut (120 000) : le solde disponible tombe à 0,
+        // le message doit le dire explicitement plutôt qu'un simple "(0.00 GNF)".
+        $livreur = $this->setupLivreurAvecFrais(montantDepense: 120000);
+
+        $response = $this->actingAs($this->user)
+            ->post(route('comptabilite.commissions.vente.livreur.paiements', $livreur->id), [
+                'montant' => 1000,
+                'mode_paiement' => 'especes',
+            ])
+            ->assertSessionHasErrors('montant');
+
+        $this->assertStringContainsString(
+            'frais',
+            mb_strtolower($response->getSession()->get('errors')->get('montant')[0])
+        );
     }
 }

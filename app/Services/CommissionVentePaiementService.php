@@ -39,11 +39,7 @@ class CommissionVentePaiementService
 
         if ($montant > $totalDisponible + 0.009) { // tolérance arrondi flottant
             throw new InvalidArgumentException(
-                sprintf(
-                    'Le montant saisi (%.2f GNF) dépasse le solde disponible (%.2f GNF).',
-                    $montant,
-                    $totalDisponible
-                )
+                self::messageSoldeInsuffisant($organizationId, $type, $beneficiaireId, $montant, $totalDisponible)
             );
         }
 
@@ -152,5 +148,56 @@ class CommissionVentePaiementService
             : 0.0;
 
         return max(0.0, $totalParts - $fraisDepenses);
+    }
+
+    /**
+     * Message d'erreur explicite : un simple "solde disponible : 0.00 GNF"
+     * ne dit pas à l'admin POURQUOI — commandes pas encore activées, frais
+     * déjà déduits, ou déjà tout payé sont trois situations différentes.
+     */
+    private static function messageSoldeInsuffisant(
+        string $organizationId,
+        string $type,
+        string $beneficiaireId,
+        float $montant,
+        float $totalDisponible
+    ): string {
+        if ($totalDisponible > 0.009) {
+            return sprintf(
+                'Le montant saisi (%.2f GNF) dépasse le solde disponible (%.2f GNF).',
+                $montant,
+                $totalDisponible
+            );
+        }
+
+        $partsQuery = CommissionPart::whereHas('commission', fn ($q) => $q->where('organization_id', $organizationId))
+            ->where('type_beneficiaire', $type);
+        $type === 'livreur'
+            ? $partsQuery->where('livreur_id', $beneficiaireId)
+            : $partsQuery->where('proprietaire_id', $beneficiaireId);
+
+        $nbCreee = $partsQuery->clone()->where('statut', StatutCommission::CREEE->value)->count();
+        $nbAutres = $partsQuery->clone()->where('statut', '!=', StatutCommission::CREEE->value)->count();
+
+        if ($nbCreee > 0 && $nbAutres === 0) {
+            return 'Aucune commission n\'est encore due : les commandes correspondantes n\'ont pas encore validé leur chargement.';
+        }
+
+        $fraisDepenses = $type === 'livreur'
+            ? CommissionVenteCalculatorService::fraisDepenseLivreur($organizationId, $beneficiaireId)
+            : 0.0;
+
+        if ($fraisDepenses > 0.009) {
+            return sprintf(
+                'Solde disponible : 0,00 GNF — %s GNF de frais (dépenses validées) ont déjà été déduits du net à payer de ce bénéficiaire.',
+                number_format($fraisDepenses, 2, ',', ' ')
+            );
+        }
+
+        if ($nbAutres > 0) {
+            return 'Toutes les commissions disponibles de ce bénéficiaire sont déjà payées.';
+        }
+
+        return 'Aucune commission disponible pour ce bénéficiaire.';
     }
 }

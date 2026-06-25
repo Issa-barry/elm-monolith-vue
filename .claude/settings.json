@@ -84,7 +84,10 @@
       "Bash(php -r \"echo json_encode\\(['a' => \\(float\\)120000]\\);\")",
       "Bash(./vendor/bin/pint app/Services/CommissionVenteCalculatorService.php app/Http/Controllers/Comptabilite/CommissionVenteController.php app/Services/CommissionVentePaiementService.php tests/Feature/Comptabilite/CommissionVenteFraisTest.php)",
       "Bash(git status *)",
-      "Bash(gh pr *)"
+      "Bash(gh pr *)",
+      "Bash(php \"C:/Users/issab/AppData/Local/Temp/claude/c--laragon-www-eau-la-maman-elm-monolithe/f03b0334-3f4a-4570-b5e5-a8539061a949/scratchpad/render_commission_pdf.php\")",
+      "Bash(./vendor/bin/pint app/Http/Controllers/Comptabilite/CommissionVenteController.php tests/Feature/Comptabilite/CommissionVenteStatutCreeeTest.php)",
+      "Bash(./vendor/bin/pint app/Services/CommissionVentePaiementService.php tests/Feature/Comptabilite/CommissionVenteFraisTest.php tests/Feature/Comptabilite/CommissionVenteStatutCreeeTest.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"

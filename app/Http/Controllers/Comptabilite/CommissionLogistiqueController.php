@@ -490,7 +490,7 @@ class CommissionLogistiqueController extends Controller
                 'vehicules' => $vehicules ?: null,
                 'agence' => $agence ?: null,
                 'periode' => $periodeLabel,
-                'total_cumule' => $totalNet,
+                'total_cumule' => $totalBrut,
                 'frais' => $totalFrais,
                 'motifs_frais' => $motifs ?: null,
                 'deja_paye' => $totalVerse,

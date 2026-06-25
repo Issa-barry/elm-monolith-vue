@@ -37,8 +37,23 @@ body {
 .page-total:before { content: counter(pages); }
 
 /* ── Bloc par agence ──────────────────────────────────────────────── */
-.site-page { page-break-before: always; }
-.site-page:first-child { page-break-before: auto; }
+/* Important : on ajoute la classe "new-page" explicitement en PHP (cf. boucle
+   ci-dessous) plutôt que de s'appuyer sur :first-child. Le pied de page fixe
+   est techniquement le premier enfant du <body>, donc ":first-child" ne
+   matche jamais le premier ".site-page" et provoquait une page blanche en tête
+   de document (saut de page forcé avant la toute première section). */
+.site-page.new-page { page-break-before: always; }
+
+/* ── Ligne meta (filtres + total) ─────────────────────────────────── */
+.meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4pt 16pt;
+    margin-bottom: 8pt;
+    font-size: 8pt;
+    color: #333;
+}
+.meta-row b { color: #000; }
 
 /* ── En-tête ──────────────────────────────────────────────────────── */
 .header {
@@ -96,7 +111,7 @@ thead { display: table-header-group; }
 thead th {
     background: #d0d0d0;
     border: 0.75pt solid #000;
-    padding: 4pt 4pt;
+    padding: 4pt 6pt;
     font-size: 7pt;
     font-weight: 700;
     text-transform: uppercase;
@@ -105,17 +120,17 @@ thead th {
     vertical-align: bottom;
     white-space: normal;
 }
-thead th.right  { text-align: right; }
+thead th.right  { text-align: right; padding-right: 8pt; }
 thead th.center { text-align: center; }
 
 tbody td {
     border: 0.75pt solid #bbb;
-    padding: 3.5pt 4pt;
+    padding: 3.5pt 6pt;
     font-size: 8.5pt;
     vertical-align: top;
 }
 tbody tr:nth-child(even) { background: #f0f0f0; }
-tbody td.right  { text-align: right; }
+tbody td.right  { text-align: right; padding-right: 8pt; }
 tbody td.center { text-align: center; }
 
 /* Largeurs de colonnes fixes (A4 paysage ≈ 267mm utilisables avec marges 15mm) */
@@ -139,9 +154,9 @@ tbody td.center { text-align: center; }
     border-bottom: 1.5pt solid #000;
     border-left: 0.75pt solid #000;
     border-right: 0.75pt solid #000;
-    padding: 4pt 4pt;
+    padding: 4pt 6pt;
 }
-.total-row td.right { text-align: right; }
+.total-row td.right { text-align: right; padding-right: 8pt; }
 
 
 /* ── Ligne signature ──────────────────────────────────────────────── */
@@ -164,7 +179,7 @@ tbody td.center { text-align: center; }
 
 @foreach($sites as $siteData)
 
-<div class="site-page">
+<div class="site-page{{ !$loop->first ? ' new-page' : '' }}">
 
     {{-- En-tête 3 zones --}}
     <div class="header">
@@ -188,6 +203,25 @@ tbody td.center { text-align: center; }
             <strong>Imprimé le :</strong> {{ $generated_at->format('d/m/Y H:i') }}<br>
             <strong>Imprimé par :</strong> {{ $printed_by }}
         </div>
+    </div>
+
+    {{-- Ligne meta : filtres appliqués + total --}}
+    <div class="meta-row">
+        @php
+            $statutFiltreLabel = match ($filters['statut'] ?? '') {
+                'impaye' => 'Impayée',
+                'paye' => 'Payée',
+                'partiel' => 'Partiellement payée',
+                default => null,
+            };
+        @endphp
+        @if($statutFiltreLabel)
+        <div>Statut : <b>{{ $statutFiltreLabel }}</b></div>
+        @endif
+        @if(!empty($filters['search']))
+        <div>Recherche : <b>{{ $filters['search'] }}</b></div>
+        @endif
+        <div>Total : <b>{{ count($siteData['rows']) }} bénéficiaire(s)</b></div>
     </div>
 
     {{-- Tableau --}}
