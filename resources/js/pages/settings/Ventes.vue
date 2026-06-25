@@ -5,7 +5,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
-import { Cog, Lock, PackageCheck, ShieldCheck } from 'lucide-vue-next';
+import { Lock, PackageCheck, ShieldCheck } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 interface RoleQuantite {
@@ -16,16 +16,8 @@ interface RoleQuantite {
     locked: boolean;
 }
 
-interface CommissionOption {
-    value: string;
-    label: string;
-    description: string;
-}
-
 const props = defineProps<{
     roles: RoleQuantite[];
-    commission_generation_mode: string;
-    commission_options: CommissionOption[];
     autoriser_saisie_dessous_qte_max: boolean;
 }>();
 
@@ -40,7 +32,6 @@ const flashSuccess = computed(
 );
 
 const form = useForm({
-    commission_generation_mode: props.commission_generation_mode,
     quantity_edit_role_names: props.roles
         .filter((role) => role.can_update_quantite && !role.locked)
         .map((role) => role.name),
@@ -217,41 +208,6 @@ function submit() {
                                 />
                             </button>
                         </div>
-                    </div>
-                </div>
-
-                <div class="overflow-hidden rounded-xl border bg-card">
-                    <div
-                        class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
-                    >
-                        <Cog class="h-4 w-4 text-muted-foreground" />
-                        <h3 class="text-sm font-semibold text-foreground">
-                            Generation des commissions
-                        </h3>
-                    </div>
-
-                    <div class="divide-y">
-                        <label
-                            v-for="option in commission_options"
-                            :key="option.value"
-                            class="flex cursor-pointer items-start gap-3 px-5 py-4"
-                        >
-                            <input
-                                v-model="form.commission_generation_mode"
-                                type="radio"
-                                name="commission_generation_mode"
-                                :value="option.value"
-                                class="mt-1 h-4 w-4 border-input text-primary focus:ring-ring"
-                            />
-                            <div class="min-w-0">
-                                <p class="text-sm font-medium text-foreground">
-                                    {{ option.label }}
-                                </p>
-                                <p class="mt-0.5 text-xs text-muted-foreground">
-                                    {{ option.description }}
-                                </p>
-                            </div>
-                        </label>
                     </div>
                 </div>
 

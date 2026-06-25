@@ -5,14 +5,13 @@ namespace App\Http\Controllers\Comptabilite;
 use App\Enums\AuditEvent;
 use App\Enums\ModePaiement;
 use App\Enums\StatutCommission;
-use App\Enums\StatutDepense;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionPart;
-use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PaiementCommissionVente;
 use App\Services\AuditLogService;
+use App\Services\CommissionVenteCalculatorService;
 use App\Services\CommissionVentePaiementService;
 use App\Services\PeriodeComptableService;
 use App\Services\SiteScopeService;
@@ -58,7 +57,6 @@ class CommissionVenteController extends Controller
             ->where('cv.organization_id', $orgId)
             ->where('cp.type_beneficiaire', 'livreur')
             ->whereNotNull('cp.livreur_id')
-            ->where('cp.role', 'chauffeur')
             ->leftJoin('livreurs', 'livreurs.id', '=', 'cp.livreur_id')
             ->select(['cp.livreur_id AS beneficiaire_id'])
             ->selectRaw(
@@ -82,21 +80,7 @@ class CommissionVenteController extends Controller
 
         $allLivreurIds = $rows->pluck('beneficiaire_id')->filter()->unique()->values()->toArray();
 
-        $fraisDepensesParLivreur = [];
-        if (! empty($allLivreurIds)) {
-            $depQuery = Depense::where('beneficiaire_type', 'livreur')
-                ->whereIn('beneficiaire_id', $allLivreurIds)
-                ->where('statut', StatutDepense::VALIDE->value)
-                ->where('organization_id', $orgId);
-            if ($filtrePeriode !== '') {
-                [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-                $depQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
-            }
-            $fraisDepensesParLivreur = $depQuery->get(['beneficiaire_id', 'montant'])
-                ->groupBy('beneficiaire_id')
-                ->map(fn ($d) => (float) $d->sum('montant'))
-                ->toArray();
-        }
+        $fraisDepensesParLivreur = CommissionVenteCalculatorService::fraisDepensesParLivreur($orgId, $allLivreurIds, $filtrePeriode);
 
         $partsParLivreur = CommissionPart::with([
             'commission.commande.site:id,nom',
@@ -104,7 +88,6 @@ class CommissionVenteController extends Controller
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')
-            ->where('role', 'chauffeur')
             ->whereIn('livreur_id', $allLivreurIds)
             ->when($filtrePeriode !== '', function ($q) use ($filtrePeriode) {
                 [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
@@ -132,18 +115,13 @@ class CommissionVenteController extends Controller
 
         $beneficiaires = $rows->map(function ($row) use ($agencesParLivreur, $vehiculesParLivreur, $fraisDepensesParLivreur) {
             $livreurId = (string) $row->beneficiaire_id;
-            $totalBrut = (float) $row->total_brut_cumule;
-            $totalFrais = (float) $row->total_frais;
             $fraisDepenses = $fraisDepensesParLivreur[$livreurId] ?? 0.0;
-            $totalNet = max(0.0, $totalBrut - $totalFrais - $fraisDepenses);
-            $totalVerse = (float) $row->total_verse;
-            $solde = max(0.0, $totalNet - $totalVerse);
-
-            $statutGlobal = match (true) {
-                $totalNet > 0 && $totalVerse >= $totalNet => StatutCommission::PAYE->value,
-                $totalVerse > 0 => StatutCommission::PARTIEL->value,
-                default => StatutCommission::IMPAYE->value,
-            };
+            $resume = CommissionVenteCalculatorService::calculerResume(
+                (float) $row->total_brut_cumule,
+                (float) $row->total_frais,
+                $fraisDepenses,
+                (float) $row->total_verse,
+            );
 
             return [
                 'beneficiaire_id' => $livreurId,
@@ -151,13 +129,13 @@ class CommissionVenteController extends Controller
                 'telephone' => $row->telephone,
                 'agence' => $agencesParLivreur->get($livreurId),
                 'vehicules' => $vehiculesParLivreur->get($livreurId) ?: null,
-                'total_brut_cumule' => $totalBrut,
-                'total_frais' => $totalFrais + $fraisDepenses,
-                'total_net_cumule' => $totalNet,
-                'total_verse' => $totalVerse,
-                'solde_restant' => $solde,
+                'total_brut_cumule' => $resume['brut'],
+                'total_frais' => $resume['frais'],
+                'total_net_cumule' => $resume['net'],
+                'total_verse' => $resume['verse'],
+                'solde_restant' => $resume['reste'],
                 'nb_commandes' => (int) $row->nb_commandes,
-                'statut_global' => $statutGlobal,
+                'statut_global' => $resume['statut'],
             ];
         });
 
@@ -233,13 +211,13 @@ class CommissionVenteController extends Controller
             ->orderByDesc('commission_vente_id')
             ->get();
 
-        $totalBrut = (float) $allParts->sum('montant_brut');
-        $totalFrais = (float) $allParts->sum('frais_supplementaires');
-        $totalNet = max(0.0, $totalBrut - $totalFrais);
-        $totalVerse = (float) $allParts->sum('montant_verse');
-
-        $activeParts = $allParts->filter(fn ($p) => $p->statut !== StatutCommission::CREEE);
-        $solde = max(0.0, (float) $activeParts->sum('montant_net') - (float) $activeParts->sum('montant_verse'));
+        $fraisDepenses = CommissionVenteCalculatorService::fraisDepenseLivreur($orgId, $livreurId);
+        $resume = CommissionVenteCalculatorService::calculerResume(
+            (float) $allParts->sum('montant_brut'),
+            (float) $allParts->sum('frais_supplementaires'),
+            $fraisDepenses,
+            (float) $allParts->sum('montant_verse'),
+        );
 
         $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
 
@@ -327,11 +305,11 @@ class CommissionVenteController extends Controller
                 'telephone' => $livreur?->telephone,
             ],
             'resume_global' => [
-                'total_brut_cumule' => $totalBrut,
-                'total_frais' => $totalFrais,
-                'total_net_cumule' => $totalNet,
-                'total_verse' => $totalVerse,
-                'solde_global' => $solde,
+                'total_brut_cumule' => $resume['brut'],
+                'total_frais' => $resume['frais'],
+                'total_net_cumule' => $resume['net'],
+                'total_verse' => $resume['verse'],
+                'solde_global' => $resume['reste'],
             ],
             'historique_commandes' => $historiqueCommandes,
             'historique_paiements' => $historiquePaiements,
@@ -393,7 +371,12 @@ class CommissionVenteController extends Controller
         $search = trim((string) $request->input('search', ''));
 
         $parts = $this->loadPartsForExport($orgId, $filtrePeriode);
-        $rows = $this->buildExportRows($parts, $filtrePeriode, $filtreStatut, $search);
+        $fraisDepensesParLivreur = CommissionVenteCalculatorService::fraisDepensesParLivreur(
+            $orgId,
+            $parts->pluck('livreur_id')->filter()->unique()->values()->all(),
+            $filtrePeriode
+        );
+        $rows = $this->buildExportRows($parts, $filtrePeriode, $filtreStatut, $search, $fraisDepensesParLivreur);
 
         $periodeLabel = $filtrePeriode !== '' ? PeriodeComptableService::labelForCode($filtrePeriode) : 'Toutes périodes';
         $filename = 'commissions-vente-'.now()->format('Y-m-d').'.csv';
@@ -432,7 +415,12 @@ class CommissionVenteController extends Controller
         $search = trim((string) $request->input('search', ''));
 
         $parts = $this->loadPartsForExport($orgId, $filtrePeriode);
-        $rows = $this->buildExportRows($parts, $filtrePeriode, $filtreStatut, $search);
+        $fraisDepensesParLivreur = CommissionVenteCalculatorService::fraisDepensesParLivreur(
+            $orgId,
+            $parts->pluck('livreur_id')->filter()->unique()->values()->all(),
+            $filtrePeriode
+        );
+        $rows = $this->buildExportRows($parts, $filtrePeriode, $filtreStatut, $search, $fraisDepensesParLivreur);
         $siteGroups = $this->buildSiteGroups($rows);
 
         $org = Organization::find($orgId);
@@ -459,8 +447,7 @@ class CommissionVenteController extends Controller
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')
-            ->whereNotNull('livreur_id')
-            ->where('role', 'chauffeur');
+            ->whereNotNull('livreur_id');
 
         if ($filtrePeriode !== '') {
             [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
@@ -470,15 +457,17 @@ class CommissionVenteController extends Controller
         return $query->get();
     }
 
-    private function buildExportRows(Collection $parts, string $filtrePeriode, string $filtreStatut, string $search): Collection
+    private function buildExportRows(Collection $parts, string $filtrePeriode, string $filtreStatut, string $search, array $fraisDepensesParLivreur = []): Collection
     {
-        $rows = $parts->groupBy('livreur_id')->map(function (Collection $livParts) use ($filtrePeriode) {
+        $rows = $parts->groupBy('livreur_id')->map(function (Collection $livParts) use ($filtrePeriode, $fraisDepensesParLivreur) {
             $first = $livParts->first();
-            $totalBrut = (float) $livParts->sum('montant_brut');
-            $totalFrais = (float) $livParts->sum('frais_supplementaires');
-            $totalNet = max(0.0, $totalBrut - $totalFrais);
-            $totalVerse = (float) $livParts->sum('montant_verse');
-            $solde = max(0.0, $totalNet - $totalVerse);
+            $fraisDepenses = $fraisDepensesParLivreur[(string) $first->livreur_id] ?? 0.0;
+            $resume = CommissionVenteCalculatorService::calculerResume(
+                (float) $livParts->sum('montant_brut'),
+                (float) $livParts->sum('frais_supplementaires'),
+                $fraisDepenses,
+                (float) $livParts->sum('montant_verse'),
+            );
 
             $vehicules = $livParts->pluck('commission.vehicule')
                 ->filter()->unique('id')
@@ -502,12 +491,6 @@ class CommissionVenteController extends Controller
                     ))
                     ->unique()->implode(', ');
 
-            $statut = match (true) {
-                $totalNet > 0 && $totalVerse >= $totalNet => StatutCommission::PAYE->label(),
-                $totalVerse > 0 => StatutCommission::PARTIEL->label(),
-                default => StatutCommission::IMPAYE->label(),
-            };
-
             return [
                 'beneficiaire_id' => $first->livreur_id,
                 'beneficiaire_nom' => $first->beneficiaire_nom ?? '—',
@@ -515,12 +498,12 @@ class CommissionVenteController extends Controller
                 'vehicules' => $vehicules ?: null,
                 'agence' => $agence ?: null,
                 'periode' => $periodeLabel,
-                'total_cumule' => $totalNet,
-                'frais' => $totalFrais,
+                'total_cumule' => $resume['net'],
+                'frais' => $resume['frais'],
                 'motifs_frais' => $motifs ?: null,
-                'deja_paye' => $totalVerse,
-                'reste' => $solde,
-                'statut' => $statut,
+                'deja_paye' => $resume['verse'],
+                'reste' => $resume['reste'],
+                'statut' => StatutCommission::from($resume['statut'])->label(),
             ];
         });
 
