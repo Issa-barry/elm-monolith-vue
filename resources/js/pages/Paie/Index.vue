@@ -3,10 +3,11 @@ import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import { Button } from '@/components/ui/button';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { CalendarDays, Plus } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
@@ -45,6 +46,10 @@ const props = defineProps<{
 }>();
 
 const { can } = usePermissions();
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<Periode>(
+    (periode) => `/paie/${periode.id}`,
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -122,9 +127,9 @@ function statutSeverity(statut: string) {
                 :value="periodesFiltrees"
                 dataKey="id"
                 striped-rows
-                selection-mode="single"
-                class="text-sm [&_tr]:cursor-pointer"
-                @row-click="(e) => router.visit(`/paie/${e.data.id}`)"
+                class="text-sm"
+                :pt="{ bodyRow: bodyRowPt }"
+                @row-click="onRowClick"
             >
                 <Column field="label" header="Période" sortable />
                 <Column field="statut_label" header="Statut" sortable>
@@ -138,7 +143,7 @@ function statutSeverity(statut: string) {
                 <Column field="lignes_count" header="Lignes" sortable />
                 <Column header="Actions" style="width: 8rem">
                     <template #body="{ data }">
-                        <Link :href="`/paie/${data.id}`" @click.stop>
+                        <Link :href="`/paie/${data.id}`">
                             <Button variant="outline" size="sm"
                                 >Détail →</Button
                             >

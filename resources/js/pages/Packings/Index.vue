@@ -11,6 +11,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -59,6 +60,10 @@ const props = defineProps<{ packings: Packing[] }>();
 const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<Packing>(
+    (packing) => `/packings/${packing.id}`,
+);
 
 const search = ref('');
 const statutFilter = ref<string>('tous');
@@ -430,7 +435,9 @@ function confirmDelete(packing: Packing) {
                     :pt="{
                         root: { class: 'w-full' },
                         tbody: { class: 'divide-y' },
+                        bodyRow: bodyRowPt,
                     }"
+                    @row-click="onRowClick"
                 >
                     <!-- Référence -->
                     <Column
