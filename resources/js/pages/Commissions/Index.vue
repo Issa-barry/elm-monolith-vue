@@ -12,6 +12,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
@@ -264,6 +265,9 @@ function formatGNF(val: number): string {
 function detailUrl(b: BeneficiaireRow): string {
     return `/commissions/beneficiaires/${b.type_beneficiaire}/${b.beneficiaire_id}`;
 }
+
+const { onRowClick, bodyRowPt } =
+    useClickableTableRow<BeneficiaireRow>(detailUrl);
 </script>
 
 <template>
@@ -530,7 +534,9 @@ function detailUrl(b: BeneficiaireRow): string {
                         table: {
                             style: 'table-layout: fixed; min-width: 960px',
                         },
+                        bodyRow: bodyRowPt,
                     }"
+                    @row-click="onRowClick"
                 >
                     <!-- Bénéficiaire (26%) -->
                     <Column

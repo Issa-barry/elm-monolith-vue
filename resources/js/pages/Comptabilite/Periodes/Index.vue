@@ -3,6 +3,7 @@ import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import { Button } from '@/components/ui/button';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
@@ -79,6 +80,10 @@ const filterFields: FilterField[] = [
 function fmt(n: number) {
     return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' GNF';
 }
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<Periode>(
+    (periode) => `/comptabilite/periodes/${periode.id}`,
+);
 
 const typeBadge = (type: string) =>
     ({
@@ -177,6 +182,8 @@ const statutBadge = (statut: string) =>
                     data-key="id"
                     striped-rows
                     class="text-sm"
+                    :pt="{ bodyRow: bodyRowPt }"
+                    @row-click="onRowClick"
                 >
                     <Column
                         field="reference"

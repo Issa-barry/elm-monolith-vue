@@ -11,6 +11,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -126,6 +127,10 @@ const props = defineProps<{
 const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<Produit>(
+    (produit) => `/produits/${produit.id}`,
+);
 
 // ── Filtres serveur ───────────────────────────────────────────────────────────
 
@@ -599,7 +604,9 @@ function confirmArchive(produit: Produit) {
                     :pt="{
                         root: { class: 'w-full' },
                         tbody: { class: 'divide-y' },
+                        bodyRow: bodyRowPt,
                     }"
+                    @row-click="onRowClick"
                 >
                     <!-- Image -->
                     <Column header="Image" style="width: 72px">

@@ -11,6 +11,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -21,7 +22,7 @@ import {
     ChevronRight,
     HandCoins,
     History,
-    MoreVertical,
+    MoreHorizontal,
     Pencil,
     Plus,
     Search,
@@ -114,6 +115,10 @@ const props = defineProps<{
 const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
+    (commande) => `/ventes/${commande.id}`,
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -627,7 +632,9 @@ function confirmDelete(c: Commande) {
                     :pt="{
                         root: { class: 'w-full' },
                         tbody: { class: 'divide-y' },
+                        bodyRow: bodyRowPt,
                     }"
+                    @row-click="onRowClick"
                 >
                     <!-- Référence -->
                     <Column
@@ -780,7 +787,7 @@ function confirmDelete(c: Commande) {
                                             size="icon"
                                             class="h-8 w-8"
                                         >
-                                            <MoreVertical class="h-4 w-4" />
+                                            <MoreHorizontal class="h-4 w-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent

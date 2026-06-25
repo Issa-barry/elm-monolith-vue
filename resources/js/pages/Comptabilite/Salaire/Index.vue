@@ -4,6 +4,7 @@ import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -217,18 +218,16 @@ function handlePaiementSubmit(payload: {
     );
 }
 
-function statutClass(s: string) {
+function statutDotClass(s: string) {
     return (
         (
             {
-                paye: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
-                partiellement_paye:
-                    'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
-                calcule:
-                    'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
-                en_attente: 'bg-muted text-muted-foreground',
+                paye: 'bg-emerald-500',
+                partiellement_paye: 'bg-amber-500',
+                calcule: 'bg-blue-500',
+                en_attente: 'bg-zinc-400 dark:bg-zinc-500',
             } as Record<string, string>
-        )[s] ?? 'bg-muted text-muted-foreground'
+        )[s] ?? 'bg-zinc-400 dark:bg-zinc-500'
     );
 }
 
@@ -482,12 +481,10 @@ const periodeCourante = computed(
                                     {{ fmt(l.reste_a_payer) }}
                                 </td>
                                 <td class="px-5 py-3">
-                                    <span
-                                        class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap"
-                                        :class="statutClass(l.statut)"
-                                    >
-                                        {{ l.statut_label }}
-                                    </span>
+                                    <StatusDot
+                                        :label="l.statut_label"
+                                        :dot-class="statutDotClass(l.statut)"
+                                    />
                                 </td>
                                 <td class="px-4 py-3 text-right">
                                     <DropdownMenu>

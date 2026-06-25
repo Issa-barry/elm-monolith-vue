@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
@@ -122,6 +123,10 @@ function fmt(n: number) {
     return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' GNF';
 }
 
+const { onRowClick, bodyRowPt } = useClickableTableRow<Fiche>(
+    (fiche) => `/comptabilite/fiches/${fiche.id}`,
+);
+
 const ficheBadge = (s: string) =>
     ({
         a_payer: 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400',
@@ -228,6 +233,8 @@ function exportExcel() {
                     data-key="id"
                     striped-rows
                     class="text-sm"
+                    :pt="{ bodyRow: bodyRowPt }"
+                    @row-click="onRowClick"
                 >
                     <Column header="Référence" style="width: 160px">
                         <template #body="{ data }">

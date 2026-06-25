@@ -11,6 +11,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -63,6 +64,10 @@ const props = defineProps<{ vehicules: Vehicule[] }>();
 const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<Vehicule>(
+    (vehicule) => `/vehicules/${vehicule.id}`,
+);
 
 // Mobile — filtrage immédiat
 const mobileSearch = ref('');
@@ -502,6 +507,8 @@ function confirmDelete(v: Vehicule) {
                     removable-sort
                     class="text-sm"
                     table-class="w-full"
+                    :pt="{ bodyRow: bodyRowPt }"
+                    @row-click="onRowClick"
                 >
                     <!-- Photo -->
                     <Column header="Photo" style="width: 72px">

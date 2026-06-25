@@ -11,6 +11,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -48,6 +49,10 @@ const props = defineProps<{ equipes: Equipe[] }>();
 const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<Equipe>(
+    (equipe) => `/equipes-livraison/${equipe.id}`,
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -192,6 +197,8 @@ function confirmDelete(equipe: Equipe) {
                 :paginator="equipes.length > 25"
                 class="rounded-xl border bg-card shadow-sm"
                 :table-style="{ tableLayout: 'fixed', width: '100%' }"
+                :pt="{ bodyRow: bodyRowPt }"
+                @row-click="onRowClick"
             >
                 <template #empty>
                     <div

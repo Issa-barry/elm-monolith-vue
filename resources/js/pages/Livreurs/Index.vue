@@ -4,6 +4,7 @@ import DataFilters, {
 } from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -34,6 +35,10 @@ interface Livreur {
 const props = defineProps<{ livreurs: Livreur[] }>();
 
 const { can } = usePermissions();
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<Livreur>(
+    (livreur) => `/livreurs/${livreur.id}`,
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -178,6 +183,8 @@ function approuver(livreur: Livreur) {
                 :rows="30"
                 :paginator="livreursFiltres.length > 30"
                 class="rounded-xl border bg-card shadow-sm"
+                :pt="{ bodyRow: bodyRowPt }"
+                @row-click="onRowClick"
             >
                 <template #empty>
                     <div

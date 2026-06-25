@@ -10,6 +10,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -54,6 +55,10 @@ const props = defineProps<{ commandes: Commande[] }>();
 const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
+    (commande) => `/achats/${commande.id}`,
+);
 
 const search = ref('');
 
@@ -313,7 +318,9 @@ function confirmDelete(c: Commande) {
                     :pt="{
                         root: { class: 'w-full' },
                         tbody: { class: 'divide-y' },
+                        bodyRow: bodyRowPt,
                     }"
+                    @row-click="onRowClick"
                 >
                     <!-- Référence -->
                     <Column

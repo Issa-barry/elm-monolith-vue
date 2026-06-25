@@ -94,7 +94,7 @@ const statutConfig: Record<
     },
     rejete: {
         label: 'Rejetée',
-        class: 'bg-orange-100 text-orange-700 border-orange-200',
+        class: 'bg-red-100 text-red-700 border-red-200',
         icon: XCircle,
     },
     annule: {

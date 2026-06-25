@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
+import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
@@ -114,6 +115,10 @@ const voirCommissionsUrl = computed(() => {
 function fmt(n: number) {
     return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' GNF';
 }
+
+const { onRowClick, bodyRowPt } = useClickableTableRow<Fiche>(
+    (fiche) => `/comptabilite/fiches/${fiche.id}`,
+);
 
 const statutBadge = (s: string) =>
     ({
@@ -493,6 +498,8 @@ function exportPdf() {
                     data-key="id"
                     striped-rows
                     class="text-sm"
+                    :pt="{ bodyRow: bodyRowPt }"
+                    @row-click="onRowClick"
                 >
                     <Column header="Bénéficiaire" style="min-width: 200px">
                         <template #body="{ data }">
