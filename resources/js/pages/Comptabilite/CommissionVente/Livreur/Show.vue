@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import AuditTimeline from '@/components/AuditTimeline.vue';
+import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, HandCoins } from 'lucide-vue-next';
-import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
-import InputNumber from 'primevue/inputnumber';
-import { reactive, ref } from 'vue';
+import { ref } from 'vue';
 
 interface CommandeRow {
     commission_id: string;
@@ -43,6 +43,18 @@ interface ModePaiement {
     label: string;
 }
 
+interface DepenseRow {
+    id: string;
+    date_depense: string | null;
+    montant: number;
+    statut: string;
+    statut_label: string;
+    saisi_par: string | null;
+    validateur: string | null;
+    date_validation: string | null;
+    commentaire: string | null;
+}
+
 const props = defineProps<{
     livreur: { id: string; nom: string; telephone: string | null };
     resume_global: {
@@ -54,6 +66,7 @@ const props = defineProps<{
     };
     historique_commandes: CommandeRow[];
     historique_paiements: PaiementRow[];
+    depenses: DepenseRow[];
     modes_paiement: ModePaiement[];
     periode_courante: string;
     periode_courante_label: string;
@@ -94,53 +107,38 @@ function changePeriode(code: string) {
 
 // Dialog paiement
 const showPaiementDialog = ref(false);
-const paiementForm = reactive({
-    montant: null as number | null,
-    mode_paiement: 'especes',
-    note: '',
-    processing: false,
-    errors: {} as Record<string, string>,
-});
+const paiementProcessing = ref(false);
+const paiementErrors = ref<Record<string, string>>({});
 
 function openPaiement() {
-    paiementForm.montant =
-        props.resume_global.solde_global > 0
-            ? props.resume_global.solde_global
-            : null;
-    paiementForm.mode_paiement = 'especes';
-    paiementForm.note = '';
-    paiementForm.processing = false;
-    paiementForm.errors = {};
     showPaiementDialog.value = true;
 }
 
-function submitPaiement() {
-    if (!paiementForm.montant) return;
-    paiementForm.processing = true;
-    paiementForm.errors = {};
+function handlePaiementSubmit(payload: {
+    montant: number;
+    mode_paiement: string;
+}) {
+    paiementProcessing.value = true;
+    paiementErrors.value = {};
     router.post(
         `/comptabilite/commissions/vente/livreurs/${props.livreur.id}/paiements`,
-        {
-            montant: paiementForm.montant,
-            mode_paiement: paiementForm.mode_paiement,
-            note: paiementForm.note || null,
-        },
+        payload,
         {
             preserveScroll: true,
             onSuccess: () => {
                 showPaiementDialog.value = false;
             },
             onError: (e) => {
-                paiementForm.errors = e as Record<string, string>;
+                paiementErrors.value = e as Record<string, string>;
             },
             onFinish: () => {
-                paiementForm.processing = false;
+                paiementProcessing.value = false;
             },
         },
     );
 }
 
-const activeTab = ref<'informations' | 'paiements' | 'historique'>(
+const activeTab = ref<'informations' | 'depenses' | 'paiements' | 'historique'>(
     'informations',
 );
 
@@ -154,6 +152,25 @@ function fmt(val: number | null | undefined) {
 function formatMode(mode: string) {
     return props.modes_paiement.find((m) => m.value === mode)?.label ?? mode;
 }
+
+const statutDepenseVariant: Record<
+    string,
+    'default' | 'secondary' | 'destructive' | 'outline'
+> = {
+    brouillon: 'secondary',
+    soumis: 'outline',
+    valide: 'default',
+    rejete: 'destructive',
+    annule: 'destructive',
+};
+
+const statutDepenseColors: Record<string, string> = {
+    brouillon: '',
+    soumis: 'border-blue-400 text-blue-700',
+    valide: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+    rejete: 'bg-orange-100 text-orange-700 border-orange-300',
+    annule: '',
+};
 </script>
 
 <template>
@@ -182,7 +199,7 @@ function formatMode(mode: string) {
                             v-if="livreur.telephone"
                             class="text-sm text-muted-foreground"
                         >
-                            {{ livreur.telephone }}
+                            {{ formatPhoneDisplay(livreur.telephone) }}
                         </p>
                     </div>
                 </div>
@@ -195,6 +212,68 @@ function formatMode(mode: string) {
                         <HandCoins class="mr-1.5 h-4 w-4" />
                         Payer {{ fmt(resume_global.solde_global) }}
                     </Button>
+                </div>
+            </div>
+
+            <!-- KPIs globaux : visibles peu importe l'onglet actif -->
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                <div class="rounded-lg border bg-card p-4 text-center">
+                    <p class="text-base font-bold tabular-nums">
+                        {{ fmt(resume_global.total_brut_cumule) }}
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Brut cumulé
+                    </p>
+                </div>
+                <div class="rounded-lg border bg-card p-4 text-center">
+                    <p
+                        class="text-base font-bold text-red-600 tabular-nums dark:text-red-400"
+                    >
+                        {{
+                            resume_global.total_frais > 0
+                                ? '-' + fmt(resume_global.total_frais)
+                                : fmt(0)
+                        }}
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">Frais</p>
+                </div>
+                <div class="rounded-lg border bg-card p-4 text-center">
+                    <p class="text-base font-bold tabular-nums">
+                        {{ fmt(resume_global.total_net_cumule) }}
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Net à payer
+                    </p>
+                </div>
+                <div class="rounded-lg border bg-card p-4 text-center">
+                    <p
+                        class="text-base font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
+                    >
+                        {{ fmt(resume_global.total_verse) }}
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">Déjà payé</p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card p-4 text-center"
+                    :class="
+                        resume_global.solde_global > 0
+                            ? 'border-amber-200 dark:border-amber-900'
+                            : ''
+                    "
+                >
+                    <p
+                        class="text-base font-bold tabular-nums"
+                        :class="
+                            resume_global.solde_global > 0
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : ''
+                        "
+                    >
+                        {{ fmt(resume_global.solde_global) }}
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Reste à payer
+                    </p>
                 </div>
             </div>
 
@@ -211,6 +290,23 @@ function formatMode(mode: string) {
                     @click="activeTab = 'informations'"
                 >
                     Informations
+                </button>
+                <button
+                    type="button"
+                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    :class="
+                        activeTab === 'depenses'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="activeTab = 'depenses'"
+                >
+                    Dépenses
+                    <span
+                        v-if="depenses.length > 0"
+                        class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums"
+                        >{{ depenses.length }}</span
+                    >
                 </button>
                 <button
                     type="button"
@@ -244,70 +340,6 @@ function formatMode(mode: string) {
             </div>
 
             <template v-if="activeTab === 'informations'">
-                <!-- KPIs globaux -->
-                <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                    <div class="rounded-lg border bg-card p-4 text-center">
-                        <p class="text-base font-bold tabular-nums">
-                            {{ fmt(resume_global.total_brut_cumule) }}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Brut cumulé
-                        </p>
-                    </div>
-                    <div class="rounded-lg border bg-card p-4 text-center">
-                        <p
-                            class="text-base font-bold text-red-600 tabular-nums dark:text-red-400"
-                        >
-                            {{
-                                resume_global.total_frais > 0
-                                    ? '-' + fmt(resume_global.total_frais)
-                                    : fmt(0)
-                            }}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">Frais</p>
-                    </div>
-                    <div class="rounded-lg border bg-card p-4 text-center">
-                        <p class="text-base font-bold tabular-nums">
-                            {{ fmt(resume_global.total_net_cumule) }}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Net à payer
-                        </p>
-                    </div>
-                    <div class="rounded-lg border bg-card p-4 text-center">
-                        <p
-                            class="text-base font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
-                        >
-                            {{ fmt(resume_global.total_verse) }}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Déjà payé
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-lg border bg-card p-4 text-center"
-                        :class="
-                            resume_global.solde_global > 0
-                                ? 'border-amber-200 dark:border-amber-900'
-                                : ''
-                        "
-                    >
-                        <p
-                            class="text-base font-bold tabular-nums"
-                            :class="
-                                resume_global.solde_global > 0
-                                    ? 'text-amber-600 dark:text-amber-400'
-                                    : ''
-                            "
-                        >
-                            {{ fmt(resume_global.solde_global) }}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Reste à payer
-                        </p>
-                    </div>
-                </div>
-
                 <!-- Tableau commandes avec filtre période -->
                 <div
                     class="overflow-hidden rounded-xl border bg-card shadow-sm"
@@ -335,31 +367,6 @@ function formatMode(mode: string) {
                             class="w-full text-sm sm:w-64"
                             @change="changePeriode(periodeFiltre)"
                         />
-                    </div>
-
-                    <div
-                        v-if="periode_stats"
-                        class="border-b bg-blue-50/50 px-4 py-2 dark:bg-blue-950/20"
-                    >
-                        <p class="text-xs text-muted-foreground">
-                            {{ periode_stats.label }} — Net :
-                            <strong>{{
-                                fmt(periode_stats.total_commission)
-                            }}</strong>
-                            · Payé :
-                            <strong>{{
-                                fmt(periode_stats.total_verse)
-                            }}</strong>
-                            · Reste :
-                            <strong
-                                :class="
-                                    periode_stats.reste > 0
-                                        ? 'text-amber-600 dark:text-amber-400'
-                                        : ''
-                                "
-                                >{{ fmt(periode_stats.reste) }}</strong
-                            >
-                        </p>
                     </div>
 
                     <table
@@ -439,6 +446,106 @@ function formatMode(mode: string) {
                 </div>
             </template>
 
+            <template v-if="activeTab === 'depenses'">
+                <div
+                    class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                >
+                    <div class="border-b px-4 py-3">
+                        <h2 class="text-sm font-semibold">
+                            Dépenses imputées à ce livreur
+                        </h2>
+                    </div>
+                    <table v-if="depenses.length > 0" class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b bg-muted/40">
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Date
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-right font-medium text-muted-foreground"
+                                >
+                                    Montant
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-center font-medium text-muted-foreground"
+                                >
+                                    Statut
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Saisi par
+                                </th>
+                                <th
+                                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                                >
+                                    Validé par
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr
+                                v-for="d in depenses"
+                                :key="d.id"
+                                class="hover:bg-muted/10"
+                            >
+                                <td
+                                    class="px-4 py-3 text-xs text-muted-foreground"
+                                >
+                                    {{ d.date_depense ?? '—' }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right font-medium tabular-nums"
+                                >
+                                    {{ fmt(d.montant) }}
+                                </td>
+                                <td class="px-4 py-3 text-center">
+                                    <Badge
+                                        :variant="
+                                            statutDepenseVariant[d.statut] ??
+                                            'secondary'
+                                        "
+                                        :class="statutDepenseColors[d.statut]"
+                                    >
+                                        {{ d.statut_label }}
+                                    </Badge>
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-xs text-muted-foreground"
+                                >
+                                    {{ d.saisi_par ?? '—' }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-xs text-muted-foreground"
+                                >
+                                    <span v-if="d.validateur">
+                                        {{ d.validateur }}
+                                        <span
+                                            v-if="d.date_validation"
+                                            class="text-muted-foreground/60"
+                                        >
+                                            ({{ d.date_validation }})
+                                        </span>
+                                    </span>
+                                    <span v-else>—</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div
+                        v-else
+                        class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
+                    >
+                        <HandCoins class="h-10 w-10 opacity-30" />
+                        <p class="text-sm">
+                            Aucune dépense imputée à ce livreur.
+                        </p>
+                    </div>
+                </div>
+            </template>
+
             <template v-if="activeTab === 'paiements'">
                 <div class="rounded-xl border bg-card">
                     <div class="border-b px-4 py-3">
@@ -497,76 +604,12 @@ function formatMode(mode: string) {
         </div>
     </AppLayout>
 
-    <!-- Dialog paiement -->
-    <Dialog
+    <PaymentDialogCompact
         v-model:visible="showPaiementDialog"
-        modal
-        :style="{ width: '420px' }"
-        header="Enregistrer un paiement"
-    >
-        <div class="flex flex-col gap-4 py-2">
-            <div class="flex flex-col gap-1.5">
-                <Label>Montant (GNF)</Label>
-                <InputNumber
-                    v-model="paiementForm.montant"
-                    :min="1"
-                    :max="resume_global.solde_global"
-                    :use-grouping="true"
-                    class="w-full"
-                    input-class="w-full"
-                    suffix=" GNF"
-                    locale="fr-FR"
-                    autofocus
-                />
-                <p
-                    v-if="paiementForm.errors.montant"
-                    class="text-xs text-destructive"
-                >
-                    {{ paiementForm.errors.montant }}
-                </p>
-                <p class="text-xs text-muted-foreground">
-                    Disponible : {{ fmt(resume_global.solde_global) }}
-                </p>
-            </div>
-            <div class="flex flex-col gap-1.5">
-                <Label>Mode de paiement</Label>
-                <Dropdown
-                    v-model="paiementForm.mode_paiement"
-                    :options="modes_paiement"
-                    option-label="label"
-                    option-value="value"
-                    class="w-full text-sm"
-                />
-            </div>
-            <div class="flex flex-col gap-1.5">
-                <Label>Note (optionnel)</Label>
-                <textarea
-                    v-model="paiementForm.note"
-                    rows="2"
-                    class="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
-                />
-            </div>
-        </div>
-        <template #footer>
-            <div class="flex justify-end gap-2">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    @click="showPaiementDialog = false"
-                    >Annuler</Button
-                >
-                <Button
-                    size="sm"
-                    :disabled="paiementForm.processing || !paiementForm.montant"
-                    @click="submitPaiement"
-                >
-                    {{
-                        paiementForm.processing
-                            ? 'Enregistrement…'
-                            : 'Confirmer'
-                    }}
-                </Button>
-            </div>
-        </template>
-    </Dialog>
+        :title="`Payer — ${livreur.nom}`"
+        :solde="resume_global.solde_global"
+        :processing="paiementProcessing"
+        :errors="paiementErrors"
+        @submit="handlePaiementSubmit"
+    />
 </template>
