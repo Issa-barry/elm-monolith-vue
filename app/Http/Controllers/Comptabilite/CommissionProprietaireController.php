@@ -178,8 +178,8 @@ class CommissionProprietaireController extends Controller
         $vehiculesParProprio = $partsParProprio->map(fn ($parts) => $parts
             ->pluck('commission.vehicule')
             ->filter()->unique('id')
-            ->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))
-            ->values()->implode(', ')
+            ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+            ->values()
         );
 
         $agencesParProprio = $partsParProprio->map(fn ($parts) => $parts
@@ -189,7 +189,7 @@ class CommissionProprietaireController extends Controller
 
         $list = $list->map(function ($b) use ($vehiculesParProprio, $agencesParProprio) {
             return array_merge($b, [
-                'vehicules' => $vehiculesParProprio[$b['beneficiaire_id']] ?: null,
+                'vehicules' => $vehiculesParProprio[$b['beneficiaire_id']]?->values()->all() ?? [],
                 'agence' => $agencesParProprio[$b['beneficiaire_id']] ?: null,
             ]);
         })->values();
@@ -432,7 +432,7 @@ class CommissionProprietaireController extends Controller
                 fputcsv($handle, [
                     $row['beneficiaire_nom'],
                     $row['telephone'] ?? '',
-                    $row['vehicules'] ?? '',
+                    self::vehiculesEnTexte($row['vehicules'] ?? []),
                     $row['agence'] ?? '',
                     $periodeLabel,
                     number_format((float) $row['total_cumule'], 0, ',', ' '),
@@ -482,6 +482,7 @@ class CommissionProprietaireController extends Controller
         $query = CommissionPart::with([
             'commission.commande.site:id,nom',
             'commission.vehicule:id,nom_vehicule,immatriculation',
+            'proprietaire:id,telephone',
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'proprietaire')
@@ -526,13 +527,6 @@ class CommissionProprietaireController extends Controller
                     $motifsParProprio[(string) $proprioId] = $proprioDeps
                         ->pluck('depenseType.libelle')->filter()->unique()->implode(', ');
                 }
-
-                // Build vehicules map per proprietaire
-                foreach ($vehiculesByProprio as $proprioId => $vehicules) {
-                    $vehiculesByProprio[(string) $proprioId] = $vehicules
-                        ->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))
-                        ->implode(', ');
-                }
             }
         }
 
@@ -551,8 +545,8 @@ class CommissionProprietaireController extends Controller
 
             $vehicules = $propParts->pluck('commission.vehicule')
                 ->filter()->unique('id')
-                ->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))
-                ->implode(', ');
+                ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+                ->values();
 
             $agence = $propParts->pluck('commission.commande.site.nom')
                 ->filter()->unique()->sort()->implode(', ');
@@ -577,8 +571,8 @@ class CommissionProprietaireController extends Controller
             return [
                 'beneficiaire_id' => $proprioId,
                 'beneficiaire_nom' => $first->beneficiaire_nom ?? '—',
-                'telephone' => $first->telephone ?? null,
-                'vehicules' => $vehicules ?: null,
+                'telephone' => $first->proprietaire?->telephone,
+                'vehicules' => $vehicules->all(),
                 'agence' => $agence ?: null,
                 'periode' => $periodeLabel,
                 'total_cumule' => $totalBrut,
@@ -630,6 +624,15 @@ class CommissionProprietaireController extends Controller
         return $grouped->isEmpty()
             ? [['site_nom' => null, 'rows' => [], 'totaux' => ['total_cumule' => 0, 'total_frais' => 0, 'total_deja_paye' => 0, 'total_reste' => 0]]]
             : $grouped->values()->toArray();
+    }
+
+    /** @param  array<int, array{nom: string, immatriculation: ?string}>  $vehicules */
+    private static function vehiculesEnTexte(array $vehicules): string
+    {
+        return implode(' / ', array_map(
+            fn ($v) => trim($v['nom'].($v['immatriculation'] ? ' '.$v['immatriculation'] : '')),
+            $vehicules
+        ));
     }
 
     private static function periodesProprietaireBetween(Carbon $from, Carbon $to): array

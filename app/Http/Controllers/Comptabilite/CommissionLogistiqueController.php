@@ -127,8 +127,8 @@ class CommissionLogistiqueController extends Controller
         $vehiculesParLivreur = $partsParLivreur->map(fn ($parts) => $parts
             ->pluck('commission.vehicule')
             ->filter()->unique('id')
-            ->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))
-            ->values()->implode(' ')
+            ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+            ->values()
         );
 
         $agencesParLivreur = $partsParLivreur->map(fn ($parts) => $parts
@@ -144,7 +144,7 @@ class CommissionLogistiqueController extends Controller
                 'livreur_id' => $row->livreur_id,
                 'nom' => $row->beneficiaire_nom,
                 'telephone' => $telephones[$row->livreur_id] ?? null,
-                'vehicules' => $vehiculesParLivreur[$row->livreur_id] ?? null,
+                'vehicules' => $vehiculesParLivreur[$row->livreur_id]?->values()->all() ?? [],
                 'agence' => $agencesParLivreur[$row->livreur_id] ?? null,
                 'frais_depenses' => $frais,
                 'impaye' => $impaye,
@@ -377,7 +377,7 @@ class CommissionLogistiqueController extends Controller
                 fputcsv($handle, [
                     $row['beneficiaire_nom'],
                     $row['telephone'] ?? '',
-                    $row['vehicules'] ?? '',
+                    self::vehiculesEnTexte($row['vehicules'] ?? []),
                     $row['agence'] ?? '',
                     $periodeLabel,
                     number_format((float) $row['total_cumule'], 0, ',', ' '),
@@ -460,8 +460,8 @@ class CommissionLogistiqueController extends Controller
 
             $vehicules = $livParts->pluck('commission.vehicule')
                 ->filter()->unique('id')
-                ->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))
-                ->implode(', ');
+                ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+                ->values();
 
             $agence = $livParts->pluck('commission.transfert.siteSource.nom')
                 ->filter()->unique()->sort()->implode(', ');
@@ -487,7 +487,7 @@ class CommissionLogistiqueController extends Controller
                 'beneficiaire_id' => $first->livreur_id,
                 'beneficiaire_nom' => $first->beneficiaire_nom ?? '—',
                 'telephone' => $first->livreur?->telephone,
-                'vehicules' => $vehicules ?: null,
+                'vehicules' => $vehicules->all(),
                 'agence' => $agence ?: null,
                 'periode' => $periodeLabel,
                 'total_cumule' => $totalBrut,
@@ -549,5 +549,14 @@ class CommissionLogistiqueController extends Controller
             'autre' => 'Autre',
             default => (string) $type,
         };
+    }
+
+    /** @param  array<int, array{nom: string, immatriculation: ?string}>  $vehicules */
+    private static function vehiculesEnTexte(array $vehicules): string
+    {
+        return implode(' / ', array_map(
+            fn ($v) => trim($v['nom'].($v['immatriculation'] ? ' '.$v['immatriculation'] : '')),
+            $vehicules
+        ));
     }
 }

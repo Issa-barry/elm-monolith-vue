@@ -7,6 +7,7 @@ use App\Enums\ModePaiement;
 use App\Enums\StatutCommission;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionPart;
+use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PaiementCommissionVente;
@@ -110,8 +111,8 @@ class CommissionVenteController extends Controller
 
         $vehiculesParLivreur = $partsParLivreur->map(fn ($parts) => $parts
             ->pluck('commission.vehicule')->filter()->unique('id')
-            ->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))
-            ->implode(', ')
+            ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+            ->values()
         );
 
         $beneficiaires = $rows->map(function ($row) use ($agencesParLivreur, $vehiculesParLivreur, $fraisDepensesParLivreur) {
@@ -129,7 +130,7 @@ class CommissionVenteController extends Controller
                 'beneficiaire_nom' => $row->beneficiaire_nom ?? '—',
                 'telephone' => $row->telephone,
                 'agence' => $agencesParLivreur->get($livreurId),
-                'vehicules' => $vehiculesParLivreur->get($livreurId) ?: null,
+                'vehicules' => $vehiculesParLivreur->get($livreurId, collect())->values()->all(),
                 'total_brut_cumule' => $resume['brut'],
                 'total_frais' => $resume['frais'],
                 'total_net_cumule' => $resume['net'],
@@ -300,6 +301,24 @@ class CommissionVenteController extends Controller
                 'created_by' => $p->creator?->name,
             ]);
 
+        $depenses = Depense::with(['user', 'validateur'])
+            ->where('organization_id', $orgId)
+            ->where('beneficiaire_type', 'livreur')
+            ->where('beneficiaire_id', $livreurId)
+            ->orderByDesc('date_depense')
+            ->get()
+            ->map(fn (Depense $d) => [
+                'id' => $d->id,
+                'date_depense' => $d->date_depense?->format(self::DATE_FORMAT),
+                'montant' => (float) $d->montant,
+                'statut' => $d->statut->value,
+                'statut_label' => $d->statut->label(),
+                'saisi_par' => $d->user?->name,
+                'validateur' => $d->validateur?->name,
+                'date_validation' => $d->date_validation?->format(self::DATE_FORMAT),
+                'commentaire' => $d->commentaire,
+            ]);
+
         return Inertia::render('Comptabilite/CommissionVente/Livreur/Show', [
             'livreur' => [
                 'id' => $livreurId,
@@ -315,6 +334,7 @@ class CommissionVenteController extends Controller
             ],
             'historique_commandes' => $historiqueCommandes,
             'historique_paiements' => $historiquePaiements,
+            'depenses' => $depenses,
             'modes_paiement' => ModePaiement::options(),
             'periode_courante' => $periodeCourante,
             'periode_courante_label' => PeriodeComptableService::labelForCode($periodeCourante),
@@ -391,7 +411,7 @@ class CommissionVenteController extends Controller
                 fputcsv($handle, [
                     $row['beneficiaire_nom'],
                     $row['telephone'] ?? '',
-                    $row['vehicules'] ?? '',
+                    self::vehiculesEnTexte($row['vehicules'] ?? []),
                     $row['agence'] ?? '',
                     $periodeLabel,
                     number_format((float) $row['total_cumule'], 0, ',', ' '),
@@ -446,6 +466,7 @@ class CommissionVenteController extends Controller
         $query = CommissionPart::with([
             'commission.commande.site:id,nom',
             'commission.vehicule:id,nom_vehicule,immatriculation',
+            'livreur:id,telephone',
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')
@@ -474,8 +495,8 @@ class CommissionVenteController extends Controller
 
             $vehicules = $livParts->pluck('commission.vehicule')
                 ->filter()->unique('id')
-                ->map(fn ($v) => $v->nom_vehicule.($v->immatriculation ? ' '.$v->immatriculation : ''))
-                ->implode(', ');
+                ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+                ->values();
 
             $agence = $livParts->pluck('commission.commande.site.nom')
                 ->filter()->unique()->sort()->implode(', ');
@@ -497,8 +518,8 @@ class CommissionVenteController extends Controller
             return [
                 'beneficiaire_id' => $first->livreur_id,
                 'beneficiaire_nom' => $first->beneficiaire_nom ?? '—',
-                'telephone' => $first->telephone ?? null,
-                'vehicules' => $vehicules ?: null,
+                'telephone' => $first->livreur?->telephone,
+                'vehicules' => $vehicules->all(),
                 'agence' => $agence ?: null,
                 'periode' => $periodeLabel,
                 'total_cumule' => $resume['brut'],
@@ -560,5 +581,14 @@ class CommissionVenteController extends Controller
             'autre' => 'Autre',
             default => (string) $type,
         };
+    }
+
+    /** @param  array<int, array{nom: string, immatriculation: ?string}>  $vehicules */
+    private static function vehiculesEnTexte(array $vehicules): string
+    {
+        return implode(' / ', array_map(
+            fn ($v) => trim($v['nom'].($v['immatriculation'] ? ' '.$v['immatriculation'] : '')),
+            $vehicules
+        ));
     }
 }

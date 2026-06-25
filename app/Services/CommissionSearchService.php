@@ -60,7 +60,7 @@ class CommissionSearchService
      * at least one field (name, vehicle, phone, amount, or statut keyword).
      * Multi-word search uses AND logic across tokens, OR across fields.
      *
-     * @param  array{nom:string,telephone:?string,vehicules:?string,impaye:float,paye:float}  $livreur
+     * @param  array{nom:string,telephone:?string,vehicules:array<int, array{nom:string,immatriculation:?string}>,impaye:float,paye:float}  $livreur
      */
     public static function matches(array $livreur, string $search): bool
     {
@@ -98,10 +98,19 @@ class CommissionSearchService
         // "GNF" est un suffixe monétaire neutre : ne bloque pas le AND
         return $normToken === 'gnf'
             || self::matchesText((string) ($l['nom'] ?? ''), $normToken)
-            || (! empty($l['vehicules']) && self::matchesText((string) $l['vehicules'], $normToken))
+            || self::matchesText(self::vehiculesText($l['vehicules'] ?? []), $normToken)
             || self::matchesPhone($l, $token)
             || self::matchesAmount($l, $token)
             || self::matchesStatut($l, $normToken);
+    }
+
+    /** @param  array<int, array{nom:string,immatriculation:?string}>  $vehicules */
+    private static function vehiculesText(array $vehicules): string
+    {
+        return implode(' ', array_map(
+            fn ($v) => trim(($v['nom'] ?? '').' '.($v['immatriculation'] ?? '')),
+            $vehicules
+        ));
     }
 
     private static function matchesText(string $haystack, string $normToken): bool

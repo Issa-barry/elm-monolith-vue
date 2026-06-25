@@ -50,10 +50,16 @@ body {
     flex-wrap: wrap;
     gap: 4pt 16pt;
     margin-bottom: 8pt;
+    padding-left: 6pt;
     font-size: 8pt;
     color: #333;
 }
 .meta-row b { color: #000; }
+
+/* ── Véhicule(s) : nom puis immatriculation en dessous ────────────── */
+.veh-item { margin-bottom: 3pt; }
+.veh-item:last-child { margin-bottom: 0; }
+.veh-immat { display: block; font-size: 7pt; color: #555; }
 
 /* ── En-tête ──────────────────────────────────────────────────────── */
 .header {
@@ -95,6 +101,7 @@ body {
     font-size: 7.5pt;
     text-align: right;
     line-height: 1.7;
+    padding-right: 6pt;
 }
 .header-right strong { font-weight: 700; }
 
@@ -157,15 +164,6 @@ tbody td.center { text-align: center; }
     padding: 4pt 6pt;
 }
 .total-row td.right { text-align: right; padding-right: 8pt; }
-
-
-/* ── Ligne signature ──────────────────────────────────────────────── */
-.sig-line {
-    display: block;
-    border-bottom: 0.75pt solid #555;
-    height: 18pt;
-    width: 100%;
-}
 </style>
 </head>
 <body>
@@ -245,14 +243,25 @@ tbody td.center { text-align: center; }
             <tr>
                 <td class="col-ben"><strong>{{ $row['beneficiaire_nom'] }}</strong></td>
                 <td class="col-tel center">{{ $row['telephone'] ?? '—' }}</td>
-                <td class="col-veh">{{ $row['vehicules'] ?? '—' }}</td>
+                <td class="col-veh">
+                    @forelse($row['vehicules'] ?? [] as $vehicule)
+                    <div class="veh-item">
+                        {{ $vehicule['nom'] }}
+                        @if($vehicule['immatriculation'])
+                        <span class="veh-immat">{{ $vehicule['immatriculation'] }}</span>
+                        @endif
+                    </div>
+                    @empty
+                    —
+                    @endforelse
+                </td>
                 <td class="col-cum right">{{ number_format((float) $row['total_cumule'], 0, ',', "\xc2\xa0") }}</td>
                 <td class="col-fra right">{{ $row['frais'] > 0 ? number_format((float) $row['frais'], 0, ',', "\xc2\xa0") : '—' }}</td>
                 <td class="col-mot">{{ $row['motifs_frais'] ?? '—' }}</td>
                 <td class="col-pay right">{{ number_format((float) $row['deja_paye'], 0, ',', "\xc2\xa0") }}</td>
                 <td class="col-res right">{{ $row['reste'] > 0 ? number_format((float) $row['reste'], 0, ',', "\xc2\xa0") : '—' }}</td>
                 <td class="col-sta center">{{ $row['statut'] ?? '—' }}</td>
-                <td class="col-sig"><span class="sig-line"></span></td>
+                <td class="col-sig"></td>
             </tr>
             @empty
             <tr>

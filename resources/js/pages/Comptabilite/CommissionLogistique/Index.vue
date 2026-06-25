@@ -27,11 +27,16 @@ import {
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
+interface VehiculeInfo {
+    nom: string;
+    immatriculation: string | null;
+}
+
 interface LivreurRow {
     livreur_id: string;
     nom: string;
     telephone: string | null;
-    vehicules: string | null;
+    vehicules: VehiculeInfo[];
     agence: string | null;
     frais_depenses: number;
     impaye: number;
@@ -411,11 +416,25 @@ function fmtTel(tel: string | null | undefined): string {
                                 </td>
                                 <td class="px-5 py-3">
                                     <div
-                                        v-if="l.vehicules"
-                                        class="flex items-center gap-1.5 text-sm text-muted-foreground"
+                                        v-if="l.vehicules.length"
+                                        class="flex items-start gap-1.5 text-sm text-muted-foreground"
                                     >
-                                        <Truck class="h-3.5 w-3.5 shrink-0" />
-                                        <span>{{ l.vehicules }}</span>
+                                        <Truck
+                                            class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                                        />
+                                        <div>
+                                            <div
+                                                v-for="(v, idx) in l.vehicules"
+                                                :key="idx"
+                                            >
+                                                <span>{{ v.nom }}</span>
+                                                <span
+                                                    v-if="v.immatriculation"
+                                                    class="block text-xs text-muted-foreground/80"
+                                                    >{{ v.immatriculation }}</span
+                                                >
+                                            </div>
+                                        </div>
                                     </div>
                                     <span
                                         v-else
