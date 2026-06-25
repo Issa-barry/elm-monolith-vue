@@ -58,13 +58,6 @@ class ParametreSeeder extends Seeder
             'groupe' => Parametre::GROUPE_CASHBACK,
             'description' => 'Montant du cashback verse en cash au client lors du franchissement du seuil (GNF)',
         ],
-        [
-            'cle' => Parametre::CLE_VENTES_COMMISSION_MODE,
-            'valeur' => Parametre::COMMISSION_MODE_COMMANDE_VALIDEE,
-            'type' => Parametre::TYPE_STRING,
-            'groupe' => Parametre::GROUPE_VENTES,
-            'description' => 'Moment de generation des commissions de vente',
-        ],
     ];
 
     public function run(): void

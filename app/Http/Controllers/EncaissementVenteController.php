@@ -8,12 +8,10 @@ use App\Features\ModuleFeature;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\Organization;
-use App\Models\Parametre;
 use App\Services\AuditLogService;
 use App\Services\CashbackService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
-use App\Services\CommissionGenerator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -92,29 +90,12 @@ class EncaissementVenteController extends Controller
         // Auto-clôture si LIVREE + facture payée + commissions versées.
         $commande?->cloturerSiComplete();
 
-        // Hooks de transition vers facture payee.
+        // Cashback: declenche uniquement quand la facture passe a "payee".
         if (! $etaitPayee && $estPayeeMaintenant) {
-            if ($commande && $commande->organization_id) {
-                $modeCommission = Parametre::getVentesCommissionMode($commande->organization_id);
-
-                if ($modeCommission === Parametre::COMMISSION_MODE_FACTURE_PAYEE) {
-                    $commande->loadMissing('vehicule');
-
-                    if ($commande->vehicule_id && $commande->vehicule) {
-                        CommissionGenerator::generateForCommandeIfMissing(
-                            $commande,
-                            null,
-                            Parametre::COMMISSION_MODE_FACTURE_PAYEE
-                        );
-                    }
-                }
-
-                // Cashback: declenche uniquement quand la facture passe a "payee".
-                if ($commande->client_id) {
-                    $org = Organization::find($commande->organization_id);
-                    if ($org && Feature::for($org)->active(ModuleFeature::CASHBACK)) {
-                        app(CashbackService::class)->processVente($commande);
-                    }
+            if ($commande && $commande->organization_id && $commande->client_id) {
+                $org = Organization::find($commande->organization_id);
+                if ($org && Feature::for($org)->active(ModuleFeature::CASHBACK)) {
+                    app(CashbackService::class)->processVente($commande);
                 }
             }
         }

@@ -65,7 +65,7 @@ class CommissionVenteIndexTest extends TestCase
             );
     }
 
-    public function test_index_livreurs_affiche_uniquement_la_part_principale(): void
+    public function test_index_livreurs_affiche_chauffeur_et_convoyeur(): void
     {
         $livreur1 = Livreur::factory()->create(['organization_id' => $this->org->id]);
         $livreur2 = Livreur::factory()->create(['organization_id' => $this->org->id]);
@@ -81,9 +81,14 @@ class CommissionVenteIndexTest extends TestCase
             ->get(route('commissions.index', ['tab' => 'livreurs', 'periode' => 'all']))
             ->assertStatus(200)
             ->assertInertia(fn ($page) => $page
-                ->has('beneficiaires', 1)
+                ->has('beneficiaires', 2)
                 ->where('beneficiaires.0.type_beneficiaire', 'livreur')
-                ->where('beneficiaires.0.beneficiaire_nom', 'Oumar CAMARA')
+                ->where('beneficiaires.1.type_beneficiaire', 'livreur')
+                ->where(
+                    'beneficiaires',
+                    fn ($beneficiaires) => collect($beneficiaires)->pluck('beneficiaire_nom')->sort()->values()->all()
+                        === ['Abdoulaye SYLLA', 'Oumar CAMARA']
+                )
             );
     }
 

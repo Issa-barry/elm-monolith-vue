@@ -62,7 +62,6 @@ class VenteParametrageTest extends TestCase
 
         $this->actingAs($user)
             ->put(route('settings.ventes.update'), [
-                'commission_generation_mode' => Parametre::COMMISSION_MODE_COMMANDE_VALIDEE,
                 'quantity_edit_role_names' => [],
                 'price_edit_role_names' => ['commerciale'],
                 'autoriser_saisie_dessous_qte_max' => true,
@@ -99,7 +98,6 @@ class VenteParametrageTest extends TestCase
 
         $this->actingAs($user)
             ->put(route('settings.ventes.update'), [
-                'commission_generation_mode' => Parametre::COMMISSION_MODE_COMMANDE_VALIDEE,
                 'quantity_edit_role_names' => [],
                 'price_edit_role_names' => [],
                 'autoriser_saisie_dessous_qte_max' => false,
@@ -122,7 +120,6 @@ class VenteParametrageTest extends TestCase
 
         $this->actingAs($user)
             ->put(route('settings.ventes.update'), [
-                'commission_generation_mode' => Parametre::COMMISSION_MODE_COMMANDE_VALIDEE,
                 'quantity_edit_role_names' => [],
                 'price_edit_role_names' => [],
                 'autoriser_saisie_dessous_qte_max' => true,
@@ -142,7 +139,6 @@ class VenteParametrageTest extends TestCase
 
         $this->actingAs($user)
             ->put(route('settings.ventes.update'), [
-                'commission_generation_mode' => Parametre::COMMISSION_MODE_COMMANDE_VALIDEE,
                 'quantity_edit_role_names' => [],
                 'price_edit_role_names' => [],
                 // autoriser_saisie_dessous_qte_max absent intentionnellement

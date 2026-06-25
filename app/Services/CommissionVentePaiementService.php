@@ -35,7 +35,7 @@ class CommissionVentePaiementService
         }
 
         $parts = self::partsDisponibles($organizationId, $type, $beneficiaireId);
-        $totalDisponible = $parts->sum(fn ($p) => max(0.0, (float) $p->montant_net - (float) $p->montant_verse));
+        $totalDisponible = self::totalDisponible($organizationId, $type, $beneficiaireId, $parts);
 
         if ($montant > $totalDisponible + 0.009) { // tolérance arrondi flottant
             throw new InvalidArgumentException(
@@ -133,11 +133,24 @@ class CommissionVentePaiementService
     }
 
     /**
-     * Calcule le total disponible maintenant pour un bénéficiaire.
+     * Calcule le total disponible maintenant pour un bénéficiaire, net des frais
+     * (Depense validées) déjà déduits dans l'index/le détail — pour ne jamais
+     * autoriser un paiement supérieur au "reste à payer" affiché à l'écran.
      */
-    public static function totalDisponible(string $organizationId, string $type, string $beneficiaireId): float
-    {
-        return (float) self::partsDisponibles($organizationId, $type, $beneficiaireId)
-            ->sum(fn ($p) => max(0.0, (float) $p->montant_net - (float) $p->montant_verse));
+    public static function totalDisponible(
+        string $organizationId,
+        string $type,
+        string $beneficiaireId,
+        ?Collection $parts = null
+    ): float {
+        $parts ??= self::partsDisponibles($organizationId, $type, $beneficiaireId);
+
+        $totalParts = (float) $parts->sum(fn ($p) => max(0.0, (float) $p->montant_net - (float) $p->montant_verse));
+
+        $fraisDepenses = $type === 'livreur'
+            ? CommissionVenteCalculatorService::fraisDepenseLivreur($organizationId, $beneficiaireId)
+            : 0.0;
+
+        return max(0.0, $totalParts - $fraisDepenses);
     }
 }

@@ -10,11 +10,8 @@ use Illuminate\Support\Facades\Log;
 
 class CommissionGenerator
 {
-    public static function generateForCommandeIfMissing(
-        CommandeVente $commande,
-        ?string $factureId = null,
-        string $trigger = 'facture_payee'
-    ): void {
+    public static function generateForCommandeIfMissing(CommandeVente $commande): void
+    {
         $commande->loadMissing([
             'lignes',
             'vehicule.equipe.membres.livreur',
@@ -34,8 +31,6 @@ class CommissionGenerator
         } catch (\InvalidArgumentException $e) {
             Log::warning('Commission non generee : '.$e->getMessage(), [
                 'commande_id' => $commande->id,
-                'facture_id' => $factureId,
-                'trigger' => $trigger,
             ]);
 
             return;
@@ -43,7 +38,8 @@ class CommissionGenerator
 
         $vehicule = $commande->vehicule;
 
-        // Commandes déjà en livraison (ex : mode FACTURE_PAYEE) → activer directement.
+        // Sécurité : si la commande est déjà encaissable (legacy / appel hors workflow normal),
+        // on active directement plutôt que de créer une commission qui resterait bloquée à CREEE.
         $statutInitial = $commande->isEncaissable() ? StatutCommission::IMPAYE : StatutCommission::CREEE;
 
         $commission = CommissionVente::create([
