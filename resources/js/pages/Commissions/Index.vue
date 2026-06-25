@@ -266,7 +266,8 @@ function detailUrl(b: BeneficiaireRow): string {
     return `/commissions/beneficiaires/${b.type_beneficiaire}/${b.beneficiaire_id}`;
 }
 
-const { onRowClick, bodyRowPt } = useClickableTableRow<BeneficiaireRow>(detailUrl);
+const { onRowClick, bodyRowPt } =
+    useClickableTableRow<BeneficiaireRow>(detailUrl);
 </script>
 
 <template>
