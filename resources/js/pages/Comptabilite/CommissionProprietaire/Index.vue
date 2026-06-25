@@ -439,7 +439,9 @@ function fmtTel(tel: string | null | undefined): string {
                                                 <span
                                                     v-if="v.immatriculation"
                                                     class="block text-xs text-muted-foreground/80"
-                                                    >{{ v.immatriculation }}</span
+                                                    >{{
+                                                        v.immatriculation
+                                                    }}</span
                                                 >
                                             </div>
                                         </div>
@@ -572,7 +574,9 @@ function fmtTel(tel: string | null | undefined): string {
     <PaymentDialogCompact
         v-model:visible="showPaiementDialog"
         :title="
-            selectedBenef ? `Payer — ${selectedBenef.beneficiaire_nom}` : 'Payer'
+            selectedBenef
+                ? `Payer — ${selectedBenef.beneficiaire_nom}`
+                : 'Payer'
         "
         :solde="selectedBenef?.solde_restant ?? 0"
         :processing="paiementProcessing"

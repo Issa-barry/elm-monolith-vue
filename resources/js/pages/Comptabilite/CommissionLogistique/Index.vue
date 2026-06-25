@@ -428,7 +428,9 @@ function fmtTel(tel: string | null | undefined): string {
                                                 <span
                                                     v-if="v.immatriculation"
                                                     class="block text-xs text-muted-foreground/80"
-                                                    >{{ v.immatriculation }}</span
+                                                    >{{
+                                                        v.immatriculation
+                                                    }}</span
                                                 >
                                             </div>
                                         </div>

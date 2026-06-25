@@ -138,9 +138,9 @@ function handlePaiementSubmit(payload: {
     );
 }
 
-const activeTab = ref<
-    'informations' | 'depenses' | 'paiements' | 'historique'
->('informations');
+const activeTab = ref<'informations' | 'depenses' | 'paiements' | 'historique'>(
+    'informations',
+);
 
 function fmt(val: number | null | undefined) {
     return (
@@ -251,9 +251,7 @@ const statutDepenseColors: Record<string, string> = {
                     >
                         {{ fmt(resume_global.total_verse) }}
                     </p>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        Déjà payé
-                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">Déjà payé</p>
                 </div>
                 <div
                     class="rounded-lg border bg-card p-4 text-center"
@@ -370,7 +368,6 @@ const statutDepenseColors: Record<string, string> = {
                             @change="changePeriode(periodeFiltre)"
                         />
                     </div>
-
 
                     <table
                         v-if="historique_commandes.length > 0"
