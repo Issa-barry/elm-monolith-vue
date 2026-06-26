@@ -33,6 +33,7 @@ import {
     ChevronLeft,
     ChevronRight,
     Download,
+    ExternalLink,
     Eye,
     History,
     MoreHorizontal,
@@ -550,11 +551,6 @@ const categorieColors: Record<string, string> = {
                                 Saisi par
                             </th>
                             <th
-                                class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground xl:table-cell"
-                            >
-                                Validé par
-                            </th>
-                            <th
                                 class="px-4 py-2.5 text-right font-medium text-muted-foreground"
                             >
                                 Actions
@@ -606,13 +602,16 @@ const categorieColors: Record<string, string> = {
                                         d.beneficiaire_type !== 'vehicule'
                                     "
                                     type="button"
-                                    class="group text-left"
+                                    class="text-left"
                                     @click="openConcerneDialog(d)"
                                 >
                                     <div
-                                        class="font-medium group-hover:underline"
+                                        class="flex items-center gap-1 font-medium hover:underline"
                                     >
                                         {{ d.beneficiaire_label ?? '—' }}
+                                        <ExternalLink
+                                            class="h-3 w-3 shrink-0 text-primary"
+                                        />
                                     </div>
                                     <div
                                         v-if="d.beneficiaire_telephone"
@@ -647,13 +646,16 @@ const categorieColors: Record<string, string> = {
                                 <button
                                     v-if="d.vehicule_id"
                                     type="button"
-                                    class="group text-left"
+                                    class="text-left"
                                     @click="openVehiculeDialog(d)"
                                 >
                                     <div
-                                        class="text-sm font-medium group-hover:underline"
+                                        class="flex items-center gap-1 text-sm font-medium hover:underline"
                                     >
                                         {{ d.vehicule_nom ?? '—' }}
+                                        <ExternalLink
+                                            class="h-3 w-3 shrink-0 text-primary"
+                                        />
                                     </div>
                                     <div
                                         v-if="d.vehicule_immatriculation"
@@ -700,13 +702,6 @@ const categorieColors: Record<string, string> = {
                                 class="hidden px-4 py-3 text-xs text-muted-foreground xl:table-cell"
                             >
                                 {{ d.user.name }}
-                            </td>
-
-                            <!-- Validé par -->
-                            <td
-                                class="hidden px-4 py-3 text-xs text-muted-foreground xl:table-cell"
-                            >
-                                {{ d.validateur?.name ?? '—' }}
                             </td>
 
                             <!-- Actions -->
@@ -835,7 +830,7 @@ const categorieColors: Record<string, string> = {
 
                         <tr v-if="depenses.data.length === 0">
                             <td
-                                colspan="10"
+                                colspan="9"
                                 class="px-4 py-16 text-center text-sm text-muted-foreground"
                             >
                                 <div class="flex flex-col items-center gap-3">

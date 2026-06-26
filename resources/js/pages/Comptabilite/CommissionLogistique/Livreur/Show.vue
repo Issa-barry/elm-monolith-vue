@@ -8,6 +8,8 @@ import CommissionPaymentDialog from '@/components/commission/CommissionPaymentDi
 import CommissionPaymentsTable from '@/components/commission/CommissionPaymentsTable.vue';
 import CommissionPeriodSelect from '@/components/commission/CommissionPeriodSelect.vue';
 import CommissionSummaryCards from '@/components/commission/CommissionSummaryCards.vue';
+import CommissionVehiculeSelect from '@/components/commission/CommissionVehiculeSelect.vue';
+import { useCommissionVehiculeFilter } from '@/composables/useCommissionVehiculeFilter';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
@@ -21,7 +23,7 @@ import type {
     PeriodeOption,
 } from '@/types/commission';
 import { Head, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps<{
     livreur: { id: string; nom: string; telephone: string | null };
@@ -62,6 +64,9 @@ function changePeriode(code: string) {
 
 const activeTab = ref<CommissionDetailTab>('informations');
 const showPaiementDialog = ref(false);
+
+const { vehiculeOptions, selectedVehicules, filteredRows } =
+    useCommissionVehiculeFilter(computed(() => props.commission_details));
 </script>
 
 <template>
@@ -103,16 +108,32 @@ const showPaiementDialog = ref(false);
                             </h2>
                             <span
                                 class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums"
-                                >{{ commission_details.length }}</span
+                                >{{ filteredRows.length }}</span
                             >
                         </div>
-                        <CommissionPeriodSelect
-                            v-model="periodeFiltre"
-                            :periodes-disponibles="periodes_disponibles"
-                            @update:model-value="changePeriode"
-                        />
+                        <div class="flex flex-wrap items-center gap-2">
+                            <CommissionVehiculeSelect
+                                v-if="vehiculeOptions.length > 1"
+                                v-model="selectedVehicules"
+                                :options="vehiculeOptions"
+                            />
+                            <div class="w-full sm:w-64">
+                                <CommissionPeriodSelect
+                                    v-model="periodeFiltre"
+                                    :periodes-disponibles="periodes_disponibles"
+                                    @update:model-value="changePeriode"
+                                />
+                            </div>
+                        </div>
                     </div>
-                    <CommissionDetailTable :rows="commission_details" />
+                    <CommissionDetailTable
+                        :rows="filteredRows"
+                        :empty-message="
+                            selectedVehicules.length > 0
+                                ? 'Aucune ligne pour ce véhicule.'
+                                : undefined
+                        "
+                    />
                 </div>
             </template>
 

@@ -213,7 +213,12 @@
                         <br><small style="color:#555; font-size:7px;">{{ $row['type']['categorie_label'] }}</small>
                         @endif
                     </td>
-                    <td>{{ $row['beneficiaire_label'] ?? '—' }}</td>
+                    <td>
+                        {{ $row['beneficiaire_label'] ?? '—' }}
+                        @if(!empty($row['beneficiaire_telephone']))
+                        <br><small style="color:#555; font-size:7px;">{{ $row['beneficiaire_telephone'] }}</small>
+                        @endif
+                    </td>
                     <td>{{ $row['vehicule_nom'] ?? '—' }}</td>
                     <td class="right">{{ number_format((float)$row['montant'], 0, ',', ' ') }}</td>
                     <td>{{ $row['statut_label'] ?? ($row['statut'] ?? '—') }}</td>

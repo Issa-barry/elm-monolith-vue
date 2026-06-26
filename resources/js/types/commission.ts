@@ -6,6 +6,12 @@ export interface CommissionSummary {
     reste_a_payer: number;
 }
 
+export interface CommissionVehiculeInfo {
+    id: string | null;
+    nom: string | null;
+    immatriculation: string | null;
+}
+
 export interface CommissionDetailRow {
     id?: string;
     commission_id?: string;
@@ -13,6 +19,7 @@ export interface CommissionDetailRow {
     date: string | null;
     periode?: string | null;
     periode_label: string | null;
+    vehicule?: CommissionVehiculeInfo | null;
     montant: number;
     paye: number;
     reste: number;

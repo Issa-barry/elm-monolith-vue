@@ -310,18 +310,27 @@ class CommissionLogistiqueController extends Controller
                 $totalVerse,
                 $totalImpaye,
             ),
-            'commission_details' => $filteredParts->map(fn ($p) => [
-                'id' => $p->id,
-                'reference' => $p->commission?->transfert?->reference,
-                'montant' => (float) $p->montant_net,
-                'paye' => (float) $p->montant_verse,
-                'reste' => (float) $p->montant_restant,
-                'date' => $p->earned_at?->format(self::DATE_FORMAT),
-                'periode' => $p->periode,
-                'periode_label' => $p->periode ? PeriodeComptableService::labelForCode($p->periode) : null,
-                'statut' => $p->statut_label,
-                'statut_dot_class' => $p->statut_dot_class,
-            ])->values(),
+            'commission_details' => $filteredParts->map(function ($p) {
+                $vehicule = $p->commission?->transfert?->vehicule;
+
+                return [
+                    'id' => $p->id,
+                    'reference' => $p->commission?->transfert?->reference,
+                    'vehicule' => $vehicule ? [
+                        'id' => $vehicule->id,
+                        'nom' => $vehicule->nom_vehicule,
+                        'immatriculation' => $vehicule->immatriculation,
+                    ] : null,
+                    'montant' => (float) $p->montant_net,
+                    'paye' => (float) $p->montant_verse,
+                    'reste' => (float) $p->montant_restant,
+                    'date' => $p->earned_at?->format(self::DATE_FORMAT),
+                    'periode' => $p->periode,
+                    'periode_label' => $p->periode ? PeriodeComptableService::labelForCode($p->periode) : null,
+                    'statut' => $p->statut_label,
+                    'statut_dot_class' => $p->statut_dot_class,
+                ];
+            })->values(),
             'periode_stats' => $periodeStats,
             'payments' => $payments,
             'expenses' => $expenses,

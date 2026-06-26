@@ -302,7 +302,11 @@ class CommissionVenteController extends Controller
                     'reference' => $commission->commande?->reference,
                     'date' => $commission->created_at?->format(self::DATE_FORMAT),
                     'site' => $commission->commande?->site?->nom,
-                    'vehicule' => $commission->vehicule?->nom_vehicule,
+                    'vehicule' => $commission->vehicule ? [
+                        'id' => $commission->vehicule->id,
+                        'nom' => $commission->vehicule->nom_vehicule,
+                        'immatriculation' => $commission->vehicule->immatriculation,
+                    ] : null,
                     'montant_brut' => (float) $partsGroup->sum('montant_brut'),
                     'frais' => (float) $partsGroup->sum('frais_supplementaires'),
                     'montant' => $montantNet,

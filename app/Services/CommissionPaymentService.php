@@ -154,7 +154,8 @@ class CommissionPaymentService
     public static function releveLivreur(string $livreurId, string $orgId): Collection
     {
         return CommissionLogistiquePart::with([
-            'commission.transfert:id,reference,date_arrivee_reelle',
+            'commission.transfert:id,reference,date_arrivee_reelle,vehicule_id',
+            'commission.transfert.vehicule:id,nom_vehicule,immatriculation',
             'paymentItems.payment:id,paid_at,mode_paiement,montant',
         ])
             ->where('type_beneficiaire', 'livreur')

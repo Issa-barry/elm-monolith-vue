@@ -11,9 +11,10 @@ import {
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     AlertTriangle,
+    ArrowLeft,
     CheckCircle,
     Clock,
     Edit,
@@ -54,6 +55,7 @@ interface DepenseDetail {
     categorie_label: string;
     impact_message: string;
     vehicule_nom: string | null;
+    vehicule_immatriculation: string | null;
     beneficiaire_label: string | null;
     site_nom: string | null;
     saisi_par: string;
@@ -304,24 +306,40 @@ function formatDate(iso: string | null): string {
         <div class="p-4 sm:p-6">
             <div class="mx-auto max-w-3xl space-y-5">
                 <!-- Header -->
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h1 class="text-xl font-semibold">
-                                {{ depense.type_libelle }}
-                            </h1>
-                            <span
-                                class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
-                                :class="statut.class"
+                <div class="flex flex-wrap items-start justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <Link
+                            href="/depenses"
+                            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
+                        >
+                            <ArrowLeft class="h-4 w-4" />
+                        </Link>
+                        <div>
+                            <p
+                                class="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase"
                             >
-                                <component :is="statut.icon" class="h-3 w-3" />
-                                {{ statut.label }}
-                            </span>
+                                Détail de la dépense
+                            </p>
+                            <div class="mt-0.5 flex items-center gap-2">
+                                <h1 class="text-xl font-semibold">
+                                    {{ depense.type_libelle }}
+                                </h1>
+                                <span
+                                    class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
+                                    :class="statut.class"
+                                >
+                                    <component
+                                        :is="statut.icon"
+                                        class="h-3 w-3"
+                                    />
+                                    {{ statut.label }}
+                                </span>
+                            </div>
+                            <p class="text-sm text-muted-foreground">
+                                Saisie le {{ formatDate(depense.created_at) }}
+                                par {{ depense.saisi_par }}
+                            </p>
                         </div>
-                        <p class="mt-0.5 text-sm text-muted-foreground">
-                            Saisie le {{ formatDate(depense.created_at) }} par
-                            {{ depense.saisi_par }}
-                        </p>
                     </div>
 
                     <!-- Actions -->
@@ -489,6 +507,12 @@ function formatDate(iso: string | null): string {
                                 <dt class="text-muted-foreground">Véhicule</dt>
                                 <dd class="col-span-2">
                                     {{ depense.vehicule_nom }}
+                                    <span
+                                        v-if="depense.vehicule_immatriculation"
+                                        class="text-muted-foreground"
+                                    >
+                                        — {{ depense.vehicule_immatriculation }}
+                                    </span>
                                 </dd>
                             </div>
                             <div

@@ -319,6 +319,7 @@ class DepenseController extends Controller
                 'categorie_label' => $categorie?->label() ?? '',
                 'impact_message' => $impactMessage,
                 'vehicule_nom' => $vehiculeInfo['vehicule_nom'] ?? null,
+                'vehicule_immatriculation' => $vehiculeInfo['vehicule_immatriculation'] ?? null,
                 'beneficiaire_label' => $concerneReelLabel,
                 'site_nom' => $depense->site?->nom,
                 'saisi_par' => $depense->user->name,
@@ -831,19 +832,21 @@ class DepenseController extends Controller
     private function resolveVehiculeInfo(string $vehiculeId): array
     {
         $vehicule = Vehicule::with('proprietaire:id,nom,prenom')
-            ->find($vehiculeId, ['id', 'nom_vehicule', 'proprietaire_id']);
+            ->find($vehiculeId, ['id', 'nom_vehicule', 'immatriculation', 'proprietaire_id']);
 
         if (! $vehicule) {
-            return ['vehicule_nom' => null, 'concerne_reel_label' => null, 'impact_message' => ''];
+            return ['vehicule_nom' => null, 'vehicule_immatriculation' => null, 'concerne_reel_label' => null, 'impact_message' => ''];
         }
 
         $vehiculeNom = $vehicule->nom_vehicule;
+        $immatriculation = $vehicule->immatriculation;
 
         if ($vehicule->proprietaire_id) {
             $propNom = trim("{$vehicule->proprietaire->prenom} {$vehicule->proprietaire->nom}");
 
             return [
                 'vehicule_nom' => $vehiculeNom,
+                'vehicule_immatriculation' => $immatriculation,
                 'concerne_reel_label' => $propNom,
                 'impact_message' => "Cette dépense sera déduite de la commission de {$propNom}.",
             ];
@@ -851,6 +854,7 @@ class DepenseController extends Controller
 
         return [
             'vehicule_nom' => $vehiculeNom,
+            'vehicule_immatriculation' => $immatriculation,
             'concerne_reel_label' => 'Agence ELM',
             'impact_message' => 'Ce véhicule est interne ELM. La dépense sera comptabilisée comme charge entreprise.',
         ];

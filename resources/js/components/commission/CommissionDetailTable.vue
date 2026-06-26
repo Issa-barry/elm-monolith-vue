@@ -39,7 +39,7 @@ const totals = computed(() => ({
                 <th
                     class="px-4 py-3 text-left font-medium text-muted-foreground"
                 >
-                    Période
+                    Véhicule
                 </th>
                 <th
                     class="px-4 py-3 text-right font-medium text-muted-foreground"
@@ -76,7 +76,12 @@ const totals = computed(() => ({
                     {{ row.date ?? '—' }}
                 </td>
                 <td class="px-4 py-3 text-xs text-muted-foreground">
-                    {{ row.periode_label ?? '—' }}
+                    {{ row.vehicule?.nom ?? '—' }}
+                    <span
+                        v-if="row.vehicule?.immatriculation"
+                        class="block text-muted-foreground/70"
+                        >{{ row.vehicule.immatriculation }}</span
+                    >
                 </td>
                 <td class="px-4 py-3 text-right font-medium tabular-nums">
                     {{ formatGNF(row.montant) }}

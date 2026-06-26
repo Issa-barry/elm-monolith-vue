@@ -297,6 +297,7 @@ class CommissionDetailKpiTest extends TestCase
                 ->where('commission_details.0.paye', 3000)
                 ->where('commission_details.0.reste', 8000)
                 ->has('commission_details.0.statut')
+                ->where('commission_details.0.vehicule.id', $commission->vehicule_id)
                 ->has('expenses')
             );
     }
@@ -321,6 +322,8 @@ class CommissionDetailKpiTest extends TestCase
                 ->where('commission_details.0.paye', 4000)
                 ->where('commission_details.0.reste', 6000)
                 ->has('commission_details.0.statut')
+                ->where('commission_details.0.vehicule.id', $vehicule->id)
+                ->where('commission_details.0.vehicule.nom', $vehicule->nom_vehicule)
                 ->has('expenses')
             );
     }
