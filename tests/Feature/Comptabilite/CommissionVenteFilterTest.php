@@ -44,9 +44,9 @@ class CommissionVenteFilterTest extends TestCase
             ->assertOk();
     }
 
-    public function test_index_avec_site_envoye_en_tableau_ne_plante_pas(): void
+    public function test_index_avec_site_ids_envoyes_ne_plante_pas(): void
     {
-        $this->get('/comptabilite/commissions/vente?'.http_build_query(['site' => [$this->user->sites()->first()->id]]))
+        $this->get('/comptabilite/commissions/vente?'.http_build_query(['site_ids' => [$this->user->sites()->first()->id]]))
             ->assertOk();
     }
 

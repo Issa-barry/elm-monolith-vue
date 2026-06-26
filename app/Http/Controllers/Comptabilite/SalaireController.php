@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\PaieLigne;
 use App\Models\PaiePeriode;
+use App\Models\Site;
 use App\Services\AuditLogService;
 use App\Services\PaieCalculService;
 use App\Services\SiteScopeService;
@@ -32,10 +33,10 @@ class SalaireController extends Controller
         $filtreStatut = (string) $request->input('statut', '');
         $search = trim((string) $request->input('search', ''));
 
-        $siteProps = $this->siteScope->inertiaProps($user, $orgId, $request->input('site_id', ''));
-        $filtreSite = $siteProps['filtre_site'];
-        $isAdmin = $siteProps['is_admin'];
+        $isAdmin = $user->isAdmin();
+        $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
+        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $periode = PaiePeriode::firstOrCreate(
             ['organization_id' => $orgId, 'mois' => $filtreMois, 'annee' => $filtreAnnee],
@@ -58,8 +59,8 @@ class SalaireController extends Controller
                 $query->where('statut', $filtreStatut);
             }
 
-            if ($filtreSite !== '') {
-                $query->whereHas('employe', fn ($q) => $q->where('site_id', $filtreSite));
+            if ($isAdmin && ! empty($filtreSiteIds)) {
+                $query->whereHas('employe', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));
             }
 
             if (! $isAdmin && ! empty($siteIds)) {
@@ -128,10 +129,9 @@ class SalaireController extends Controller
             'filtre_mois' => $filtreMois,
             'filtre_annee' => $filtreAnnee,
             'filtre_statut' => $filtreStatut,
-            'filtre_site' => $filtreSite,
+            'filtre_site_ids' => $filtreSiteIds,
             'search' => $search,
-            'is_admin' => $isAdmin,
-            'sites' => $siteProps['sites'],
+            'sites' => $sites,
             'can_payer' => auth()->user()->can('comptabilite.payer'),
         ]);
     }

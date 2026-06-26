@@ -65,10 +65,9 @@ const props = defineProps<{
     filtre_mois: number;
     filtre_annee: number;
     filtre_statut: string;
-    filtre_site: string;
+    filtre_site_ids: string[];
     search: string;
-    is_admin: boolean;
-    sites: { value: string; label: string }[];
+    sites: { id: string; nom: string }[];
     can_payer: boolean;
 }>();
 
@@ -123,19 +122,6 @@ const filterFields = computed((): FilterField[] => [
             label: a.label,
         })),
     },
-    ...(props.is_admin && props.sites.length > 1
-        ? [
-              {
-                  key: 'site_id',
-                  label: 'Agence',
-                  type: 'select' as const,
-                  options: props.sites.map((s) => ({
-                      value: s.value,
-                      label: s.label,
-                  })),
-              },
-          ]
-        : []),
     {
         key: 'statut',
         label: 'Statut',
@@ -153,7 +139,7 @@ const currentFilters = computed(() => ({
     mois: String(props.filtre_mois),
     annee: String(props.filtre_annee),
     statut: props.filtre_statut ?? '',
-    site_id: props.filtre_site ?? '',
+    site_ids: props.filtre_site_ids ?? [],
 }));
 
 function buildParams() {
@@ -353,6 +339,7 @@ const periodeCourante = computed(
                 url="/comptabilite/salaires"
                 :values="currentFilters"
                 :fields="filterFields"
+                :sites="sites"
                 :result-count="lignes.length"
                 search-placeholder="Rechercher un salarié..."
                 v-model:search="search"

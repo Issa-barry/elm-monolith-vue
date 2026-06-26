@@ -160,10 +160,10 @@ class CommissionVenteFraisTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionVente/Livreur/Show')
-                ->where('resume_global.total_brut_cumule', 120000)
-                ->where('resume_global.total_frais', 100000)
-                ->where('resume_global.total_net_cumule', 20000)
-                ->where('resume_global.solde_global', 20000)
+                ->where('commission_summary.brut_cumule', 120000)
+                ->where('commission_summary.frais', 100000)
+                ->where('commission_summary.net_a_payer', 20000)
+                ->where('commission_summary.reste_a_payer', 20000)
             );
     }
 

@@ -5,17 +5,20 @@ namespace App\Http\Controllers\Comptabilite;
 use App\Enums\AuditEvent;
 use App\Enums\ModePaiement;
 use App\Enums\StatutCommission;
+use App\Enums\StatutDepense;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionPart;
 use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PaiementCommissionVente;
+use App\Models\Site;
 use App\Services\AuditLogService;
 use App\Services\CommissionVenteCalculatorService;
 use App\Services\CommissionVentePaiementService;
 use App\Services\PeriodeComptableService;
 use App\Services\SiteScopeService;
+use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -59,10 +62,10 @@ class CommissionVenteController extends Controller
             $filtrePeriode = '';
         }
 
-        $siteProps = $this->siteScope->inertiaProps($user, $orgId, $this->scalarInput($request, 'site'));
-        $filtreSite = $siteProps['filtre_site'];
-        $isAdmin = $siteProps['is_admin'];
+        $isAdmin = $user->isAdmin();
+        $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
+        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $query = CommissionPart::query()
             ->from('commission_parts AS cp')
@@ -98,7 +101,9 @@ class CommissionVenteController extends Controller
 
         $partsParLivreur = CommissionPart::with([
             'commission.commande.site:id,nom',
-            'commission.vehicule:id,nom_vehicule,immatriculation',
+            'commission.vehicule:id,nom_vehicule,immatriculation,capacite_packs,type_vehicule_id,proprietaire_id',
+            'commission.vehicule.typeVehicule:id,nom',
+            'commission.vehicule.proprietaire:id,prenom,nom,telephone,code_phone_pays',
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')
@@ -107,8 +112,8 @@ class CommissionVenteController extends Controller
                 [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
                 $q->whereHas('commission', fn ($q2) => $q2->whereBetween('created_at', [$debut, $fin]));
             })
-            ->when($isAdmin && $filtreSite !== '', fn ($q) => $q->whereHas(
-                'commission.commande', fn ($q2) => $q2->where('site_id', $filtreSite)
+            ->when($isAdmin && ! empty($filtreSiteIds), fn ($q) => $q->whereHas(
+                'commission.commande', fn ($q2) => $q2->whereIn('site_id', $filtreSiteIds)
             ))
             ->when(! $isAdmin && ! empty($siteIds), fn ($q) => $q->whereHas(
                 'commission.commande', fn ($q2) => $q2->whereIn('site_id', $siteIds)
@@ -123,7 +128,17 @@ class CommissionVenteController extends Controller
 
         $vehiculesParLivreur = $partsParLivreur->map(fn ($parts) => $parts
             ->pluck('commission.vehicule')->filter()->unique('id')
-            ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+            ->map(fn ($v) => [
+                'nom' => $v->nom_vehicule,
+                'immatriculation' => $v->immatriculation,
+                'type' => $v->typeVehicule?->nom,
+                'capacite_packs' => $v->capacite_packs,
+                'proprietaire_nom' => $v->proprietaire
+                    ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom)
+                    : null,
+                'proprietaire_telephone' => $v->proprietaire?->telephone,
+                'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
+            ])
             ->values()
         );
 
@@ -165,7 +180,7 @@ class CommissionVenteController extends Controller
             );
         }
 
-        if (! $isAdmin || $filtreSite !== '') {
+        if (! $isAdmin || ! empty($filtreSiteIds)) {
             $allowedIds = $partsParLivreur->keys()->map(fn ($k) => (string) $k)->all();
             $beneficiaires = $beneficiaires->filter(fn ($b) => in_array($b['beneficiaire_id'], $allowedIds));
         }
@@ -199,12 +214,11 @@ class CommissionVenteController extends Controller
             'kpis' => $kpis,
             'search' => $search,
             'filtre_statut' => $filtreStatut,
-            'filtre_site' => $filtreSite,
+            'filtre_site_ids' => $filtreSiteIds,
             'selected_periode' => $filtrePeriode,
             'periodes_disponibles' => $periodesDisponibles,
             'periode_courante' => $periodeCourante,
-            'is_admin' => $isAdmin,
-            'sites' => $siteProps['sites'],
+            'sites' => $sites,
             'can_payer' => auth()->user()->can('comptabilite.payer'),
         ]);
     }
@@ -280,16 +294,22 @@ class CommissionVenteController extends Controller
                     ? PeriodeComptableService::codeForLivreur(Carbon::instance($commission->created_at))
                     : null;
 
+                $montantNet = (float) $partsGroup->sum('montant_net');
+                $montantVerse = (float) $partsGroup->sum('montant_verse');
+
                 return [
                     'commission_id' => $commission->id,
-                    'commande_reference' => $commission->commande?->reference,
-                    'date_commande' => $commission->created_at?->format(self::DATE_FORMAT),
+                    'reference' => $commission->commande?->reference,
+                    'date' => $commission->created_at?->format(self::DATE_FORMAT),
                     'site' => $commission->commande?->site?->nom,
                     'vehicule' => $commission->vehicule?->nom_vehicule,
                     'montant_brut' => (float) $partsGroup->sum('montant_brut'),
                     'frais' => (float) $partsGroup->sum('frais_supplementaires'),
-                    'montant_net' => (float) $partsGroup->sum('montant_net'),
-                    'montant_verse' => (float) $partsGroup->sum('montant_verse'),
+                    'montant' => $montantNet,
+                    'paye' => $montantVerse,
+                    'reste' => max(0.0, $montantNet - $montantVerse),
+                    'statut' => $first->statut_label,
+                    'statut_dot_class' => $first->statut_dot_class,
                     'periode' => $periodeCode,
                     'periode_label' => $periodeCode ? PeriodeComptableService::labelForCode($periodeCode) : null,
                 ];
@@ -313,22 +333,21 @@ class CommissionVenteController extends Controller
                 'created_by' => $p->creator?->name,
             ]);
 
-        $depenses = Depense::with(['user', 'validateur'])
+        $expenses = Depense::with(['user', 'validateur', 'depenseType:id,libelle'])
             ->where('organization_id', $orgId)
             ->where('beneficiaire_type', 'livreur')
             ->where('beneficiaire_id', $livreurId)
+            ->where('statut', StatutDepense::VALIDE->value)
             ->orderByDesc('date_depense')
             ->get()
             ->map(fn (Depense $d) => [
                 'id' => $d->id,
-                'date_depense' => $d->date_depense?->format(self::DATE_FORMAT),
-                'montant' => (float) $d->montant,
-                'statut' => $d->statut->value,
-                'statut_label' => $d->statut->label(),
+                'date' => $d->date_depense?->format(self::DATE_FORMAT),
+                'type' => $d->depenseType?->libelle ?? '—',
+                'commentaire' => $d->commentaire,
                 'saisi_par' => $d->user?->name,
                 'validateur' => $d->validateur?->name,
-                'date_validation' => $d->date_validation?->format(self::DATE_FORMAT),
-                'commentaire' => $d->commentaire,
+                'montant' => (float) $d->montant,
             ]);
 
         return Inertia::render('Comptabilite/CommissionVente/Livreur/Show', [
@@ -337,16 +356,16 @@ class CommissionVenteController extends Controller
                 'nom' => $nom,
                 'telephone' => $livreur?->telephone,
             ],
-            'resume_global' => [
-                'total_brut_cumule' => $resume['brut'],
-                'total_frais' => $resume['frais'],
-                'total_net_cumule' => $resume['net'],
-                'total_verse' => $resume['verse'],
-                'solde_global' => $resume['reste'],
-            ],
-            'historique_commandes' => $historiqueCommandes,
-            'historique_paiements' => $historiquePaiements,
-            'depenses' => $depenses,
+            'commission_summary' => CommissionSummaryFormatter::format(
+                $resume['brut'],
+                $resume['frais'],
+                $resume['net'],
+                $resume['verse'],
+                $resume['reste'],
+            ),
+            'commission_details' => $historiqueCommandes,
+            'payments' => $historiquePaiements,
+            'expenses' => $expenses,
             'modes_paiement' => ModePaiement::options(),
             'periode_courante' => $periodeCourante,
             'periode_courante_label' => PeriodeComptableService::labelForCode($periodeCourante),
