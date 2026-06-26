@@ -223,7 +223,7 @@ class CommissionLogistiqueController extends Controller
         $periodesDisponibles = PeriodeComptableService::periodesDisponibles($earliestDate);
 
         $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
-        $selectedPeriode = $request->input('periode', '');
+        $selectedPeriode = (string) $request->input('periode', '');
 
         $filteredParts = $selectedPeriode !== ''
             ? $allParts->filter(fn ($p) => $p->periode === $selectedPeriode)
@@ -280,11 +280,18 @@ class CommissionLogistiqueController extends Controller
             'created_by' => $p->createur ? trim("{$p->createur->prenom} {$p->createur->nom}") : null,
         ]);
 
-        $expenses = Depense::with(['user', 'validateur', 'depenseType:id,libelle'])
+        $expensesQuery = Depense::with(['user', 'validateur', 'depenseType:id,libelle'])
             ->where('organization_id', $orgId)
             ->where('beneficiaire_type', 'livreur')
             ->where('beneficiaire_id', $livreurId)
-            ->where('statut', StatutDepense::VALIDE->value)
+            ->where('statut', StatutDepense::VALIDE->value);
+
+        if ($selectedPeriode !== '') {
+            [$debut, $fin] = PeriodeComptableService::dateRangeForCode($selectedPeriode);
+            $expensesQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
+        }
+
+        $expenses = $expensesQuery
             ->orderByDesc('date_depense')
             ->get()
             ->map(fn (Depense $d) => [

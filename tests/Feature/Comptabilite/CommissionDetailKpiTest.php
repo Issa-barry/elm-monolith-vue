@@ -407,4 +407,49 @@ class CommissionDetailKpiTest extends TestCase
                 ->has('expenses', 0)
             );
     }
+
+    // ── Dépenses : filtrées par la même période que le tableau "Détail" ─────
+
+    public function test_vente_expenses_sont_filtrees_par_periode_selectionnee(): void
+    {
+        $livreur = $this->makeLivreur();
+
+        Depense::factory()->valide()->create([
+            'organization_id' => $this->org->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreur->id,
+            'montant' => 1000,
+            'date_depense' => '2026-06-05',
+        ]);
+        Depense::factory()->valide()->create([
+            'organization_id' => $this->org->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreur->id,
+            'montant' => 2000,
+            'date_depense' => '2026-06-20',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?periode=2026-06-P1")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('expenses', 1)
+                ->where('expenses.0.montant', 1000)
+            );
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?periode=2026-06-P2")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('expenses', 1)
+                ->where('expenses.0.montant', 2000)
+            );
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?periode=")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('expenses', 2)
+            );
+    }
 }

@@ -150,11 +150,20 @@ const {
                         <h2 class="text-sm font-semibold">
                             Dépenses imputées à ce livreur
                         </h2>
-                        <CommissionVehiculeSelect
-                            v-if="expenseVehiculeOptions.length > 1"
-                            v-model="selectedExpenseVehicules"
-                            :options="expenseVehiculeOptions"
-                        />
+                        <div class="flex flex-wrap items-center gap-2">
+                            <CommissionVehiculeSelect
+                                v-if="expenseVehiculeOptions.length > 1"
+                                v-model="selectedExpenseVehicules"
+                                :options="expenseVehiculeOptions"
+                            />
+                            <div class="w-full sm:w-64">
+                                <CommissionPeriodSelect
+                                    v-model="periodeFiltre"
+                                    :periodes-disponibles="periodes_disponibles"
+                                    @update:model-value="changePeriode"
+                                />
+                            </div>
+                        </div>
                     </div>
                     <CommissionExpensesTable
                         :rows="filteredExpenses"

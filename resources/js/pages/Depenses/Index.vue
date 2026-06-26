@@ -598,7 +598,7 @@ const categorieColors: Record<string, string> = {
                                     >
                                         {{ d.beneficiaire_label ?? '—' }}
                                         <ExternalLink
-                                            class="h-3 w-3 shrink-0 text-muted-foreground"
+                                            class="h-3 w-3 shrink-0 text-primary"
                                         />
                                     </div>
                                     <div

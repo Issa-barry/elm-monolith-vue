@@ -307,8 +307,16 @@ class CommissionProprietaireController extends Controller
         $activeParts = $allParts->filter(fn ($p) => $p->statut !== StatutCommission::CREEE);
         $solde = max(0.0, (float) $activeParts->sum('montant_brut') - $totalFraisDepenses - (float) $activeParts->sum('montant_verse'));
 
-        $periodeFilter = $request->input('periode', '');
+        $periodeFilter = (string) $request->input('periode', '');
         $periodeCourante = PeriodeComptableService::periodeCouranteProprietaire();
+
+        $fraisDepensesAffichees = $fraisDepenses;
+        if ($periodeFilter !== '') {
+            [$debutDep, $finDep] = PeriodeComptableService::dateRangeForCode($periodeFilter);
+            $fraisDepensesAffichees = $fraisDepenses->filter(
+                fn ($d) => $d->date_depense && $d->date_depense->between($debutDep, $finDep)
+            );
+        }
 
         $earliestCommission = $allParts
             ->filter(fn ($p) => $p->commission?->created_at !== null)
@@ -393,7 +401,7 @@ class CommissionProprietaireController extends Controller
                 $totalVerse,
                 $solde,
             ),
-            'expenses' => $fraisDepenses->map(function ($d) use ($vehicules) {
+            'expenses' => $fraisDepensesAffichees->map(function ($d) use ($vehicules) {
                 $vehicule = $d->beneficiaire_type === 'vehicule'
                     ? $vehicules->get($d->beneficiaire_id)
                     : null;

@@ -257,7 +257,7 @@ class CommissionVenteController extends Controller
         $earliestDate = $earliestCommission?->commission?->created_at ?? now();
         $periodesDisponibles = PeriodeComptableService::periodesDisponibles(Carbon::instance($earliestDate));
 
-        $periodeFilter = $request->input('periode', $periodeCourante);
+        $periodeFilter = (string) $request->input('periode', $periodeCourante);
 
         $filteredParts = $allParts;
         if ($periodeFilter !== '') {
@@ -337,11 +337,18 @@ class CommissionVenteController extends Controller
                 'created_by' => $p->creator?->name,
             ]);
 
-        $expenses = Depense::with(['user', 'validateur', 'depenseType:id,libelle'])
+        $expensesQuery = Depense::with(['user', 'validateur', 'depenseType:id,libelle'])
             ->where('organization_id', $orgId)
             ->where('beneficiaire_type', 'livreur')
             ->where('beneficiaire_id', $livreurId)
-            ->where('statut', StatutDepense::VALIDE->value)
+            ->where('statut', StatutDepense::VALIDE->value);
+
+        if ($periodeFilter !== '') {
+            [$debut, $fin] = PeriodeComptableService::dateRangeForCode($periodeFilter);
+            $expensesQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
+        }
+
+        $expenses = $expensesQuery
             ->orderByDesc('date_depense')
             ->get()
             ->map(fn (Depense $d) => [
