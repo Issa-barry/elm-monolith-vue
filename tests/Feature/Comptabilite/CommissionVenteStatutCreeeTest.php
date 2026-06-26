@@ -135,9 +135,9 @@ class CommissionVenteStatutCreeeTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionVente/Livreur/Show')
-                ->where('resume_global.total_net_cumule', 0)
-                ->where('resume_global.solde_global', 0)
-                ->has('historique_commandes', 0)
+                ->where('commission_summary.net_a_payer', 0)
+                ->where('commission_summary.reste_a_payer', 0)
+                ->has('commission_details', 0)
             );
     }
 

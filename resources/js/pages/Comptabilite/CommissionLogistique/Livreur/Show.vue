@@ -1,75 +1,40 @@
 <script setup lang="ts">
 import AuditTimeline from '@/components/AuditTimeline.vue';
-import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
-import StatusDot from '@/components/StatusDot.vue';
-import { Button } from '@/components/ui/button';
+import CommissionDetailHeader from '@/components/commission/CommissionDetailHeader.vue';
+import CommissionDetailTable from '@/components/commission/CommissionDetailTable.vue';
+import CommissionDetailTabs from '@/components/commission/CommissionDetailTabs.vue';
+import CommissionExpensesTable from '@/components/commission/CommissionExpensesTable.vue';
+import CommissionPaymentDialog from '@/components/commission/CommissionPaymentDialog.vue';
+import CommissionPaymentsTable from '@/components/commission/CommissionPaymentsTable.vue';
+import CommissionPeriodSelect from '@/components/commission/CommissionPeriodSelect.vue';
+import CommissionSummaryCards from '@/components/commission/CommissionSummaryCards.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, CalendarDays, HandCoins } from 'lucide-vue-next';
-import Dropdown from 'primevue/dropdown';
-import { computed, ref } from 'vue';
-
-interface PartRow {
-    id: string;
-    transfert_reference: string | null;
-    montant_net: number;
-    earned_at: string | null;
-    periode: string | null;
-    periode_label: string | null;
-    statut: string | null;
-    statut_label: string;
-    statut_dot_class: string;
-}
-
-interface PeriodeStats {
-    code: string;
-    label: string;
-    total_commission: number;
-    total_verse: number;
-    reste: number;
-    statut: string;
-    statut_label: string;
-    statut_dot_class: string;
-}
-
-interface PaymentRow {
-    id: string;
-    montant: number;
-    mode_paiement: string;
-    note: string | null;
-    paid_at: string | null;
-    created_by: string | null;
-}
-
-interface PeriodeOption {
-    code: string;
-    label: string;
-}
-interface ModePaiement {
-    value: string;
-    label: string;
-}
+import type {
+    CommissionDetailRow,
+    CommissionDetailTab,
+    CommissionExpenseRow,
+    CommissionPaymentRow,
+    CommissionSummary,
+    ModePaiementOption,
+    PeriodeOption,
+} from '@/types/commission';
+import { Head, router } from '@inertiajs/vue3';
+import { ref } from 'vue';
 
 const props = defineProps<{
     livreur: { id: string; nom: string; telephone: string | null };
-    kpis: {
-        total_brut: number;
-        total_frais: number;
-        total_net: number;
-        total_verse: number;
-        impaye: number;
-        paye: number;
-    };
-    parts: PartRow[];
-    periode_stats: PeriodeStats | null;
-    payments: PaymentRow[];
-    modes_paiement: ModePaiement[];
-    can_payer: boolean;
+    commission_summary: CommissionSummary;
+    commission_details: CommissionDetailRow[];
+    payments: CommissionPaymentRow[];
+    expenses: CommissionExpenseRow[];
+    modes_paiement: ModePaiementOption[];
     periode_courante: string;
     periode_courante_label: string;
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
+    can_payer: boolean;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -82,268 +47,48 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: props.livreur.nom, href: '' },
 ];
 
-const selectedPeriode = ref<string>(props.selected_periode);
-const periodeOptions: PeriodeOption[] = [
-    { code: '', label: 'Toutes les périodes' },
-    ...props.periodes_disponibles,
-];
+const periodeFiltre = ref(props.selected_periode ?? '');
 
-function onPeriodeChange(value: string) {
+function changePeriode(code: string) {
+    periodeFiltre.value = code;
     const params: Record<string, string> = {};
-    if (value) params.periode = value;
+    if (code) params.periode = code;
     router.get(
         `/comptabilite/commissions/logistique/livreurs/${props.livreur.id}`,
         params,
-        {
-            preserveScroll: true,
-            replace: true,
-        },
+        { preserveScroll: true, replace: true },
     );
 }
 
-// Groupement par période
-interface PeriodeGroup {
-    code: string;
-    label: string;
-    statut_label: string;
-    statut_dot_class: string;
-    total_net: number;
-    parts: PartRow[];
-}
-
-const partsGrouped = computed<PeriodeGroup[]>(() => {
-    const map = new Map<string, PeriodeGroup>();
-    for (const part of props.parts) {
-        const key = part.periode ?? '__sans__';
-        if (!map.has(key)) {
-            map.set(key, {
-                code: key,
-                label: part.periode_label ?? part.periode ?? '—',
-                statut_label: '',
-                statut_dot_class: '',
-                total_net: 0,
-                parts: [],
-            });
-        }
-        const g = map.get(key)!;
-        g.parts.push(part);
-        g.total_net += part.montant_net;
-    }
-    for (const g of map.values()) {
-        const all = g.parts;
-        if (all.every((p) => p.statut === 'paye')) {
-            g.statut_label = 'Soldée';
-            g.statut_dot_class = 'bg-emerald-500';
-        } else if (all.every((p) => p.statut === 'impaye')) {
-            g.statut_label = 'Non versée';
-            g.statut_dot_class = 'bg-red-500';
-        } else {
-            g.statut_label = 'Partiellement versée';
-            g.statut_dot_class = 'bg-amber-500';
-        }
-    }
-    return Array.from(map.values());
-});
-
-// Dialog paiement
+const activeTab = ref<CommissionDetailTab>('informations');
 const showPaiementDialog = ref(false);
-const paiementProcessing = ref(false);
-const paiementErrors = ref<Record<string, string>>({});
-
-function openPaiement() {
-    showPaiementDialog.value = true;
-}
-
-function handlePaiementSubmit(payload: {
-    montant: number;
-    mode_paiement: string;
-}) {
-    paiementProcessing.value = true;
-    paiementErrors.value = {};
-    router.post(
-        `/comptabilite/commissions/logistique/livreurs/${props.livreur.id}/paiements`,
-        payload,
-        {
-            preserveScroll: true,
-            onSuccess: () => {
-                showPaiementDialog.value = false;
-            },
-            onError: (e) => {
-                paiementErrors.value = e as Record<string, string>;
-            },
-            onFinish: () => {
-                paiementProcessing.value = false;
-            },
-        },
-    );
-}
-
-const activeTab = ref<'informations' | 'paiements' | 'historique'>(
-    'informations',
-);
-
-function fmt(val: number) {
-    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
-}
-
-function formatMode(mode: string) {
-    return props.modes_paiement.find((m) => m.value === mode)?.label ?? mode;
-}
 </script>
 
 <template>
     <Head :title="`Commissions — ${livreur.nom}`" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
-            <!-- En-tête -->
-            <div class="flex flex-wrap items-start justify-between gap-4">
-                <div class="flex items-center gap-3">
-                    <Link
-                        href="/comptabilite/commissions/logistique"
-                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
-                    >
-                        <ArrowLeft class="h-4 w-4" />
-                    </Link>
-                    <div>
-                        <p
-                            class="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase"
-                        >
-                            Livreur — Logistique
-                        </p>
-                        <p class="mt-0.5 text-xl font-semibold">
-                            {{ livreur.nom }}
-                        </p>
-                        <p
-                            v-if="livreur.telephone"
-                            class="text-sm text-muted-foreground"
-                        >
-                            {{ livreur.telephone }}
-                        </p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <Button
-                        v-if="can_payer && kpis.impaye > 0"
-                        size="sm"
-                        @click="openPaiement"
-                    >
-                        <HandCoins class="mr-1.5 h-4 w-4" />
-                        Payer {{ fmt(kpis.impaye) }}
-                    </Button>
-                </div>
-            </div>
+            <CommissionDetailHeader
+                :back-href="'/comptabilite/commissions/logistique'"
+                eyebrow="Livreur — Logistique"
+                :title="livreur.nom"
+                :telephone="livreur.telephone"
+                :can-pay="can_payer && commission_summary.reste_a_payer > 0"
+                :pay-label="`Payer ${formatGNF(commission_summary.reste_a_payer)}`"
+                @pay="showPaiementDialog = true"
+            />
 
-            <!-- Tabs -->
-            <div class="flex border-b">
-                <button
-                    type="button"
-                    class="px-4 py-2 text-sm font-medium transition-colors"
-                    :class="
-                        activeTab === 'informations'
-                            ? 'border-b-2 border-primary text-primary'
-                            : 'text-muted-foreground hover:text-foreground'
-                    "
-                    @click="activeTab = 'informations'"
-                >
-                    Informations
-                </button>
-                <button
-                    type="button"
-                    class="px-4 py-2 text-sm font-medium transition-colors"
-                    :class="
-                        activeTab === 'paiements'
-                            ? 'border-b-2 border-primary text-primary'
-                            : 'text-muted-foreground hover:text-foreground'
-                    "
-                    @click="activeTab = 'paiements'"
-                >
-                    Paiements
-                    <span
-                        v-if="payments.length > 0"
-                        class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums"
-                        >{{ payments.length }}</span
-                    >
-                </button>
-                <button
-                    type="button"
-                    class="px-4 py-2 text-sm font-medium transition-colors"
-                    :class="
-                        activeTab === 'historique'
-                            ? 'border-b-2 border-primary text-primary'
-                            : 'text-muted-foreground hover:text-foreground'
-                    "
-                    @click="activeTab = 'historique'"
-                >
-                    Historique
-                </button>
-            </div>
+            <CommissionSummaryCards :summary="commission_summary" />
+
+            <CommissionDetailTabs
+                v-model="activeTab"
+                :counts="{
+                    depenses: expenses.length,
+                    paiements: payments.length,
+                }"
+            />
 
             <template v-if="activeTab === 'informations'">
-                <!-- KPIs — 5 cartes uniformes -->
-                <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                    <div class="rounded-lg border bg-card p-4 text-center">
-                        <p class="text-base font-bold tabular-nums">
-                            {{ fmt(kpis.total_brut) }}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Brut cumulé
-                        </p>
-                    </div>
-                    <div class="rounded-lg border bg-card p-4 text-center">
-                        <p
-                            class="text-base font-bold text-red-600 tabular-nums dark:text-red-400"
-                        >
-                            {{
-                                kpis.total_frais > 0
-                                    ? '-' + fmt(kpis.total_frais)
-                                    : fmt(0)
-                            }}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">Frais</p>
-                    </div>
-                    <div class="rounded-lg border bg-card p-4 text-center">
-                        <p class="text-base font-bold tabular-nums">
-                            {{ fmt(kpis.total_net) }}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Net à payer
-                        </p>
-                    </div>
-                    <div class="rounded-lg border bg-card p-4 text-center">
-                        <p
-                            class="text-base font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
-                        >
-                            {{ fmt(kpis.total_verse) }}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Déjà payé
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-lg border bg-card p-4 text-center"
-                        :class="
-                            kpis.impaye > 0
-                                ? 'border-amber-200 dark:border-amber-900'
-                                : ''
-                        "
-                    >
-                        <p
-                            class="text-base font-bold tabular-nums"
-                            :class="
-                                kpis.impaye > 0
-                                    ? 'text-amber-600 dark:text-amber-400'
-                                    : ''
-                            "
-                        >
-                            {{ fmt(kpis.impaye) }}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Reste à payer
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Tableau des parts -->
                 <div
                     class="overflow-hidden rounded-xl border bg-card shadow-sm"
                 >
@@ -358,146 +103,48 @@ function formatMode(mode: string) {
                             </h2>
                             <span
                                 class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums"
-                                >{{ parts.length }}</span
+                                >{{ commission_details.length }}</span
                             >
-                            <StatusDot
-                                v-if="periode_stats"
-                                :label="periode_stats.statut_label"
-                                :dot-class="periode_stats.statut_dot_class"
-                                class="text-xs text-muted-foreground"
-                            />
                         </div>
-                        <Dropdown
-                            v-model="selectedPeriode"
-                            :options="periodeOptions"
-                            option-label="label"
-                            option-value="code"
-                            placeholder="Toutes les périodes"
-                            class="w-full text-sm sm:w-64"
-                            @change="onPeriodeChange(selectedPeriode)"
+                        <CommissionPeriodSelect
+                            v-model="periodeFiltre"
+                            :periodes-disponibles="periodes_disponibles"
+                            @update:model-value="changePeriode"
                         />
                     </div>
+                    <CommissionDetailTable :rows="commission_details" />
+                </div>
+            </template>
 
-                    <div v-if="parts.length > 0">
-                        <template
-                            v-for="group in partsGrouped"
-                            :key="group.code"
-                        >
-                            <div
-                                v-if="!periode_stats"
-                                class="flex items-center justify-between border-b bg-muted/30 px-4 py-2"
-                            >
-                                <div class="flex items-center gap-2">
-                                    <CalendarDays
-                                        class="h-3.5 w-3.5 text-muted-foreground"
-                                    />
-                                    <span
-                                        class="text-xs font-semibold text-muted-foreground"
-                                        >{{ group.label }}</span
-                                    >
-                                    <StatusDot
-                                        :label="group.statut_label"
-                                        :dot-class="group.statut_dot_class"
-                                        class="text-xs text-muted-foreground"
-                                    />
-                                </div>
-                                <span
-                                    class="text-xs font-semibold tabular-nums"
-                                    >{{ fmt(group.total_net) }}</span
-                                >
-                            </div>
-                            <table class="w-full text-sm">
-                                <tbody class="divide-y">
-                                    <tr
-                                        v-for="part in group.parts"
-                                        :key="part.id"
-                                        class="hover:bg-muted/10"
-                                    >
-                                        <td
-                                            class="px-4 py-3 font-mono text-xs text-muted-foreground"
-                                        >
-                                            {{
-                                                part.transfert_reference ?? '—'
-                                            }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-xs text-muted-foreground"
-                                        >
-                                            {{ part.earned_at ?? '—' }}
-                                        </td>
-                                        <td class="px-4 py-3">
-                                            <StatusDot
-                                                :label="part.statut_label"
-                                                :dot-class="
-                                                    part.statut_dot_class
-                                                "
-                                                class="text-xs text-muted-foreground"
-                                            />
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right font-medium tabular-nums"
-                                        >
-                                            {{ fmt(part.montant_net) }}
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </template>
+            <template v-if="activeTab === 'depenses'">
+                <div
+                    class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                >
+                    <div class="border-b px-4 py-3">
+                        <h2 class="text-sm font-semibold">
+                            Dépenses imputées à ce livreur
+                        </h2>
                     </div>
-                    <div
-                        v-else
-                        class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
-                    >
-                        <HandCoins class="h-10 w-10 opacity-30" />
-                        <p class="text-sm">
-                            Aucune commission pour cette période.
-                        </p>
-                    </div>
+                    <CommissionExpensesTable
+                        :rows="expenses"
+                        empty-message="Aucune dépense imputée à ce livreur."
+                    />
                 </div>
             </template>
 
             <template v-if="activeTab === 'paiements'">
-                <div class="rounded-xl border bg-card">
+                <div
+                    class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                >
                     <div class="border-b px-4 py-3">
                         <h2 class="text-sm font-semibold">
                             Paiements enregistrés
                         </h2>
                     </div>
-                    <div v-if="payments.length > 0" class="divide-y">
-                        <div
-                            v-for="p in payments"
-                            :key="p.id"
-                            class="flex items-start justify-between gap-3 px-4 py-3"
-                        >
-                            <div>
-                                <p class="text-sm font-medium">
-                                    {{ fmt(p.montant) }}
-                                </p>
-                                <p class="text-xs text-muted-foreground">
-                                    {{ p.paid_at }} ·
-                                    {{ formatMode(p.mode_paiement) }}
-                                </p>
-                                <p
-                                    v-if="p.note"
-                                    class="text-xs text-muted-foreground"
-                                >
-                                    {{ p.note }}
-                                </p>
-                                <p
-                                    v-if="p.created_by"
-                                    class="text-xs text-muted-foreground/60"
-                                >
-                                    Par {{ p.created_by }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    <p
-                        v-else
-                        class="py-8 text-center text-sm text-muted-foreground"
-                    >
-                        Aucun paiement enregistré.
-                    </p>
+                    <CommissionPaymentsTable
+                        :rows="payments"
+                        :modes-paiement="modes_paiement"
+                    />
                 </div>
             </template>
 
@@ -513,12 +160,11 @@ function formatMode(mode: string) {
         </div>
     </AppLayout>
 
-    <PaymentDialogCompact
+    <CommissionPaymentDialog
         v-model:visible="showPaiementDialog"
-        :title="`Payer — ${livreur.nom}`"
-        :solde="kpis.impaye"
-        :processing="paiementProcessing"
-        :errors="paiementErrors"
-        @submit="handlePaiementSubmit"
+        :beneficiaire-nom="livreur.nom"
+        :solde-a-payer="commission_summary.reste_a_payer"
+        :modes-paiement="modes_paiement"
+        :payment-route="`/comptabilite/commissions/logistique/livreurs/${livreur.id}/paiements`"
     />
 </template>
