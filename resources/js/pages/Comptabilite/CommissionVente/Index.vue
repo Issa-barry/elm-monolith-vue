@@ -20,6 +20,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Building2,
     Download,
+    ExternalLink,
     FileText,
     HandCoins,
     History,
@@ -27,11 +28,17 @@ import {
     Truck,
     User,
 } from 'lucide-vue-next';
+import Dialog from 'primevue/dialog';
 import { computed, ref } from 'vue';
 
 interface VehiculeInfo {
     nom: string;
     immatriculation: string | null;
+    type: string | null;
+    capacite_packs: number | null;
+    proprietaire_nom: string | null;
+    proprietaire_telephone: string | null;
+    proprietaire_code_phone_pays: string | null;
 }
 
 interface BeneficiaireRow {
@@ -66,12 +73,11 @@ const props = defineProps<{
     };
     search: string;
     filtre_statut: string;
-    filtre_site: string;
+    filtre_site_ids: string[];
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
     periode_courante: string;
-    is_admin: boolean;
-    sites: { value: string; label: string }[];
+    sites: { id: string; nom: string }[];
     can_payer: boolean;
 }>();
 
@@ -87,19 +93,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 const search = ref(props.search ?? '');
 
 const filterFields = computed((): FilterField[] => [
-    ...(props.is_admin && props.sites.length > 1
-        ? [
-              {
-                  key: 'site',
-                  label: 'Agence',
-                  type: 'select' as const,
-                  options: props.sites.map((s) => ({
-                      value: s.value,
-                      label: s.label,
-                  })),
-              },
-          ]
-        : []),
     {
         key: 'statut',
         label: 'Statut',
@@ -122,7 +115,7 @@ const filterFields = computed((): FilterField[] => [
 ]);
 
 const currentFilters = computed(() => ({
-    site: props.filtre_site ?? '',
+    site_ids: props.filtre_site_ids ?? [],
     statut: props.filtre_statut ?? '',
     periode: props.selected_periode ?? '',
 }));
@@ -150,6 +143,14 @@ const paiementErrors = ref<Record<string, string>>({});
 const showAudit = ref(false);
 const auditBenefId = ref('');
 const auditBenefNom = ref('');
+
+const vehiculeDialogVisible = ref(false);
+const selectedVehicule = ref<VehiculeInfo | null>(null);
+
+function openVehicule(v: VehiculeInfo) {
+    selectedVehicule.value = v;
+    vehiculeDialogVisible.value = true;
+}
 
 function openAudit(b: BeneficiaireRow) {
     auditBenefId.value = b.beneficiaire_id;
@@ -190,8 +191,10 @@ function handlePaiementSubmit(payload: {
 function buildParams(): URLSearchParams {
     const params = new URLSearchParams();
     if (props.selected_periode) params.set('periode', props.selected_periode);
+    for (const id of props.filtre_site_ids ?? []) {
+        params.append('site_ids[]', id);
+    }
     if (props.filtre_statut) params.set('statut', props.filtre_statut);
-    if (props.filtre_site) params.set('site', props.filtre_site);
     if (search.value) params.set('search', search.value);
     return params;
 }
@@ -343,6 +346,7 @@ function fmtTel(tel: string | null | undefined): string {
                 url="/comptabilite/commissions/vente"
                 :values="currentFilters"
                 :fields="filterFields"
+                :sites="sites"
                 :result-count="beneficiaires.length"
                 search-placeholder="Rechercher un livreur, téléphone, véhicule..."
                 v-model:search="search"
@@ -428,7 +432,7 @@ function fmtTel(tel: string | null | undefined): string {
                                         </div>
                                     </div>
                                 </td>
-                                <td class="px-5 py-3">
+                                <td class="px-5 py-3" @click.stop>
                                     <div
                                         v-if="b.vehicules.length"
                                         class="flex items-start gap-1.5 text-sm text-muted-foreground"
@@ -441,7 +445,16 @@ function fmtTel(tel: string | null | undefined): string {
                                                 v-for="(v, idx) in b.vehicules"
                                                 :key="idx"
                                             >
-                                                <span>{{ v.nom }}</span>
+                                                <button
+                                                    type="button"
+                                                    class="flex items-center gap-1 font-medium text-primary hover:underline focus:outline-none"
+                                                    @click="openVehicule(v)"
+                                                >
+                                                    {{ v.nom }}
+                                                    <ExternalLink
+                                                        class="h-3 w-3 shrink-0"
+                                                    />
+                                                </button>
                                                 <span
                                                     v-if="v.immatriculation"
                                                     class="block text-xs text-muted-foreground/80"
@@ -595,4 +608,76 @@ function fmtTel(tel: string | null | undefined): string {
         :auditable-id="auditBenefId"
         module="commissions_vente"
     />
+
+    <Dialog
+        v-model:visible="vehiculeDialogVisible"
+        modal
+        header="Détail véhicule"
+        :style="{ width: '28rem' }"
+    >
+        <div class="space-y-3 px-1 py-2">
+            <div class="flex justify-between">
+                <span class="text-sm text-muted-foreground">Nom</span>
+                <span class="text-sm font-medium">{{
+                    selectedVehicule?.nom ?? '—'
+                }}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-sm text-muted-foreground"
+                    >Immatriculation</span
+                >
+                <span class="text-sm font-medium">{{
+                    selectedVehicule?.immatriculation ?? '—'
+                }}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-sm text-muted-foreground">Type</span>
+                <span class="text-sm font-medium">{{
+                    selectedVehicule?.type ?? '—'
+                }}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-sm text-muted-foreground">Capacité</span>
+                <span class="text-sm font-medium">
+                    {{
+                        selectedVehicule?.capacite_packs != null
+                            ? selectedVehicule.capacite_packs + ' packs'
+                            : '—'
+                    }}
+                </span>
+            </div>
+            <div class="border-t pt-3">
+                <p
+                    class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                >
+                    Propriétaire
+                </p>
+                <div class="flex justify-between">
+                    <span class="text-sm text-muted-foreground">Nom</span>
+                    <span class="text-sm font-medium">{{
+                        selectedVehicule?.proprietaire_nom ?? '—'
+                    }}</span>
+                </div>
+                <div
+                    v-if="selectedVehicule?.proprietaire_telephone"
+                    class="mt-2 flex justify-between"
+                >
+                    <span class="text-sm text-muted-foreground"
+                        >Téléphone</span
+                    >
+                    <span class="text-sm font-medium">
+                        {{ fmtTel(selectedVehicule.proprietaire_telephone) }}
+                    </span>
+                </div>
+            </div>
+        </div>
+        <template #footer>
+            <Button
+                variant="outline"
+                size="sm"
+                @click="vehiculeDialogVisible = false"
+                >Fermer</Button
+            >
+        </template>
+    </Dialog>
 </template>

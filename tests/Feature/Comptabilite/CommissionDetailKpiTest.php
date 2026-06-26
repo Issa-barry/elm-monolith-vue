@@ -8,6 +8,7 @@ use App\Features\ModuleFeature;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionVente;
+use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -123,16 +124,16 @@ class CommissionDetailKpiTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionLogistique/Livreur/Show')
-                ->has('kpis.total_brut')
-                ->has('kpis.total_frais')
-                ->has('kpis.total_net')
-                ->has('kpis.total_verse')
-                ->has('kpis.impaye')
-                ->where('kpis.total_brut', fn ($v) => (float) $v === 0.0)
-                ->where('kpis.total_frais', fn ($v) => (float) $v === 0.0)
-                ->where('kpis.total_net', fn ($v) => (float) $v === 0.0)
-                ->where('kpis.total_verse', fn ($v) => (float) $v === 0.0)
-                ->where('kpis.impaye', fn ($v) => (float) $v === 0.0)
+                ->has('commission_summary.brut_cumule')
+                ->has('commission_summary.frais')
+                ->has('commission_summary.net_a_payer')
+                ->has('commission_summary.deja_paye')
+                ->has('commission_summary.reste_a_payer')
+                ->where('commission_summary.brut_cumule', fn ($v) => (float) $v === 0.0)
+                ->where('commission_summary.frais', fn ($v) => (float) $v === 0.0)
+                ->where('commission_summary.net_a_payer', fn ($v) => (float) $v === 0.0)
+                ->where('commission_summary.deja_paye', fn ($v) => (float) $v === 0.0)
+                ->where('commission_summary.reste_a_payer', fn ($v) => (float) $v === 0.0)
             );
     }
 
@@ -153,11 +154,11 @@ class CommissionDetailKpiTest extends TestCase
             ->get("/comptabilite/commissions/logistique/livreurs/{$livreur->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->where('kpis.total_brut', 10000)
-                ->where('kpis.total_frais', 500)
-                ->where('kpis.total_net', 9500)
-                ->where('kpis.total_verse', fn ($v) => (float) $v === 0.0)
-                ->where('kpis.impaye', 9500)
+                ->where('commission_summary.brut_cumule', 10000)
+                ->where('commission_summary.frais', 500)
+                ->where('commission_summary.net_a_payer', 9500)
+                ->where('commission_summary.deja_paye', fn ($v) => (float) $v === 0.0)
+                ->where('commission_summary.reste_a_payer', 9500)
             );
     }
 
@@ -224,11 +225,11 @@ class CommissionDetailKpiTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionVente/Livreur/Show')
-                ->where('resume_global.total_brut_cumule', 12000)
-                ->where('resume_global.total_frais', 1000)
-                ->where('resume_global.total_net_cumule', 11000)
-                ->where('resume_global.total_verse', 3000)
-                ->where('resume_global.solde_global', 8000)
+                ->where('commission_summary.brut_cumule', 12000)
+                ->where('commission_summary.frais', 1000)
+                ->where('commission_summary.net_a_payer', 11000)
+                ->where('commission_summary.deja_paye', 3000)
+                ->where('commission_summary.reste_a_payer', 8000)
             );
     }
 
@@ -256,15 +257,151 @@ class CommissionDetailKpiTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionProprietaire/Show')
-                ->has('resume_global.total_brut_cumule')
-                ->has('resume_global.total_frais_depenses')
-                ->has('resume_global.total_net_cumule')
-                ->has('resume_global.total_verse')
-                ->has('resume_global.solde_global')
-                ->where('resume_global.total_brut_cumule', 50000)
-                ->where('resume_global.total_net_cumule', 50000)
-                ->where('resume_global.total_verse', 10000)
-                ->where('resume_global.solde_global', 40000)
+                ->has('commission_summary.brut_cumule')
+                ->has('commission_summary.frais')
+                ->has('commission_summary.net_a_payer')
+                ->has('commission_summary.deja_paye')
+                ->has('commission_summary.reste_a_payer')
+                ->where('commission_summary.brut_cumule', 50000)
+                ->where('commission_summary.net_a_payer', 50000)
+                ->where('commission_summary.deja_paye', 10000)
+                ->where('commission_summary.reste_a_payer', 40000)
+            );
+    }
+
+    // ── Structure commune : commission_details + expenses sur les 3 routes ───
+
+    public function test_vente_commission_details_expose_montant_paye_reste_statut(): void
+    {
+        $livreur = $this->makeLivreur();
+        $commission = CommissionVente::factory()->create(['organization_id' => $this->org->id]);
+        $commission->parts()->create([
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
+            'role' => 'chauffeur',
+            'taux_commission' => 10,
+            'montant_brut' => 12000,
+            'frais_supplementaires' => 1000,
+            'montant_net' => 11000,
+            'montant_verse' => 3000,
+            'statut' => 'partiel',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('commission_details', 1)
+                ->where('commission_details.0.montant', 11000)
+                ->where('commission_details.0.paye', 3000)
+                ->where('commission_details.0.reste', 8000)
+                ->has('commission_details.0.statut')
+                ->has('expenses')
+            );
+    }
+
+    public function test_logistique_commission_details_expose_montant_paye_reste_statut(): void
+    {
+        $siteA = $this->makeSite('Gamma');
+        $siteB = $this->makeSite('Delta');
+        $vehicule = $this->makeVehicule();
+        $livreur = $this->makeLivreur();
+
+        $transfert = $this->makeTransfert($siteA, $siteB, $vehicule);
+        $commission = $this->makeCommissionLogistique($transfert);
+        $this->makePartLogistique($commission, $livreur, brut: 10000, frais: 0, verse: 4000, statut: 'partiel');
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/logistique/livreurs/{$livreur->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('commission_details', 1)
+                ->where('commission_details.0.montant', 10000)
+                ->where('commission_details.0.paye', 4000)
+                ->where('commission_details.0.reste', 6000)
+                ->has('commission_details.0.statut')
+                ->has('expenses')
+            );
+    }
+
+    public function test_proprietaire_commission_details_expose_montant_paye_reste_statut(): void
+    {
+        $proprio = $this->makeProprietaire();
+        $commission = CommissionVente::factory()->create(['organization_id' => $this->org->id]);
+        $commission->parts()->create([
+            'type_beneficiaire' => 'proprietaire',
+            'proprietaire_id' => $proprio->id,
+            'beneficiaire_nom' => trim($proprio->prenom.' '.$proprio->nom),
+            'role' => 'proprietaire',
+            'taux_commission' => 60,
+            'montant_brut' => 50000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 50000,
+            'montant_verse' => 10000,
+            'statut' => 'partiel',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/proprietaires/{$proprio->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('commission_details', 1)
+                ->where('commission_details.0.montant', 50000)
+                ->where('commission_details.0.paye', 10000)
+                ->where('commission_details.0.reste', 40000)
+                ->has('commission_details.0.statut')
+                ->has('expenses')
+            );
+    }
+
+    // ── Logistique — onglet Dépenses ajouté sans changer le KPI Frais ────────
+
+    public function test_logistique_expenses_n_affecte_pas_le_kpi_frais(): void
+    {
+        $siteA = $this->makeSite('Epsilon');
+        $siteB = $this->makeSite('Zeta');
+        $vehicule = $this->makeVehicule();
+        $livreur = $this->makeLivreur();
+
+        $transfert = $this->makeTransfert($siteA, $siteB, $vehicule);
+        $commission = $this->makeCommissionLogistique($transfert);
+        $this->makePartLogistique($commission, $livreur, brut: 10000, frais: 500, verse: 0, statut: 'impaye');
+
+        Depense::factory()->valide()->create([
+            'organization_id' => $this->org->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreur->id,
+            'montant' => 2000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/logistique/livreurs/{$livreur->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('expenses', 1)
+                ->where('expenses.0.montant', 2000)
+                ->where('commission_summary.frais', 500)
+            );
+    }
+
+    // ── Dépenses : seules les dépenses validées sont exposées ────────────────
+
+    public function test_vente_expenses_n_inclut_pas_les_depenses_non_validees(): void
+    {
+        $livreur = $this->makeLivreur();
+        Depense::factory()->brouillon()->create([
+            'organization_id' => $this->org->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreur->id,
+            'montant' => 1500,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('expenses', 0)
             );
     }
 }

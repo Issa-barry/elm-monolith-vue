@@ -180,9 +180,9 @@ class CommissionVenteEquipeTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionVente/Livreur/Show')
-                ->has('historique_commandes', 1)
-                ->where('historique_commandes.0.commande_reference', $commandeReference)
-                ->where('historique_commandes.0.montant_net', 5831.77)
+                ->has('commission_details', 1)
+                ->where('commission_details.0.reference', $commandeReference)
+                ->where('commission_details.0.montant', 5831.77)
             );
     }
 
@@ -201,9 +201,9 @@ class CommissionVenteEquipeTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionVente/Livreur/Show')
-                ->has('historique_commandes', 1)
-                ->where('historique_commandes.0.commande_reference', $commandeReference)
-                ->where('historique_commandes.0.montant_net', 4166.46)
+                ->has('commission_details', 1)
+                ->where('commission_details.0.reference', $commandeReference)
+                ->where('commission_details.0.montant', 4166.46)
             );
     }
 }

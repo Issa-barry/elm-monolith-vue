@@ -143,6 +143,13 @@ export function formatPhoneDisplay(
     return formatLocalDigits(digits);
 }
 
+export function formatGNF(value: number | null | undefined): string {
+    return (
+        new Intl.NumberFormat('fr-FR').format(Math.round(Number(value ?? 0))) +
+        ' GNF'
+    );
+}
+
 export function phoneToTelHref(value: string | null | undefined) {
     if (!value) return '';
 

@@ -12,11 +12,13 @@ use App\Models\Depense;
 use App\Models\Organization;
 use App\Models\PaiementCommissionVente;
 use App\Models\Proprietaire;
+use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommissionVentePaiementService;
 use App\Services\PeriodeComptableService;
 use App\Services\SiteScopeService;
+use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -48,10 +50,10 @@ class CommissionProprietaireController extends Controller
             $filtrePeriode = '';
         }
 
-        $siteProps = $this->siteScope->inertiaProps($user, $orgId, $request->input('site', ''));
-        $filtreSite = $siteProps['filtre_site'];
-        $isAdmin = $siteProps['is_admin'];
+        $isAdmin = $user->isAdmin();
+        $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
+        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $query = CommissionPart::query()
             ->from('commission_parts AS cp')
@@ -166,8 +168,8 @@ class CommissionProprietaireController extends Controller
                 [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
                 $q->whereHas('commission', fn ($q2) => $q2->whereBetween('created_at', [$debut, $fin]));
             })
-            ->when($isAdmin && $filtreSite !== '', fn ($q) => $q->whereHas(
-                'commission.commande', fn ($q2) => $q2->where('site_id', $filtreSite)
+            ->when($isAdmin && ! empty($filtreSiteIds), fn ($q) => $q->whereHas(
+                'commission.commande', fn ($q2) => $q2->whereIn('site_id', $filtreSiteIds)
             ))
             ->when(! $isAdmin && ! empty($siteIds), fn ($q) => $q->whereHas(
                 'commission.commande', fn ($q2) => $q2->whereIn('site_id', $siteIds)
@@ -194,7 +196,7 @@ class CommissionProprietaireController extends Controller
             ]);
         })->values();
 
-        if (! $isAdmin || $filtreSite !== '') {
+        if (! $isAdmin || ! empty($filtreSiteIds)) {
             $allowedIds = $partsParProprio->keys()->map(fn ($k) => (string) $k)->all();
             $list = $list->filter(fn ($b) => in_array($b['beneficiaire_id'], $allowedIds))->values();
         }
@@ -227,12 +229,11 @@ class CommissionProprietaireController extends Controller
             'kpis' => $kpis,
             'search' => $search,
             'filtre_statut' => $filtreStatut,
-            'filtre_site' => $filtreSite,
+            'filtre_site_ids' => $filtreSiteIds,
             'selected_periode' => $filtrePeriode,
             'periodes_disponibles' => $periodesDisponibles,
             'periode_courante' => $periodeCourante,
-            'is_admin' => $isAdmin,
-            'sites' => $siteProps['sites'],
+            'sites' => $sites,
             'can_payer' => auth()->user()->can('comptabilite.payer'),
         ]);
     }
@@ -261,7 +262,7 @@ class CommissionProprietaireController extends Controller
         $totalFraisDepenses = 0.0;
 
         if ($vehiculeIds->isNotEmpty()) {
-            $fraisDepenses = Depense::with(['depenseType:id,libelle'])
+            $fraisDepenses = Depense::with(['depenseType:id,libelle', 'user', 'validateur'])
                 ->where('beneficiaire_type', 'vehicule')
                 ->whereIn('beneficiaire_id', $vehiculeIds)
                 ->where('statut', StatutDepense::VALIDE->value)
@@ -309,15 +310,21 @@ class CommissionProprietaireController extends Controller
                     ? PeriodeComptableService::codeForProprietaire(Carbon::instance($commission->created_at))
                     : null;
 
+                $montantNet = (float) $partsGroup->sum('montant_net');
+                $montantVerse = (float) $partsGroup->sum('montant_verse');
+
                 return [
                     'commission_id' => $commission->id,
-                    'commande_reference' => $commission->commande?->reference,
-                    'date_commande' => $commission->created_at?->format(self::DATE_FORMAT),
+                    'reference' => $commission->commande?->reference,
+                    'date' => $commission->created_at?->format(self::DATE_FORMAT),
                     'site' => $commission->commande?->site?->nom,
                     'vehicule' => $commission->vehicule?->nom_vehicule,
                     'montant_brut' => (float) $partsGroup->sum('montant_brut'),
-                    'montant_net' => (float) $partsGroup->sum('montant_net'),
-                    'montant_verse' => (float) $partsGroup->sum('montant_verse'),
+                    'montant' => $montantNet,
+                    'paye' => $montantVerse,
+                    'reste' => max(0.0, $montantNet - $montantVerse),
+                    'statut' => $first->statut_label,
+                    'statut_dot_class' => $first->statut_dot_class,
                     'periode' => $periodeCode,
                     'periode_label' => $periodeCode ? PeriodeComptableService::labelForCode($periodeCode) : null,
                 ];
@@ -347,22 +354,24 @@ class CommissionProprietaireController extends Controller
                 'nom' => $nom,
                 'telephone' => $proprio?->telephone,
             ],
-            'resume_global' => [
-                'total_brut_cumule' => $totalBrut,
-                'total_frais_depenses' => $totalFraisDepenses,
-                'total_net_cumule' => $totalNet,
-                'total_verse' => $totalVerse,
-                'solde_global' => $solde,
-            ],
-            'frais_depenses' => $fraisDepenses->map(fn ($d) => [
+            'commission_summary' => CommissionSummaryFormatter::format(
+                $totalBrut,
+                $totalFraisDepenses,
+                $totalNet,
+                $totalVerse,
+                $solde,
+            ),
+            'expenses' => $fraisDepenses->map(fn ($d) => [
                 'id' => $d->id,
-                'date' => $d->date_depense->toDateString(),
+                'date' => $d->date_depense->format(self::DATE_FORMAT),
                 'type' => $d->depenseType?->libelle ?? '—',
-                'montant' => (float) $d->montant,
                 'commentaire' => $d->commentaire,
+                'saisi_par' => $d->user?->name,
+                'validateur' => $d->validateur?->name,
+                'montant' => (float) $d->montant,
             ])->values(),
-            'historique_commandes' => $historiqueCommandes,
-            'historique_paiements' => $historiquePaiements,
+            'commission_details' => $historiqueCommandes,
+            'payments' => $historiquePaiements,
             'modes_paiement' => ModePaiement::options(),
             'periode_courante' => $periodeCourante,
             'selected_periode' => $periodeFilter,
