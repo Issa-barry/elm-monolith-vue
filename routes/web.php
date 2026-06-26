@@ -351,6 +351,10 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
             ->name('salaires.excel');
         Route::get('salaires/export/pdf', [SalaireController::class, 'exportPdf'])
             ->name('salaires.pdf');
+        Route::get('salaires/employes/{employeId}', [SalaireController::class, 'showEmploye'])
+            ->name('salaires.employe');
+        Route::post('salaires/employes/{employeId}/paiements', [SalaireController::class, 'payerEmploye'])
+            ->name('salaires.employe.paiements');
 
         // ── Historique des actions ────────────────────────────────────────────
         Route::get('historique', [HistoriqueActionsController::class, 'index'])

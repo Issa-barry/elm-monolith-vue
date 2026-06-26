@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\JournalTresorerieService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -33,6 +34,10 @@ class CashbackVersement extends Model
     protected static function booted(): void
     {
         static::creating(fn (self $v) => $v->created_by ??= Auth::id());
+
+        static::created(function (self $v) {
+            JournalTresorerieService::enregistrerCashback($v);
+        });
     }
 
     public function transaction(): BelongsTo

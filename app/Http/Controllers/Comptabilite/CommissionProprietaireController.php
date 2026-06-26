@@ -271,9 +271,11 @@ class CommissionProprietaireController extends Controller
             ->orderByDesc('commission_vente_id')
             ->get();
 
-        $vehiculeIds = Vehicule::where('proprietaire_id', $proprietaireId)
+        $vehicules = Vehicule::where('proprietaire_id', $proprietaireId)
             ->where('organization_id', $orgId)
-            ->pluck('id');
+            ->get(['id', 'nom_vehicule', 'immatriculation'])
+            ->keyBy('id');
+        $vehiculeIds = $vehicules->keys();
 
         // Deux sources de dépenses imputées à la commission propriétaire :
         // celles rattachées à un véhicule qu'il possède, et celles rattachées
@@ -305,8 +307,16 @@ class CommissionProprietaireController extends Controller
         $activeParts = $allParts->filter(fn ($p) => $p->statut !== StatutCommission::CREEE);
         $solde = max(0.0, (float) $activeParts->sum('montant_brut') - $totalFraisDepenses - (float) $activeParts->sum('montant_verse'));
 
-        $periodeFilter = $request->input('periode', '');
+        $periodeFilter = (string) $request->input('periode', '');
         $periodeCourante = PeriodeComptableService::periodeCouranteProprietaire();
+
+        $fraisDepensesAffichees = $fraisDepenses;
+        if ($periodeFilter !== '') {
+            [$debutDep, $finDep] = PeriodeComptableService::dateRangeForCode($periodeFilter);
+            $fraisDepensesAffichees = $fraisDepenses->filter(
+                fn ($d) => $d->date_depense && $d->date_depense->between($debutDep, $finDep)
+            );
+        }
 
         $earliestCommission = $allParts
             ->filter(fn ($p) => $p->commission?->created_at !== null)
@@ -344,7 +354,11 @@ class CommissionProprietaireController extends Controller
                     'reference' => $commission->commande?->reference,
                     'date' => $commission->created_at?->format(self::DATE_FORMAT),
                     'site' => $commission->commande?->site?->nom,
-                    'vehicule' => $commission->vehicule?->nom_vehicule,
+                    'vehicule' => $commission->vehicule ? [
+                        'id' => $commission->vehicule->id,
+                        'nom' => $commission->vehicule->nom_vehicule,
+                        'immatriculation' => $commission->vehicule->immatriculation,
+                    ] : null,
                     'montant_brut' => (float) $partsGroup->sum('montant_brut'),
                     'montant' => $montantNet,
                     'paye' => $montantVerse,
@@ -387,15 +401,26 @@ class CommissionProprietaireController extends Controller
                 $totalVerse,
                 $solde,
             ),
-            'expenses' => $fraisDepenses->map(fn ($d) => [
-                'id' => $d->id,
-                'date' => $d->date_depense->format(self::DATE_FORMAT),
-                'type' => $d->depenseType?->libelle ?? '—',
-                'commentaire' => $d->commentaire,
-                'saisi_par' => $d->user?->name,
-                'validateur' => $d->validateur?->name,
-                'montant' => (float) $d->montant,
-            ])->values(),
+            'expenses' => $fraisDepensesAffichees->map(function ($d) use ($vehicules) {
+                $vehicule = $d->beneficiaire_type === 'vehicule'
+                    ? $vehicules->get($d->beneficiaire_id)
+                    : null;
+
+                return [
+                    'id' => $d->id,
+                    'date' => $d->date_depense->format(self::DATE_FORMAT),
+                    'type' => $d->depenseType?->libelle ?? '—',
+                    'commentaire' => $d->commentaire,
+                    'saisi_par' => $d->user?->name,
+                    'validateur' => $d->validateur?->name,
+                    'vehicule' => $vehicule ? [
+                        'id' => $vehicule->id,
+                        'nom' => $vehicule->nom_vehicule,
+                        'immatriculation' => $vehicule->immatriculation,
+                    ] : null,
+                    'montant' => (float) $d->montant,
+                ];
+            })->values(),
             'commission_details' => $historiqueCommandes,
             'payments' => $historiquePaiements,
             'modes_paiement' => ModePaiement::options(),
