@@ -662,9 +662,7 @@ function fmtTel(tel: string | null | undefined): string {
                     v-if="selectedVehicule?.proprietaire_telephone"
                     class="mt-2 flex justify-between"
                 >
-                    <span class="text-sm text-muted-foreground"
-                        >Téléphone</span
-                    >
+                    <span class="text-sm text-muted-foreground">Téléphone</span>
                     <span class="text-sm font-medium">
                         {{ fmtTel(selectedVehicule.proprietaire_telephone) }}
                     </span>

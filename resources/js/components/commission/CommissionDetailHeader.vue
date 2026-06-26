@@ -36,20 +36,13 @@ const emit = defineEmits<{
                 <p class="mt-0.5 text-xl font-semibold">
                     {{ props.title }}
                 </p>
-                <p
-                    v-if="props.telephone"
-                    class="text-sm text-muted-foreground"
-                >
+                <p v-if="props.telephone" class="text-sm text-muted-foreground">
                     {{ formatPhoneDisplay(props.telephone) }}
                 </p>
             </div>
         </div>
         <div class="flex items-center gap-2">
-            <Button
-                v-if="props.canPay"
-                size="sm"
-                @click="emit('pay')"
-            >
+            <Button v-if="props.canPay" size="sm" @click="emit('pay')">
                 <HandCoins class="mr-1.5 h-4 w-4" />
                 {{ props.payLabel }}
             </Button>

@@ -14,9 +14,7 @@ const props = withDefaults(
     },
 );
 
-const total = computed(() =>
-    props.rows.reduce((sum, r) => sum + r.montant, 0),
-);
+const total = computed(() => props.rows.reduce((sum, r) => sum + r.montant, 0));
 </script>
 
 <template>
@@ -56,7 +54,11 @@ const total = computed(() =>
             </tr>
         </thead>
         <tbody class="divide-y">
-            <tr v-for="row in props.rows" :key="row.id" class="hover:bg-muted/10">
+            <tr
+                v-for="row in props.rows"
+                :key="row.id"
+                class="hover:bg-muted/10"
+            >
                 <td class="px-4 py-3 text-xs text-muted-foreground">
                     {{ row.date ?? '—' }}
                 </td>
