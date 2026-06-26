@@ -336,8 +336,9 @@ function formatDate(iso: string | null): string {
                                 </span>
                             </div>
                             <p class="text-sm text-muted-foreground">
-                                Saisie le {{ formatDate(depense.created_at) }}
-                                par {{ depense.saisi_par }}
+                                Saisie le
+                                {{ formatDate(depense.created_at) }} par
+                                {{ depense.saisi_par }}
                             </p>
                         </div>
                     </div>

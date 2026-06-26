@@ -64,6 +64,12 @@ const showPaiementDialog = ref(false);
 
 const { vehiculeOptions, selectedVehicules, filteredRows } =
     useCommissionVehiculeFilter(computed(() => props.commission_details));
+
+const {
+    vehiculeOptions: expenseVehiculeOptions,
+    selectedVehicules: selectedExpenseVehicules,
+    filteredRows: filteredExpenses,
+} = useCommissionVehiculeFilter(computed(() => props.expenses));
 </script>
 
 <template>
@@ -138,14 +144,25 @@ const { vehiculeOptions, selectedVehicules, filteredRows } =
                 <div
                     class="overflow-hidden rounded-xl border bg-card shadow-sm"
                 >
-                    <div class="border-b px-4 py-3">
+                    <div
+                        class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3"
+                    >
                         <h2 class="text-sm font-semibold">
                             Dépenses imputées à ce livreur
                         </h2>
+                        <CommissionVehiculeSelect
+                            v-if="expenseVehiculeOptions.length > 1"
+                            v-model="selectedExpenseVehicules"
+                            :options="expenseVehiculeOptions"
+                        />
                     </div>
                     <CommissionExpensesTable
-                        :rows="expenses"
-                        empty-message="Aucune dépense imputée à ce livreur."
+                        :rows="filteredExpenses"
+                        :empty-message="
+                            selectedExpenseVehicules.length > 0
+                                ? 'Aucune dépense pour ce véhicule.'
+                                : 'Aucune dépense imputée à ce livreur.'
+                        "
                     />
                 </div>
             </template>

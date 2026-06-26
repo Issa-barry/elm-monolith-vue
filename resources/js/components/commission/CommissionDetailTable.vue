@@ -17,7 +17,6 @@ const props = withDefaults(
 
 const totals = computed(() => ({
     montant: props.rows.reduce((sum, r) => sum + r.montant, 0),
-    paye: props.rows.reduce((sum, r) => sum + r.paye, 0),
     reste: props.rows.reduce((sum, r) => sum + r.reste, 0),
 }));
 </script>
@@ -45,11 +44,6 @@ const totals = computed(() => ({
                     class="px-4 py-3 text-right font-medium text-muted-foreground"
                 >
                     Montant
-                </th>
-                <th
-                    class="px-4 py-3 text-right font-medium text-muted-foreground"
-                >
-                    Payé
                 </th>
                 <th
                     class="px-4 py-3 text-right font-medium text-muted-foreground"
@@ -86,11 +80,6 @@ const totals = computed(() => ({
                 <td class="px-4 py-3 text-right font-medium tabular-nums">
                     {{ formatGNF(row.montant) }}
                 </td>
-                <td
-                    class="px-4 py-3 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
-                >
-                    {{ formatGNF(row.paye) }}
-                </td>
                 <td class="px-4 py-3 text-right tabular-nums">
                     {{ formatGNF(row.reste) }}
                 </td>
@@ -112,11 +101,6 @@ const totals = computed(() => ({
                 </td>
                 <td class="px-4 py-2.5 text-right tabular-nums">
                     {{ formatGNF(totals.montant) }}
-                </td>
-                <td
-                    class="px-4 py-2.5 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
-                >
-                    {{ formatGNF(totals.paye) }}
                 </td>
                 <td class="px-4 py-2.5 text-right tabular-nums">
                     {{ formatGNF(totals.reste) }}

@@ -1,23 +1,27 @@
-import type { CommissionDetailRow } from '@/types/commission';
+import type { CommissionVehiculeInfo } from '@/types/commission';
 import { computed, ref, type ComputedRef } from 'vue';
 
-function vehiculeKey(row: CommissionDetailRow): string | null {
+interface HasVehicule {
+    vehicule?: CommissionVehiculeInfo | null;
+}
+
+function vehiculeKey(row: HasVehicule): string | null {
     return row.vehicule?.id ?? row.vehicule?.nom ?? null;
 }
 
-function vehiculeLabel(vehicule: CommissionDetailRow['vehicule']): string {
+function vehiculeLabel(vehicule: HasVehicule['vehicule']): string {
     if (!vehicule || (!vehicule.nom && !vehicule.immatriculation)) return '—';
     return [vehicule.nom, vehicule.immatriculation].filter(Boolean).join(' — ');
 }
 
 /**
- * Filtre véhicule partagé par les 3 pages détail commission : dérive les
- * options depuis les lignes reçues, garde la sélection, et renvoie les
- * lignes filtrées — pour que chaque page puisse placer le sélecteur où elle
- * veut (ex. sur la même ligne que le filtre période) sans dupliquer la logique.
+ * Filtre véhicule partagé par les tableaux détail commission (commandes/
+ * transferts ET dépenses) : dérive les options depuis les lignes reçues,
+ * garde la sélection, et renvoie les lignes filtrées — pour que chaque page
+ * puisse placer le sélecteur où elle veut sans dupliquer la logique.
  */
-export function useCommissionVehiculeFilter(
-    rows: ComputedRef<CommissionDetailRow[]>,
+export function useCommissionVehiculeFilter<T extends HasVehicule>(
+    rows: ComputedRef<T[]>,
 ) {
     const vehiculeOptions = computed<{ value: string; label: string }[]>(() => {
         const seen = new Map<string, string>();

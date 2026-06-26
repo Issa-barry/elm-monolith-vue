@@ -2,7 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
-import StatusDot from '@/components/StatusDot.vue';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -263,13 +263,13 @@ const mobileFiltered = computed(() => {
 
 // ── Couleurs statut ───────────────────────────────────────────────────────────
 const statutCommandeColor: Record<string, string> = {
-    brouillon: 'bg-zinc-400 dark:bg-zinc-500',
-    a_charger: 'bg-amber-400',
-    chargement_en_cours: 'bg-orange-500',
-    livraison_en_cours: 'bg-blue-500',
-    livree: 'bg-teal-500',
-    cloturee: 'bg-emerald-500',
-    annulee: 'bg-red-400',
+    brouillon: 'bg-muted text-muted-foreground border-transparent',
+    a_charger: 'bg-amber-100 text-amber-700 border-amber-300',
+    chargement_en_cours: 'bg-orange-100 text-orange-700 border-orange-300',
+    livraison_en_cours: 'bg-blue-100 text-blue-700 border-blue-300',
+    livree: 'bg-teal-100 text-teal-700 border-teal-300',
+    cloturee: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+    annulee: 'bg-red-100 text-red-700 border-red-300',
 };
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
@@ -522,14 +522,15 @@ function confirmDelete(c: Commande) {
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
                         <div class="flex flex-col items-end gap-1.5">
-                            <StatusDot
-                                :label="c.statut_label"
-                                :dot-class="
+                            <Badge
+                                variant="outline"
+                                :class="
                                     statutCommandeColor[c.statut] ??
-                                    'bg-zinc-400 dark:bg-zinc-500'
+                                    'border-transparent bg-muted text-muted-foreground'
                                 "
-                                class="text-xs text-muted-foreground"
-                            />
+                            >
+                                {{ c.statut_label }}
+                            </Badge>
                             <span
                                 class="text-xs text-muted-foreground tabular-nums"
                                 >{{ c.created_at }}</span
@@ -742,25 +743,6 @@ function confirmDelete(c: Commande) {
                         </template>
                     </Column>
 
-                    <!-- Statut commande -->
-                    <Column
-                        field="statut"
-                        header="Statut"
-                        sortable
-                        style="width: 130px"
-                    >
-                        <template #body="{ data }">
-                            <StatusDot
-                                :label="data.statut_label"
-                                :dot-class="
-                                    statutCommandeColor[data.statut] ??
-                                    'bg-zinc-400 dark:bg-zinc-500'
-                                "
-                                class="text-muted-foreground"
-                            />
-                        </template>
-                    </Column>
-
                     <!-- Date -->
                     <Column
                         field="created_at"
@@ -773,6 +755,26 @@ function confirmDelete(c: Commande) {
                                 class="text-xs text-muted-foreground tabular-nums"
                                 >{{ data.created_at }}</span
                             >
+                        </template>
+                    </Column>
+
+                    <!-- Statut commande -->
+                    <Column
+                        field="statut"
+                        header="Statut"
+                        sortable
+                        style="width: 130px"
+                    >
+                        <template #body="{ data }">
+                            <Badge
+                                variant="outline"
+                                :class="
+                                    statutCommandeColor[data.statut] ??
+                                    'border-transparent bg-muted text-muted-foreground'
+                                "
+                            >
+                                {{ data.statut_label }}
+                            </Badge>
                         </template>
                     </Column>
 

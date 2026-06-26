@@ -294,6 +294,7 @@ class CommissionLogistiqueController extends Controller
                 'commentaire' => $d->commentaire,
                 'saisi_par' => $d->user?->name,
                 'validateur' => $d->validateur?->name,
+                'vehicule' => null,
                 'montant' => (float) $d->montant,
             ]);
 

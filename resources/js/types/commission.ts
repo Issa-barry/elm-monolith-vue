@@ -34,6 +34,7 @@ export interface CommissionExpenseRow {
     commentaire: string | null;
     saisi_par: string | null;
     validateur: string | null;
+    vehicule?: CommissionVehiculeInfo | null;
     montant: number;
 }
 

@@ -5,7 +5,7 @@ import VehiculeDetailDialog from '@/components/Depenses/VehiculeDetailDialog.vue
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
-import { Badge } from '@/components/ui/badge';
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -402,31 +402,26 @@ function formatPaginationLabel(label: string) {
     return el.textContent?.trim() ?? label.trim();
 }
 
-const statutVariant: Record<
-    string,
-    'default' | 'secondary' | 'destructive' | 'outline'
-> = {
-    brouillon: 'secondary',
-    soumis: 'outline',
-    valide: 'default',
-    rejete: 'destructive',
-    annule: 'destructive',
-};
-
-const statutColors: Record<string, string> = {
-    brouillon: '',
-    soumis: 'border-blue-400 text-blue-700',
-    valide: 'bg-emerald-100 text-emerald-700 border-emerald-300',
-    rejete: 'bg-red-100 text-red-700 border-red-300',
-    annule: '',
-};
+function statutDotClass(s: string) {
+    return (
+        (
+            {
+                brouillon: 'bg-zinc-400 dark:bg-zinc-500',
+                soumis: 'bg-blue-500',
+                valide: 'bg-emerald-500',
+                rejete: 'bg-red-500',
+                annule: 'bg-red-400',
+            } as Record<string, string>
+        )[s] ?? 'bg-zinc-400 dark:bg-zinc-500'
+    );
+}
 
 const categorieColors: Record<string, string> = {
-    interne: 'bg-slate-100 text-slate-600',
-    employe: 'bg-blue-100 text-blue-700',
-    livreur: 'bg-amber-100 text-amber-700',
-    proprietaire: 'bg-purple-100 text-purple-700',
-    vehicule: 'bg-green-100 text-green-700',
+    interne: 'bg-muted text-muted-foreground',
+    employe: 'bg-muted text-muted-foreground',
+    livreur: 'bg-muted text-muted-foreground',
+    proprietaire: 'bg-muted text-muted-foreground',
+    vehicule: 'bg-muted text-muted-foreground',
 };
 </script>
 
@@ -536,11 +531,6 @@ const categorieColors: Record<string, string> = {
                                 Montant
                             </th>
                             <th
-                                class="px-4 py-2.5 text-center font-medium text-muted-foreground"
-                            >
-                                Statut
-                            </th>
-                            <th
                                 class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground lg:table-cell"
                             >
                                 Site
@@ -549,6 +539,11 @@ const categorieColors: Record<string, string> = {
                                 class="hidden px-4 py-2.5 text-left font-medium text-muted-foreground xl:table-cell"
                             >
                                 Saisi par
+                            </th>
+                            <th
+                                class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                            >
+                                Statut
                             </th>
                             <th
                                 class="px-4 py-2.5 text-right font-medium text-muted-foreground"
@@ -585,13 +580,6 @@ const categorieColors: Record<string, string> = {
                                 >
                                     {{ d.type.categorie_label }}
                                 </span>
-                                <div
-                                    v-if="d.commentaire"
-                                    class="mt-0.5 truncate text-xs text-muted-foreground"
-                                    style="max-width: 200px"
-                                >
-                                    {{ d.commentaire }}
-                                </div>
                             </td>
 
                             <!-- Concerné -->
@@ -610,7 +598,7 @@ const categorieColors: Record<string, string> = {
                                     >
                                         {{ d.beneficiaire_label ?? '—' }}
                                         <ExternalLink
-                                            class="h-3 w-3 shrink-0 text-primary"
+                                            class="h-3 w-3 shrink-0 text-muted-foreground"
                                         />
                                     </div>
                                     <div
@@ -654,7 +642,7 @@ const categorieColors: Record<string, string> = {
                                     >
                                         {{ d.vehicule_nom ?? '—' }}
                                         <ExternalLink
-                                            class="h-3 w-3 shrink-0 text-primary"
+                                            class="h-3 w-3 shrink-0 text-muted-foreground"
                                         />
                                     </div>
                                     <div
@@ -678,18 +666,6 @@ const categorieColors: Record<string, string> = {
                                 {{ fmt(d.montant) }}
                             </td>
 
-                            <!-- Statut -->
-                            <td class="px-4 py-3 text-center">
-                                <Badge
-                                    :variant="
-                                        statutVariant[d.statut] ?? 'secondary'
-                                    "
-                                    :class="statutColors[d.statut]"
-                                >
-                                    {{ d.statut_label }}
-                                </Badge>
-                            </td>
-
                             <!-- Site -->
                             <td
                                 class="hidden px-4 py-3 text-xs text-muted-foreground lg:table-cell"
@@ -702,6 +678,14 @@ const categorieColors: Record<string, string> = {
                                 class="hidden px-4 py-3 text-xs text-muted-foreground xl:table-cell"
                             >
                                 {{ d.user.name }}
+                            </td>
+
+                            <!-- Statut -->
+                            <td class="px-4 py-3">
+                                <StatusDot
+                                    :label="d.statut_label"
+                                    :dot-class="statutDotClass(d.statut)"
+                                />
                             </td>
 
                             <!-- Actions -->

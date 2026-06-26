@@ -216,7 +216,7 @@
                     <td>
                         {{ $row['beneficiaire_label'] ?? '—' }}
                         @if(!empty($row['beneficiaire_telephone']))
-                        <br><small style="color:#555; font-size:7px;">{{ $row['beneficiaire_telephone'] }}</small>
+                        <br><small style="color:#555; font-size:7px;">{{ \App\Support\PhoneFormatter::display($row['beneficiaire_telephone']) }}</small>
                         @endif
                     </td>
                     <td>{{ $row['vehicule_nom'] ?? '—' }}</td>
