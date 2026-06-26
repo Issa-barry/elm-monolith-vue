@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ModePaiement;
+use App\Services\JournalTresorerieService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -47,6 +48,7 @@ class EncaissementVente extends Model
                 $facture->recalculStatut();
                 $facture->commande->cloturerSiComplete();
             }
+            JournalTresorerieService::enregistrerEncaissement($e);
         });
 
         static::deleted(function (EncaissementVente $e) {
@@ -55,6 +57,9 @@ class EncaissementVente extends Model
                 $facture->recalculStatut();
                 $facture->commande->cloturerSiComplete();
             }
+            JournalTresorerie::where('source_type', EncaissementVente::class)
+                ->where('source_id', $e->id)
+                ->delete();
         });
     }
 

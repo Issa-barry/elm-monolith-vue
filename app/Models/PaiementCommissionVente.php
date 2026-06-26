@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ModePaiement;
+use App\Services\JournalTresorerieService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -34,6 +35,13 @@ class PaiementCommissionVente extends Model
             'paid_at' => 'date',
             'mode_paiement' => ModePaiement::class,
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::created(function (self $p) {
+            JournalTresorerieService::enregistrerCommissionVente($p);
+        });
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────

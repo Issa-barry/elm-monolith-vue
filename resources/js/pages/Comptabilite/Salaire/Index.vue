@@ -15,9 +15,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Download,
+    Eye,
     FileText,
     HandCoins,
     History,
@@ -490,6 +491,16 @@ const periodeCourante = computed(
                                             align="end"
                                             class="w-48"
                                         >
+                                            <DropdownMenuItem as-child>
+                                                <Link
+                                                    :href="`/comptabilite/salaires/employes/${l.employe_id}`"
+                                                    class="flex w-full cursor-pointer items-center"
+                                                >
+                                                    <Eye class="mr-2 h-4 w-4" />
+                                                    Voir détail
+                                                </Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
                                             <template
                                                 v-if="
                                                     can_payer &&

@@ -297,6 +297,7 @@ class CommissionDetailKpiTest extends TestCase
                 ->where('commission_details.0.paye', 3000)
                 ->where('commission_details.0.reste', 8000)
                 ->has('commission_details.0.statut')
+                ->where('commission_details.0.vehicule.id', $commission->vehicule_id)
                 ->has('expenses')
             );
     }
@@ -321,6 +322,8 @@ class CommissionDetailKpiTest extends TestCase
                 ->where('commission_details.0.paye', 4000)
                 ->where('commission_details.0.reste', 6000)
                 ->has('commission_details.0.statut')
+                ->where('commission_details.0.vehicule.id', $vehicule->id)
+                ->where('commission_details.0.vehicule.nom', $vehicule->nom_vehicule)
                 ->has('expenses')
             );
     }
@@ -402,6 +405,51 @@ class CommissionDetailKpiTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('expenses', 0)
+            );
+    }
+
+    // ── Dépenses : filtrées par la même période que le tableau "Détail" ─────
+
+    public function test_vente_expenses_sont_filtrees_par_periode_selectionnee(): void
+    {
+        $livreur = $this->makeLivreur();
+
+        Depense::factory()->valide()->create([
+            'organization_id' => $this->org->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreur->id,
+            'montant' => 1000,
+            'date_depense' => '2026-06-05',
+        ]);
+        Depense::factory()->valide()->create([
+            'organization_id' => $this->org->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreur->id,
+            'montant' => 2000,
+            'date_depense' => '2026-06-20',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?periode=2026-06-P1")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('expenses', 1)
+                ->where('expenses.0.montant', 1000)
+            );
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?periode=2026-06-P2")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('expenses', 1)
+                ->where('expenses.0.montant', 2000)
+            );
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?periode=")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('expenses', 2)
             );
     }
 }

@@ -60,6 +60,13 @@ class DepenseObserver
         $this->paieCalc->calculerLigne($ligne);
     }
 
+    public function deleted(Depense $depense): void
+    {
+        JournalTresorerie::where('source_type', Depense::class)
+            ->where('source_id', $depense->id)
+            ->delete();
+    }
+
     private function syncJournalDepenseInterne(Depense $depense, bool $isValide): void
     {
         JournalTresorerie::where('source_type', Depense::class)

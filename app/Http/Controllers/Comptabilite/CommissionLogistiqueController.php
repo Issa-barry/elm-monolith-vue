@@ -223,7 +223,7 @@ class CommissionLogistiqueController extends Controller
         $periodesDisponibles = PeriodeComptableService::periodesDisponibles($earliestDate);
 
         $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
-        $selectedPeriode = $request->input('periode', '');
+        $selectedPeriode = (string) $request->input('periode', '');
 
         $filteredParts = $selectedPeriode !== ''
             ? $allParts->filter(fn ($p) => $p->periode === $selectedPeriode)
@@ -280,11 +280,18 @@ class CommissionLogistiqueController extends Controller
             'created_by' => $p->createur ? trim("{$p->createur->prenom} {$p->createur->nom}") : null,
         ]);
 
-        $expenses = Depense::with(['user', 'validateur', 'depenseType:id,libelle'])
+        $expensesQuery = Depense::with(['user', 'validateur', 'depenseType:id,libelle'])
             ->where('organization_id', $orgId)
             ->where('beneficiaire_type', 'livreur')
             ->where('beneficiaire_id', $livreurId)
-            ->where('statut', StatutDepense::VALIDE->value)
+            ->where('statut', StatutDepense::VALIDE->value);
+
+        if ($selectedPeriode !== '') {
+            [$debut, $fin] = PeriodeComptableService::dateRangeForCode($selectedPeriode);
+            $expensesQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
+        }
+
+        $expenses = $expensesQuery
             ->orderByDesc('date_depense')
             ->get()
             ->map(fn (Depense $d) => [
@@ -294,6 +301,7 @@ class CommissionLogistiqueController extends Controller
                 'commentaire' => $d->commentaire,
                 'saisi_par' => $d->user?->name,
                 'validateur' => $d->validateur?->name,
+                'vehicule' => null,
                 'montant' => (float) $d->montant,
             ]);
 
@@ -310,18 +318,27 @@ class CommissionLogistiqueController extends Controller
                 $totalVerse,
                 $totalImpaye,
             ),
-            'commission_details' => $filteredParts->map(fn ($p) => [
-                'id' => $p->id,
-                'reference' => $p->commission?->transfert?->reference,
-                'montant' => (float) $p->montant_net,
-                'paye' => (float) $p->montant_verse,
-                'reste' => (float) $p->montant_restant,
-                'date' => $p->earned_at?->format(self::DATE_FORMAT),
-                'periode' => $p->periode,
-                'periode_label' => $p->periode ? PeriodeComptableService::labelForCode($p->periode) : null,
-                'statut' => $p->statut_label,
-                'statut_dot_class' => $p->statut_dot_class,
-            ])->values(),
+            'commission_details' => $filteredParts->map(function ($p) {
+                $vehicule = $p->commission?->transfert?->vehicule;
+
+                return [
+                    'id' => $p->id,
+                    'reference' => $p->commission?->transfert?->reference,
+                    'vehicule' => $vehicule ? [
+                        'id' => $vehicule->id,
+                        'nom' => $vehicule->nom_vehicule,
+                        'immatriculation' => $vehicule->immatriculation,
+                    ] : null,
+                    'montant' => (float) $p->montant_net,
+                    'paye' => (float) $p->montant_verse,
+                    'reste' => (float) $p->montant_restant,
+                    'date' => $p->earned_at?->format(self::DATE_FORMAT),
+                    'periode' => $p->periode,
+                    'periode_label' => $p->periode ? PeriodeComptableService::labelForCode($p->periode) : null,
+                    'statut' => $p->statut_label,
+                    'statut_dot_class' => $p->statut_dot_class,
+                ];
+            })->values(),
             'periode_stats' => $periodeStats,
             'payments' => $payments,
             'expenses' => $expenses,

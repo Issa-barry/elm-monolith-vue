@@ -195,6 +195,43 @@ class PaieCalculService
         ]);
     }
 
+    /**
+     * Paiement global d'un salarié : répartit un montant en FIFO (période la
+     * plus ancienne d'abord) sur ses lignes de paie impayées, sur toutes les
+     * périodes — l'utilisateur paie un solde total, pas une période précise.
+     */
+    public function payerEmploye(string $employeId, string $orgId, float $montant, string $modePaiement, string $paidAt, ?string $note = null): void
+    {
+        $lignes = PaieLigne::with('periode')
+            ->where('employe_id', $employeId)
+            ->whereHas('periode', fn ($q) => $q->where('organization_id', $orgId))
+            ->where('reste_a_payer', '>', 0)
+            ->get()
+            ->sortBy(fn (PaieLigne $l) => sprintf('%04d-%02d', $l->periode->annee, $l->periode->mois));
+
+        $totalDisponible = (float) $lignes->sum('reste_a_payer');
+        if ($montant > $totalDisponible + 0.01) {
+            throw new \InvalidArgumentException("Le montant dépasse le reste à payer ({$totalDisponible} GNF).");
+        }
+
+        $restant = $montant;
+        foreach ($lignes as $ligne) {
+            if ($restant <= 0.01) {
+                break;
+            }
+
+            $alloue = min($restant, (float) $ligne->reste_a_payer);
+            $ligne->paiements()->create([
+                'montant' => $alloue,
+                'date_paiement' => $paidAt,
+                'mode_paiement' => $modePaiement,
+                'note' => $note,
+            ]);
+            $this->recalculerApresPaiement($ligne);
+            $restant -= $alloue;
+        }
+    }
+
     private function joursActifs(Contrat $contrat, Carbon $debut, Carbon $fin, int $joursMois): float
     {
         $dateDebut = Carbon::parse($contrat->date_debut)->startOfDay();

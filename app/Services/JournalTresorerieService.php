@@ -5,10 +5,14 @@ namespace App\Services;
 use App\Enums\CategorieJournal;
 use App\Enums\SensJournal;
 use App\Models\CashbackVersement;
+use App\Models\CommissionPayment;
 use App\Models\Depense;
 use App\Models\EncaissementVente;
 use App\Models\JournalTresorerie;
+use App\Models\PaiementCommissionVente;
 use App\Models\PaiementFichePaiement;
+use App\Models\PaiePaiement;
+use Illuminate\Support\Facades\Auth;
 
 class JournalTresorerieService
 {
@@ -99,6 +103,74 @@ class JournalTresorerieService
             'source_type' => Depense::class,
             'source_id' => $depense->id,
             'created_by' => $depense->user_id,
+        ]);
+    }
+
+    public static function enregistrerCommissionVente(PaiementCommissionVente $paiement): void
+    {
+        $categorie = $paiement->type_beneficiaire === 'proprietaire'
+            ? CategorieJournal::PROPRIETAIRE->value
+            : CategorieJournal::COMMISSION_VENTE->value;
+
+        JournalTresorerie::create([
+            'organization_id' => $paiement->organization_id,
+            'site_id' => null,
+            'date_operation' => $paiement->paid_at,
+            'sens' => SensJournal::SORTIE->value,
+            'categorie' => $categorie,
+            'libelle' => 'Paiement commission vente — '.$paiement->beneficiaire_nom,
+            'reference' => null,
+            'montant' => (float) $paiement->montant,
+            'source_type' => PaiementCommissionVente::class,
+            'source_id' => $paiement->id,
+            'created_by' => $paiement->created_by,
+        ]);
+    }
+
+    public static function enregistrerCommissionLogistique(CommissionPayment $paiement): void
+    {
+        $categorie = $paiement->beneficiary_type === 'proprietaire'
+            ? CategorieJournal::PROPRIETAIRE->value
+            : CategorieJournal::COMMISSION_LOGISTIQUE->value;
+
+        JournalTresorerie::create([
+            'organization_id' => $paiement->organization_id,
+            'site_id' => $paiement->vehicule?->site_id,
+            'date_operation' => $paiement->paid_at,
+            'sens' => SensJournal::SORTIE->value,
+            'categorie' => $categorie,
+            'libelle' => 'Paiement commission logistique — '.$paiement->beneficiary_nom,
+            'reference' => null,
+            'montant' => (float) $paiement->montant,
+            'source_type' => CommissionPayment::class,
+            'source_id' => $paiement->id,
+            'created_by' => $paiement->created_by,
+        ]);
+    }
+
+    public static function enregistrerPaieSalaire(PaiePaiement $paiement): void
+    {
+        $ligne = $paiement->ligne;
+        $orgId = $ligne?->periode?->organization_id;
+
+        if (! $orgId) {
+            return;
+        }
+
+        $employe = $ligne->employe;
+
+        JournalTresorerie::create([
+            'organization_id' => $orgId,
+            'site_id' => $employe?->site_id,
+            'date_operation' => $paiement->date_paiement,
+            'sens' => SensJournal::SORTIE->value,
+            'categorie' => CategorieJournal::SALAIRE->value,
+            'libelle' => 'Paiement salaire — '.($employe?->nom_complet ?? '—'),
+            'reference' => null,
+            'montant' => (float) $paiement->montant,
+            'source_type' => PaiePaiement::class,
+            'source_id' => $paiement->id,
+            'created_by' => Auth::id(),
         ]);
     }
 }

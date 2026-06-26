@@ -257,7 +257,7 @@ class CommissionVenteController extends Controller
         $earliestDate = $earliestCommission?->commission?->created_at ?? now();
         $periodesDisponibles = PeriodeComptableService::periodesDisponibles(Carbon::instance($earliestDate));
 
-        $periodeFilter = $request->input('periode', $periodeCourante);
+        $periodeFilter = (string) $request->input('periode', $periodeCourante);
 
         $filteredParts = $allParts;
         if ($periodeFilter !== '') {
@@ -302,7 +302,11 @@ class CommissionVenteController extends Controller
                     'reference' => $commission->commande?->reference,
                     'date' => $commission->created_at?->format(self::DATE_FORMAT),
                     'site' => $commission->commande?->site?->nom,
-                    'vehicule' => $commission->vehicule?->nom_vehicule,
+                    'vehicule' => $commission->vehicule ? [
+                        'id' => $commission->vehicule->id,
+                        'nom' => $commission->vehicule->nom_vehicule,
+                        'immatriculation' => $commission->vehicule->immatriculation,
+                    ] : null,
                     'montant_brut' => (float) $partsGroup->sum('montant_brut'),
                     'frais' => (float) $partsGroup->sum('frais_supplementaires'),
                     'montant' => $montantNet,
@@ -333,11 +337,18 @@ class CommissionVenteController extends Controller
                 'created_by' => $p->creator?->name,
             ]);
 
-        $expenses = Depense::with(['user', 'validateur', 'depenseType:id,libelle'])
+        $expensesQuery = Depense::with(['user', 'validateur', 'depenseType:id,libelle'])
             ->where('organization_id', $orgId)
             ->where('beneficiaire_type', 'livreur')
             ->where('beneficiaire_id', $livreurId)
-            ->where('statut', StatutDepense::VALIDE->value)
+            ->where('statut', StatutDepense::VALIDE->value);
+
+        if ($periodeFilter !== '') {
+            [$debut, $fin] = PeriodeComptableService::dateRangeForCode($periodeFilter);
+            $expensesQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
+        }
+
+        $expenses = $expensesQuery
             ->orderByDesc('date_depense')
             ->get()
             ->map(fn (Depense $d) => [
@@ -347,6 +358,7 @@ class CommissionVenteController extends Controller
                 'commentaire' => $d->commentaire,
                 'saisi_par' => $d->user?->name,
                 'validateur' => $d->validateur?->name,
+                'vehicule' => null,
                 'montant' => (float) $d->montant,
             ]);
 
