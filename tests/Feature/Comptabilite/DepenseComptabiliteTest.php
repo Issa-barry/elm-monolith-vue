@@ -688,4 +688,73 @@ class DepenseComptabiliteTest extends TestCase
                 ->where('beneficiaires.0.solde_restant', 250_000)
             );
     }
+
+    public function test_commission_proprietaire_deduit_depenses_rattachees_directement_au_proprietaire(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $typeVehicule = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'type_vehicule_id' => $typeVehicule->id,
+            'proprietaire_id' => $proprietaire->id,
+        ]);
+
+        $commandeVenteP = CommandeVente::factory()->create(['organization_id' => $this->org->id]);
+        $commissionVente = CommissionVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'commande_vente_id' => $commandeVenteP->id,
+        ]);
+
+        $commissionVente->parts()->create([
+            'type_beneficiaire' => 'proprietaire',
+            'proprietaire_id' => $proprietaire->id,
+            'beneficiaire_nom' => 'Propriétaire Test',
+            'role' => 'proprietaire',
+            'taux_commission' => 30,
+            'montant_brut' => 300_000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 300_000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        $type = DepenseType::factory()->proprietaire()->create([
+            'organization_id' => $this->org->id,
+            'libelle' => 'Dette propriétaire',
+        ]);
+
+        Depense::factory()->valide()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $type->id,
+            'beneficiaire_type' => 'proprietaire',
+            'beneficiaire_id' => $proprietaire->id,
+            'montant' => 32_000,
+            'date_depense' => '2026-06-26',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get('/comptabilite/commissions/proprietaires')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Comptabilite/CommissionProprietaire/Index')
+                ->where('beneficiaires.0.total_frais', 32_000)
+                ->where('beneficiaires.0.total_net_cumule', 268_000)
+                ->where('beneficiaires.0.solde_restant', 268_000)
+            );
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/proprietaires/{$proprietaire->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Comptabilite/CommissionProprietaire/Show')
+                ->where('commission_summary.frais', 32_000)
+                ->where('commission_summary.net_a_payer', 268_000)
+                ->has('expenses', 1)
+                ->where('expenses.0.montant', 32_000)
+                ->where('expenses.0.type', 'Dette propriétaire')
+            );
+    }
 }
