@@ -53,13 +53,16 @@ const props = defineProps<{
     vehicules: VehiculeOption[];
     currentSiteName: string;
     backHref?: string;
+    lockedVehicule?: VehiculeOption | null;
 }>();
 const emit = defineEmits<{ submit: [] }>();
 
 // ── AutoComplete : Véhicule ───────────────────────────────────────────────────
 
 const vehiculeSelected = ref<VehiculeOption | null>(
-    props.vehicules.find((v) => v.value === props.form.vehicule_id) ?? null,
+    props.lockedVehicule ??
+        props.vehicules.find((v) => v.value === props.form.vehicule_id) ??
+        null,
 );
 
 if (
@@ -341,7 +344,30 @@ function handleSubmit() {
                         Véhicule affecté
                         <span class="text-destructive">*</span>
                     </Label>
+
+                    <!-- Verrouillé : venu de la fiche véhicule -->
+                    <div
+                        v-if="lockedVehicule"
+                        class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
+                        data-testid="vehicule-locked"
+                    >
+                        <span class="text-foreground">{{
+                            lockedVehicule.label
+                        }}</span>
+                        <Lock
+                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                        />
+                    </div>
+                    <p
+                        v-if="lockedVehicule"
+                        class="mt-1 font-mono text-xs text-muted-foreground"
+                    >
+                        {{ lockedVehicule.immatriculation }}
+                    </p>
+
+                    <!-- Éditable : accès direct au formulaire -->
                     <AutoComplete
+                        v-else
                         v-model="vehiculeSelected"
                         input-id="vehicule_id"
                         :suggestions="vehiculeSuggests"
@@ -384,6 +410,7 @@ function handleSubmit() {
                             </div>
                         </template>
                     </AutoComplete>
+
                     <p
                         v-if="form.errors?.vehicule_id"
                         class="mt-1 text-xs text-destructive"

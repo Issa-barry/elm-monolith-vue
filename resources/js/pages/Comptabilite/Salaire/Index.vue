@@ -342,6 +342,7 @@ const periodeCourante = computed(
                 :fields="filterFields"
                 :sites="sites"
                 :result-count="lignes.length"
+                search-key="search"
                 search-placeholder="Rechercher un salarié..."
                 v-model:search="search"
             />

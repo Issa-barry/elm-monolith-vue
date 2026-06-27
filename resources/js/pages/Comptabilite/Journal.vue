@@ -153,6 +153,7 @@ function fmt(n: number) {
                 :fields="filterFields"
                 :sites="journalSites"
                 :result-count="lignes.data.length"
+                search-key="search"
                 search-placeholder="Rechercher une référence, un libellé..."
                 v-model:search="search"
             />

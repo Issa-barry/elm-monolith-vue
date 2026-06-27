@@ -31,6 +31,13 @@ import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
+interface Membre {
+    nom: string;
+    prenom: string;
+    telephone: string;
+    role: string;
+}
+
 interface Equipe {
     id: string;
     is_active: boolean;
@@ -41,6 +48,9 @@ interface Equipe {
     vehicule_nom: string | null;
     vehicule_immatriculation: string | null;
     vehicule_categorie: 'interne' | 'externe' | null;
+    proprietaire_id: string | null;
+    proprietaire_nom: string | null;
+    membres: Membre[];
 }
 
 const props = defineProps<{ equipes: Equipe[] }>();
@@ -62,51 +72,99 @@ const breadcrumbs: BreadcrumbItem[] = [
 const search = ref('');
 const statut = ref<'tous' | 'actif' | 'inactif'>('tous');
 const categorie = ref<'tous' | 'interne' | 'externe'>('tous');
+const proprietaire = ref('tous');
 
-const filterFields: FilterField[] = [
-    {
-        key: 'statut',
-        label: 'Statut',
-        type: 'select',
-        options: [
-            { value: 'tous', label: 'Tous' },
-            { value: 'actif', label: 'Actif' },
-            { value: 'inactif', label: 'Inactif' },
-        ],
-    },
-    {
-        key: 'categorie',
-        label: 'Catégorie véhicule',
-        type: 'select',
-        options: [
-            { value: 'tous', label: 'Tous véhicules' },
-            { value: 'interne', label: 'Interne' },
-            { value: 'externe', label: 'Externe' },
-        ],
-    },
-];
+const filterFields = computed<FilterField[]>(() => {
+    const proprietaireOpts = [
+        { value: 'tous', label: 'Tous propriétaires' },
+        ...Array.from(
+            new Map(
+                props.equipes
+                    .filter((e) => e.proprietaire_id)
+                    .map((e) => [
+                        e.proprietaire_id!,
+                        {
+                            value: e.proprietaire_id!,
+                            label: e.proprietaire_nom ?? '—',
+                        },
+                    ]),
+            ).values(),
+        ),
+    ];
+    return [
+        {
+            key: 'statut',
+            label: 'Statut',
+            type: 'select',
+            options: [
+                { value: 'tous', label: 'Tous' },
+                { value: 'actif', label: 'Actif' },
+                { value: 'inactif', label: 'Inactif' },
+            ],
+        },
+        {
+            key: 'categorie',
+            label: 'Catégorie véhicule',
+            type: 'select',
+            options: [
+                { value: 'tous', label: 'Tous véhicules' },
+                { value: 'interne', label: 'Interne' },
+                { value: 'externe', label: 'Externe' },
+            ],
+        },
+        {
+            key: 'proprietaire',
+            label: 'Propriétaire',
+            type: 'select',
+            options: proprietaireOpts,
+        },
+    ];
+});
 
 function resetFilters() {
     search.value = '';
     statut.value = 'tous';
     categorie.value = 'tous';
+    proprietaire.value = 'tous';
+}
+
+function applyFilters(vals: Record<string, string>) {
+    statut.value = (vals.statut as typeof statut.value) || 'tous';
+    categorie.value = (vals.categorie as typeof categorie.value) || 'tous';
+    proprietaire.value = vals.proprietaire || 'tous';
 }
 
 const equipesFiltrees = computed(() => {
     const q = search.value.toLowerCase().trim();
     return props.equipes.filter((e) => {
-        const searchMatch =
-            !q ||
-            (e.vehicule_nom ?? '').toLowerCase().includes(q) ||
-            (e.premier_chauffeur_nom ?? '').toLowerCase().includes(q) ||
-            (e.vehicule_immatriculation ?? '').toLowerCase().includes(q);
-        const statusMatch =
-            statut.value === 'tous' ||
-            e.is_active === (statut.value === 'actif');
-        const categorieMatch =
-            categorie.value === 'tous' ||
-            e.vehicule_categorie === categorie.value;
-        return searchMatch && statusMatch && categorieMatch;
+        if (q) {
+            const vehiculeMatch =
+                (e.vehicule_nom ?? '').toLowerCase().includes(q) ||
+                (e.vehicule_immatriculation ?? '').toLowerCase().includes(q);
+            const livreurMatch = e.membres.some(
+                (m) =>
+                    m.nom.toLowerCase().includes(q) ||
+                    m.prenom.toLowerCase().includes(q) ||
+                    m.telephone.includes(q),
+            );
+            if (!vehiculeMatch && !livreurMatch) return false;
+        }
+        if (
+            statut.value !== 'tous' &&
+            e.is_active !== (statut.value === 'actif')
+        )
+            return false;
+        if (
+            categorie.value !== 'tous' &&
+            e.vehicule_categorie !== categorie.value
+        )
+            return false;
+        if (
+            proprietaire.value !== 'tous' &&
+            e.proprietaire_id !== proprietaire.value
+        )
+            return false;
+        return true;
     });
 });
 
@@ -169,21 +227,10 @@ function confirmDelete(equipe: Equipe) {
             <!-- Barre de recherche + filtres -->
             <DataFilters
                 v-model:search="search"
-                :values="{ statut: statut, categorie: categorie }"
+                :values="{ statut, categorie, proprietaire }"
                 :fields="filterFields"
                 :result-count="equipesFiltrees.length"
-                @apply="
-                    (vals) => {
-                        statut.value =
-                            (vals.statut as 'tous' | 'actif' | 'inactif') ||
-                            'tous';
-                        categorie.value =
-                            (vals.categorie as
-                                | 'tous'
-                                | 'interne'
-                                | 'externe') || 'tous';
-                    }
-                "
+                @apply="applyFilters"
                 @reset="resetFilters"
             />
 

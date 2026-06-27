@@ -548,4 +548,30 @@ class EquipeLivraisonTest extends TestCase
             'taux_commission_proprietaire' => 60,
         ]);
     }
+
+    // ── création depuis véhicule ───────────────────────────────────────────────
+
+    public function test_create_passe_initial_vehicule_id_depuis_query(): void
+    {
+        $vehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->get(route('equipes-livraison.create', ['vehicule_id' => $vehicule->id]))
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('EquipesLivraison/Create')
+                ->where('initialVehiculeId', $vehicule->id)
+            );
+    }
+
+    public function test_create_initial_vehicule_id_null_sans_param(): void
+    {
+        $this->actingAs($this->user)
+            ->get(route('equipes-livraison.create'))
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('EquipesLivraison/Create')
+                ->where('initialVehiculeId', null)
+            );
+    }
 }

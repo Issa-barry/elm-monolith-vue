@@ -24,6 +24,27 @@ function equipeRowByPrefix(page: Page, prefix: string) {
         .first();
 }
 
+/** Navigue depuis la liste véhicules vers le formulaire de création d'équipe. */
+async function navigateToEquipeCreate(page: Page) {
+    await page.goto('/vehicules');
+    const vehiculeRow = page
+        .locator('.p-datatable-table tbody tr:not(.p-datatable-emptymessage)', {
+            hasText: new RegExp(escapeRegExp(E2E_EQUIPE_NOM_PREFIX), 'i'),
+        })
+        .first();
+    await vehiculeRow.click();
+    await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 15_000 });
+
+    await page
+        .locator('aside button')
+        .filter({ hasText: /equipe/i })
+        .click();
+    await page.getByRole('button', { name: /ajouter une équipe/i }).click();
+    await page.waitForURL(/\/equipes-livraison\/create\?vehicule_id=/, {
+        timeout: 15_000,
+    });
+}
+
 test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
@@ -97,11 +118,15 @@ test.afterEach(async ({ browser }) => {
             await page.goto('/equipes-livraison');
 
             const searchInput = page
-                .locator('input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible')
+                .locator(
+                    'input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible',
+                )
                 .first();
             await searchInput
                 .fill(E2E_EQUIPE_NOM_PREFIX)
                 .catch(() => undefined);
+            await searchInput.press('Enter').catch(() => undefined);
+            await page.waitForLoadState('networkidle').catch(() => undefined);
 
             for (let i = 0; i < 4; i++) {
                 const row = equipeRowByPrefix(page, E2E_EQUIPE_NOM_PREFIX);
@@ -132,6 +157,10 @@ test.afterEach(async ({ browser }) => {
                 await searchInput
                     .fill(E2E_EQUIPE_NOM_PREFIX)
                     .catch(() => undefined);
+                await searchInput.press('Enter').catch(() => undefined);
+                await page
+                    .waitForLoadState('networkidle')
+                    .catch(() => undefined);
             }
         } finally {
             await context.close().catch(() => undefined);
@@ -141,25 +170,20 @@ test.afterEach(async ({ browser }) => {
     }
 });
 
-test('create equipe with chauffeur and partage config + verify list', async ({
+test('create equipe depuis vehicule avec chauffeur et partage + verify list', async ({
     page,
 }) => {
-    await page.goto('/equipes-livraison/create');
-    await expect(page).toHaveURL(/\/equipes-livraison\/create$/);
+    await navigateToEquipeCreate(page);
 
-    const formComboboxes = page.locator('form').getByRole('combobox');
-    await selectOptionFromCombobox(
-        page,
-        formComboboxes.nth(0),
-        new RegExp(escapeRegExp(E2E_EQUIPE_NOM_PREFIX), 'i'),
-    );
-
-    const proprietaireInput = page.locator('input#proprietaire_id');
-    if (
-        await proprietaireInput.isVisible({ timeout: 2_000 }).catch(() => false)
-    ) {
-        await selectOptionFromCombobox(page, formComboboxes.nth(1));
-    }
+    // Le véhicule est verrouillé (pre-sélectionné depuis la fiche)
+    await expect(page.getByTestId('vehicule-locked')).toBeVisible({
+        timeout: 10_000,
+    });
+    await expect(
+        page
+            .getByText(new RegExp(escapeRegExp(E2E_EQUIPE_NOM_PREFIX), 'i'))
+            .first(),
+    ).toBeVisible();
 
     await page
         .locator('button', { hasText: /ajouter un membre/i })
@@ -212,15 +236,21 @@ test('create equipe with chauffeur and partage config + verify list', async ({
     await expect(partageDialog).toBeHidden({ timeout: 5_000 });
 
     await page.locator('form button[type="submit"]:visible').first().click();
-    await expect(page).toHaveURL(/\/equipes-livraison\/[a-z0-9]+$/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/equipes-livraison\/[a-z0-9]+$/, {
+        timeout: 20_000,
+    });
 
     await page.goto('/equipes-livraison');
     await expect(page).toHaveURL(/\/equipes-livraison$/);
 
     const searchInput = page
-        .locator('input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible')
+        .locator(
+            'input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible',
+        )
         .first();
     await searchInput.fill(E2E_EQUIPE_NOM_PREFIX);
+    await searchInput.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     const row = equipeRowByPrefix(page, E2E_EQUIPE_NOM_PREFIX);
     await expect(row).toBeVisible({ timeout: 10_000 });
@@ -237,10 +267,20 @@ test('create equipe with chauffeur and partage config + verify list', async ({
     });
 });
 
-test('store equipe echoue sans proprietaire', async ({ page }) => {
-    await page.goto('/equipes-livraison/create');
-    await expect(page).toHaveURL(/\/equipes-livraison\/create$/);
+test('equipe index ne propose plus de bouton creation directe', async ({
+    page,
+}) => {
+    await page.goto('/equipes-livraison');
+    await expect(page).toHaveURL(/\/equipes-livraison$/);
+    await expect(
+        page.getByRole('link', { name: /nouvelle équipe/i }),
+    ).not.toBeVisible();
+});
 
+test('formulaire equipe sans membres desactive le submit', async ({ page }) => {
+    await navigateToEquipeCreate(page);
+
+    // Véhicule verrouillé, aucun membre → submit désactivé
     const submitBtn = page
         .locator('form button[type="submit"]:visible')
         .first();
@@ -250,8 +290,7 @@ test('store equipe echoue sans proprietaire', async ({ page }) => {
 test('membre modal affiche prefixe +224 et rejette telephone invalide', async ({
     page,
 }) => {
-    await page.goto('/equipes-livraison/create');
-    await expect(page).toHaveURL(/\/equipes-livraison\/create$/);
+    await navigateToEquipeCreate(page);
 
     await page
         .locator('button', { hasText: /ajouter un membre/i })

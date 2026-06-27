@@ -49,7 +49,6 @@ interface VehiculeData {
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     equipe_id: string | null;
-    equipe_nom: string | null;
     equipe_membres: EquipeMembre[];
     pris_en_charge_par_usine: boolean;
     photo_url: string | null;
@@ -426,15 +425,6 @@ function formatGNF(val: number): string {
                     </div>
 
                     <div class="space-y-3">
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">
-                                Nom de l'équipe
-                            </p>
-                            <p class="mt-1 text-sm font-medium">
-                                {{ vehicule.equipe_nom ?? '—' }}
-                            </p>
-                        </div>
-
                         <div
                             v-if="vehicule.equipe_membres.length === 0"
                             class="rounded-lg border border-dashed py-10 text-center"

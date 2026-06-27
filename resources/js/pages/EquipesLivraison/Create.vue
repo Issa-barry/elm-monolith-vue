@@ -3,6 +3,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft } from 'lucide-vue-next';
+import { computed } from 'vue';
 import EquipeForm from './partials/EquipeForm.vue';
 
 interface ProprietaireOption {
@@ -51,6 +52,13 @@ const form = useForm({
     }[],
 });
 
+const lockedVehicule = computed(() =>
+    props.initialVehiculeId
+        ? (props.vehicules.find((v) => v.value === props.initialVehiculeId) ??
+          null)
+        : null,
+);
+
 function submit() {
     form.post('/equipes-livraison');
 }
@@ -81,6 +89,7 @@ function submit() {
                 :proprietaires="proprietaires"
                 :vehicules="vehicules"
                 :current-site-name="currentSiteName"
+                :locked-vehicule="lockedVehicule"
                 @submit="submit"
             />
         </div>

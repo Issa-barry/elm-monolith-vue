@@ -348,6 +348,7 @@ function fmtTel(tel: string | null | undefined): string {
                 :fields="filterFields"
                 :sites="sites"
                 :result-count="beneficiaires.length"
+                search-key="search"
                 search-placeholder="Rechercher un livreur, téléphone, véhicule..."
                 v-model:search="search"
             />

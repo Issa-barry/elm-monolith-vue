@@ -62,6 +62,8 @@ test('create prestataire -> edit status -> verify inactive in list', async ({
 
     const search = getVisibleSearchInput(page);
     await search.fill(prenom);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     const row = rowByText(page, prenom);
     await expect(row).toBeVisible({ timeout: 15_000 });
@@ -89,6 +91,8 @@ test('create prestataire -> edit status -> verify inactive in list', async ({
 
     await page.goto('/prestataires');
     await search.fill(prenom);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     const updatedRow = rowByText(page, prenom);
     await expect(updatedRow).toBeVisible({ timeout: 15_000 });
@@ -103,6 +107,8 @@ test('create prestataire -> delete from list', async ({ page }) => {
 
     const search = getVisibleSearchInput(page);
     await search.fill(prenom);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     const row = rowByText(page, prenom);
     await expect(row).toBeVisible({ timeout: 15_000 });
@@ -119,5 +125,7 @@ test('create prestataire -> delete from list', async ({ page }) => {
 
     await page.waitForLoadState('networkidle');
     await search.fill(prenom);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
     await expect(rowByText(page, prenom)).toHaveCount(0);
 });

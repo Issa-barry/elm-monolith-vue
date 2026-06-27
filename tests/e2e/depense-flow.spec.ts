@@ -244,6 +244,7 @@ test('stat cards reflect active filters', async ({ page }) => {
 
     const searchInput = getVisibleSearchInput(page);
     await searchInput.fill('ZZZZNO_MATCH_9999');
+    await searchInput.press('Enter');
     await page.waitForLoadState('networkidle');
 
     await expect(totalCard).toHaveText('0', { timeout: 10_000 });
@@ -261,6 +262,7 @@ test('stat cards reflect active filters', async ({ page }) => {
     await expect(valideesCard).toHaveText('0');
 
     await searchInput.fill('');
+    await searchInput.press('Enter');
     await page.waitForLoadState('networkidle');
 
     await expect(totalCard).not.toHaveText('0', { timeout: 10_000 });
