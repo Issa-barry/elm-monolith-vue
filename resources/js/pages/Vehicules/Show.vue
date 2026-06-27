@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
@@ -10,6 +12,7 @@ import {
     Car,
     CheckCircle,
     CircleHelp,
+    ExternalLink,
     Pencil,
     Plus,
     Receipt,
@@ -42,6 +45,7 @@ interface VehiculeData {
     capacite_packs: number | null;
     site_id: string | null;
     site_nom: string | null;
+    proprietaire_id: string | null;
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     equipe_id: string | null;
@@ -137,60 +141,38 @@ function formatGNF(val: number): string {
             </div>
 
             <!-- Header desktop -->
-            <div
-                class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+            <DetailHeader
+                eyebrow="Véhicule"
+                :title="vehicule.nom_vehicule"
+                :icon="Car"
+                :photo-url="vehicule.photo_url"
+                avatar-shape="square"
+                :status-label="vehicule.is_active ? 'Actif' : 'Inactif'"
+                :status-dot-class="
+                    vehicule.is_active
+                        ? 'bg-emerald-500'
+                        : 'bg-zinc-400 dark:bg-zinc-500'
+                "
             >
-                <div class="flex items-start gap-4">
-                    <div
-                        class="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border bg-muted/30"
-                    >
-                        <img
-                            v-if="vehicule.photo_url"
-                            :src="vehicule.photo_url"
-                            :alt="vehicule.nom_vehicule"
-                            class="h-full w-full object-cover"
-                        />
-                        <Car v-else class="h-7 w-7 text-muted-foreground/30" />
-                    </div>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h1 class="text-2xl font-semibold tracking-tight">
-                                {{ vehicule.nom_vehicule }}
-                            </h1>
-                            <StatusDot
-                                :label="
-                                    vehicule.is_active ? 'Actif' : 'Inactif'
-                                "
-                                :dot-class="
-                                    vehicule.is_active
-                                        ? 'bg-emerald-500'
-                                        : 'bg-zinc-400 dark:bg-zinc-500'
-                                "
-                                class="text-sm text-muted-foreground"
-                            />
-                        </div>
-                        <p
-                            class="mt-0.5 font-mono text-sm text-muted-foreground"
+                <template #subtitle>
+                    <p class="mt-0.5 font-mono text-sm text-muted-foreground">
+                        {{ vehicule.immatriculation }}
+                    </p>
+                    <div class="mt-1.5 flex items-center gap-2">
+                        <span
+                            class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
                         >
-                            {{ vehicule.immatriculation }}
-                        </p>
-                        <div class="mt-1.5 flex items-center gap-2">
-                            <span
-                                class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
-                            >
-                                {{ vehicule.type_label }}
-                            </span>
-                            <span
-                                v-if="vehicule.capacite_packs"
-                                class="text-xs text-muted-foreground"
-                            >
-                                {{ vehicule.capacite_packs }} packs
-                            </span>
-                        </div>
+                            {{ vehicule.type_label }}
+                        </span>
+                        <span
+                            v-if="vehicule.capacite_packs"
+                            class="text-xs text-muted-foreground"
+                        >
+                            {{ vehicule.capacite_packs }} packs
+                        </span>
                     </div>
-                </div>
-
-                <div class="flex items-center gap-2">
+                </template>
+                <template #actions>
                     <Link href="/vehicules">
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
@@ -206,8 +188,8 @@ function formatGNF(val: number): string {
                             Modifier
                         </Button>
                     </Link>
-                </div>
-            </div>
+                </template>
+            </DetailHeader>
 
             <!-- Tab layout -->
             <div class="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
@@ -348,15 +330,36 @@ function formatGNF(val: number): string {
                                     Site (véhicule interne)
                                 </p>
                             </template>
-                            <template v-else>
-                                <p class="mt-1 text-sm font-medium">
-                                    {{ vehicule.proprietaire_nom ?? '—' }}
+                            <template v-else-if="vehicule.proprietaire_id">
+                                <p
+                                    class="mt-1 text-sm font-medium"
+                                    data-testid="proprietaire-nom"
+                                >
+                                    {{ vehicule.proprietaire_nom }}
                                 </p>
                                 <p
-                                    v-if="vehicule.proprietaire_telephone"
-                                    class="font-mono text-xs text-muted-foreground"
+                                    class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                    data-testid="proprietaire-telephone"
                                 >
-                                    {{ vehicule.proprietaire_telephone }}
+                                    {{
+                                        formatPhoneDisplay(
+                                            vehicule.proprietaire_telephone,
+                                        )
+                                    }}
+                                </p>
+                                <Link
+                                    :href="`/proprietaires/${vehicule.proprietaire_id}`"
+                                    target="_blank"
+                                    data-testid="voir-fiche-proprietaire-btn"
+                                    class="mt-3 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                                >
+                                    Voir la fiche propriétaire
+                                    <ExternalLink class="h-3 w-3 opacity-60" />
+                                </Link>
+                            </template>
+                            <template v-else>
+                                <p class="mt-1 text-sm text-muted-foreground">
+                                    Aucun propriétaire rattaché
                                 </p>
                             </template>
                         </div>

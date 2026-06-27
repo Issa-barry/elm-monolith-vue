@@ -290,7 +290,7 @@ test('stat cards reflect active search filter', async ({ page }) => {
     expect(totalBefore).toBeGreaterThan(0);
 
     const searchInput = page
-        .locator('input[placeholder*="recherch" i]:visible')
+        .locator('input[placeholder*="recherch" i]:not([data-testid="global-search"]):visible')
         .first();
     await searchInput.fill('ZZZZNO_MATCH_9999');
 

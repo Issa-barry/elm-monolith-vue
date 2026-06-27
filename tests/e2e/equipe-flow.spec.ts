@@ -97,7 +97,7 @@ test.afterEach(async ({ browser }) => {
             await page.goto('/equipes-livraison');
 
             const searchInput = page
-                .locator('input[placeholder*="recherche" i]:visible')
+                .locator('input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible')
                 .first();
             await searchInput
                 .fill(E2E_EQUIPE_NOM_PREFIX)
@@ -218,7 +218,7 @@ test('create equipe with chauffeur and partage config + verify list', async ({
     await expect(page).toHaveURL(/\/equipes-livraison$/);
 
     const searchInput = page
-        .locator('input[placeholder*="recherche" i]:visible')
+        .locator('input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible')
         .first();
     await searchInput.fill(E2E_EQUIPE_NOM_PREFIX);
 
