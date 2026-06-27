@@ -461,7 +461,7 @@ class CommandeVenteController extends Controller
                 'livreur_nom' => $chauffeur ? trim($chauffeur->prenom.' '.$chauffeur->nom) : null,
                 'livreur_telephone' => $chauffeur?->telephone,
                 'equipe_detail' => $equipe ? [
-                    'nom' => $equipe->nom,
+                    'nom' => $vehicule->nom_vehicule,
                     'taux_commission_proprietaire' => $equipe->taux_commission_proprietaire !== null
                         ? (float) $equipe->taux_commission_proprietaire
                         : null,

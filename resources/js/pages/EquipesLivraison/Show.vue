@@ -21,7 +21,6 @@ interface Membre {
 
 interface EquipeData {
     id: string;
-    nom: string;
     is_active: boolean;
     vehicule_nom: string | null;
     vehicule_immatriculation: string | null;
@@ -44,7 +43,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Véhicules', href: '/vehicules' },
     { title: 'Équipes de livraison', href: '/equipes-livraison' },
-    { title: props.equipe.nom, href: '#' },
+    { title: props.equipe.vehicule_nom ?? '—', href: '#' },
 ];
 
 function roleLabel(role: string, numero?: number): string {
@@ -60,7 +59,7 @@ function roleLabel(role: string, numero?: number): string {
 
 <template>
     <Head>
-        <title>Équipe {{ equipe.nom }}</title>
+        <title>Équipe {{ equipe.vehicule_nom ?? '—' }}</title>
     </Head>
 
     <AppLayout :breadcrumbs="breadcrumbs">
@@ -73,7 +72,7 @@ function roleLabel(role: string, numero?: number): string {
                         Équipe de livraison
                     </p>
                     <h1 class="text-2xl font-semibold tracking-tight">
-                        {{ equipe.nom }}
+                        {{ equipe.vehicule_nom ?? '—' }}
                     </h1>
                     <div class="flex flex-wrap items-center gap-3 text-sm">
                         <StatusDot

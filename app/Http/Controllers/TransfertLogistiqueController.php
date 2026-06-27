@@ -71,7 +71,8 @@ class TransfertLogistiqueController extends Controller
             'siteSource:id,nom',
             'siteDestination:id,nom',
             'vehicule:id,nom_vehicule,immatriculation',
-            'equipeLivraison:id,nom',
+            'equipeLivraison:id,vehicule_id',
+            'equipeLivraison.vehicule:id,nom_vehicule',
             'commission:id,transfert_logistique_id,statut,montant_total,montant_verse',
             'lignes:id,transfert_logistique_id,produit_id,quantite_chargee,quantite_recue,ecart_type,ecart_motif',
             'lignes.produit:id,nom,code_interne,image_url',
@@ -217,7 +218,7 @@ class TransfertLogistiqueController extends Controller
             'vehicules' => Vehicule::where('organization_id', $orgId)
                 ->where('is_active', true)
                 ->where('categorie', 'interne')
-                ->with('equipe:id,nom,vehicule_id')
+                ->with('equipe:id,vehicule_id')
                 ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs')
                 ->get()
                 ->map(fn ($v) => [
@@ -225,14 +226,16 @@ class TransfertLogistiqueController extends Controller
                     'nom_vehicule' => $v->nom_vehicule,
                     'immatriculation' => $v->immatriculation,
                     'equipe_livraison_id' => $v->equipe?->id,
-                    'equipe_nom' => $v->equipe?->nom,
+                    'equipe_nom' => $v->equipe ? $v->nom_vehicule : null,
                     'capacite_packs' => $v->capacite_packs,
                 ]),
-            'equipes' => EquipeLivraison::where('organization_id', $orgId)
+            'equipes' => EquipeLivraison::with('vehicule:id,nom_vehicule')
+                ->where('organization_id', $orgId)
                 ->where('is_active', true)
-                ->select('id', 'nom')
-                ->orderBy('nom')
-                ->get(),
+                ->select('id', 'vehicule_id')
+                ->get()
+                ->sortBy(fn ($e) => $e->vehicule?->nom_vehicule)
+                ->values(),
             'produits' => Produit::where('organization_id', $orgId)
                 ->select('id', 'nom')
                 ->orderBy('nom')
@@ -351,9 +354,10 @@ class TransfertLogistiqueController extends Controller
             'siteSource:id,nom',
             'siteDestination:id,nom',
             'vehicule:id,nom_vehicule,immatriculation',
-            'vehicule.equipe:id,nom',
+            'vehicule.equipe:id,vehicule_id',
             'vehicule.proprietaire:id,prenom,nom',
-            'equipeLivraison:id,nom',
+            'equipeLivraison:id,vehicule_id',
+            'equipeLivraison.vehicule:id,nom_vehicule',
             'lignes.produit:id,nom,code_interne,image_url',
             'commission.parts.versements.createur:id,prenom,nom',
             'createur:id,prenom,nom',
@@ -422,7 +426,7 @@ class TransfertLogistiqueController extends Controller
             'sites' => Site::where('organization_id', $orgId)->select('id', 'nom')->orderBy('nom')->get(),
             'vehicules' => Vehicule::where('organization_id', $orgId)->where('is_active', true)
                 ->where('categorie', 'interne')
-                ->with('equipe:id,nom,vehicule_id')
+                ->with('equipe:id,vehicule_id')
                 ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs')
                 ->get()
                 ->map(fn ($v) => [
@@ -430,10 +434,16 @@ class TransfertLogistiqueController extends Controller
                     'nom_vehicule' => $v->nom_vehicule,
                     'immatriculation' => $v->immatriculation,
                     'equipe_livraison_id' => $v->equipe?->id,
-                    'equipe_nom' => $v->equipe?->nom,
+                    'equipe_nom' => $v->equipe ? $v->nom_vehicule : null,
                     'capacite_packs' => $v->capacite_packs,
                 ]),
-            'equipes' => EquipeLivraison::where('organization_id', $orgId)->where('is_active', true)->select('id', 'nom')->orderBy('nom')->get(),
+            'equipes' => EquipeLivraison::with('vehicule:id,nom_vehicule')
+                ->where('organization_id', $orgId)
+                ->where('is_active', true)
+                ->select('id', 'vehicule_id')
+                ->get()
+                ->sortBy(fn ($e) => $e->vehicule?->nom_vehicule)
+                ->values(),
             'produits' => Produit::where('organization_id', $orgId)->select('id', 'nom')->orderBy('nom')->get(),
         ]);
     }

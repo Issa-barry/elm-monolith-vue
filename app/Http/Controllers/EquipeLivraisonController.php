@@ -23,8 +23,9 @@ class EquipeLivraisonController extends Controller
 
         $equipes = EquipeLivraison::with('membres.livreur', 'proprietaire', 'vehicule')
             ->where('organization_id', auth()->user()->organization_id)
-            ->orderBy('nom')
             ->get()
+            ->sortBy(fn (EquipeLivraison $e) => $e->vehicule?->nom_vehicule)
+            ->values()
             ->map(fn (EquipeLivraison $e) => $this->equipeData($e));
 
         return Inertia::render('EquipesLivraison/Index', [
@@ -55,7 +56,6 @@ class EquipeLivraisonController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'nom' => ['required', 'string', 'max:100', Rule::unique('equipes_livraison', 'nom')->where('organization_id', $orgId)->whereNull('deleted_at')],
             'is_active' => 'boolean',
             'vehicule_id' => [
                 'required', 'string',
@@ -104,7 +104,6 @@ class EquipeLivraisonController extends Controller
                 'organization_id' => $orgId,
                 'vehicule_id' => $data['vehicule_id'],
                 'proprietaire_id' => $data['proprietaire_id'],
-                'nom' => $data['nom'],
                 'is_active' => $data['is_active'] ?? true,
                 'commission_unitaire_par_pack' => $commission,
                 'montant_par_pack_proprietaire' => $isExterne ? $montantProp : null,
@@ -167,7 +166,6 @@ class EquipeLivraisonController extends Controller
         $vehiculeSelectionne = $this->selectedVehicule($orgId, $request);
 
         $data = $request->validate([
-            'nom' => ['required', 'string', 'max:100', Rule::unique('equipes_livraison', 'nom')->where('organization_id', $orgId)->whereNull('deleted_at')->ignore($equipes_livraison->id)],
             'is_active' => 'boolean',
             'vehicule_id' => [
                 'required', 'string',
@@ -216,7 +214,6 @@ class EquipeLivraisonController extends Controller
             $equipes_livraison->update([
                 'vehicule_id' => $data['vehicule_id'],
                 'proprietaire_id' => $data['proprietaire_id'],
-                'nom' => $data['nom'],
                 'is_active' => $data['is_active'] ?? $equipes_livraison->is_active,
                 'commission_unitaire_par_pack' => $commission,
                 'montant_par_pack_proprietaire' => $isExterne ? $montantProp : null,
@@ -297,7 +294,6 @@ class EquipeLivraisonController extends Controller
 
         return [
             'id' => $e->id,
-            'nom' => $e->nom,
             'is_active' => $e->is_active,
             'vehicule_id' => $e->vehicule_id,
             'vehicule_immatriculation' => $e->vehicule?->immatriculation,
@@ -495,8 +491,6 @@ class EquipeLivraisonController extends Controller
     private function messages(): array
     {
         return [
-            'nom.required' => "Le nom de l'équipe est obligatoire.",
-            'nom.unique' => 'Une équipe avec ce nom existe déjà dans votre organisation.',
             'vehicule_id.required' => 'Le véhicule est obligatoire.',
             'vehicule_id.exists' => 'Le véhicule sélectionné est introuvable.',
             'vehicule_id.unique' => 'Ce véhicule est déjà affecté à une autre équipe.',

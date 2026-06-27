@@ -1082,7 +1082,8 @@ function closeDetailDialog() {
                     class="flex items-center justify-between border-b bg-muted/30 px-4 py-3"
                 >
                     <h2 class="text-sm font-semibold">
-                        Dépenses déduites (dépenses approuvées liées au véhicule)
+                        Dépenses déduites (dépenses approuvées liées au
+                        véhicule)
                     </h2>
                     <span
                         class="text-sm font-bold text-destructive tabular-nums"

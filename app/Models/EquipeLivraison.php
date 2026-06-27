@@ -20,12 +20,16 @@ class EquipeLivraison extends Model
         'organization_id',
         'vehicule_id',
         'proprietaire_id',
-        'nom',
         'is_active',
         'commission_unitaire_par_pack',
         'montant_par_pack_proprietaire',
         'taux_commission_proprietaire',
     ];
+
+    public function getNomAttribute(): string
+    {
+        return $this->vehicule?->nom_vehicule ?? '—';
+    }
 
     protected function casts(): array
     {

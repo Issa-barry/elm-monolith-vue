@@ -29,7 +29,7 @@ class ScanCommandeController extends Controller
         $commande = CommandeVente::with([
             'site:id,nom',
             'vehicule:id,nom_vehicule,immatriculation',
-            'vehicule.equipe:id,nom',
+            'vehicule.equipe:id,vehicule_id',
             'client:id,nom,prenom,telephone,adresse,quartier,ville',
             'lignes:id,commande_vente_id,quantite_demandee',
         ])->where('reference', $reference)->first();
@@ -60,7 +60,7 @@ class ScanCommandeController extends Controller
                 'nom' => $commande->vehicule->nom_vehicule,
                 'immatriculation' => $commande->vehicule->immatriculation,
             ] : null,
-            'equipe_nom' => $commande->vehicule?->equipe?->nom ?? '—',
+            'equipe_nom' => $commande->vehicule?->nom_vehicule ?? '—',
             'date_commande' => $commande->validated_at?->toDateString(),
             'nb_packs' => (int) $commande->lignes->sum('quantite_demandee'),
             'total' => (float) $commande->total_commande,
@@ -73,7 +73,7 @@ class ScanCommandeController extends Controller
             'siteSource:id,nom',
             'siteDestination:id,nom',
             'vehicule:id,nom_vehicule,immatriculation',
-            'equipeLivraison:id,nom',
+            'equipeLivraison:id,vehicule_id', 'equipeLivraison.vehicule:id,nom_vehicule',
             'lignes',
         ])->where('reference', $reference)->first();
 

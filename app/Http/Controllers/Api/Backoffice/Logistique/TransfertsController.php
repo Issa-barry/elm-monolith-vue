@@ -22,7 +22,7 @@ class TransfertsController extends Controller
                 'siteSource:id,nom',
                 'siteDestination:id,nom',
                 'vehicule:id,nom_vehicule,immatriculation',
-                'equipeLivraison:id,nom',
+                'equipeLivraison:id,vehicule_id', 'equipeLivraison.vehicule:id,nom_vehicule',
                 'lignes',
             ])
             ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id));
@@ -102,7 +102,7 @@ class TransfertsController extends Controller
             'siteSource:id,nom',
             'siteDestination:id,nom',
             'vehicule:id,nom_vehicule,immatriculation',
-            'equipeLivraison:id,nom',
+            'equipeLivraison:id,vehicule_id', 'equipeLivraison.vehicule:id,nom_vehicule',
             'lignes.produit:id,nom,code_interne,image_url',
             'commission.parts',
             'activites',

@@ -18,7 +18,7 @@ interface MembreData {
 
 interface EquipeData {
     id: string;
-    nom: string;
+    vehicule_nom: string | null;
     is_active: boolean;
     vehicule_id: string | null;
     proprietaire_id: string | null;
@@ -58,11 +58,10 @@ const flashSuccess = computed(
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Équipes', href: '/equipes-livraison' },
-    { title: props.equipe.nom, href: '#' },
+    { title: props.equipe.vehicule_nom ?? '—', href: '#' },
 ];
 
 const form = useForm({
-    nom: props.equipe.nom,
     is_active: Boolean(props.equipe.is_active),
     vehicule_id: props.equipe.vehicule_id,
     proprietaire_id: props.equipe.proprietaire_id,
@@ -86,7 +85,7 @@ function submit() {
 
 <template>
     <Head>
-        <title>Équipe {{ equipe.nom }}</title>
+        <title>Équipe {{ equipe.vehicule_nom ?? '—' }}</title>
     </Head>
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
@@ -95,10 +94,10 @@ function submit() {
                     :href="`/equipes-livraison/${equipe.id}`"
                     class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
                 >
-                    <ArrowLeft class="h-4 w-4" /> {{ equipe.nom }}
+                    <ArrowLeft class="h-4 w-4" /> {{ equipe.vehicule_nom ?? '—' }}
                 </Link>
                 <h1 class="text-2xl font-semibold tracking-tight">
-                    {{ equipe.nom }}
+                    {{ equipe.vehicule_nom ?? '—' }}
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
                     Modifier le véhicule, les membres et taux.

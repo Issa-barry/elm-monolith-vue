@@ -19,7 +19,7 @@ import { computed, ref } from 'vue';
 
 interface EquipeItem {
     id: string;
-    nom: string;
+    vehicule_nom: string;
     role: string;
 }
 
@@ -160,7 +160,7 @@ const showInfo = ref(false);
                                     class="flex items-center justify-between text-sm"
                                 >
                                     <span class="font-medium">{{
-                                        equipe.nom
+                                        equipe.vehicule_nom
                                     }}</span>
                                     <span
                                         class="text-xs text-muted-foreground capitalize"

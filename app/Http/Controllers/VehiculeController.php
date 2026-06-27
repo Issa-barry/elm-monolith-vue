@@ -45,7 +45,7 @@ class VehiculeController extends Controller
             'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
             'agence_nom' => $agence?->nom,
             'equipe_id' => $equipe?->id,
-            'equipe_nom' => $equipe?->nom,
+            'equipe_nom' => $equipe ? $v->nom_vehicule : null,
             'livreur_principal_nom' => $membres->first()?->livreur
                 ? trim($membres->first()->livreur->prenom.' '.$membres->first()->livreur->nom)
                 : null,

@@ -48,7 +48,7 @@ class MesLivraisonsController extends Controller
                 'siteSource:id,nom',
                 'siteDestination:id,nom',
                 'vehicule:id,nom_vehicule,immatriculation',
-                'equipeLivraison:id,nom',
+                'equipeLivraison:id,vehicule_id', 'equipeLivraison.vehicule:id,nom_vehicule',
                 'lignes',
             ])
             ->whereIn('statut', $statuts)

@@ -508,7 +508,7 @@ class CommissionVenteController extends Controller
             'site_nom' => $c->commande?->site?->nom,
             'vehicule_nom' => $c->vehicule?->nom_vehicule,
             'immatriculation' => $c->vehicule?->immatriculation,
-            'equipe_nom' => $c->vehicule?->equipe?->nom,
+            'equipe_nom' => $c->vehicule?->nom_vehicule,
             'proprietaire_nom' => $c->vehicule?->proprietaire
                 ? trim(($c->vehicule->proprietaire->prenom ?? '').' '.($c->vehicule->proprietaire->nom ?? ''))
                 : null,

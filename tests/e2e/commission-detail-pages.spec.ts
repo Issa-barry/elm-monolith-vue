@@ -56,7 +56,7 @@ test('détail Commission logistique — 5 cartes, tabs, dialog paiement', async 
         { timeout: 20_000 },
     );
 
-    await assertSummaryCardsAndTabs(page, 'Frais');
+    await assertSummaryCardsAndTabs(page, 'Dépenses');
 
     // Onglet Dépenses désormais disponible pour la logistique.
     await page.getByRole('button', { name: 'Dépenses', exact: false }).click();
@@ -95,7 +95,7 @@ test('détail Commission vente — 5 cartes et tabs identiques', async ({
         { timeout: 20_000 },
     );
 
-    await assertSummaryCardsAndTabs(page, 'Frais');
+    await assertSummaryCardsAndTabs(page, 'Dépenses');
 
     // Changer la période recalcule la section (re-render des cartes) sans casser la page.
     const periodeSelect = page.locator('.p-dropdown').first();
@@ -108,12 +108,12 @@ test('détail Commission vente — 5 cartes et tabs identiques', async ({
                 /\/comptabilite\/commissions\/vente\/livreurs\//,
                 { timeout: 15_000 },
             );
-            await assertSummaryCardsAndTabs(page, 'Frais');
+            await assertSummaryCardsAndTabs(page, 'Dépenses');
         }
     }
 });
 
-test('détail Commission propriétaire — libellé « Frais véhicules »', async ({
+test('détail Commission propriétaire — libellé « Dépenses véhicules »', async ({
     page,
 }) => {
     await login(page);
@@ -133,7 +133,7 @@ test('détail Commission propriétaire — libellé « Frais véhicules »', asy
         { timeout: 20_000 },
     );
 
-    await assertSummaryCardsAndTabs(page, 'Frais véhicules');
+    await assertSummaryCardsAndTabs(page, 'Dépenses véhicules');
 
     await page.getByRole('button', { name: 'Dépenses', exact: false }).click();
     await expect(page.locator('body')).toContainText(
