@@ -410,7 +410,7 @@ class EquipeLivraisonTest extends TestCase
             ->assertRedirectContains('/equipes-livraison/');
 
         $equipe2 = EquipeLivraison::where('organization_id', $this->org->id)
-            ->where('nom', 'Équipe Deux')->first();
+            ->where('vehicule_id', $vehicule2->id)->first();
 
         // Tenter d'affecter le livreur de l'équipe 1 à l'équipe 2
         $this->actingAs($this->user)
