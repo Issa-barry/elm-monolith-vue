@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Depense;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Traits\PhoneHandlerTrait;
@@ -150,6 +151,21 @@ class ProprietaireController extends Controller
             })
             ->values();
 
+        $depenses = Depense::where('beneficiaire_type', 'proprietaire')
+            ->where('beneficiaire_id', $proprietaire->id)
+            ->where('organization_id', $proprietaire->organization_id)
+            ->with('depenseType:id,libelle')
+            ->orderByDesc('date_depense')
+            ->get()
+            ->map(fn (Depense $d) => [
+                'id' => $d->id,
+                'libelle' => $d->depenseType?->libelle ?? '—',
+                'montant' => (float) $d->montant,
+                'date_depense' => $d->date_depense?->format('d/m/Y'),
+                'statut' => $d->statut,
+                'commentaire' => $d->commentaire,
+            ]);
+
         return Inertia::render('Proprietaires/Show', [
             'proprietaire' => [
                 'id' => $proprietaire->id,
@@ -167,6 +183,7 @@ class ProprietaireController extends Controller
                 'vehicules_count' => $vehicules->count(),
             ],
             'vehicules' => $vehicules,
+            'depenses' => $depenses,
             'can_create_vehicule' => auth()->user()->can('vehicules.create'),
         ]);
     }

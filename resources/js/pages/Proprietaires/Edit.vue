@@ -100,13 +100,23 @@ function submit() {
 
         <div class="mx-auto max-w-2xl pb-6 sm:p-6">
             <div class="mx-auto hidden max-w-2xl px-6 pt-6 pb-0 sm:block">
-                <div class="mb-8">
-                    <h1 class="text-2xl font-semibold tracking-tight">
-                        Modifier le propriétaire
-                    </h1>
-                    <p class="mt-1 text-sm font-medium text-muted-foreground">
-                        {{ proprietaire.prenom }} {{ proprietaire.nom }}
-                    </p>
+                <div class="mb-8 flex items-center gap-3">
+                    <Link
+                        :href="`/proprietaires/${proprietaire.id}`"
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
+                    >
+                        <ArrowLeft class="h-4 w-4" />
+                    </Link>
+                    <div>
+                        <h1 class="text-2xl font-semibold tracking-tight">
+                            Modifier le propriétaire
+                        </h1>
+                        <p
+                            class="mt-1 text-sm font-medium text-muted-foreground"
+                        >
+                            {{ proprietaire.prenom }} {{ proprietaire.nom }}
+                        </p>
+                    </div>
                 </div>
             </div>
 

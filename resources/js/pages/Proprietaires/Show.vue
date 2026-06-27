@@ -12,6 +12,7 @@ import {
     CircleHelp,
     Pencil,
     Plus,
+    Receipt,
     UserRound,
     X,
 } from 'lucide-vue-next';
@@ -46,14 +47,50 @@ interface VehiculeRow {
     livreur_principal_nom: string | null;
 }
 
+interface DepenseRow {
+    id: string;
+    libelle: string;
+    montant: number;
+    date_depense: string | null;
+    statut: string;
+    commentaire: string | null;
+}
+
 const props = defineProps<{
     proprietaire: ProprietaireData;
     vehicules: VehiculeRow[];
+    depenses: DepenseRow[];
     can_create_vehicule: boolean;
 }>();
 
 const { can } = usePermissions();
-const activeTab = ref<'informations' | 'vehicules'>('informations');
+const activeTab = ref<'informations' | 'vehicules' | 'depenses'>(
+    'informations',
+);
+
+const statutLabel: Record<string, string> = {
+    brouillon: 'Brouillon',
+    soumis: 'Soumis',
+    approuve: 'Approuvé',
+    rejete: 'Rejeté',
+};
+
+const statutBadge: Record<string, string> = {
+    brouillon: 'bg-muted text-muted-foreground',
+    soumis: 'bg-blue-50 text-blue-700',
+    approuve: 'bg-emerald-50 text-emerald-700',
+    rejete: 'bg-red-50 text-red-700',
+};
+
+const totalApprouve = computed(() =>
+    props.depenses
+        .filter((d) => d.statut === 'approuve')
+        .reduce((s, d) => s + d.montant, 0),
+);
+
+function formatGNF(val: number): string {
+    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -198,6 +235,32 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                             {{ vehicules.length }}
                         </span>
                     </button>
+                    <button
+                        type="button"
+                        data-testid="owner-depenses-tab"
+                        class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'depenses'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        @click="activeTab = 'depenses'"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <Receipt class="h-4 w-4" />
+                            Dépenses
+                        </span>
+                        <span
+                            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px]"
+                            :class="
+                                activeTab === 'depenses'
+                                    ? 'bg-white/20 text-primary-foreground'
+                                    : 'bg-muted text-muted-foreground'
+                            "
+                        >
+                            {{ depenses.length }}
+                        </span>
+                    </button>
                 </aside>
 
                 <div
@@ -269,7 +332,10 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                     </div>
                 </div>
 
-                <div v-else class="rounded-xl border bg-card p-5 sm:p-6">
+                <div
+                    v-else-if="activeTab === 'vehicules'"
+                    class="rounded-xl border bg-card p-5 sm:p-6"
+                >
                     <div
                         class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                     >
@@ -454,6 +520,81 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- Dépenses tab -->
+                <div v-else class="rounded-xl border bg-card p-5 sm:p-6">
+                    <div
+                        class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+                    >
+                        <div>
+                            <h2
+                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Dépenses du propriétaire
+                            </h2>
+                            <p class="mt-1 text-xs text-muted-foreground">
+                                Frais opérationnels gérés via le module
+                                Dépenses.
+                            </p>
+                        </div>
+                        <span
+                            v-if="totalApprouve > 0"
+                            class="shrink-0 rounded-lg bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700 tabular-nums"
+                        >
+                            Approuvés : {{ formatGNF(totalApprouve) }}
+                        </span>
+                    </div>
+
+                    <div
+                        v-if="!depenses.length"
+                        class="rounded-lg border border-dashed py-10 text-center"
+                    >
+                        <p class="text-sm text-muted-foreground">
+                            Aucune dépense enregistrée pour ce propriétaire.
+                        </p>
+                    </div>
+
+                    <div v-else class="divide-y rounded-lg border">
+                        <div
+                            v-for="d in depenses"
+                            :key="d.id"
+                            class="flex items-center gap-4 px-4 py-3 hover:bg-muted/30"
+                        >
+                            <div class="min-w-0 flex-1">
+                                <div class="text-sm font-semibold tabular-nums">
+                                    {{ formatGNF(d.montant) }}
+                                </div>
+                                <div class="text-xs text-muted-foreground">
+                                    {{ d.libelle }}
+                                    <span v-if="d.commentaire">
+                                        · {{ d.commentaire }}</span
+                                    >
+                                </div>
+                            </div>
+                            <div
+                                class="hidden text-xs text-muted-foreground sm:block"
+                            >
+                                {{ d.date_depense ?? '—' }}
+                            </div>
+                            <span
+                                class="shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
+                                :class="
+                                    statutBadge[d.statut] ??
+                                    'bg-muted text-muted-foreground'
+                                "
+                            >
+                                {{ statutLabel[d.statut] ?? d.statut }}
+                            </span>
+                            <Link
+                                v-if="can('depenses.update')"
+                                :href="`/depenses/${d.id}/edit`"
+                                class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                            >
+                                <Pencil class="h-3.5 w-3.5" />
+                            </Link>
+                        </div>
                     </div>
                 </div>
             </div>

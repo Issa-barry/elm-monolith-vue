@@ -24,7 +24,6 @@ interface FormData {
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
-    qte_stock: number;
     seuil_alerte_stock: number | null;
     description: string | null;
     is_alerte: boolean;
@@ -293,23 +292,7 @@ const displayImage = computed(
                 Stock
             </h3>
 
-            <div class="grid gap-4 sm:grid-cols-3 sm:gap-5">
-                <div>
-                    <Label class="mb-1.5 block">Quantité en stock</Label>
-                    <InputNumber
-                        :model-value="form.qte_stock"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                qte_stock: $event ?? 0,
-                            })
-                        "
-                        :min="0"
-                        class="w-full"
-                        input-class="w-full"
-                    />
-                </div>
-
+            <div class="grid gap-4 sm:grid-cols-2 sm:gap-5">
                 <div>
                     <Label class="mb-1.5 block">Seuil d'alerte stock</Label>
                     <InputNumber

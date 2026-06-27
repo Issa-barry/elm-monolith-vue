@@ -22,7 +22,6 @@ interface ProduitData {
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
-    qte_stock: number;
     seuil_alerte_stock: number | null;
     description: string | null;
     is_alerte: boolean;
@@ -50,7 +49,6 @@ const form = useForm({
     prix_vente: props.produit.prix_vente,
     prix_achat: props.produit.prix_achat,
     cout: props.produit.cout,
-    qte_stock: props.produit.qte_stock,
     seuil_alerte_stock: props.produit.seuil_alerte_stock,
     description: props.produit.description,
     is_alerte: props.produit.is_alerte,

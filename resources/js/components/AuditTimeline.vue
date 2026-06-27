@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 
 interface AuditEntry {
     id: string;
@@ -17,6 +17,9 @@ const props = defineProps<{
     auditableType: string;
     auditableId: string;
     module?: string;
+    dateDebut?: string;
+    dateFin?: string;
+    siteIds?: (string | number)[];
 }>();
 
 const logs = ref<AuditEntry[]>([]);
@@ -32,6 +35,11 @@ async function fetchLogs() {
             auditable_id: props.auditableId,
         });
         if (props.module) params.set('module', props.module);
+        if (props.dateDebut) params.set('date_debut', props.dateDebut);
+        if (props.dateFin) params.set('date_fin', props.dateFin);
+        for (const siteId of props.siteIds ?? []) {
+            params.append('site_ids[]', String(siteId));
+        }
         const res = await fetch(
             `/comptabilite/historique/entite?${params.toString()}`,
             { headers: { Accept: 'application/json' } },
@@ -46,6 +54,10 @@ async function fetchLogs() {
 }
 
 onMounted(fetchLogs);
+watch(
+    () => [props.dateDebut, props.dateFin, JSON.stringify(props.siteIds ?? [])],
+    fetchLogs,
+);
 
 const EVENT_COLOR: Record<string, string> = {
     created: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
