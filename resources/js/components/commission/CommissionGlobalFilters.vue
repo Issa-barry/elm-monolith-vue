@@ -83,10 +83,7 @@ function reset() {
                 @update:model-value="onPeriodeChange"
             />
         </div>
-        <div
-            v-if="vehiculeOptions.length > 1"
-            data-testid="commission-filters-vehicule"
-        >
+        <div data-testid="commission-filters-vehicule">
             <CommissionVehiculeSelect
                 :model-value="filters.vehicule_ids"
                 :options="vehiculeOptions"
