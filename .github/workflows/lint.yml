@@ -48,3 +48,6 @@ jobs:
 
       - name: Lint frontend (ESLint)
         run: npx eslint . --max-warnings 0
+
+      - name: Check UI standards (StatusDot / DataFilters)
+        run: node scripts/check-ui-standards.mjs

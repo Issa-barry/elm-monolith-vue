@@ -13,7 +13,8 @@
         "e2e:ui": "playwright test --ui",
         "format": "prettier --write resources/",
         "format:check": "prettier --check resources/",
-        "lint": "eslint . --fix"
+        "lint": "eslint . --fix",
+        "lint:standards": "node scripts/check-ui-standards.mjs"
     },
     "devDependencies": {
         "@eslint/js": "^9.19.0",
