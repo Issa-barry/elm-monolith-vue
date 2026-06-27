@@ -18,6 +18,9 @@ import {
     Package,
     Sun,
 } from 'lucide-vue-next';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
+import InputText from 'primevue/inputtext';
 import { computed, onMounted, ref } from 'vue';
 
 withDefaults(
@@ -68,11 +71,38 @@ onMounted(() => {
         <div class="flex items-center gap-2">
             <SidebarTrigger class="-ml-1" />
             <template v-if="breadcrumbs && breadcrumbs.length > 0">
-                <Breadcrumbs :breadcrumbs="breadcrumbs" />
+                <Breadcrumbs
+                    :breadcrumbs="breadcrumbs"
+                    class="hidden sm:block"
+                />
             </template>
         </div>
 
         <div class="ml-auto flex items-center gap-1">
+            <!-- Recherche globale (UI seulement pour l'instant) -->
+            <IconField>
+                <InputIcon class="pointer-events-none">
+                    <svg
+                        class="h-4 w-4 text-muted-foreground"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                        />
+                    </svg>
+                </InputIcon>
+                <InputText
+                    placeholder="Recherche"
+                    class="w-48 rounded-full text-sm sm:w-full"
+                />
+            </IconField>
+
             <Button
                 variant="ghost"
                 size="icon"
