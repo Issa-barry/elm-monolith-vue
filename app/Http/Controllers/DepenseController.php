@@ -112,7 +112,7 @@ class DepenseController extends Controller
 
             fputcsv($handle, [
                 'Référence', 'Date', 'Type', 'Catégorie', 'Concerné', 'Téléphone concerné',
-                'Véhicule', 'Montant (GNF)', 'Frais (GNF)', 'Statut', 'Site',
+                'Véhicule', 'Montant (GNF)', 'Dépenses (GNF)', 'Statut', 'Site',
                 'Saisi par', 'Validé par', 'Commentaire',
             ], ';');
 

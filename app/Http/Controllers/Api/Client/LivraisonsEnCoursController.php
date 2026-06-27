@@ -45,7 +45,8 @@ class LivraisonsEnCoursController extends Controller
                 'siteSource:id,nom',
                 'siteDestination:id,nom',
                 'vehicule:id,nom_vehicule,immatriculation',
-                'equipeLivraison:id,nom',
+                'equipeLivraison:id,vehicule_id',
+                'equipeLivraison.vehicule:id,nom_vehicule',
                 'lignes',
             ])
             ->where('statut', StatutTransfert::TRANSIT->value)
@@ -61,7 +62,7 @@ class LivraisonsEnCoursController extends Controller
         $commandes = collect();
         if ($tousVehiculeIds->isNotEmpty()) {
             $commandes = CommandeVente::query()
-                ->with(['site:id,nom', 'vehicule:id,nom_vehicule,immatriculation', 'vehicule.equipe:id,nom', 'client:id,nom,prenom', 'lignes:id,commande_vente_id,quantite_demandee'])
+                ->with(['site:id,nom', 'vehicule:id,nom_vehicule,immatriculation', 'vehicule.equipe:id,vehicule_id', 'client:id,nom,prenom', 'lignes:id,commande_vente_id,quantite_demandee'])
                 ->where('statut', StatutCommandeVente::LIVRAISON_EN_COURS->value)
                 ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
                 ->whereIn('vehicule_id', $tousVehiculeIds)
@@ -140,7 +141,7 @@ class LivraisonsEnCoursController extends Controller
                 'nom' => $c->vehicule->nom_vehicule,
                 'immatriculation' => $c->vehicule->immatriculation,
             ] : null,
-            'equipe_nom' => $c->vehicule?->equipe?->nom ?? '—',
+            'equipe_nom' => $c->vehicule?->nom_vehicule ?? '—',
             'date_depart' => $c->validated_at?->toDateString(),
             'date_arrivee_prevue' => null,
             'nb_packs' => (int) $c->lignes->sum('quantite_demandee'),

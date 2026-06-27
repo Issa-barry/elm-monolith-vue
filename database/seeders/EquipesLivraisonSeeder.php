@@ -10,13 +10,13 @@ use App\Models\Proprietaire;
 use Illuminate\Database\Seeder;
 
 /**
- * Cree les equipes de livraison avec leurs membres et la répartition par montant/pack.
+ * Crée les équipes de livraison avec leurs membres et la répartition par montant/pack.
  *
  * Règle: somme(montants membres) + montant_proprietaire = commission_unitaire_par_pack
  *        taux = montant / commission * 100 (calculé et stocké à la sauvegarde)
  *
  * Équipes EXTERNES (commission 200 GNF/pack) :
- * | Equipe         | Proprietaire      | Prop GNF | Chauffeur         | GNF | Convoyeur(s)          | GNF   |
+ * | Vehicule       | Proprietaire      | Prop GNF | Chauffeur         | GNF | Convoyeur(s)          | GNF   |
  * |----------------|-------------------|----------|-------------------|-----|-----------------------|-------|
  * | Nen Dow        | Amadou DIALLO     | 120      | Ibrahima CAMARA   | 50  | Sekou KOUYATE         | 30    |
  * | Auto Dogomet   | Fatoumata DIALLO  | 120      | Mariama BAH       | 80  | -                     | -     |
@@ -25,7 +25,7 @@ use Illuminate\Database\Seeder;
  * | Conakry 2      | Amadou DIALLO     | 120      | Boubacar DIALLO   | 80  | -                     | -     |
  *
  * Équipes INTERNES (commission 200 GNF/pack — 100 % aux membres) :
- * | Equipe           | Prop GNF | Chauffeur          | GNF | Convoyeur(s)                   | GNF    |
+ * | Vehicule         | Prop GNF | Chauffeur          | GNF | Convoyeur(s)                   | GNF    |
  * |------------------|----------|--------------------|-----|--------------------------------|--------|
  * | ELM Logistique 1 | 0        | Boubacar KONATÉ    | 200 | -                              | -      |
  * | ELM Logistique 2 | 0        | Aissatou BALDÉ     | 140 | Thierno SALL                   | 60     |
@@ -54,7 +54,6 @@ class EquipesLivraisonSeeder extends Seeder
 
         $equipesExternes = [
             [
-                'nom' => 'Nen Dow',
                 'proprietaire_tel' => '+33754158797',
                 'membres' => [
                     ['telephone' => '+224622000001', 'role' => 'chauffeur', 'montant' => 50, 'ordre' => 0],
@@ -62,14 +61,12 @@ class EquipesLivraisonSeeder extends Seeder
                 ],
             ],
             [
-                'nom' => 'Auto Dogomet',
                 'proprietaire_tel' => '+224621000002',
                 'membres' => [
                     ['telephone' => '+224622000003', 'role' => 'chauffeur', 'montant' => 80, 'ordre' => 0],
                 ],
             ],
             [
-                'nom' => 'Baba Ousou',
                 'proprietaire_tel' => '+33754158797',
                 'membres' => [
                     ['telephone' => '+224622000008', 'role' => 'chauffeur', 'montant' => 40, 'ordre' => 0],
@@ -78,7 +75,6 @@ class EquipesLivraisonSeeder extends Seeder
                 ],
             ],
             [
-                'nom' => 'Kaloum Express',
                 'proprietaire_tel' => '+224621000003',
                 'membres' => [
                     ['telephone' => '+224622000004', 'role' => 'chauffeur', 'montant' => 50, 'ordre' => 0],
@@ -86,8 +82,6 @@ class EquipesLivraisonSeeder extends Seeder
                 ],
             ],
             [
-                'nom' => 'Conakry 2',
-                'aliases' => ['Conakry2'],
                 'proprietaire_tel' => '+33754158797',
                 'membres' => [
                     ['telephone' => '+224622000006', 'role' => 'chauffeur', 'montant' => 80, 'ordre' => 0],
@@ -101,45 +95,17 @@ class EquipesLivraisonSeeder extends Seeder
             $montantProp = self::COMMISSION - $sommeMembres;
             $tauxProp = round($montantProp / self::COMMISSION * 100, 2);
 
-            $nomOfficiel = $equipeData['nom'];
-            $nomsRecherche = collect([$nomOfficiel])
-                ->merge($equipeData['aliases'] ?? [])
-                ->filter()
-                ->unique()
-                ->values()
-                ->all();
-
-            $equipe = EquipeLivraison::query()
-                ->where('organization_id', $org->id)
-                ->whereIn('nom', $nomsRecherche)
-                ->first();
-
-            if ($equipe) {
-                $equipe->update([
-                    'nom' => $nomOfficiel,
-                    'is_active' => true,
-                    'proprietaire_id' => $proprietaire->id,
-                    'commission_unitaire_par_pack' => self::COMMISSION,
-                    'montant_par_pack_proprietaire' => $montantProp,
-                    'taux_commission_proprietaire' => $tauxProp,
-                ]);
-            } else {
-                $equipe = EquipeLivraison::create([
-                    'organization_id' => $org->id,
-                    'nom' => $nomOfficiel,
-                    'is_active' => true,
-                    'proprietaire_id' => $proprietaire->id,
-                    'commission_unitaire_par_pack' => self::COMMISSION,
-                    'montant_par_pack_proprietaire' => $montantProp,
-                    'taux_commission_proprietaire' => $tauxProp,
-                ]);
-            }
-
-            $membresIds = [];
+            $equipe = EquipeLivraison::create([
+                'organization_id' => $org->id,
+                'is_active' => true,
+                'proprietaire_id' => $proprietaire->id,
+                'commission_unitaire_par_pack' => self::COMMISSION,
+                'montant_par_pack_proprietaire' => $montantProp,
+                'taux_commission_proprietaire' => $tauxProp,
+            ]);
 
             foreach ($equipeData['membres'] as $m) {
                 $livreur = $lv($m['telephone']);
-                $membresIds[] = $livreur->id;
                 $taux = round($m['montant'] / self::COMMISSION * 100, 2);
                 EquipeLivreur::updateOrCreate(
                     ['equipe_id' => $equipe->id, 'livreur_id' => $livreur->id],
@@ -151,32 +117,23 @@ class EquipesLivraisonSeeder extends Seeder
                     ]
                 );
             }
-
-            // Nettoie les anciens membres qui ne font plus partie de l'équipe seedée.
-            EquipeLivreur::query()
-                ->where('equipe_id', $equipe->id)
-                ->whereNotIn('livreur_id', $membresIds)
-                ->delete();
         }
 
         // ── Équipes INTERNES ──────────────────────────────────────────────────
 
         $equipesInternes = [
             [
-                'nom' => 'ELM Logistique 1',
                 'membres' => [
                     ['telephone' => '+224622000011', 'role' => 'chauffeur', 'montant' => 200, 'ordre' => 0],
                 ],
             ],
             [
-                'nom' => 'ELM Logistique 2',
                 'membres' => [
                     ['telephone' => '+224622000012', 'role' => 'chauffeur', 'montant' => 140, 'ordre' => 0],
                     ['telephone' => '+224622000013', 'role' => 'convoyeur', 'montant' => 60, 'ordre' => 1],
                 ],
             ],
             [
-                'nom' => 'ELM Logistique 3',
                 'membres' => [
                     ['telephone' => '+224622000014', 'role' => 'chauffeur', 'montant' => 100, 'ordre' => 0],
                     ['telephone' => '+224622000015', 'role' => 'convoyeur', 'montant' => 60, 'ordre' => 1],
@@ -184,13 +141,11 @@ class EquipesLivraisonSeeder extends Seeder
                 ],
             ],
             [
-                'nom' => 'ELM Logistique 4',
                 'membres' => [
                     ['telephone' => '+224622000007', 'role' => 'chauffeur', 'montant' => 200, 'ordre' => 0],
                 ],
             ],
             [
-                'nom' => 'Cousin',
                 'membres' => [
                     ['telephone' => '+224621346981', 'role' => 'chauffeur', 'montant' => 50, 'ordre' => 0],
                     ['telephone' => '+224624099568', 'role' => 'chauffeur', 'montant' => 50, 'ordre' => 1],
@@ -203,16 +158,14 @@ class EquipesLivraisonSeeder extends Seeder
         ];
 
         foreach ($equipesInternes as $equipeData) {
-            $equipe = EquipeLivraison::updateOrCreate(
-                ['nom' => $equipeData['nom'], 'organization_id' => $org->id],
-                [
-                    'is_active' => true,
-                    'proprietaire_id' => null,
-                    'commission_unitaire_par_pack' => self::COMMISSION,
-                    'montant_par_pack_proprietaire' => null,
-                    'taux_commission_proprietaire' => 0,
-                ]
-            );
+            $equipe = EquipeLivraison::create([
+                'organization_id' => $org->id,
+                'is_active' => true,
+                'proprietaire_id' => null,
+                'commission_unitaire_par_pack' => self::COMMISSION,
+                'montant_par_pack_proprietaire' => null,
+                'taux_commission_proprietaire' => 0,
+            ]);
 
             foreach ($equipeData['membres'] as $m) {
                 $taux = round($m['montant'] / self::COMMISSION * 100, 2);

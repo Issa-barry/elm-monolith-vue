@@ -234,7 +234,7 @@ tbody td.center { text-align: center; }
                 <th class="col-tel center">Téléphone</th>
                 <th class="col-veh">Véhicule(s)</th>
                 <th class="col-cum right">Total cumulé (GNF)</th>
-                <th class="col-fra right">Frais (GNF)</th>
+                <th class="col-fra right">Dépenses (GNF)</th>
                 <th class="col-pay right">Déjà payé (GNF)</th>
                 <th class="col-res right">Reste à payer (GNF)</th>
                 <th class="col-sta center">Statut</th>

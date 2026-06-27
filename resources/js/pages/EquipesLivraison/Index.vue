@@ -33,7 +33,6 @@ import { computed, ref } from 'vue';
 
 interface Equipe {
     id: string;
-    nom: string;
     is_active: boolean;
     nb_membres: number;
     somme_taux: number;
@@ -98,9 +97,8 @@ const equipesFiltrees = computed(() => {
     return props.equipes.filter((e) => {
         const searchMatch =
             !q ||
-            e.nom.toLowerCase().includes(q) ||
-            (e.premier_chauffeur_nom ?? '').toLowerCase().includes(q) ||
             (e.vehicule_nom ?? '').toLowerCase().includes(q) ||
+            (e.premier_chauffeur_nom ?? '').toLowerCase().includes(q) ||
             (e.vehicule_immatriculation ?? '').toLowerCase().includes(q);
         const statusMatch =
             statut.value === 'tous' ||
@@ -114,7 +112,7 @@ const equipesFiltrees = computed(() => {
 
 function confirmDelete(equipe: Equipe) {
     confirm.require({
-        message: `Supprimer l'équipe « ${equipe.nom} » ?`,
+        message: `Supprimer l'équipe « ${equipe.vehicule_nom ?? '—'} » ?`,
         header: 'Confirmer la suppression',
         icon: 'pi pi-exclamation-triangle',
         rejectLabel: 'Annuler',
@@ -207,14 +205,6 @@ function confirmDelete(equipe: Equipe) {
                         Aucune équipe trouvée.
                     </div>
                 </template>
-
-                <Column field="nom" header="Équipe" sortable style="width: 18%">
-                    <template #body="{ data }">
-                        <div class="truncate font-medium" :title="data.nom">
-                            {{ data.nom }}
-                        </div>
-                    </template>
-                </Column>
 
                 <Column
                     field="premier_chauffeur_nom"

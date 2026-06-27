@@ -567,7 +567,7 @@ function formatModePaiement(mode: string): string {
                                 <th
                                     class="px-4 py-3 text-right font-medium text-muted-foreground"
                                 >
-                                    Frais
+                                    Dépenses
                                 </th>
                                 <th
                                     class="px-4 py-3 text-right font-medium text-muted-foreground"

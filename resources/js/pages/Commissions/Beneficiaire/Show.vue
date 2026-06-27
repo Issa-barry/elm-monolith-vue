@@ -639,7 +639,7 @@ function closeDetailDialog() {
                                 class="h-7 gap-1 text-xs"
                                 @click="openFraisDialog(c)"
                             >
-                                <Pencil class="h-3 w-3" /> Frais
+                                <Pencil class="h-3 w-3" /> Dépense
                             </Button>
                             <Button
                                 size="sm"
@@ -927,10 +927,10 @@ function closeDetailDialog() {
                         </template>
                     </Column>
 
-                    <!-- ─ Colonne : Frais (11%) ───────────────────────────── -->
+                    <!-- ─ Colonne : Dépenses (11%) ──────────────────────────── -->
                     <Column
                         field="frais"
-                        header="Frais"
+                        header="Dépenses"
                         sortable
                         style="width: 130px"
                         header-class="py-3 align-middle text-left"
@@ -1049,7 +1049,7 @@ function closeDetailDialog() {
                                             @click="openFraisDialog(data)"
                                         >
                                             <Pencil class="h-4 w-4" />
-                                            Modifier frais
+                                            Modifier dépense
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                             class="cursor-pointer"
@@ -1082,7 +1082,8 @@ function closeDetailDialog() {
                     class="flex items-center justify-between border-b bg-muted/30 px-4 py-3"
                 >
                     <h2 class="text-sm font-semibold">
-                        Frais déduits (dépenses approuvées liées au véhicule)
+                        Dépenses déduites (dépenses approuvées liées au
+                        véhicule)
                     </h2>
                     <span
                         class="text-sm font-bold text-destructive tabular-nums"
@@ -1429,7 +1430,7 @@ function closeDetailDialog() {
         <!-- ══════════════════════ DIALOG FRAIS LIVREUR ════════════════════════ -->
         <Dialog
             v-model:visible="fraisVisible"
-            :header="`Frais — ${fraisCommande?.commande_reference ?? '—'}`"
+            :header="`Dépense — ${fraisCommande?.commande_reference ?? '—'}`"
             modal
             :style="{ width: '400px' }"
             @hide="closeFraisDialog"
@@ -1447,7 +1448,7 @@ function closeDetailDialog() {
                     </div>
                     <div class="mt-1 flex justify-between text-xs">
                         <span class="text-muted-foreground"
-                            >Net après frais :</span
+                            >Net après dépenses :</span
                         >
                         <span class="font-semibold tabular-nums">
                             {{
@@ -1465,7 +1466,7 @@ function closeDetailDialog() {
 
                 <div class="space-y-1">
                     <label class="text-sm font-medium"
-                        >Montant des frais (GNF)</label
+                        >Montant des dépenses (GNF)</label
                     >
                     <InputNumber
                         v-model="fraisForm.frais"
@@ -1479,7 +1480,7 @@ function closeDetailDialog() {
 
                 <div class="space-y-1">
                     <label class="text-sm font-medium"
-                        >Type de frais
+                        >Type de dépense
                         <span class="text-destructive">*</span></label
                     >
                     <Dropdown
@@ -1590,7 +1591,7 @@ function closeDetailDialog() {
                         </p>
                     </div>
                     <div class="rounded-lg bg-muted/30 p-3 text-center">
-                        <p class="text-xs text-muted-foreground">Frais</p>
+                        <p class="text-xs text-muted-foreground">Dépenses</p>
                         <p
                             class="mt-1 text-lg font-bold tabular-nums"
                             :class="

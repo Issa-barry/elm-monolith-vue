@@ -71,7 +71,7 @@ class VersementCommissionController extends Controller
                 $types = $fraisList->pluck('type')->unique();
                 $typePrincipal = $types->count() === 1 ? $types->first() : 'autre';
                 $commentairePrincipal = ($typePrincipal === 'autre')
-                    ? ($fraisList->count() === 1 ? $fraisList->first()->commentaire : 'Frais véhicule')
+                    ? ($fraisList->count() === 1 ? $fraisList->first()->commentaire : 'Dépenses véhicule')
                     : null;
 
                 $part->appliquerFrais($fraisAAppliquer, $typePrincipal, $commentairePrincipal);
@@ -83,7 +83,7 @@ class VersementCommissionController extends Controller
                     $vehiculeAvecFrais->frais()->create([
                         'montant' => $reliquat,
                         'type' => $typePrincipal,
-                        'commentaire' => $typePrincipal === 'autre' ? 'Reliquat frais' : null,
+                        'commentaire' => $typePrincipal === 'autre' ? 'Reliquat dépenses' : null,
                     ]);
                 }
             }

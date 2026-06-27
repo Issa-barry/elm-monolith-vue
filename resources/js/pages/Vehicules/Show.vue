@@ -508,7 +508,7 @@ function formatGNF(val: number): string {
                                 Dépenses du véhicule
                             </h2>
                             <p class="mt-1 text-xs text-muted-foreground">
-                                Frais opérationnels gérés via le module
+                                Dépenses opérationnelles gérées via le module
                                 Dépenses.
                             </p>
                         </div>

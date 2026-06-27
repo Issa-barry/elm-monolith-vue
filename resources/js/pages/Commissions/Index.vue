@@ -573,10 +573,10 @@ const { onRowClick, bodyRowPt } =
                         </template>
                     </Column>
 
-                    <!-- Frais (10%) -->
+                    <!-- Dépenses (10%) -->
                     <Column
                         field="total_frais"
-                        header="Frais"
+                        header="Dépenses"
                         sortable
                         style="width: 10%"
                     >

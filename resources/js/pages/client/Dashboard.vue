@@ -128,7 +128,7 @@ const kpiItems = computed<KpiWidgetItem[]>(() => [
         subtitle: `${props.earnings.operations_count} operation(s) - ${periodLabel.value}`,
         note:
             props.earnings.frais_depenses_total > 0
-                ? `dont ${formatMoney(props.earnings.frais_depenses_total)} de frais deduits`
+                ? `dont ${formatMoney(props.earnings.frais_depenses_total)} de dépenses déduites`
                 : undefined,
         noteClass:
             props.earnings.frais_depenses_total > 0
@@ -464,7 +464,7 @@ onBeforeUnmount(() => {
                                 <th
                                     class="py-2 pr-4 font-medium text-destructive"
                                 >
-                                    Frais
+                                    Dépenses
                                 </th>
                                 <th class="py-2 pr-4 font-medium">Verses</th>
                                 <th class="py-2 pr-0 font-medium">

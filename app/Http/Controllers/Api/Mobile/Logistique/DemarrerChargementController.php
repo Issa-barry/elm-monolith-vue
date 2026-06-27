@@ -49,7 +49,7 @@ class DemarrerChargementController extends Controller
             'siteSource:id,nom',
             'siteDestination:id,nom',
             'vehicule:id,nom_vehicule,immatriculation',
-            'equipeLivraison:id,nom',
+            'equipeLivraison:id,vehicule_id', 'equipeLivraison.vehicule:id,nom_vehicule',
             'lignes.produit:id,nom,code_interne,image_url',
         ]);
 

@@ -94,7 +94,7 @@ class EquipeLivraisonTest extends TestCase
         $this->assertDatabaseHas('equipes_livraison', [
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'nom' => 'Équipe Test',
+            'vehicule_id' => $vehicule->id,
             'taux_commission_proprietaire' => 70,
         ]);
     }
@@ -182,7 +182,6 @@ class EquipeLivraisonTest extends TestCase
             'organization_id' => $this->org->id,
             'vehicule_id' => $vehiculeInterne->id,
             'proprietaire_id' => null,
-            'nom' => 'Ã‰quipe Interne',
         ]);
     }
 
@@ -289,7 +288,7 @@ class EquipeLivraisonTest extends TestCase
             ->assertSessionHasErrors('membres');
     }
 
-    public function test_store_fails_si_nom_deja_utilise_dans_meme_org(): void
+    public function test_store_fails_si_vehicule_deja_utilise_dans_meme_org(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = $this->makeVehicule();
@@ -298,9 +297,10 @@ class EquipeLivraisonTest extends TestCase
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
             ->assertRedirectContains('/equipes-livraison/');
 
-        // Même nom, membre différent pour éviter conflit livreur
+        // Même véhicule, membre différent pour éviter conflit livreur
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
                 'membres' => [[
                     'livreur_id' => null,
                     'nom' => 'Barry', 'prenom' => 'Ibrahima',
@@ -308,7 +308,7 @@ class EquipeLivraisonTest extends TestCase
                     'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
-            ->assertSessionHasErrors('nom');
+            ->assertSessionHasErrors('vehicule_id');
     }
 
     public function test_store_autorise_meme_nom_apres_suppression_equipe(): void
@@ -410,7 +410,7 @@ class EquipeLivraisonTest extends TestCase
             ->assertRedirectContains('/equipes-livraison/');
 
         $equipe2 = EquipeLivraison::where('organization_id', $this->org->id)
-            ->where('nom', 'Équipe Deux')->first();
+            ->where('vehicule_id', $vehicule2->id)->first();
 
         // Tenter d'affecter le livreur de l'équipe 1 à l'équipe 2
         $this->actingAs($this->user)
@@ -470,7 +470,6 @@ class EquipeLivraisonTest extends TestCase
         $this->actingAs($this->user)
             ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($nouveauProprietaire->id, [
                 'vehicule_id' => $vehicule->id,
-                'nom' => 'Équipe Modifiée',
                 'commission_unitaire_par_pack' => 100,
                 'montant_par_pack_proprietaire' => 55,
                 'membres' => [[
@@ -485,7 +484,7 @@ class EquipeLivraisonTest extends TestCase
         $this->assertDatabaseHas('equipes_livraison', [
             'id' => $equipe->id,
             'proprietaire_id' => $nouveauProprietaire->id,
-            'nom' => 'Équipe Modifiée',
+            'vehicule_id' => $vehicule->id,
             'taux_commission_proprietaire' => 55,
         ]);
     }
@@ -545,7 +544,6 @@ class EquipeLivraisonTest extends TestCase
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaireId,
             'vehicule_id' => null,
-            'nom' => 'Équipe Fixture',
             'is_active' => true,
             'taux_commission_proprietaire' => 60,
         ]);

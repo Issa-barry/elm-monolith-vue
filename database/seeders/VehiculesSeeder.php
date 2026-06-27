@@ -51,30 +51,27 @@ class VehiculesSeeder extends Seeder
             ->where('nom', 'Kouria')
             ->firstOrFail();
 
-        $equipe = fn (string $nom) => EquipeLivraison::query()
-            ->where('nom', $nom)
+        $equipeParChauffeur = fn (string $tel) => EquipeLivraison::query()
             ->where('organization_id', $org->id)
+            ->whereHas('membres', fn ($q) => $q
+                ->where('role', 'chauffeur')
+                ->whereHas('livreur', fn ($q2) => $q2
+                    ->where('telephone', $tel)
+                    ->where('organization_id', $org->id)
+                )
+            )
             ->firstOrFail();
 
-        $equipeParNoms = fn (array $noms) => EquipeLivraison::query()
-            ->where('organization_id', $org->id)
-            ->whereIn('nom', $noms)
-            ->firstOrFail();
-
-        $eqNenDow = $equipe('Nen Dow');
-        $eqAutoDogomet = $equipe('Auto Dogomet');
-        $eqBabaOusou = $equipe('Baba Ousou');
-        $eqKaloumExpress = $equipe('Kaloum Express');
-        $eqConakry2 = $equipeParNoms(['Conakry 2', 'Conakry2']);
-        if ($eqConakry2->nom !== 'Conakry 2') {
-            $eqConakry2->update(['nom' => 'Conakry 2']);
-        }
-
-        $eqElm1 = $equipe('ELM Logistique 1');
-        $eqElm2 = $equipe('ELM Logistique 2');
-        $eqElm3 = $equipe('ELM Logistique 3');
-        $eqElm4 = $equipe('ELM Logistique 4');
-        $eqCousin = $equipe('Cousin');
+        $eqNenDow = $equipeParChauffeur('+224622000001');
+        $eqAutoDogomet = $equipeParChauffeur('+224622000003');
+        $eqBabaOusou = $equipeParChauffeur('+224622000008');
+        $eqKaloumExpress = $equipeParChauffeur('+224622000004');
+        $eqConakry2 = $equipeParChauffeur('+224622000006');
+        $eqElm1 = $equipeParChauffeur('+224622000011');
+        $eqElm2 = $equipeParChauffeur('+224622000012');
+        $eqElm3 = $equipeParChauffeur('+224622000014');
+        $eqElm4 = $equipeParChauffeur('+224622000007');
+        $eqCousin = $equipeParChauffeur('+224621346981');
 
         $vehicules = [
             // ── Externes ────────────────────────────────────────────────────

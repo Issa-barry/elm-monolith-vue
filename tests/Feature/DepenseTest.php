@@ -848,7 +848,7 @@ class DepenseTest extends TestCase
         $response = $this->get('/depenses/export/excel');
         $response->assertOk();
         $content = $response->streamedContent();
-        $this->assertStringContainsString('Frais', $content);
+        $this->assertStringContainsString('Dépenses', $content);
     }
 
     public function test_export_excel_includes_telephone_for_employe_beneficiaire(): void

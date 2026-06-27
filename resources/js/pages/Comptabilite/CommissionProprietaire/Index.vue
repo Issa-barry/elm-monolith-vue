@@ -271,7 +271,7 @@ function fmtTel(tel: string | null | undefined): string {
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Frais</p>
+                    <p class="text-sm text-muted-foreground">Dépenses</p>
                     <p
                         class="mt-2 text-2xl font-bold text-red-600 tabular-nums dark:text-red-400"
                     >
@@ -360,7 +360,7 @@ function fmtTel(tel: string | null | undefined): string {
                                 <th
                                     class="px-5 py-3.5 text-right font-medium text-muted-foreground"
                                 >
-                                    Frais
+                                    Dépenses
                                 </th>
                                 <th
                                     class="px-5 py-3.5 text-right font-medium text-muted-foreground"
