@@ -62,16 +62,16 @@ class VehiculesSeeder extends Seeder
             )
             ->firstOrFail();
 
-        $eqNenDow        = $equipeParChauffeur('+224622000001');
-        $eqAutoDogomet   = $equipeParChauffeur('+224622000003');
-        $eqBabaOusou     = $equipeParChauffeur('+224622000008');
+        $eqNenDow = $equipeParChauffeur('+224622000001');
+        $eqAutoDogomet = $equipeParChauffeur('+224622000003');
+        $eqBabaOusou = $equipeParChauffeur('+224622000008');
         $eqKaloumExpress = $equipeParChauffeur('+224622000004');
-        $eqConakry2      = $equipeParChauffeur('+224622000006');
-        $eqElm1          = $equipeParChauffeur('+224622000011');
-        $eqElm2          = $equipeParChauffeur('+224622000012');
-        $eqElm3          = $equipeParChauffeur('+224622000014');
-        $eqElm4          = $equipeParChauffeur('+224622000007');
-        $eqCousin        = $equipeParChauffeur('+224621346981');
+        $eqConakry2 = $equipeParChauffeur('+224622000006');
+        $eqElm1 = $equipeParChauffeur('+224622000011');
+        $eqElm2 = $equipeParChauffeur('+224622000012');
+        $eqElm3 = $equipeParChauffeur('+224622000014');
+        $eqElm4 = $equipeParChauffeur('+224622000007');
+        $eqCousin = $equipeParChauffeur('+224621346981');
 
         $vehicules = [
             // ── Externes ────────────────────────────────────────────────────

@@ -172,7 +172,8 @@
       "Bash(grep -rn ''\\\\''nom'\\\\'' => $e->nom\\\\b' --include=*.php app/)",
       "Bash(grep -n \"equipe_nom\" app/Http/Controllers/Comptabilite/CommissionLogistiqueController.php)",
       "Bash(grep -rn \"equipe_nom\" app/Http/Controllers/Comptabilite/)",
-      "Bash(grep -n '$equipe\\\\|->equipe\\\\b\\\\|->load\\\\|->with\\(' app/Http/Controllers/CommandeVenteController.php)"
+      "Bash(grep -n '$equipe\\\\|->equipe\\\\b\\\\|->load\\\\|->with\\(' app/Http/Controllers/CommandeVenteController.php)",
+      "Bash(vendor/bin/pint --test database/seeders/VehiculesSeeder.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"
