@@ -204,8 +204,8 @@ function meaningfulTotal(options?: FilterOption[]): number {
 function buildParams(): Record<string, string | string[]> {
     const params: Record<string, string | string[]> = { ...props.baseParams };
 
-    if (props.searchKey && search.value) {
-        params[props.searchKey] = search.value;
+    if (props.searchKey && localSearch.value) {
+        params[props.searchKey] = localSearch.value;
     }
 
     // Filtre agence : seulement pour admin, et seulement si une sélection partielle

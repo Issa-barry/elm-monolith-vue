@@ -17,14 +17,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import {
-    Eye,
-    MoreVertical,
-    Pencil,
-    Plus,
-    Trash2,
-    Users,
-} from 'lucide-vue-next';
+import { Eye, MoreVertical, Pencil, Trash2, Users } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { useConfirm } from 'primevue/useconfirm';
@@ -204,24 +197,13 @@ function confirmDelete(equipe: Equipe) {
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="space-y-6 p-4 sm:p-6">
             <!-- En-tête -->
-            <div class="flex items-center justify-between gap-4">
-                <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">
-                        Équipes de livraison
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Gérez les équipes et leurs taux de commission.
-                    </p>
-                </div>
-                <Link
-                    v-if="can('equipes-livraison.create')"
-                    href="/equipes-livraison/create"
-                >
-                    <Button>
-                        <Plus class="mr-2 h-4 w-4" />
-                        Nouvelle équipe
-                    </Button>
-                </Link>
+            <div>
+                <h1 class="text-2xl font-semibold tracking-tight">
+                    Équipes de livraison
+                </h1>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Gérez les équipes et leurs taux de commission.
+                </p>
             </div>
 
             <!-- Barre de recherche + filtres -->
