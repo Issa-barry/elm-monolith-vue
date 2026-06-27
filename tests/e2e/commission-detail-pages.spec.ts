@@ -27,9 +27,9 @@ async function assertSummaryCardsAndTabs(
     fraisLabel: string,
 ) {
     for (const label of [...SUMMARY_LABELS, fraisLabel]) {
-        await expect(page.getByText(label, { exact: true })).toBeVisible({
-            timeout: 15_000,
-        });
+        await expect(
+            page.getByText(label, { exact: true }).first(),
+        ).toBeVisible({ timeout: 15_000 });
     }
 
     for (const label of TAB_LABELS) {
