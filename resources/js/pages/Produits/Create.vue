@@ -31,7 +31,6 @@ const form = useForm({
     prix_vente: null as number | null,
     prix_achat: null as number | null,
     cout: null as number | null,
-    qte_stock: 0,
     seuil_alerte_stock: null as number | null,
     description: null as string | null,
     is_alerte: false,

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Depense;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Traits\PhoneHandlerTrait;
@@ -121,17 +122,15 @@ class ProprietaireController extends Controller
         $this->authorize('view', $proprietaire);
 
         $vehicules = Vehicule::query()
-            ->with(['equipe.membres.livreur'])
+            ->with(['typeVehicule', 'equipe.livreurs'])
             ->where('organization_id', auth()->user()->organization_id)
             ->where('proprietaire_id', $proprietaire->id)
             ->orderBy('nom_vehicule')
             ->get()
             ->map(function (Vehicule $vehicule) {
-                $livreurPrincipal = $vehicule
-                    ->equipe
-                    ?->membres
-                    ?->firstWhere('role', 'chauffeur')
-                    ?->livreur;
+                $equipe = $vehicule->equipe;
+                $chauffeur = $equipe?->livreurs->first(fn ($l) => ($l->pivot->role ?? null) === 'chauffeur');
+                $convoyeurs = $equipe ? $equipe->livreurs->filter(fn ($l) => ($l->pivot->role ?? null) !== 'chauffeur') : collect();
 
                 return [
                     'id' => $vehicule->id,
@@ -142,13 +141,38 @@ class ProprietaireController extends Controller
                     'capacite_packs' => $vehicule->capacite_packs,
                     'categorie' => $vehicule->categorie,
                     'is_active' => $vehicule->is_active,
-                    'equipe_nom' => $vehicule->equipe?->nom,
-                    'livreur_principal_nom' => $livreurPrincipal
-                        ? trim($livreurPrincipal->prenom.' '.$livreurPrincipal->nom)
-                        : null,
+                    'equipe_detail' => $equipe ? [
+                        'nom' => $equipe->nom,
+                        'taux_commission_proprietaire' => $equipe->taux_commission_proprietaire !== null
+                            ? (float) $equipe->taux_commission_proprietaire
+                            : null,
+                        'chauffeur' => $chauffeur ? [
+                            'nom' => trim($chauffeur->prenom.' '.$chauffeur->nom),
+                            'telephone' => $chauffeur->telephone,
+                        ] : null,
+                        'convoyeurs' => $convoyeurs->map(fn ($l) => [
+                            'nom' => trim($l->prenom.' '.$l->nom),
+                            'telephone' => $l->telephone,
+                        ])->values(),
+                    ] : null,
                 ];
             })
             ->values();
+
+        $depenses = Depense::where('beneficiaire_type', 'proprietaire')
+            ->where('beneficiaire_id', $proprietaire->id)
+            ->where('organization_id', $proprietaire->organization_id)
+            ->with('depenseType:id,libelle')
+            ->orderByDesc('date_depense')
+            ->get()
+            ->map(fn (Depense $d) => [
+                'id' => $d->id,
+                'libelle' => $d->depenseType?->libelle ?? '—',
+                'montant' => (float) $d->montant,
+                'date_depense' => $d->date_depense?->format('d/m/Y'),
+                'statut' => $d->statut,
+                'commentaire' => $d->commentaire,
+            ]);
 
         return Inertia::render('Proprietaires/Show', [
             'proprietaire' => [
@@ -167,6 +191,7 @@ class ProprietaireController extends Controller
                 'vehicules_count' => $vehicules->count(),
             ],
             'vehicules' => $vehicules,
+            'depenses' => $depenses,
             'can_create_vehicule' => auth()->user()->can('vehicules.create'),
         ]);
     }

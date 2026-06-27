@@ -451,24 +451,6 @@ function formatModePaiement(mode: string): string {
     return mode.replaceAll('_', ' ');
 }
 
-// Badge couleur statut
-const statutBadgeClass = computed(() => {
-    const map: Record<string, string> = {
-        brouillon:
-            'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
-        chargement:
-            'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-        transit:
-            'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-        reception:
-            'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
-        cloture:
-            'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-        annule: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-    };
-    return map[props.transfert.statut] ?? 'bg-zinc-100 text-zinc-700';
-});
-
 // Afficher la section commission ?
 const showCommissionSection = computed(
     () =>
@@ -652,14 +634,10 @@ function activiteDotClass(action: string): string {
                             <h1 class="text-xl font-bold tracking-tight">
                                 Transferts
                             </h1>
-                            <span
-                                :class="[
-                                    'rounded-full px-2.5 py-0.5 text-xs font-semibold',
-                                    statutBadgeClass,
-                                ]"
-                            >
-                                {{ transfert.statut_label }}
-                            </span>
+                            <StatusDot
+                                :status="transfert.statut"
+                                :label="transfert.statut_label"
+                            />
                         </div>
                         <p class="mt-0.5 text-xs text-muted-foreground">
                             N° transfert : {{ transfert.reference }}

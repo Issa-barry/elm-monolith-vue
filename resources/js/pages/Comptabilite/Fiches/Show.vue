@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StatusDot from '@/components/StatusDot.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
@@ -110,14 +111,6 @@ function fmt(n: number) {
     return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' GNF';
 }
 
-const ficheBadge = (s: string) =>
-    ({
-        a_payer: 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400',
-        partiellement_paye:
-            'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
-        paye: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
-    })[s] ?? 'bg-muted text-muted-foreground';
-
 const progressPct = computed(() => {
     if (!props.fiche.montant_net) return 0;
     return Math.min(
@@ -174,12 +167,10 @@ function exportPdf() {
                         <h1 class="font-mono text-xl font-semibold">
                             {{ fiche.reference }}
                         </h1>
-                        <span
-                            class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                            :class="ficheBadge(fiche.statut)"
-                        >
-                            {{ fiche.statut_label }}
-                        </span>
+                        <StatusDot
+                            :status="fiche.statut"
+                            :label="fiche.statut_label"
+                        />
                     </div>
                     <p class="mt-1 text-sm font-medium">
                         {{ fiche.beneficiaire_nom }}

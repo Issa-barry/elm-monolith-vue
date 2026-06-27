@@ -19,7 +19,10 @@ class CommissionVenteCalculatorService
      * @param  array<int, string>  $livreurIds
      * @return array<string, float>
      */
-    public static function fraisDepensesParLivreur(string $orgId, array $livreurIds, ?string $periode = null): array
+    /**
+     * @param  array<int, string>|null  $siteIds  Filtre Agence optionnel (page détail) — sans effet si vide.
+     */
+    public static function fraisDepensesParLivreur(string $orgId, array $livreurIds, ?string $periode = null, ?array $siteIds = null): array
     {
         if (empty($livreurIds)) {
             return [];
@@ -35,15 +38,19 @@ class CommissionVenteCalculatorService
             $query->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
         }
 
+        if (! empty($siteIds)) {
+            $query->whereIn('site_id', $siteIds);
+        }
+
         return $query->get(['beneficiaire_id', 'montant'])
             ->groupBy('beneficiaire_id')
             ->map(fn ($d) => (float) $d->sum('montant'))
             ->toArray();
     }
 
-    public static function fraisDepenseLivreur(string $orgId, string $livreurId, ?string $periode = null): float
+    public static function fraisDepenseLivreur(string $orgId, string $livreurId, ?string $periode = null, ?array $siteIds = null): float
     {
-        return self::fraisDepensesParLivreur($orgId, [$livreurId], $periode)[$livreurId] ?? 0.0;
+        return self::fraisDepensesParLivreur($orgId, [$livreurId], $periode, $siteIds)[$livreurId] ?? 0.0;
     }
 
     /**

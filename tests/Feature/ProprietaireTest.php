@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\EquipeLivraison;
+use App\Models\EquipeLivreur;
+use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
@@ -142,6 +145,59 @@ class ProprietaireTest extends TestCase
                 ->component('Proprietaires/Show')
                 ->where('proprietaire.id', $proprietaire->id)
                 ->has('vehicules', 1)
+            );
+    }
+
+    public function test_show_expose_le_type_de_vehicule(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'categorie' => 'externe',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('proprietaires.show', $proprietaire))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicules.0.type_label', $vehicule->typeVehicule->nom)
+            );
+    }
+
+    public function test_show_expose_le_detail_equipe_avec_chauffeur_et_convoyeurs(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'categorie' => 'externe',
+        ]);
+
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'proprietaire_id' => $proprietaire->id,
+            'nom' => 'Équipe Baba Ousou',
+            'is_active' => true,
+            'taux_commission_proprietaire' => 60,
+        ]);
+
+        $chauffeur = Livreur::factory()->create(['organization_id' => $this->org->id, 'nom' => 'CAMARA', 'prenom' => 'Oumar']);
+        $convoyeur = Livreur::factory()->create(['organization_id' => $this->org->id, 'nom' => 'SYLLA', 'prenom' => 'Abdoulaye']);
+
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $convoyeur->id, 'role' => 'convoyeur', 'ordre' => 1]);
+
+        $this->actingAs($this->user)
+            ->get(route('proprietaires.show', $proprietaire))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicules.0.equipe_detail.nom', 'Équipe Baba Ousou')
+                ->where('vehicules.0.equipe_detail.taux_commission_proprietaire', fn ($v) => (float) $v === 60.0)
+                ->where('vehicules.0.equipe_detail.chauffeur.nom', 'Oumar CAMARA')
+                ->has('vehicules.0.equipe_detail.convoyeurs', 1)
+                ->where('vehicules.0.equipe_detail.convoyeurs.0.nom', 'Abdoulaye SYLLA')
             );
     }
 

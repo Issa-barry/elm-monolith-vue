@@ -140,3 +140,93 @@ test('détail Commission propriétaire — libellé « Frais véhicules »', asy
         /véhicules|aucune dépense/i,
     );
 });
+
+/**
+ * Refactor filtres globaux (2026-06-27) : la barre de filtres (période /
+ * véhicule / agence) est désormais sous les cartes KPI, persistée dans l'URL
+ * via Inertia, et identique sur les 3 modules — CommissionGlobalFilters.vue.
+ */
+
+test('filtres globaux Commission vente — URL persiste et Réinitialiser fonctionne', async ({
+    page,
+}) => {
+    await login(page);
+    await page.goto('/comptabilite/commissions/vente');
+
+    const row = page.locator('tbody tr:has(td)').first();
+    const hasRow = await row.isVisible({ timeout: 10_000 }).catch(() => false);
+    test.skip(
+        !hasRow,
+        'Aucun bénéficiaire seedé pour Commission vente dans cet environnement (CommissionsSeeder désactivé).',
+    );
+
+    await row.click();
+    await expect(page).toHaveURL(
+        /\/comptabilite\/commissions\/vente\/livreurs\/[a-z0-9]+$/,
+        { timeout: 20_000 },
+    );
+
+    const globalFilters = page.getByTestId('commission-global-filters');
+    await expect(globalFilters).toBeVisible({ timeout: 15_000 });
+
+    const periodeDropdown = globalFilters
+        .getByTestId('commission-filters-periode')
+        .getByRole('combobox');
+    await periodeDropdown.click();
+    const options = page.getByRole('option');
+    const optionCount = await options.count();
+    // L'option 0 est toujours "Toutes les périodes" (réinitialise le filtre,
+    // donc omet le paramètre d'URL) — il faut une vraie période pour tester
+    // la persistance du paramètre.
+    test.skip(
+        optionCount < 2,
+        'Pas assez de périodes disponibles pour ce bénéficiaire.',
+    );
+
+    await options.nth(1).click();
+    await expect(page).toHaveURL(/periode=/, { timeout: 15_000 });
+
+    const resetButton = page.getByTestId('commission-filters-reset');
+    await expect(resetButton).toBeVisible({ timeout: 10_000 });
+    await resetButton.click();
+    await expect(page).not.toHaveURL(/periode=/, { timeout: 15_000 });
+});
+
+test('filtres globaux présents et identiques sur Commission logistique et propriétaire', async ({
+    page,
+}) => {
+    await login(page);
+
+    await page.goto('/comptabilite/commissions/logistique');
+    const logistiqueRow = page
+        .locator('tbody tr', { hasText: /Aissatou\s+BALD/i })
+        .first();
+    await expect(logistiqueRow).toBeVisible({ timeout: 20_000 });
+    await logistiqueRow.click();
+    await expect(page).toHaveURL(
+        /\/comptabilite\/commissions\/logistique\/livreurs\/[a-z0-9]+$/,
+        { timeout: 20_000 },
+    );
+    await expect(page.getByTestId('commission-global-filters')).toBeVisible({
+        timeout: 15_000,
+    });
+
+    await page.goto('/comptabilite/commissions/proprietaires');
+    const proprietaireRow = page.locator('tbody tr:has(td)').first();
+    const hasProprietaireRow = await proprietaireRow
+        .isVisible({ timeout: 10_000 })
+        .catch(() => false);
+    test.skip(
+        !hasProprietaireRow,
+        'Aucun propriétaire seedé pour Commission propriétaire dans cet environnement (CommissionsSeeder désactivé).',
+    );
+
+    await proprietaireRow.click();
+    await expect(page).toHaveURL(
+        /\/comptabilite\/commissions\/proprietaires\/[a-z0-9]+$/,
+        { timeout: 20_000 },
+    );
+    await expect(page.getByTestId('commission-global-filters')).toBeVisible({
+        timeout: 15_000,
+    });
+});

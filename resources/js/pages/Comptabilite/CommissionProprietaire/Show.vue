@@ -1,29 +1,31 @@
 <script setup lang="ts">
-import AuditTimeline from '@/components/AuditTimeline.vue';
 import CommissionDetailHeader from '@/components/commission/CommissionDetailHeader.vue';
 import CommissionDetailTable from '@/components/commission/CommissionDetailTable.vue';
 import CommissionDetailTabs from '@/components/commission/CommissionDetailTabs.vue';
 import CommissionExpensesTable from '@/components/commission/CommissionExpensesTable.vue';
+import CommissionGlobalFilters from '@/components/commission/CommissionGlobalFilters.vue';
+import CommissionHistoryTable from '@/components/commission/CommissionHistoryTable.vue';
 import CommissionPaymentDialog from '@/components/commission/CommissionPaymentDialog.vue';
 import CommissionPaymentsTable from '@/components/commission/CommissionPaymentsTable.vue';
-import CommissionPeriodSelect from '@/components/commission/CommissionPeriodSelect.vue';
 import CommissionSummaryCards from '@/components/commission/CommissionSummaryCards.vue';
-import CommissionVehiculeSelect from '@/components/commission/CommissionVehiculeSelect.vue';
-import { useCommissionVehiculeFilter } from '@/composables/useCommissionVehiculeFilter';
+import { useCommissionActiveFiltersSummary } from '@/composables/useCommissionActiveFiltersSummary';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import type {
+    AgenceOption,
     CommissionDetailRow,
     CommissionDetailTab,
     CommissionExpenseRow,
+    CommissionGlobalFiltersValue,
     CommissionPaymentRow,
     CommissionSummary,
+    CommissionVehiculeInfo,
     ModePaiementOption,
     PeriodeOption,
 } from '@/types/commission';
 import { Head, router } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 
 const props = defineProps<{
     proprietaire: { id: string; nom: string; telephone: string | null };
@@ -35,6 +37,9 @@ const props = defineProps<{
     periode_courante: string;
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
+    vehicules_disponibles: CommissionVehiculeInfo[];
+    agences_disponibles: AgenceOption[];
+    filters: CommissionGlobalFiltersValue;
     can_payer: boolean;
 }>();
 
@@ -48,30 +53,30 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: props.proprietaire.nom, href: '' },
 ];
 
-const periodeFiltre = ref(props.selected_periode ?? '');
+const filters = ref<CommissionGlobalFiltersValue>({ ...props.filters });
 
-function changePeriode(code: string) {
-    periodeFiltre.value = code;
-    const params: Record<string, string> = {};
-    if (code) params.periode = code;
+const activeFiltersLabel = useCommissionActiveFiltersSummary({
+    filters,
+    periodesDisponibles: props.periodes_disponibles,
+    vehiculesDisponibles: props.vehicules_disponibles,
+    agencesDisponibles: props.agences_disponibles,
+});
+
+function reload(next: CommissionGlobalFiltersValue) {
+    filters.value = next;
     router.get(
         `/comptabilite/commissions/proprietaires/${props.proprietaire.id}`,
-        params,
-        { preserveScroll: true, replace: true },
+        {
+            periode: next.periode || undefined,
+            vehicule_id: next.vehicule_ids,
+            site_ids: next.site_ids,
+        },
+        { preserveScroll: true, preserveState: true, replace: true },
     );
 }
 
 const activeTab = ref<CommissionDetailTab>('informations');
 const showPaiementDialog = ref(false);
-
-const { vehiculeOptions, selectedVehicules, filteredRows } =
-    useCommissionVehiculeFilter(computed(() => props.commission_details));
-
-const {
-    vehiculeOptions: expenseVehiculeOptions,
-    selectedVehicules: selectedExpenseVehicules,
-    filteredRows: filteredExpenses,
-} = useCommissionVehiculeFilter(computed(() => props.expenses));
 </script>
 
 <template>
@@ -83,6 +88,7 @@ const {
                 eyebrow="Propriétaire"
                 :title="proprietaire.nom"
                 :telephone="proprietaire.telephone"
+                :active-filters-label="activeFiltersLabel"
                 :can-pay="can_payer && commission_summary.reste_a_payer > 0"
                 :pay-label="`Payer ${formatGNF(commission_summary.reste_a_payer)}`"
                 @pay="showPaiementDialog = true"
@@ -91,6 +97,14 @@ const {
             <CommissionSummaryCards
                 :summary="commission_summary"
                 frais-label="Frais véhicules"
+            />
+
+            <CommissionGlobalFilters
+                :filters="filters"
+                :periodes-disponibles="periodes_disponibles"
+                :vehicules-disponibles="vehicules_disponibles"
+                :agences-disponibles="agences_disponibles"
+                @change="reload"
             />
 
             <CommissionDetailTabs
@@ -116,32 +130,11 @@ const {
                             </h2>
                             <span
                                 class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums"
-                                >{{ filteredRows.length }}</span
+                                >{{ commission_details.length }}</span
                             >
                         </div>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <CommissionVehiculeSelect
-                                v-if="vehiculeOptions.length > 1"
-                                v-model="selectedVehicules"
-                                :options="vehiculeOptions"
-                            />
-                            <div class="w-full sm:w-64">
-                                <CommissionPeriodSelect
-                                    v-model="periodeFiltre"
-                                    :periodes-disponibles="periodes_disponibles"
-                                    @update:model-value="changePeriode"
-                                />
-                            </div>
-                        </div>
                     </div>
-                    <CommissionDetailTable
-                        :rows="filteredRows"
-                        :empty-message="
-                            selectedVehicules.length > 0
-                                ? 'Aucune ligne pour ce véhicule.'
-                                : undefined
-                        "
-                    />
+                    <CommissionDetailTable :rows="commission_details" />
                 </div>
             </template>
 
@@ -149,35 +142,12 @@ const {
                 <div
                     class="overflow-hidden rounded-xl border bg-card shadow-sm"
                 >
-                    <div
-                        class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3"
-                    >
+                    <div class="border-b px-4 py-3">
                         <h2 class="text-sm font-semibold">
                             Dépenses véhicules
                         </h2>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <CommissionVehiculeSelect
-                                v-if="expenseVehiculeOptions.length > 1"
-                                v-model="selectedExpenseVehicules"
-                                :options="expenseVehiculeOptions"
-                            />
-                            <div class="w-full sm:w-64">
-                                <CommissionPeriodSelect
-                                    v-model="periodeFiltre"
-                                    :periodes-disponibles="periodes_disponibles"
-                                    @update:model-value="changePeriode"
-                                />
-                            </div>
-                        </div>
                     </div>
-                    <CommissionExpensesTable
-                        :rows="filteredExpenses"
-                        :empty-message="
-                            selectedExpenseVehicules.length > 0
-                                ? 'Aucune dépense pour ce véhicule.'
-                                : undefined
-                        "
-                    />
+                    <CommissionExpensesTable :rows="expenses" />
                 </div>
             </template>
 
@@ -199,10 +169,11 @@ const {
 
             <template v-if="activeTab === 'historique'">
                 <div class="rounded-xl border bg-card p-5">
-                    <AuditTimeline
+                    <CommissionHistoryTable
                         auditable-type="App\Models\Proprietaire"
                         :auditable-id="proprietaire.id"
                         module="commission_proprietaire"
+                        :filters="filters"
                     />
                 </div>
             </template>

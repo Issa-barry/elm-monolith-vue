@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import StatusDot from '@/components/StatusDot.vue';
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -126,14 +127,6 @@ function fmt(n: number) {
 const { onRowClick, bodyRowPt } = useClickableTableRow<Fiche>(
     (fiche) => `/comptabilite/fiches/${fiche.id}`,
 );
-
-const ficheBadge = (s: string) =>
-    ({
-        a_payer: 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400',
-        partiellement_paye:
-            'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
-        paye: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
-    })[s] ?? 'bg-muted text-muted-foreground';
 
 function exportExcel() {
     const params = new URLSearchParams();
@@ -309,12 +302,10 @@ function exportExcel() {
 
                     <Column header="Statut" style="width: 140px">
                         <template #body="{ data }">
-                            <span
-                                class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                                :class="ficheBadge(data.statut)"
-                            >
-                                {{ data.statut_label }}
-                            </span>
+                            <StatusDot
+                                :status="data.statut"
+                                :label="data.statut_label"
+                            />
                         </template>
                     </Column>
 

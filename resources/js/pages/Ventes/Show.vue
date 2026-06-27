@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StatusDot from '@/components/StatusDot.vue';
 import TicketCommandeVente from '@/components/print/TicketCommandeVente.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -189,37 +190,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Ventes', href: '/ventes' },
     { title: props.commande.reference, href: '#' },
 ];
-
-// ── Statut couleurs ───────────────────────────────────────────────────────────
-const statutFactureColor: Record<string, string> = {
-    creee: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-    impayee:
-        'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-    partiel: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    payee: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    annulee: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
-};
-
-const statutCommissionColor: Record<string, string> = {
-    creee: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-    impaye: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-    partiel: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    paye: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-};
-
-const statutCommandeColor: Record<string, string> = {
-    brouillon: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-    a_charger:
-        'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-    chargement_en_cours:
-        'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300',
-    livraison_en_cours:
-        'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    livree: 'bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300',
-    cloturee:
-        'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    annulee: 'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400',
-};
 
 // ── Popups véhicule / équipe ──────────────────────────────────────────────────
 const vehiculeDialogVisible = ref(false);
@@ -732,15 +702,10 @@ function connectorIsActive(idx: number): boolean {
                             {{ commande.reference }}
                         </h1>
                         <div class="mt-1 flex items-center gap-2">
-                            <span
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="
-                                    statutCommandeColor[commande.statut] ??
-                                    'bg-muted text-muted-foreground'
-                                "
-                            >
-                                {{ commande.statut_label }}
-                            </span>
+                            <StatusDot
+                                :status="commande.statut"
+                                :label="commande.statut_label"
+                            />
                             <span class="text-sm text-muted-foreground">{{
                                 commande.created_at
                             }}</span>
@@ -956,43 +921,34 @@ function connectorIsActive(idx: number): boolean {
                             Informations
                         </h3>
                         <div class="flex items-center gap-2">
-                            <span
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="
-                                    statutCommandeColor[commande.statut] ??
-                                    'bg-zinc-100 text-zinc-600'
-                                "
-                            >
-                                {{ commande.statut_label }}
-                            </span>
+                            <StatusDot
+                                :status="commande.statut"
+                                :label="commande.statut_label"
+                            />
                             <button
                                 v-if="facture"
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-opacity"
-                                :class="[
-                                    statutFactureColor[facture.statut] ??
-                                        'bg-zinc-100 text-zinc-500',
+                                type="button"
+                                class="inline-flex items-center transition-opacity"
+                                :class="
                                     facture.statut !== 'payee'
                                         ? 'cursor-pointer hover:opacity-80'
-                                        : 'cursor-default',
-                                ]"
+                                        : 'cursor-default'
+                                "
                                 @click="
                                     facture.statut !== 'payee' &&
                                     (activeTab = 'facturation')
                                 "
                             >
-                                Facture : {{ facture.statut_label }}
+                                <StatusDot
+                                    :status="facture.statut"
+                                    :label="`Facture : ${facture.statut_label}`"
+                                />
                             </button>
-                            <span
+                            <StatusDot
                                 v-if="commission_statut"
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="
-                                    statutCommissionColor[
-                                        commission_statut.value
-                                    ] ?? 'bg-zinc-100 text-zinc-500'
-                                "
-                            >
-                                Commission : {{ commission_statut.label }}
-                            </span>
+                                :status="commission_statut.value"
+                                :label="`Commission : ${commission_statut.label}`"
+                            />
                         </div>
                     </div>
                     <div

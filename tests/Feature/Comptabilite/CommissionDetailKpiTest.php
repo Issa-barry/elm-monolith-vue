@@ -5,11 +5,13 @@ namespace Tests\Feature\Comptabilite;
 use App\Enums\BaseCalculLogistique;
 use App\Enums\StatutCommission;
 use App\Features\ModuleFeature;
+use App\Models\CommandeVente;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionVente;
 use App\Models\Depense;
 use App\Models\Livreur;
+use App\Models\PaiementCommissionVente;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
@@ -450,6 +452,231 @@ class CommissionDetailKpiTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('expenses', 2)
+            );
+    }
+
+    // ── Filtres globaux : véhicule/agence recalculent aussi les KPI ──────────
+    // (et pas seulement le tableau détail) — c'est le bug que ce refactor corrige.
+
+    public function test_vente_kpi_et_details_sont_filtres_par_vehicule(): void
+    {
+        $livreur = $this->makeLivreur();
+        $vehiculeA = $this->makeVehicule();
+        $vehiculeB = $this->makeVehicule();
+
+        $commissionA = CommissionVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehiculeA->id,
+        ]);
+        $commissionA->parts()->create([
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
+            'role' => 'chauffeur',
+            'taux_commission' => 10,
+            'montant_brut' => 10000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 10000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        $commissionB = CommissionVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehiculeB->id,
+        ]);
+        $commissionB->parts()->create([
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
+            'role' => 'chauffeur',
+            'taux_commission' => 10,
+            'montant_brut' => 25000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 25000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?vehicule_id[]={$vehiculeA->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commission_summary.brut_cumule', 10000)
+                ->has('commission_details', 1)
+                ->where('commission_details.0.vehicule.id', $vehiculeA->id)
+            );
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commission_summary.brut_cumule', 35000)
+                ->has('commission_details', 2)
+            );
+    }
+
+    public function test_vente_kpi_et_details_sont_filtres_par_agence(): void
+    {
+        $livreur = $this->makeLivreur();
+        $siteA = $this->makeSite('Hamdallaye');
+        $siteB = $this->makeSite('Madina');
+
+        $commissionA = CommissionVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => CommandeVente::factory()->create([
+                'organization_id' => $this->org->id,
+                'site_id' => $siteA->id,
+            ])->id,
+        ]);
+        $commissionA->parts()->create([
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
+            'role' => 'chauffeur',
+            'taux_commission' => 10,
+            'montant_brut' => 12000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 12000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        $commissionB = CommissionVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => CommandeVente::factory()->create([
+                'organization_id' => $this->org->id,
+                'site_id' => $siteB->id,
+            ])->id,
+        ]);
+        $commissionB->parts()->create([
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
+            'role' => 'chauffeur',
+            'taux_commission' => 10,
+            'montant_brut' => 7000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 7000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?site_ids[]={$siteA->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commission_summary.brut_cumule', 12000)
+                ->has('commission_details', 1)
+            );
+    }
+
+    public function test_vente_payments_ne_sont_pas_affectes_par_le_filtre_vehicule(): void
+    {
+        $livreur = $this->makeLivreur();
+        $vehiculeA = $this->makeVehicule();
+
+        $commission = CommissionVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehiculeA->id,
+        ]);
+        $commission->parts()->create([
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
+            'role' => 'chauffeur',
+            'taux_commission' => 10,
+            'montant_brut' => 12000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 12000,
+            'montant_verse' => 5000,
+            'statut' => 'partiel',
+        ]);
+
+        PaiementCommissionVente::create([
+            'organization_id' => $this->org->id,
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
+            'montant' => 5000,
+            'mode_paiement' => 'especes',
+            'paid_at' => now(),
+        ]);
+
+        // Le véhicule sélectionné n'a aucun lien avec ce paiement global au
+        // livreur (limite de modèle de données documentée) : il reste visible.
+        $autreVehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?vehicule_id[]={$autreVehicule->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('payments', 1)
+            );
+    }
+
+    public function test_proprietaire_expenses_filtrees_par_vehicule_excluent_les_dettes_globales(): void
+    {
+        $proprio = $this->makeProprietaire();
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'categorie' => 'externe',
+            'proprietaire_id' => $proprio->id,
+            'is_active' => true,
+        ]);
+
+        Depense::factory()->valide()->create([
+            'organization_id' => $this->org->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $vehicule->id,
+            'montant' => 3000,
+        ]);
+
+        Depense::factory()->valide()->create([
+            'organization_id' => $this->org->id,
+            'beneficiaire_type' => 'proprietaire',
+            'beneficiaire_id' => $proprio->id,
+            'montant' => 1000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/proprietaires/{$proprio->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('expenses', 2)
+            );
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/proprietaires/{$proprio->id}?vehicule_id[]={$vehicule->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('expenses', 1)
+                ->where('expenses.0.montant', 3000)
+            );
+    }
+
+    public function test_logistique_kpi_et_details_sont_filtres_par_agence(): void
+    {
+        $siteA = $this->makeSite('Sonfonia');
+        $siteB = $this->makeSite('Lambanyi');
+        $siteC = $this->makeSite('Ratoma');
+        $vehicule = $this->makeVehicule();
+        $livreur = $this->makeLivreur();
+
+        $transfertA = $this->makeTransfert($siteA, $siteB, $vehicule);
+        $commissionA = $this->makeCommissionLogistique($transfertA);
+        $this->makePartLogistique($commissionA, $livreur, brut: 10000, frais: 0, verse: 0, statut: 'impaye');
+
+        $transfertB = $this->makeTransfert($siteC, $siteB, $vehicule);
+        $commissionB = $this->makeCommissionLogistique($transfertB);
+        $this->makePartLogistique($commissionB, $livreur, brut: 6000, frais: 0, verse: 0, statut: 'impaye');
+
+        $this->actingAs($this->user)
+            ->get("/comptabilite/commissions/logistique/livreurs/{$livreur->id}?site_ids[]={$siteA->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('commission_summary.brut_cumule', 10000)
+                ->has('commission_details', 1)
             );
     }
 }

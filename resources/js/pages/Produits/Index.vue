@@ -853,7 +853,7 @@ function confirmArchive(produit: Produit) {
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Eye class="h-4 w-4" />
-                                                Voir le détail
+                                                Détail
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem

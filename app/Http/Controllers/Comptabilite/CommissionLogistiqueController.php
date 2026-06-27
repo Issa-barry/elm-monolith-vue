@@ -17,6 +17,7 @@ use App\Services\CommissionPaymentService;
 use App\Services\CommissionSearchService;
 use App\Services\PeriodeComptableService;
 use App\Services\SiteScopeService;
+use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -209,25 +210,56 @@ class CommissionLogistiqueController extends Controller
         $livreurNom = $allParts->first()?->beneficiaire_nom ?? '—';
         $livreurTelephone = Livreur::find($livreurId)?->telephone;
 
-        $totalBrut = (float) $allParts->sum('montant_brut');
-        $totalFrais = (float) $allParts->sum('frais_supplementaires');
-        $totalNet = (float) $allParts->sum('montant_net');
-        $totalVerse = (float) $allParts->sum('montant_verse');
-
-        $totalImpaye = (float) $allParts
-            ->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
-            ->sum('montant_restant');
-
         $earliestPart = $allParts->whereNotNull('periode')->sortBy('earned_at')->first();
         $earliestDate = $earliestPart?->earned_at ?? now();
         $periodesDisponibles = PeriodeComptableService::periodesDisponibles($earliestDate);
 
         $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
-        $selectedPeriode = (string) $request->input('periode', '');
+        $filters = CommissionDetailFilters::fromRequest($request);
+        $selectedPeriode = $filters['periode'];
+        $vehiculeIds = $filters['vehicule_ids'];
+        $siteIds = $filters['site_ids'];
 
-        $filteredParts = $selectedPeriode !== ''
-            ? $allParts->filter(fn ($p) => $p->periode === $selectedPeriode)
-            : $allParts;
+        $vehiculesDisponibles = $allParts
+            ->map(fn ($p) => $p->commission?->transfert?->vehicule)
+            ->filter()
+            ->unique('id')
+            ->sortBy('nom_vehicule')
+            ->map(fn ($v) => [
+                'id' => $v->id,
+                'nom' => $v->nom_vehicule,
+                'immatriculation' => $v->immatriculation,
+            ])
+            ->values();
+
+        $agencesDisponibles = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
+
+        $filteredParts = $allParts->filter(function ($p) use ($selectedPeriode, $vehiculeIds, $siteIds) {
+            if ($selectedPeriode !== '' && $p->periode !== $selectedPeriode) {
+                return false;
+            }
+
+            $transfert = $p->commission?->transfert;
+
+            if (! empty($vehiculeIds) && ! in_array($transfert?->vehicule_id, $vehiculeIds, true)) {
+                return false;
+            }
+
+            if (! empty($siteIds) && ! in_array($transfert?->site_source_id, $siteIds, true) && ! in_array($transfert?->site_destination_id, $siteIds, true)) {
+                return false;
+            }
+
+            return true;
+        });
+
+        $totalBrut = (float) $filteredParts->sum('montant_brut');
+        $totalFrais = (float) $filteredParts->sum('frais_supplementaires');
+        $totalNet = (float) $filteredParts->sum('montant_net');
+        $totalVerse = (float) $filteredParts->sum('montant_verse');
+
+        $totalImpaye = (float) $filteredParts
+            ->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
+            ->sum('montant_restant');
 
         $periodeStats = null;
 
@@ -265,7 +297,7 @@ class CommissionLogistiqueController extends Controller
             ->orderByDesc('paid_at')
             ->orderByDesc('id');
 
-        if ($selectedPeriode !== '') {
+        if ($selectedPeriode !== '' || ! empty($vehiculeIds) || ! empty($siteIds)) {
             count($filteredPartIds) > 0
                 ? $paymentsQuery->whereHas('items', fn ($q) => $q->whereIn('part_id', $filteredPartIds))
                 : $paymentsQuery->whereRaw('1 = 0');
@@ -291,6 +323,10 @@ class CommissionLogistiqueController extends Controller
             $expensesQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
         }
 
+        if (! empty($siteIds)) {
+            $expensesQuery->whereIn('site_id', $siteIds);
+        }
+
         $expenses = $expensesQuery
             ->orderByDesc('date_depense')
             ->get()
@@ -304,6 +340,12 @@ class CommissionLogistiqueController extends Controller
                 'vehicule' => null,
                 'montant' => (float) $d->montant,
             ]);
+
+        $periodeRange = ['debut' => null, 'fin' => null];
+        if ($selectedPeriode !== '') {
+            [$debutRange, $finRange] = PeriodeComptableService::dateRangeForCode($selectedPeriode);
+            $periodeRange = ['debut' => $debutRange->toDateString(), 'fin' => $finRange->toDateString()];
+        }
 
         return Inertia::render('Comptabilite/CommissionLogistique/Livreur/Show', [
             'livreur' => [
@@ -319,11 +361,13 @@ class CommissionLogistiqueController extends Controller
                 $totalImpaye,
             ),
             'commission_details' => $filteredParts->map(function ($p) {
-                $vehicule = $p->commission?->transfert?->vehicule;
+                $transfert = $p->commission?->transfert;
+                $vehicule = $transfert?->vehicule;
 
                 return [
                     'id' => $p->id,
-                    'reference' => $p->commission?->transfert?->reference,
+                    'reference' => $transfert?->reference,
+                    'site' => $transfert?->siteDestination?->nom ?? $transfert?->siteSource?->nom,
                     'vehicule' => $vehicule ? [
                         'id' => $vehicule->id,
                         'nom' => $vehicule->nom_vehicule,
@@ -346,6 +390,14 @@ class CommissionLogistiqueController extends Controller
             'periode_courante_label' => PeriodeComptableService::labelForCode($periodeCourante),
             'selected_periode' => $selectedPeriode,
             'periodes_disponibles' => $periodesDisponibles,
+            'filters' => [
+                'periode' => $selectedPeriode,
+                'vehicule_ids' => $vehiculeIds,
+                'site_ids' => $siteIds,
+                'periode_range' => $periodeRange,
+            ],
+            'vehicules_disponibles' => $vehiculesDisponibles,
+            'agences_disponibles' => $agencesDisponibles,
             'modes_paiement' => [
                 ['value' => 'especes', 'label' => 'Espèces'],
                 ['value' => 'virement', 'label' => 'Virement'],

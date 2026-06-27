@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -71,15 +72,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Packings', href: '/packings' },
     { title: props.packing.reference, href: '#' },
 ];
-
-// ── Badges statut ─────────────────────────────────────────────────────────────
-const statutColor: Record<string, string> = {
-    impayee:
-        'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-    partielle: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    payee: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    annulee: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-};
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
 function formatGNF(val: number): string {
@@ -292,15 +284,10 @@ const canAddVersement = computed(
                     <div>
                         <p class="text-xs text-muted-foreground">Statut</p>
                         <div class="mt-0.5">
-                            <span
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="
-                                    statutColor[packing.statut] ??
-                                    'bg-muted text-muted-foreground'
-                                "
-                            >
-                                {{ packing.statut_label }}
-                            </span>
+                            <StatusDot
+                                :status="packing.statut"
+                                :label="packing.statut_label"
+                            />
                         </div>
                     </div>
                     <div>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StatusDot from '@/components/StatusDot.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,7 +17,6 @@ import {
     AlertTriangle,
     ArrowLeft,
     CheckCircle,
-    Clock,
     Edit,
     Send,
     Trash2,
@@ -75,35 +75,12 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: props.depense.type_libelle, href: '#' },
 ];
 
-const statutConfig: Record<
-    string,
-    { label: string; class: string; icon: unknown }
-> = {
-    brouillon: {
-        label: 'Brouillon',
-        class: 'bg-slate-100 text-slate-700 border-slate-200',
-        icon: Clock,
-    },
-    soumis: {
-        label: 'Soumis',
-        class: 'bg-blue-100 text-blue-700 border-blue-200',
-        icon: Send,
-    },
-    valide: {
-        label: 'Validée',
-        class: 'bg-green-100 text-green-700 border-green-200',
-        icon: CheckCircle,
-    },
-    rejete: {
-        label: 'Rejetée',
-        class: 'bg-red-100 text-red-700 border-red-200',
-        icon: XCircle,
-    },
-    annule: {
-        label: 'Annulée',
-        class: 'bg-red-100 text-red-700 border-red-200',
-        icon: XCircle,
-    },
+const statutConfig: Record<string, { label: string }> = {
+    brouillon: { label: 'Brouillon' },
+    soumis: { label: 'Soumis' },
+    valide: { label: 'Validée' },
+    rejete: { label: 'Rejetée' },
+    annule: { label: 'Annulée' },
 };
 
 const categorieClass: Record<string, string> = {
@@ -127,8 +104,6 @@ const statut = computed(
     () =>
         statutConfig[props.depense.statut] ?? {
             label: props.depense.statut,
-            class: '',
-            icon: Clock,
         },
 );
 
@@ -324,16 +299,10 @@ function formatDate(iso: string | null): string {
                                 <h1 class="text-xl font-semibold">
                                     {{ depense.type_libelle }}
                                 </h1>
-                                <span
-                                    class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
-                                    :class="statut.class"
-                                >
-                                    <component
-                                        :is="statut.icon"
-                                        class="h-3 w-3"
-                                    />
-                                    {{ statut.label }}
-                                </span>
+                                <StatusDot
+                                    :status="depense.statut"
+                                    :label="statut.label"
+                                />
                             </div>
                             <p class="text-sm text-muted-foreground">
                                 Saisie le

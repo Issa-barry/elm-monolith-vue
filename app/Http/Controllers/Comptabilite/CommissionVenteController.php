@@ -18,6 +18,7 @@ use App\Services\CommissionVenteCalculatorService;
 use App\Services\CommissionVentePaiementService;
 use App\Services\PeriodeComptableService;
 use App\Services\SiteScopeService;
+use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -240,15 +241,11 @@ class CommissionVenteController extends Controller
             ->orderByDesc('commission_vente_id')
             ->get();
 
-        $fraisDepenses = CommissionVenteCalculatorService::fraisDepenseLivreur($orgId, $livreurId);
-        $resume = CommissionVenteCalculatorService::calculerResume(
-            (float) $allParts->sum('montant_brut'),
-            (float) $allParts->sum('frais_supplementaires'),
-            $fraisDepenses,
-            (float) $allParts->sum('montant_verse'),
-        );
-
         $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
+        $filters = CommissionDetailFilters::fromRequest($request, $periodeCourante);
+        $periodeFilter = $filters['periode'];
+        $vehiculeIds = $filters['vehicule_ids'];
+        $siteIds = $filters['site_ids'];
 
         $earliestCommission = $allParts
             ->filter(fn ($p) => $p->commission?->created_at !== null)
@@ -257,19 +254,53 @@ class CommissionVenteController extends Controller
         $earliestDate = $earliestCommission?->commission?->created_at ?? now();
         $periodesDisponibles = PeriodeComptableService::periodesDisponibles(Carbon::instance($earliestDate));
 
-        $periodeFilter = (string) $request->input('periode', $periodeCourante);
+        $vehiculesDisponibles = $allParts
+            ->map(fn ($p) => $p->commission?->vehicule)
+            ->filter()
+            ->unique('id')
+            ->sortBy('nom_vehicule')
+            ->map(fn ($v) => [
+                'id' => $v->id,
+                'nom' => $v->nom_vehicule,
+                'immatriculation' => $v->immatriculation,
+            ])
+            ->values();
 
-        $filteredParts = $allParts;
-        if ($periodeFilter !== '') {
-            $filteredParts = $filteredParts->filter(function ($p) use ($periodeFilter) {
-                $createdAt = $p->commission?->created_at;
-                if (! $createdAt) {
+        $agencesDisponibles = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
+
+        $filteredParts = $allParts->filter(function ($p) use ($periodeFilter, $vehiculeIds, $siteIds) {
+            $commission = $p->commission;
+
+            if ($periodeFilter !== '') {
+                $createdAt = $commission?->created_at;
+                if (! $createdAt || PeriodeComptableService::codeForLivreur(Carbon::instance($createdAt)) !== $periodeFilter) {
                     return false;
                 }
+            }
 
-                return PeriodeComptableService::codeForLivreur(Carbon::instance($createdAt)) === $periodeFilter;
-            });
-        }
+            if (! empty($vehiculeIds) && ! in_array($commission?->vehicule_id, $vehiculeIds, true)) {
+                return false;
+            }
+
+            if (! empty($siteIds) && ! in_array($commission?->commande?->site_id, $siteIds, true)) {
+                return false;
+            }
+
+            return true;
+        });
+
+        $fraisDepenses = CommissionVenteCalculatorService::fraisDepenseLivreur(
+            $orgId,
+            $livreurId,
+            $periodeFilter !== '' ? $periodeFilter : null,
+            $siteIds,
+        );
+        $resume = CommissionVenteCalculatorService::calculerResume(
+            (float) $filteredParts->sum('montant_brut'),
+            (float) $filteredParts->sum('frais_supplementaires'),
+            $fraisDepenses,
+            (float) $filteredParts->sum('montant_verse'),
+        );
 
         $periodeStats = null;
         if ($periodeFilter !== '' && $filteredParts->isNotEmpty()) {
@@ -320,11 +351,18 @@ class CommissionVenteController extends Controller
             })
             ->values();
 
-        $historiquePaiements = PaiementCommissionVente::with('creator')
+        $historiquePaiementsQuery = PaiementCommissionVente::with('creator')
             ->where('organization_id', $orgId)
             ->where('type_beneficiaire', 'livreur')
             ->where('livreur_id', $livreurId)
-            ->orderByDesc('paid_at')
+            ->orderByDesc('paid_at');
+
+        if ($periodeFilter !== '') {
+            [$debutPaiement, $finPaiement] = PeriodeComptableService::dateRangeForCode($periodeFilter);
+            $historiquePaiementsQuery->whereBetween('paid_at', [$debutPaiement->toDateString(), $finPaiement->toDateString()]);
+        }
+
+        $historiquePaiements = $historiquePaiementsQuery
             ->get()
             ->map(fn ($p) => [
                 'id' => $p->id,
@@ -348,6 +386,10 @@ class CommissionVenteController extends Controller
             $expensesQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
         }
 
+        if (! empty($siteIds)) {
+            $expensesQuery->whereIn('site_id', $siteIds);
+        }
+
         $expenses = $expensesQuery
             ->orderByDesc('date_depense')
             ->get()
@@ -361,6 +403,12 @@ class CommissionVenteController extends Controller
                 'vehicule' => null,
                 'montant' => (float) $d->montant,
             ]);
+
+        $periodeRange = ['debut' => null, 'fin' => null];
+        if ($periodeFilter !== '') {
+            [$debutRange, $finRange] = PeriodeComptableService::dateRangeForCode($periodeFilter);
+            $periodeRange = ['debut' => $debutRange->toDateString(), 'fin' => $finRange->toDateString()];
+        }
 
         return Inertia::render('Comptabilite/CommissionVente/Livreur/Show', [
             'livreur' => [
@@ -384,6 +432,14 @@ class CommissionVenteController extends Controller
             'selected_periode' => $periodeFilter,
             'periodes_disponibles' => $periodesDisponibles,
             'periode_stats' => $periodeStats,
+            'filters' => [
+                'periode' => $periodeFilter,
+                'vehicule_ids' => $vehiculeIds,
+                'site_ids' => $siteIds,
+                'periode_range' => $periodeRange,
+            ],
+            'vehicules_disponibles' => $vehiculesDisponibles,
+            'agences_disponibles' => $agencesDisponibles,
             'can_payer' => auth()->user()->can('comptabilite.payer'),
         ]);
     }
