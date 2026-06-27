@@ -75,13 +75,6 @@ const statutLabel: Record<string, string> = {
     rejete: 'Rejeté',
 };
 
-const statutBadge: Record<string, string> = {
-    brouillon: 'bg-muted text-muted-foreground',
-    soumis: 'bg-blue-50 text-blue-700',
-    approuve: 'bg-emerald-50 text-emerald-700',
-    rejete: 'bg-red-50 text-red-700',
-};
-
 const totalApprouve = computed(() =>
     props.depenses
         .filter((d) => d.statut === 'approuve')
@@ -555,15 +548,11 @@ function formatGNF(val: number): string {
                             >
                                 {{ d.date_depense ?? '—' }}
                             </div>
-                            <span
-                                class="shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
-                                :class="
-                                    statutBadge[d.statut] ??
-                                    'bg-muted text-muted-foreground'
-                                "
-                            >
-                                {{ statutLabel[d.statut] ?? d.statut }}
-                            </span>
+                            <StatusDot
+                                :status="d.statut"
+                                :label="statutLabel[d.statut] ?? d.statut"
+                                class="shrink-0"
+                            />
                             <Link
                                 v-if="can('depenses.update')"
                                 :href="`/depenses/${d.id}/edit`"

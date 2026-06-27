@@ -10,12 +10,14 @@ import {
     ArrowLeft,
     Car,
     CircleHelp,
+    ExternalLink,
     Pencil,
     Plus,
     Receipt,
     UserRound,
     X,
 } from 'lucide-vue-next';
+import Dialog from 'primevue/dialog';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 interface ProprietaireData {
@@ -34,6 +36,18 @@ interface ProprietaireData {
     vehicules_count: number;
 }
 
+interface EquipeMembre {
+    nom: string;
+    telephone: string | null;
+}
+
+interface EquipeDetail {
+    nom: string;
+    taux_commission_proprietaire: number | null;
+    chauffeur: EquipeMembre | null;
+    convoyeurs: EquipeMembre[];
+}
+
 interface VehiculeRow {
     id: number;
     nom_vehicule: string;
@@ -43,8 +57,7 @@ interface VehiculeRow {
     capacite_packs: number | null;
     categorie: string | null;
     is_active: boolean;
-    equipe_nom: string | null;
-    livreur_principal_nom: string | null;
+    equipe_detail: EquipeDetail | null;
 }
 
 interface DepenseRow {
@@ -73,13 +86,6 @@ const statutLabel: Record<string, string> = {
     soumis: 'Soumis',
     approuve: 'Approuvé',
     rejete: 'Rejeté',
-};
-
-const statutBadge: Record<string, string> = {
-    brouillon: 'bg-muted text-muted-foreground',
-    soumis: 'bg-blue-50 text-blue-700',
-    approuve: 'bg-emerald-50 text-emerald-700',
-    rejete: 'bg-red-50 text-red-700',
 };
 
 const totalApprouve = computed(() =>
@@ -116,6 +122,24 @@ const locationLabel = computed(() => {
 
 function flagUrl(code: string) {
     return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
+}
+
+function chauffeurCountLabel(equipe: EquipeDetail | null): string {
+    const count = equipe?.chauffeur ? 1 : 0;
+    return `${count} chauffeur${count > 1 ? 's' : ''}`;
+}
+
+function convoyeurCountLabel(equipe: EquipeDetail | null): string {
+    const count = equipe?.convoyeurs.length ?? 0;
+    return `${count} convoyeur${count > 1 ? 's' : ''}`;
+}
+
+const equipeDialogVisible = ref(false);
+const selectedVehiculeForEquipe = ref<VehiculeRow | null>(null);
+
+function openEquipeDialog(vehicule: VehiculeRow) {
+    selectedVehiculeForEquipe.value = vehicule;
+    equipeDialogVisible.value = true;
 }
 
 const lightboxUrl = ref<string | null>(null);
@@ -474,13 +498,34 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                                         }}
                                     </td>
                                     <td class="px-4 py-3">
-                                        <p>{{ vehicule.equipe_nom ?? '-' }}</p>
+                                        <div class="flex items-center gap-1.5">
+                                            <p>
+                                                {{
+                                                    chauffeurCountLabel(
+                                                        vehicule.equipe_detail,
+                                                    )
+                                                }}
+                                            </p>
+                                            <button
+                                                v-if="vehicule.equipe_detail"
+                                                type="button"
+                                                class="inline-flex shrink-0 items-center text-primary focus:outline-none"
+                                                @click="
+                                                    openEquipeDialog(vehicule)
+                                                "
+                                            >
+                                                <ExternalLink
+                                                    class="h-3.5 w-3.5"
+                                                />
+                                            </button>
+                                        </div>
                                         <p
                                             class="text-xs text-muted-foreground"
                                         >
                                             {{
-                                                vehicule.livreur_principal_nom ??
-                                                'Sans livreur principal'
+                                                convoyeurCountLabel(
+                                                    vehicule.equipe_detail,
+                                                )
                                             }}
                                         </p>
                                     </td>
@@ -578,15 +623,11 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                             >
                                 {{ d.date_depense ?? '—' }}
                             </div>
-                            <span
-                                class="shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
-                                :class="
-                                    statutBadge[d.statut] ??
-                                    'bg-muted text-muted-foreground'
-                                "
-                            >
-                                {{ statutLabel[d.statut] ?? d.statut }}
-                            </span>
+                            <StatusDot
+                                :status="d.statut"
+                                :label="statutLabel[d.statut] ?? d.statut"
+                                class="shrink-0"
+                            />
                             <Link
                                 v-if="can('depenses.update')"
                                 :href="`/depenses/${d.id}/edit`"
@@ -624,5 +665,103 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                 </div>
             </div>
         </Teleport>
+
+        <Dialog
+            v-model:visible="equipeDialogVisible"
+            modal
+            header="Équipe de livraison"
+            :style="{ width: '30rem' }"
+        >
+            <div class="space-y-4 px-1 py-2">
+                <div class="flex justify-between">
+                    <span class="text-sm text-muted-foreground">Équipe</span>
+                    <span class="text-sm font-medium">{{
+                        selectedVehiculeForEquipe?.equipe_detail?.nom ?? '—'
+                    }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-sm text-muted-foreground">Véhicule</span>
+                    <span class="text-sm font-medium">{{
+                        selectedVehiculeForEquipe?.nom_vehicule ?? '—'
+                    }}</span>
+                </div>
+                <div
+                    v-if="
+                        selectedVehiculeForEquipe?.equipe_detail
+                            ?.taux_commission_proprietaire != null
+                    "
+                    class="flex justify-between"
+                >
+                    <span class="text-sm text-muted-foreground"
+                        >Taux propriétaire</span
+                    >
+                    <span class="text-sm font-medium"
+                        >{{
+                            selectedVehiculeForEquipe.equipe_detail
+                                .taux_commission_proprietaire
+                        }}
+                        %</span
+                    >
+                </div>
+                <div
+                    v-if="selectedVehiculeForEquipe?.equipe_detail?.chauffeur"
+                    class="border-t pt-3"
+                >
+                    <p
+                        class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                    >
+                        Chauffeur principal
+                    </p>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">{{
+                            selectedVehiculeForEquipe.equipe_detail.chauffeur
+                                .nom
+                        }}</span>
+                        <span class="text-sm text-muted-foreground">
+                            {{
+                                formatPhoneDisplay(
+                                    selectedVehiculeForEquipe.equipe_detail
+                                        .chauffeur.telephone,
+                                )
+                            }}
+                        </span>
+                    </div>
+                </div>
+                <div
+                    v-if="
+                        selectedVehiculeForEquipe?.equipe_detail?.convoyeurs
+                            ?.length
+                    "
+                    class="border-t pt-3"
+                >
+                    <p
+                        class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                    >
+                        Convoyeurs
+                    </p>
+                    <div
+                        v-for="conv in selectedVehiculeForEquipe.equipe_detail
+                            .convoyeurs"
+                        :key="conv.nom"
+                        class="flex items-center justify-between py-1"
+                    >
+                        <span class="text-sm font-medium">{{
+                            conv.nom
+                        }}</span>
+                        <span class="text-sm text-muted-foreground">{{
+                            formatPhoneDisplay(conv.telephone)
+                        }}</span>
+                    </div>
+                </div>
+            </div>
+            <template #footer>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    @click="equipeDialogVisible = false"
+                    >Fermer</Button
+                >
+            </template>
+        </Dialog>
     </AppLayout>
 </template>

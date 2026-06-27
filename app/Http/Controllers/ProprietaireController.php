@@ -122,17 +122,15 @@ class ProprietaireController extends Controller
         $this->authorize('view', $proprietaire);
 
         $vehicules = Vehicule::query()
-            ->with(['equipe.membres.livreur'])
+            ->with(['typeVehicule', 'equipe.livreurs'])
             ->where('organization_id', auth()->user()->organization_id)
             ->where('proprietaire_id', $proprietaire->id)
             ->orderBy('nom_vehicule')
             ->get()
             ->map(function (Vehicule $vehicule) {
-                $livreurPrincipal = $vehicule
-                    ->equipe
-                    ?->membres
-                    ?->firstWhere('role', 'chauffeur')
-                    ?->livreur;
+                $equipe = $vehicule->equipe;
+                $chauffeur = $equipe?->livreurs->first(fn ($l) => ($l->pivot->role ?? null) === 'chauffeur');
+                $convoyeurs = $equipe ? $equipe->livreurs->filter(fn ($l) => ($l->pivot->role ?? null) !== 'chauffeur') : collect();
 
                 return [
                     'id' => $vehicule->id,
@@ -143,10 +141,20 @@ class ProprietaireController extends Controller
                     'capacite_packs' => $vehicule->capacite_packs,
                     'categorie' => $vehicule->categorie,
                     'is_active' => $vehicule->is_active,
-                    'equipe_nom' => $vehicule->equipe?->nom,
-                    'livreur_principal_nom' => $livreurPrincipal
-                        ? trim($livreurPrincipal->prenom.' '.$livreurPrincipal->nom)
-                        : null,
+                    'equipe_detail' => $equipe ? [
+                        'nom' => $equipe->nom,
+                        'taux_commission_proprietaire' => $equipe->taux_commission_proprietaire !== null
+                            ? (float) $equipe->taux_commission_proprietaire
+                            : null,
+                        'chauffeur' => $chauffeur ? [
+                            'nom' => trim($chauffeur->prenom.' '.$chauffeur->nom),
+                            'telephone' => $chauffeur->telephone,
+                        ] : null,
+                        'convoyeurs' => $convoyeurs->map(fn ($l) => [
+                            'nom' => trim($l->prenom.' '.$l->nom),
+                            'telephone' => $l->telephone,
+                        ])->values(),
+                    ] : null,
                 ];
             })
             ->values();
