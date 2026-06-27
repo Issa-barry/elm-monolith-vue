@@ -216,16 +216,15 @@ test('show — vehicule externe : bouton "Voir la fiche propriétaire" visible, 
     const btn = page.getByTestId('voir-fiche-proprietaire-btn');
     await expect(btn).toBeVisible();
 
-    // The link opens in a new tab (target="_blank")
-    const [newTab] = await Promise.all([
-        page.context().waitForEvent('page'),
-        btn.click(),
-    ]);
+    // Verify the link points to the proprietaire page and navigate there directly
+    // (waitForEvent('page') is unreliable in headless CI when popups may be blocked)
+    const href = await btn.getAttribute('href');
+    expect(href).toMatch(/\/proprietaires\/[a-z0-9]+$/);
+    await expect(btn).toHaveAttribute('target', '_blank');
 
-    await newTab.waitForURL(/\/proprietaires\/[a-z0-9]+$/, {
-        timeout: 15_000,
-    });
-    await expect(newTab).toHaveURL(/\/proprietaires\/[a-z0-9]+$/);
+    await page.goto(href!);
+    await page.waitForURL(/\/proprietaires\/[a-z0-9]+$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/proprietaires\/[a-z0-9]+$/);
 });
 
 test('show — vehicule interne : bouton "Voir la fiche propriétaire" absent', async ({
