@@ -78,7 +78,9 @@ const props = withDefaults(
 const resolvedDotClass = computed(() => {
     if (props.dotClass) return props.dotClass;
     if (props.status) {
-        return STATUS_COLOR_MAP[props.status.toLowerCase()] ?? DEFAULT_DOT_CLASS;
+        return (
+            STATUS_COLOR_MAP[props.status.toLowerCase()] ?? DEFAULT_DOT_CLASS
+        );
     }
     return DEFAULT_DOT_CLASS;
 });
@@ -95,11 +97,7 @@ const resolvedDotClass = computed(() => {
     >
         <span
             :class="
-                cn(
-                    'shrink-0 rounded-full',
-                    SIZE_CLASS[size],
-                    resolvedDotClass,
-                )
+                cn('shrink-0 rounded-full', SIZE_CLASS[size], resolvedDotClass)
             "
         />
         <span>{{ label }}</span>

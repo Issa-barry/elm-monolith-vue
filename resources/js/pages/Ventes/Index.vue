@@ -511,7 +511,10 @@ function confirmDelete(c: Commande) {
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
                         <div class="flex flex-col items-end gap-1.5">
-                            <StatusDot :status="c.statut" :label="c.statut_label" />
+                            <StatusDot
+                                :status="c.statut"
+                                :label="c.statut_label"
+                            />
                             <span
                                 class="text-xs text-muted-foreground tabular-nums"
                                 >{{ c.created_at }}</span

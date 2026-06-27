@@ -143,7 +143,9 @@ const showPaiementDialog = ref(false);
                     class="overflow-hidden rounded-xl border bg-card shadow-sm"
                 >
                     <div class="border-b px-4 py-3">
-                        <h2 class="text-sm font-semibold">Dépenses véhicules</h2>
+                        <h2 class="text-sm font-semibold">
+                            Dépenses véhicules
+                        </h2>
                     </div>
                     <CommissionExpensesTable :rows="expenses" />
                 </div>

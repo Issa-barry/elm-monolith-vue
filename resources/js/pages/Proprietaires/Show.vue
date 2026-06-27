@@ -745,9 +745,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                         :key="conv.nom"
                         class="flex items-center justify-between py-1"
                     >
-                        <span class="text-sm font-medium">{{
-                            conv.nom
-                        }}</span>
+                        <span class="text-sm font-medium">{{ conv.nom }}</span>
                         <span class="text-sm text-muted-foreground">{{
                             formatPhoneDisplay(conv.telephone)
                         }}</span>

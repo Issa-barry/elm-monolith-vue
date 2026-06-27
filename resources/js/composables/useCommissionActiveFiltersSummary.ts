@@ -20,7 +20,12 @@ interface Options {
  */
 export function useCommissionActiveFiltersSummary(options: Options) {
     return computed(() => {
-        const { filters, periodesDisponibles, vehiculesDisponibles, agencesDisponibles } = options;
+        const {
+            filters,
+            periodesDisponibles,
+            vehiculesDisponibles,
+            agencesDisponibles,
+        } = options;
         const parts: string[] = [];
 
         if (filters.value.periode) {
@@ -34,7 +39,9 @@ export function useCommissionActiveFiltersSummary(options: Options) {
             const selected = new Set(filters.value.vehicule_ids.map(String));
             const labels = vehiculesDisponibles
                 .filter((v) => v.id && selected.has(String(v.id)))
-                .map((v) => [v.nom, v.immatriculation].filter(Boolean).join(' '));
+                .map((v) =>
+                    [v.nom, v.immatriculation].filter(Boolean).join(' '),
+                );
             if (labels.length > 0) parts.push(labels.join(', '));
         }
 

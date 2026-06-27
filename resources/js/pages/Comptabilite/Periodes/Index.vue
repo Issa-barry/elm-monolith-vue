@@ -95,7 +95,6 @@ const typeBadge = (type: string) =>
         salarie:
             'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400',
     })[type] ?? 'bg-muted text-muted-foreground';
-
 </script>
 
 <template>

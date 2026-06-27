@@ -31,7 +31,8 @@ const vehiculeOptions = computed(() =>
         .filter((v) => v.id)
         .map((v) => ({
             value: v.id as string,
-            label: [v.nom, v.immatriculation].filter(Boolean).join(' — ') || '—',
+            label:
+                [v.nom, v.immatriculation].filter(Boolean).join(' — ') || '—',
         })),
 );
 
