@@ -105,14 +105,6 @@ const shiftIcon: Record<string, string> = {
     nuit: '🌙',
 };
 
-// ── Badges statut ─────────────────────────────────────────────────────────────
-const statutColor: Record<string, string> = {
-    impayee: 'bg-amber-500',
-    partielle: 'bg-blue-500',
-    payee: 'bg-emerald-500',
-    annulee: 'bg-zinc-400 dark:bg-zinc-500',
-};
-
 // ── Formatage ─────────────────────────────────────────────────────────────────
 function formatGNF(val: number): string {
     return (
@@ -278,11 +270,8 @@ function confirmDelete(packing: Packing) {
 
                     <!-- Status dot -->
                     <StatusDot
+                        :status="p.statut"
                         :label="p.statut_label"
-                        :dot-class="
-                            statutColor[p.statut] ??
-                            'bg-zinc-400 dark:bg-zinc-500'
-                        "
                         class="shrink-0 text-xs text-muted-foreground"
                     />
 
@@ -574,11 +563,8 @@ function confirmDelete(packing: Packing) {
                     >
                         <template #body="{ data }">
                             <StatusDot
+                                :status="data.statut"
                                 :label="data.statut_label"
-                                :dot-class="
-                                    statutColor[data.statut] ??
-                                    'bg-zinc-400 dark:bg-zinc-500'
-                                "
                                 class="text-muted-foreground"
                             />
                         </template>

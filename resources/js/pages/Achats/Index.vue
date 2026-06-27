@@ -80,13 +80,6 @@ const desktopFiltered = computed(() => {
     );
 });
 
-// ── Statut couleurs ───────────────────────────────────────────────────────────
-const statutColor: Record<string, string> = {
-    en_cours: 'bg-blue-500',
-    receptionnee: 'bg-emerald-500',
-    annulee: 'bg-zinc-400 dark:bg-zinc-500',
-};
-
 // ── Formatage ─────────────────────────────────────────────────────────────────
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
@@ -233,11 +226,8 @@ function confirmDelete(c: Commande) {
                     <div class="flex shrink-0 items-center gap-2">
                         <div class="flex flex-col items-end gap-1.5">
                             <StatusDot
+                                :status="c.statut"
                                 :label="c.statut_label"
-                                :dot-class="
-                                    statutColor[c.statut] ??
-                                    'bg-zinc-400 dark:bg-zinc-500'
-                                "
                                 class="text-xs text-muted-foreground"
                             />
                             <span
@@ -426,11 +416,8 @@ function confirmDelete(c: Commande) {
                     >
                         <template #body="{ data }">
                             <StatusDot
+                                :status="data.statut"
                                 :label="data.statut_label"
-                                :dot-class="
-                                    statutColor[data.statut] ??
-                                    'bg-zinc-400 dark:bg-zinc-500'
-                                "
                                 class="text-muted-foreground"
                             />
                         </template>

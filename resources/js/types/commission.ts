@@ -17,6 +17,7 @@ export interface CommissionDetailRow {
     commission_id?: string;
     reference: string | null;
     date: string | null;
+    site?: string | null;
     periode?: string | null;
     periode_label: string | null;
     vehicule?: CommissionVehiculeInfo | null;
@@ -62,3 +63,15 @@ export type CommissionDetailTab =
     | 'depenses'
     | 'paiements'
     | 'historique';
+
+export interface AgenceOption {
+    id: string;
+    nom: string;
+}
+
+export interface CommissionGlobalFiltersValue {
+    periode: string;
+    vehicule_ids: (string | number)[];
+    site_ids: (string | number)[];
+    periode_range?: { debut: string | null; fin: string | null };
+}

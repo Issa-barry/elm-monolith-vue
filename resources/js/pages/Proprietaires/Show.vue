@@ -10,11 +10,14 @@ import {
     ArrowLeft,
     Car,
     CircleHelp,
+    ExternalLink,
     Pencil,
     Plus,
+    Receipt,
     UserRound,
     X,
 } from 'lucide-vue-next';
+import Dialog from 'primevue/dialog';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 interface ProprietaireData {
@@ -33,6 +36,18 @@ interface ProprietaireData {
     vehicules_count: number;
 }
 
+interface EquipeMembre {
+    nom: string;
+    telephone: string | null;
+}
+
+interface EquipeDetail {
+    nom: string;
+    taux_commission_proprietaire: number | null;
+    chauffeur: EquipeMembre | null;
+    convoyeurs: EquipeMembre[];
+}
+
 interface VehiculeRow {
     id: number;
     nom_vehicule: string;
@@ -42,18 +57,46 @@ interface VehiculeRow {
     capacite_packs: number | null;
     categorie: string | null;
     is_active: boolean;
-    equipe_nom: string | null;
-    livreur_principal_nom: string | null;
+    equipe_detail: EquipeDetail | null;
+}
+
+interface DepenseRow {
+    id: string;
+    libelle: string;
+    montant: number;
+    date_depense: string | null;
+    statut: string;
+    commentaire: string | null;
 }
 
 const props = defineProps<{
     proprietaire: ProprietaireData;
     vehicules: VehiculeRow[];
+    depenses: DepenseRow[];
     can_create_vehicule: boolean;
 }>();
 
 const { can } = usePermissions();
-const activeTab = ref<'informations' | 'vehicules'>('informations');
+const activeTab = ref<'informations' | 'vehicules' | 'depenses'>(
+    'informations',
+);
+
+const statutLabel: Record<string, string> = {
+    brouillon: 'Brouillon',
+    soumis: 'Soumis',
+    approuve: 'Approuvé',
+    rejete: 'Rejeté',
+};
+
+const totalApprouve = computed(() =>
+    props.depenses
+        .filter((d) => d.statut === 'approuve')
+        .reduce((s, d) => s + d.montant, 0),
+);
+
+function formatGNF(val: number): string {
+    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -79,6 +122,24 @@ const locationLabel = computed(() => {
 
 function flagUrl(code: string) {
     return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
+}
+
+function chauffeurCountLabel(equipe: EquipeDetail | null): string {
+    const count = equipe?.chauffeur ? 1 : 0;
+    return `${count} chauffeur${count > 1 ? 's' : ''}`;
+}
+
+function convoyeurCountLabel(equipe: EquipeDetail | null): string {
+    const count = equipe?.convoyeurs.length ?? 0;
+    return `${count} convoyeur${count > 1 ? 's' : ''}`;
+}
+
+const equipeDialogVisible = ref(false);
+const selectedVehiculeForEquipe = ref<VehiculeRow | null>(null);
+
+function openEquipeDialog(vehicule: VehiculeRow) {
+    selectedVehiculeForEquipe.value = vehicule;
+    equipeDialogVisible.value = true;
 }
 
 const lightboxUrl = ref<string | null>(null);
@@ -198,6 +259,32 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                             {{ vehicules.length }}
                         </span>
                     </button>
+                    <button
+                        type="button"
+                        data-testid="owner-depenses-tab"
+                        class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'depenses'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        @click="activeTab = 'depenses'"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <Receipt class="h-4 w-4" />
+                            Dépenses
+                        </span>
+                        <span
+                            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px]"
+                            :class="
+                                activeTab === 'depenses'
+                                    ? 'bg-white/20 text-primary-foreground'
+                                    : 'bg-muted text-muted-foreground'
+                            "
+                        >
+                            {{ depenses.length }}
+                        </span>
+                    </button>
                 </aside>
 
                 <div
@@ -269,7 +356,10 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                     </div>
                 </div>
 
-                <div v-else class="rounded-xl border bg-card p-5 sm:p-6">
+                <div
+                    v-else-if="activeTab === 'vehicules'"
+                    class="rounded-xl border bg-card p-5 sm:p-6"
+                >
                     <div
                         class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                     >
@@ -408,13 +498,34 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                                         }}
                                     </td>
                                     <td class="px-4 py-3">
-                                        <p>{{ vehicule.equipe_nom ?? '-' }}</p>
+                                        <div class="flex items-center gap-1.5">
+                                            <p>
+                                                {{
+                                                    chauffeurCountLabel(
+                                                        vehicule.equipe_detail,
+                                                    )
+                                                }}
+                                            </p>
+                                            <button
+                                                v-if="vehicule.equipe_detail"
+                                                type="button"
+                                                class="inline-flex shrink-0 items-center text-primary focus:outline-none"
+                                                @click="
+                                                    openEquipeDialog(vehicule)
+                                                "
+                                            >
+                                                <ExternalLink
+                                                    class="h-3.5 w-3.5"
+                                                />
+                                            </button>
+                                        </div>
                                         <p
                                             class="text-xs text-muted-foreground"
                                         >
                                             {{
-                                                vehicule.livreur_principal_nom ??
-                                                'Sans livreur principal'
+                                                convoyeurCountLabel(
+                                                    vehicule.equipe_detail,
+                                                )
                                             }}
                                         </p>
                                     </td>
@@ -456,6 +567,77 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                         </table>
                     </div>
                 </div>
+
+                <!-- Dépenses tab -->
+                <div v-else class="rounded-xl border bg-card p-5 sm:p-6">
+                    <div
+                        class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+                    >
+                        <div>
+                            <h2
+                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Dépenses du propriétaire
+                            </h2>
+                            <p class="mt-1 text-xs text-muted-foreground">
+                                Frais opérationnels gérés via le module
+                                Dépenses.
+                            </p>
+                        </div>
+                        <span
+                            v-if="totalApprouve > 0"
+                            class="shrink-0 rounded-lg bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700 tabular-nums"
+                        >
+                            Approuvés : {{ formatGNF(totalApprouve) }}
+                        </span>
+                    </div>
+
+                    <div
+                        v-if="!depenses.length"
+                        class="rounded-lg border border-dashed py-10 text-center"
+                    >
+                        <p class="text-sm text-muted-foreground">
+                            Aucune dépense enregistrée pour ce propriétaire.
+                        </p>
+                    </div>
+
+                    <div v-else class="divide-y rounded-lg border">
+                        <div
+                            v-for="d in depenses"
+                            :key="d.id"
+                            class="flex items-center gap-4 px-4 py-3 hover:bg-muted/30"
+                        >
+                            <div class="min-w-0 flex-1">
+                                <div class="text-sm font-semibold tabular-nums">
+                                    {{ formatGNF(d.montant) }}
+                                </div>
+                                <div class="text-xs text-muted-foreground">
+                                    {{ d.libelle }}
+                                    <span v-if="d.commentaire">
+                                        · {{ d.commentaire }}</span
+                                    >
+                                </div>
+                            </div>
+                            <div
+                                class="hidden text-xs text-muted-foreground sm:block"
+                            >
+                                {{ d.date_depense ?? '—' }}
+                            </div>
+                            <StatusDot
+                                :status="d.statut"
+                                :label="statutLabel[d.statut] ?? d.statut"
+                                class="shrink-0"
+                            />
+                            <Link
+                                v-if="can('depenses.update')"
+                                :href="`/depenses/${d.id}/edit`"
+                                class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                            >
+                                <Pencil class="h-3.5 w-3.5" />
+                            </Link>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         <Teleport to="body">
@@ -483,5 +665,101 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                 </div>
             </div>
         </Teleport>
+
+        <Dialog
+            v-model:visible="equipeDialogVisible"
+            modal
+            header="Équipe de livraison"
+            :style="{ width: '30rem' }"
+        >
+            <div class="space-y-4 px-1 py-2">
+                <div class="flex justify-between">
+                    <span class="text-sm text-muted-foreground">Équipe</span>
+                    <span class="text-sm font-medium">{{
+                        selectedVehiculeForEquipe?.equipe_detail?.nom ?? '—'
+                    }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-sm text-muted-foreground">Véhicule</span>
+                    <span class="text-sm font-medium">{{
+                        selectedVehiculeForEquipe?.nom_vehicule ?? '—'
+                    }}</span>
+                </div>
+                <div
+                    v-if="
+                        selectedVehiculeForEquipe?.equipe_detail
+                            ?.taux_commission_proprietaire != null
+                    "
+                    class="flex justify-between"
+                >
+                    <span class="text-sm text-muted-foreground"
+                        >Taux propriétaire</span
+                    >
+                    <span class="text-sm font-medium"
+                        >{{
+                            selectedVehiculeForEquipe.equipe_detail
+                                .taux_commission_proprietaire
+                        }}
+                        %</span
+                    >
+                </div>
+                <div
+                    v-if="selectedVehiculeForEquipe?.equipe_detail?.chauffeur"
+                    class="border-t pt-3"
+                >
+                    <p
+                        class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                    >
+                        Chauffeur principal
+                    </p>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">{{
+                            selectedVehiculeForEquipe.equipe_detail.chauffeur
+                                .nom
+                        }}</span>
+                        <span class="text-sm text-muted-foreground">
+                            {{
+                                formatPhoneDisplay(
+                                    selectedVehiculeForEquipe.equipe_detail
+                                        .chauffeur.telephone,
+                                )
+                            }}
+                        </span>
+                    </div>
+                </div>
+                <div
+                    v-if="
+                        selectedVehiculeForEquipe?.equipe_detail?.convoyeurs
+                            ?.length
+                    "
+                    class="border-t pt-3"
+                >
+                    <p
+                        class="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                    >
+                        Convoyeurs
+                    </p>
+                    <div
+                        v-for="conv in selectedVehiculeForEquipe.equipe_detail
+                            .convoyeurs"
+                        :key="conv.nom"
+                        class="flex items-center justify-between py-1"
+                    >
+                        <span class="text-sm font-medium">{{ conv.nom }}</span>
+                        <span class="text-sm text-muted-foreground">{{
+                            formatPhoneDisplay(conv.telephone)
+                        }}</span>
+                    </div>
+                </div>
+            </div>
+            <template #footer>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    @click="equipeDialogVisible = false"
+                    >Fermer</Button
+                >
+            </template>
+        </Dialog>
     </AppLayout>
 </template>

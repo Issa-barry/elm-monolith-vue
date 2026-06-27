@@ -9,6 +9,7 @@ const props = defineProps<{
     eyebrow: string;
     title: string;
     telephone?: string | null;
+    activeFiltersLabel?: string;
     canPay: boolean;
     payLabel: string;
 }>();
@@ -38,6 +39,13 @@ const emit = defineEmits<{
                 </p>
                 <p v-if="props.telephone" class="text-sm text-muted-foreground">
                     {{ formatPhoneDisplay(props.telephone) }}
+                </p>
+                <p
+                    v-if="props.activeFiltersLabel"
+                    class="mt-0.5 text-xs text-muted-foreground"
+                    data-testid="commission-active-filters-label"
+                >
+                    {{ props.activeFiltersLabel }}
                 </p>
             </div>
         </div>

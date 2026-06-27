@@ -114,6 +114,9 @@ class HistoriqueActionsController extends Controller
         $orgId = $user->organization_id;
         $auditableType = $request->input('auditable_type', '');
         $auditableId = $request->input('auditable_id', '');
+        $dateDebut = $request->input('date_debut', '');
+        $dateFin = $request->input('date_fin', '');
+        $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         abort_if($auditableType === '' || $auditableId === '', 400);
 
@@ -124,6 +127,22 @@ class HistoriqueActionsController extends Controller
 
         if ($module !== '') {
             $query->whereJsonContains('meta->module', $module);
+        }
+
+        if ($dateDebut !== '') {
+            $query->where('created_at', '>=', $dateDebut.' 00:00:00');
+        }
+
+        if ($dateFin !== '') {
+            $query->where('created_at', '<=', $dateFin.' 23:59:59');
+        }
+
+        if (! empty($siteIds)) {
+            $query->where(function ($q) use ($siteIds) {
+                foreach ($siteIds as $siteId) {
+                    $q->orWhereJsonContains('meta->site_id', $siteId);
+                }
+            });
         }
 
         $logs = $query->limit(50)->get()->map(fn (AuditLog $log) => self::transformLog($log));

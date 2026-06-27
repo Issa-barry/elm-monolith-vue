@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
@@ -233,17 +234,6 @@ function formatDate(dateStr: string | null): string {
     if (!dateStr) return '—';
     const [y, m, d] = dateStr.split('-');
     return `${d}/${m}/${y}`;
-}
-
-function statutBadgeClass(statut: string): string {
-    const map: Record<string, string> = {
-        impayee: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300',
-        partiel:
-            'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
-        payee: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
-        annulee: 'bg-muted text-muted-foreground',
-    };
-    return map[statut] ?? 'bg-muted text-muted-foreground';
 }
 
 // ── Dropdown : Produit ────────────────────────────────────────────────────────
@@ -1763,12 +1753,10 @@ function confirmerEtCreer() {
                                     {{ formatGNF(f.restant) }}
                                 </td>
                                 <td class="px-4 py-3 text-center">
-                                    <span
-                                        class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                                        :class="statutBadgeClass(f.statut)"
-                                    >
-                                        {{ f.statut_label }}
-                                    </span>
+                                    <StatusDot
+                                        :status="f.statut"
+                                        :label="f.statut_label"
+                                    />
                                 </td>
                             </tr>
                         </tbody>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
@@ -52,14 +53,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Achats', href: '/achats' },
     { title: props.commande.reference, href: '#' },
 ];
-
-// ── Statut couleurs ───────────────────────────────────────────────────────────
-const statutColor: Record<string, string> = {
-    en_cours: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-    receptionnee:
-        'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-    annulee: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-};
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
 function formatGNF(val: number): string {
@@ -166,15 +159,10 @@ function submitAnnuler() {
                             {{ commande.reference }}
                         </h1>
                         <div class="mt-1 flex items-center gap-2">
-                            <span
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="
-                                    statutColor[commande.statut] ??
-                                    'bg-muted text-muted-foreground'
-                                "
-                            >
-                                {{ commande.statut_label }}
-                            </span>
+                            <StatusDot
+                                :status="commande.statut"
+                                :label="commande.statut_label"
+                            />
                             <span class="text-sm text-muted-foreground">{{
                                 commande.created_at
                             }}</span>
@@ -228,15 +216,10 @@ function submitAnnuler() {
 
             <!-- Badge statut mobile -->
             <div class="flex items-center gap-2 px-1 sm:hidden">
-                <span
-                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                    :class="
-                        statutColor[commande.statut] ??
-                        'bg-muted text-muted-foreground'
-                    "
-                >
-                    {{ commande.statut_label }}
-                </span>
+                <StatusDot
+                    :status="commande.statut"
+                    :label="commande.statut_label"
+                />
                 <span class="text-sm text-muted-foreground">{{
                     commande.created_at
                 }}</span>
