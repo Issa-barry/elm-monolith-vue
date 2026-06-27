@@ -2,6 +2,7 @@
 
 use App\Features\ModuleFeature;
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\Api\Search\GlobalSearchController;
 use App\Http\Controllers\Auth\AcceptInvitationController;
 use App\Http\Controllers\Auth\LivreurRegistrationController;
 use App\Http\Controllers\Auth\RegisterLookupController;
@@ -418,7 +419,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     });
 
     // ── Recherche globale (dashboard — session auth) ──────────────────────────
-    Route::get('search/global', \App\Http\Controllers\Api\Search\GlobalSearchController::class)
+    Route::get('search/global', GlobalSearchController::class)
         ->name('search.global');
 });
 
