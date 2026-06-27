@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -72,6 +73,21 @@ class User extends Authenticatable
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    public function client(): HasOne
+    {
+        return $this->hasOne(Client::class);
+    }
+
+    public function livreur(): HasOne
+    {
+        return $this->hasOne(Livreur::class);
+    }
+
+    public function proprietaire(): HasOne
+    {
+        return $this->hasOne(Proprietaire::class);
     }
 
     public function sites(): BelongsToMany

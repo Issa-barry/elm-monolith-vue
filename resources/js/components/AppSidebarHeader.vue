@@ -9,16 +9,25 @@ import {
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useAppearance } from '@/composables/useAppearance';
 import type { BreadcrumbItemType } from '@/types';
-import { Link, usePage } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
+import { onClickOutside } from '@vueuse/core';
 import {
     AlertTriangle,
     Bell,
+    Loader2,
     MessageSquare,
     Moon,
     Package,
     Sun,
 } from 'lucide-vue-next';
-import { computed, onMounted, ref } from 'vue';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
+import InputText from 'primevue/inputtext';
+import { computed, onMounted, ref, watch } from 'vue';
+
+type SearchItem = { id: string; title: string; subtitle: string | null };
+type SearchCategory = { label: string; total: number; items: SearchItem[] };
+type SearchResults = Record<string, SearchCategory>;
 
 withDefaults(
     defineProps<{
@@ -32,6 +41,72 @@ withDefaults(
 const { updateAppearance } = useAppearance();
 const isDark = ref(false);
 const page = usePage();
+
+// ── Recherche globale ─────────────────────────────────────────────────────────
+const searchQuery = ref('');
+const searchResults = ref<SearchResults | null>(null);
+const isSearchOpen = ref(false);
+const isSearchLoading = ref(false);
+const searchWrapper = ref<HTMLElement | null>(null);
+
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(searchQuery, (val) => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (val.trim().length < 2) {
+        searchResults.value = null;
+        isSearchOpen.value = false;
+        isSearchLoading.value = false;
+        return;
+    }
+    isSearchOpen.value = true;
+    isSearchLoading.value = true;
+    debounceTimer = setTimeout(async () => {
+        try {
+            const params = new URLSearchParams({ q: val.trim(), limit: '5' });
+            const res = await fetch(`/search/global?${params}`, {
+                headers: { Accept: 'application/json' },
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            searchResults.value = data.results as SearchResults;
+        } catch {
+            // silent
+        } finally {
+            isSearchLoading.value = false;
+        }
+    }, 300);
+});
+
+onClickOutside(searchWrapper, () => {
+    isSearchOpen.value = false;
+});
+
+function closeSearch() {
+    isSearchOpen.value = false;
+    searchQuery.value = '';
+    searchResults.value = null;
+}
+
+const categoryRoutes: Record<string, (id: string) => string> = {
+    clients: (id) => `/clients/${id}`,
+    commandes: (id) => `/ventes/${id}`,
+    factures: (_id) => `/factures`,
+    vehicules: (id) => `/vehicules/${id}`,
+};
+
+function navigateTo(category: string, id: string) {
+    const url = categoryRoutes[category]?.(id);
+    if (url) {
+        router.visit(url);
+        closeSearch();
+    }
+}
+
+function hasResults(results: SearchResults | null): boolean {
+    if (!results) return false;
+    return Object.values(results).some((cat) => cat.items.length > 0);
+}
 
 const stockAlertes = computed(
     () =>
@@ -68,11 +143,102 @@ onMounted(() => {
         <div class="flex items-center gap-2">
             <SidebarTrigger class="-ml-1" />
             <template v-if="breadcrumbs && breadcrumbs.length > 0">
-                <Breadcrumbs :breadcrumbs="breadcrumbs" />
+                <Breadcrumbs
+                    :breadcrumbs="breadcrumbs"
+                    class="hidden sm:block"
+                />
             </template>
         </div>
 
         <div class="ml-auto flex items-center gap-1">
+            <!-- Recherche globale -->
+            <div ref="searchWrapper" class="relative">
+                <IconField>
+                    <InputIcon class="pointer-events-none">
+                        <Loader2
+                            v-if="isSearchLoading"
+                            class="h-4 w-4 animate-spin text-muted-foreground"
+                        />
+                        <svg
+                            v-else
+                            class="h-4 w-4 text-muted-foreground"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                            />
+                        </svg>
+                    </InputIcon>
+                    <InputText
+                        v-model="searchQuery"
+                        placeholder="Recherche"
+                        class="w-48 rounded-full text-sm sm:w-64 lg:w-80"
+                        data-testid="global-search"
+                        @keydown.escape="closeSearch"
+                    />
+                </IconField>
+
+                <!-- Dropdown résultats -->
+                <div
+                    v-if="isSearchOpen"
+                    class="absolute top-full right-0 z-50 mt-2 w-80 overflow-hidden rounded-lg border bg-background shadow-lg"
+                >
+                    <!-- Chargement -->
+                    <div
+                        v-if="isSearchLoading"
+                        class="py-6 text-center text-sm text-muted-foreground"
+                    >
+                        Recherche en cours…
+                    </div>
+
+                    <!-- Aucun résultat -->
+                    <div
+                        v-else-if="!hasResults(searchResults)"
+                        class="py-6 text-center text-sm text-muted-foreground"
+                    >
+                        Aucun résultat pour
+                        <span class="font-medium">« {{ searchQuery }} »</span>
+                    </div>
+
+                    <!-- Résultats groupés par catégorie -->
+                    <template v-else>
+                        <template
+                            v-for="(cat, key) in searchResults"
+                            :key="key"
+                        >
+                            <div v-if="cat.items.length > 0">
+                                <div
+                                    class="border-b bg-muted/40 px-3 py-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase"
+                                >
+                                    {{ cat.label }}
+                                </div>
+                                <button
+                                    v-for="item in cat.items"
+                                    :key="item.id"
+                                    class="flex w-full flex-col px-3 py-2 text-left transition-colors hover:bg-muted/50"
+                                    @click="navigateTo(String(key), item.id)"
+                                >
+                                    <span class="text-sm font-medium">{{
+                                        item.title
+                                    }}</span>
+                                    <span
+                                        v-if="item.subtitle"
+                                        class="text-xs text-muted-foreground"
+                                        >{{ item.subtitle }}</span
+                                    >
+                                </button>
+                            </div>
+                        </template>
+                    </template>
+                </div>
+            </div>
+
             <Button
                 variant="ghost"
                 size="icon"

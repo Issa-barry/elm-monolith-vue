@@ -2,6 +2,7 @@
 
 use App\Features\ModuleFeature;
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\Api\Search\GlobalSearchController;
 use App\Http\Controllers\Auth\AcceptInvitationController;
 use App\Http\Controllers\Auth\LivreurRegistrationController;
 use App\Http\Controllers\Auth\RegisterLookupController;
@@ -361,6 +362,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
             ->name('historique.index');
         Route::get('historique/entite', [HistoriqueActionsController::class, 'entite'])
             ->name('historique.entite');
+
     });
 
     // ── Module : Logistique inter-sites ───────────────────────────────────────
@@ -415,6 +417,10 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::post('commissions-logistique/parts/{part}/versements', [VersementCommissionLogistiqueController::class, 'store'])
             ->name('logistique.commission.versements.store');
     });
+
+    // ── Recherche globale (dashboard — session auth) ──────────────────────────
+    Route::get('search/global', GlobalSearchController::class)
+        ->name('search.global');
 });
 
 // ── Espace client ─────────────────────────────────────────────────────────────
