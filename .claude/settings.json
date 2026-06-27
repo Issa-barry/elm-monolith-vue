@@ -136,7 +136,8 @@
       "Bash(./vendor/bin/pint app/Http/Controllers/Comptabilite/CommissionVenteController.php app/Http/Controllers/Comptabilite/CommissionProprietaireController.php app/Http/Controllers/Comptabilite/CommissionLogistiqueController.php app/Http/Controllers/Comptabilite/HistoriqueActionsController.php app/Support/Commission/CommissionDetailFilters.php app/Services/CommissionVenteCalculatorService.php app/Services/CommissionPaymentService.php tests/Feature/Comptabilite/CommissionDetailKpiTest.php)",
       "Bash(./vendor/bin/pint app/Http/Controllers/ProprietaireController.php tests/Feature/ProprietaireTest.php)",
       "Bash(./vendor/bin/pint app/Http/Controllers/ProprietaireController.php)",
-      "Bash(./vendor/bin/pint tests/Feature/ProprietaireTest.php)"
+      "Bash(./vendor/bin/pint tests/Feature/ProprietaireTest.php)",
+      "Bash(git commit -m ' *)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"
