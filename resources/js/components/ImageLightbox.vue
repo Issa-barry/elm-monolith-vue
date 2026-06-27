@@ -33,7 +33,10 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                     :alt="props.alt"
                     class="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl"
                 />
-                <p v-if="props.alt" class="mt-2 text-center text-sm text-white/70">
+                <p
+                    v-if="props.alt"
+                    class="mt-2 text-center text-sm text-white/70"
+                >
                     {{ props.alt }}
                 </p>
             </div>

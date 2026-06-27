@@ -9,7 +9,7 @@ import {
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useAppearance } from '@/composables/useAppearance';
 import type { BreadcrumbItemType } from '@/types';
-import { router, Link, usePage } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import { onClickOutside } from '@vueuse/core';
 import {
     AlertTriangle,
@@ -187,7 +187,7 @@ onMounted(() => {
                 <!-- Dropdown résultats -->
                 <div
                     v-if="isSearchOpen"
-                    class="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-lg border bg-background shadow-lg"
+                    class="absolute top-full right-0 z-50 mt-2 w-80 overflow-hidden rounded-lg border bg-background shadow-lg"
                 >
                     <!-- Chargement -->
                     <div
@@ -214,7 +214,7 @@ onMounted(() => {
                         >
                             <div v-if="cat.items.length > 0">
                                 <div
-                                    class="border-b bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                                    class="border-b bg-muted/40 px-3 py-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase"
                                 >
                                     {{ cat.label }}
                                 </div>

@@ -46,7 +46,9 @@ const lightboxOpen = ref(false);
                     :is="icon"
                     v-else-if="icon"
                     class="h-6 w-6"
-                    :class="avatarShape === 'square' && 'text-muted-foreground/30'"
+                    :class="
+                        avatarShape === 'square' && 'text-muted-foreground/30'
+                    "
                 />
             </div>
             <div>

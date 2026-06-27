@@ -4,9 +4,9 @@ import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/vue3';
-import { formatPhoneDisplay } from '@/lib/utils';
 import {
     ArrowLeft,
     Car,
@@ -155,9 +155,7 @@ function formatGNF(val: number): string {
                 "
             >
                 <template #subtitle>
-                    <p
-                        class="mt-0.5 font-mono text-sm text-muted-foreground"
-                    >
+                    <p class="mt-0.5 font-mono text-sm text-muted-foreground">
                         {{ vehicule.immatriculation }}
                     </p>
                     <div class="mt-1.5 flex items-center gap-2">
