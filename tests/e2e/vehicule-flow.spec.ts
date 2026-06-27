@@ -162,3 +162,97 @@ test('externe — radio pris_en_charge_par_usine Oui sélectionnable', async ({
             .first(),
     ).toBeChecked();
 });
+
+test('show — vehicule externe : bouton "Voir la fiche propriétaire" visible, affiche nom/téléphone et navigue', async ({
+    page,
+}) => {
+    await login(page);
+    await page.goto('/vehicules');
+
+    // Find first show-page link in the desktop DataTable
+    await page.waitForSelector('.p-datatable-tbody a[href*="/vehicules/"]', {
+        timeout: 15_000,
+    });
+    const links = page.locator(
+        '.p-datatable-tbody a[href*="/vehicules/"]:not([href*="/edit"])',
+    );
+
+    // Iterate through the first few vehicules until we find one with a proprietaire
+    let vehiculeHref: string | null = null;
+    const total = await links.count();
+    for (let i = 0; i < Math.min(total, 10); i++) {
+        const href = await links.nth(i).getAttribute('href');
+        if (!href) continue;
+
+        await page.goto(href);
+        await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 10_000 });
+
+        if (
+            await page
+                .getByTestId('voir-fiche-proprietaire-btn')
+                .isVisible({ timeout: 3_000 })
+                .catch(() => false)
+        ) {
+            vehiculeHref = href;
+            break;
+        }
+
+        await page.goto('/vehicules');
+        await page.waitForSelector('.p-datatable-tbody a[href*="/vehicules/"]', {
+            timeout: 10_000,
+        });
+    }
+
+    expect(vehiculeHref, 'Aucun véhicule externe avec propriétaire trouvé').toBeTruthy();
+
+    await page.goto(vehiculeHref!);
+    await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 10_000 });
+
+    await expect(
+        page.getByTestId('proprietaire-nom'),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('proprietaire-telephone')).toBeVisible();
+
+    const btn = page.getByTestId('voir-fiche-proprietaire-btn');
+    await expect(btn).toBeVisible();
+
+    // The link opens in a new tab (target="_blank")
+    const [newTab] = await Promise.all([
+        page.context().waitForEvent('page'),
+        btn.click(),
+    ]);
+
+    await newTab.waitForURL(/\/proprietaires\/[a-z0-9]+$/, {
+        timeout: 15_000,
+    });
+    await expect(newTab).toHaveURL(/\/proprietaires\/[a-z0-9]+$/);
+});
+
+test('show — vehicule interne : bouton "Voir la fiche propriétaire" absent', async ({
+    page,
+}) => {
+    const unique = `${Date.now()}-${randomDigits(3)}`;
+    const nomVehicule = `E2E VH Interne ${unique}`;
+    const immatriculation = `${E2E_VEHICULE_IMMATRICULATION_PREFIX}I-${unique.slice(-5)}`;
+
+    await login(page);
+
+    // Create an interne vehicule via the site tab (no proprietaire)
+    await navigateToFirstSiteVehiclesTab(page);
+    await page.getByTestId('add-site-vehicle-btn').click();
+    await page.waitForURL(/\/vehicules\/create\?site_id=/, { timeout: 15_000 });
+
+    await page.locator('#nom_vehicule').fill(nomVehicule);
+    await page.locator('#immatriculation').fill(immatriculation);
+
+    const comboboxes = page.locator('#vehicule-form').getByRole('combobox');
+    await selectOptionFromCombobox(page, comboboxes.first());
+
+    await page.getByTestId('vehicle-form-submit').click();
+    await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 15_000 });
+
+    // Interne vehicule has no proprietaire — button must not be rendered
+    await expect(
+        page.getByTestId('voir-fiche-proprietaire-btn'),
+    ).not.toBeVisible({ timeout: 5_000 });
+});

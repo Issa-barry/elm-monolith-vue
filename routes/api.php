@@ -36,6 +36,7 @@ use App\Http\Controllers\Api\Mobile\PushTokenController;
 use App\Http\Controllers\Api\Mobile\ScanCommandeController;
 use App\Http\Controllers\Api\Produits\ProduitController;
 use App\Http\Controllers\Api\Produits\ProduitHistoriqueController;
+use App\Http\Controllers\Api\Search\GlobalSearchController;
 use App\Models\Vehicule;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -177,4 +178,10 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('client.gains.mine');
     Route::get('livraisons/en-cours', LivraisonsEnCoursController::class)
         ->name('client.livraisons.en-cours');
+});
+
+// ── Recherche globale (web + mobile, un seul endpoint pour tous les profils) ──
+Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
+    Route::get('v1/search/global', GlobalSearchController::class)
+        ->name('api.search.global');
 });

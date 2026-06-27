@@ -156,7 +156,17 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:8000/api/v1/mobile/notifications)",
       "Bash(curl -s http://127.0.0.1:8000/api/v1/mobile/notifications)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:8000/comptabilite/historique)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type}\\\\n\" http://127.0.0.1:8000/cette-page-n-existe-pas)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type}\\\\n\" http://127.0.0.1:8000/cette-page-n-existe-pas)",
+      "Bash(grep -n 'protected $fillable' -A 25 app/Models/CommandeVente.php)",
+      "Bash(grep -n 'protected $fillable' -A 20 app/Models/FactureVente.php)",
+      "Bash(grep -n 'protected $fillable' -A 20 app/Models/Vehicule.php)",
+      "Bash(grep -n 'protected $fillable' -A 15 app/Models/Client.php)",
+      "Bash(awk '/Role::firstOrCreate\\\\\\(\\\\[.name. => .client.\\\\]\\\\\\)/,0' database/seeders/RolesAndPermissionsSeeder.php)",
+      "Bash(./vendor/bin/pint app/Services/Search/ app/Http/Controllers/Api/Search/ app/Http/Requests/Api/Search/ tests/Feature/Api/GlobalSearchTest.php --test)",
+      "Bash(./vendor/bin/pint app/Services/Search/ app/Http/Controllers/Api/Search/ app/Http/Requests/Api/Search/ tests/Feature/Api/GlobalSearchTest.php)",
+      "PowerShell(Get-Content \"C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\d34c5111-7226-49a5-a547-426f100aea4e\\\\tasks\\\\bsnmgwe7e.output\" -Wait -Tail 20)",
+      "Bash(grep -n \"use App\\\\\\\\Http\\\\\\\\Controllers\\\\\\\\Api\\\\\\\\Search\" routes/web.php)",
+      "Bash(git -C \"c:/laragon/www/eau-la-maman/elm-monolithe\" diff app/Models/User.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"

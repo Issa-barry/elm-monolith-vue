@@ -8,6 +8,7 @@ use App\Models\Site;
 use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -452,6 +453,63 @@ class VehiculeTest extends TestCase
 
         $this->actingAs($this->user)
             ->delete(route('vehicules.destroy', $vehicule))
+            ->assertStatus(403);
+    }
+
+    // ── show ─────────────────────────────────────────────────────────────────
+
+    public function test_show_retourne_200(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertStatus(200);
+    }
+
+    public function test_show_expose_proprietaire_id_pour_vehicule_externe(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Show')
+                ->where('vehicule.proprietaire_id', $vehicule->proprietaire_id)
+                ->where('vehicule.proprietaire_nom', fn ($val) => is_string($val) && strlen($val) > 0)
+                ->where('vehicule.proprietaire_telephone', fn ($val) => $val === null || is_string($val))
+            );
+    }
+
+    public function test_show_expose_proprietaire_id_null_pour_vehicule_interne(): void
+    {
+        $site = $this->user->sites()->first();
+        $typeVehicule = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'type_vehicule_id' => $typeVehicule->id,
+            'categorie' => 'interne',
+            'site_id' => $site->id,
+            'proprietaire_id' => null,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Show')
+                ->where('vehicule.proprietaire_id', null)
+                ->where('vehicule.proprietaire_nom', null)
+            );
+    }
+
+    public function test_show_retourne_403_pour_autre_organisation(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $vehicule = $this->makeVehicule($otherOrg);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
             ->assertStatus(403);
     }
 

@@ -361,6 +361,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
             ->name('historique.index');
         Route::get('historique/entite', [HistoriqueActionsController::class, 'entite'])
             ->name('historique.entite');
+
     });
 
     // ── Module : Logistique inter-sites ───────────────────────────────────────
@@ -415,6 +416,10 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
         Route::post('commissions-logistique/parts/{part}/versements', [VersementCommissionLogistiqueController::class, 'store'])
             ->name('logistique.commission.versements.store');
     });
+
+    // ── Recherche globale (dashboard — session auth) ──────────────────────────
+    Route::get('search/global', \App\Http\Controllers\Api\Search\GlobalSearchController::class)
+        ->name('search.global');
 });
 
 // ── Espace client ─────────────────────────────────────────────────────────────

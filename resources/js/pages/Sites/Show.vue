@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -337,45 +338,31 @@ function revokeInvitation(invitationId: number) {
         <!-- Page content -->
         <div class="w-full space-y-6 p-4 sm:p-6">
             <!-- Hero header -->
-            <div
-                class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+            <DetailHeader
+                eyebrow="Site"
+                :title="site.nom"
+                :icon="Building2"
+                :status-label="site.statut_label"
+                :status-dot-class="
+                    site.statut === 'active'
+                        ? 'bg-emerald-500'
+                        : 'bg-zinc-400 dark:bg-zinc-500'
+                "
             >
-                <div class="flex items-start gap-4">
-                    <div
-                        class="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                    >
-                        <Building2 class="h-6 w-6" />
-                    </div>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h1 class="text-2xl font-semibold tracking-tight">
-                                {{ site.nom }}
-                            </h1>
-                            <StatusDot
-                                :label="site.statut_label"
-                                :dot-class="
-                                    site.statut === 'active'
-                                        ? 'bg-emerald-500'
-                                        : 'bg-zinc-400 dark:bg-zinc-500'
-                                "
-                                class="text-sm text-muted-foreground"
-                            />
-                        </div>
-                        <p class="mt-1 font-mono text-sm text-muted-foreground">
-                            {{ site.code }}&nbsp;·&nbsp;{{ site.type_label }}
-                        </p>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-2">
+                <template #subtitle>
+                    <p class="mt-1 font-mono text-sm text-muted-foreground">
+                        {{ site.code }}&nbsp;·&nbsp;{{ site.type_label }}
+                    </p>
+                </template>
+                <template #actions>
                     <Link href="/sites">
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
                             Retour
                         </Button>
                     </Link>
-                </div>
-            </div>
+                </template>
+            </DetailHeader>
 
             <!-- Tab layout -->
             <div class="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">

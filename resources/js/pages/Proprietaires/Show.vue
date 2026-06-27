@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import DetailHeader from '@/components/DetailHeader.vue';
+import ImageLightbox from '@/components/ImageLightbox.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
@@ -15,10 +17,9 @@ import {
     Plus,
     Receipt,
     UserRound,
-    X,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 
 interface ProprietaireData {
     id: number;
@@ -153,15 +154,6 @@ function openLightbox(url: string, alt: string) {
 function closeLightbox() {
     lightboxUrl.value = null;
 }
-
-function onKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-        closeLightbox();
-    }
-}
-
-onMounted(() => document.addEventListener('keydown', onKeydown));
-onUnmounted(() => document.removeEventListener('keydown', onKeydown));
 </script>
 
 <template>
@@ -169,52 +161,36 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <div class="w-full space-y-6 p-4 sm:p-6">
-            <div
-                class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+            <DetailHeader
+                eyebrow="Propriétaire"
+                :title="proprietaire.nom_complet"
+                :icon="UserRound"
+                :status-label="proprietaire.is_active ? 'Actif' : 'Inactif'"
+                :status-dot-class="
+                    proprietaire.is_active
+                        ? 'bg-emerald-500'
+                        : 'bg-zinc-400 dark:bg-zinc-500'
+                "
             >
-                <div class="flex items-start gap-4">
-                    <div
-                        class="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                    >
-                        <UserRound class="h-6 w-6" />
-                    </div>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h1 class="text-2xl font-semibold tracking-tight">
-                                {{ proprietaire.nom_complet }}
-                            </h1>
-                            <StatusDot
-                                :label="
-                                    proprietaire.is_active ? 'Actif' : 'Inactif'
-                                "
-                                :dot-class="
-                                    proprietaire.is_active
-                                        ? 'bg-emerald-500'
-                                        : 'bg-zinc-400 dark:bg-zinc-500'
-                                "
-                                class="text-sm text-muted-foreground"
-                            />
-                        </div>
-                        <p class="mt-1 text-sm text-muted-foreground">
-                            {{ proprietaire.vehicules_count }} vehicule{{
-                                proprietaire.vehicules_count > 1 ? 's' : ''
-                            }}
-                            rattache{{
-                                proprietaire.vehicules_count > 1 ? 's' : ''
-                            }}
-                        </p>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-2">
+                <template #subtitle>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        {{ proprietaire.vehicules_count }} vehicule{{
+                            proprietaire.vehicules_count > 1 ? 's' : ''
+                        }}
+                        rattache{{
+                            proprietaire.vehicules_count > 1 ? 's' : ''
+                        }}
+                    </p>
+                </template>
+                <template #actions>
                     <Link href="/proprietaires">
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
                             Retour
                         </Button>
                     </Link>
-                </div>
-            </div>
+                </template>
+            </DetailHeader>
 
             <div class="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
                 <aside class="h-fit rounded-xl border bg-card p-2">
@@ -640,31 +616,11 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                 </div>
             </div>
         </div>
-        <Teleport to="body">
-            <div
-                v-if="lightboxUrl"
-                class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-                @click.self="closeLightbox"
-            >
-                <div class="relative max-h-full max-w-3xl">
-                    <button
-                        type="button"
-                        class="absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
-                        @click="closeLightbox"
-                    >
-                        <X class="h-5 w-5" />
-                    </button>
-                    <img
-                        :src="lightboxUrl"
-                        :alt="lightboxAlt"
-                        class="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl"
-                    />
-                    <p class="mt-2 text-center text-sm text-white/70">
-                        {{ lightboxAlt }}
-                    </p>
-                </div>
-            </div>
-        </Teleport>
+        <ImageLightbox
+            :url="lightboxUrl"
+            :alt="lightboxAlt"
+            @close="closeLightbox"
+        />
 
         <Dialog
             v-model:visible="equipeDialogVisible"

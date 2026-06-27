@@ -215,7 +215,14 @@ const ajustements = props.mouvements.map((m) => ({
                         </Button>
                     </Link>
                     <div>
-                        <h1 class="text-2xl font-semibold tracking-tight">
+                        <p
+                            class="text-xs font-medium tracking-widest text-muted-foreground uppercase"
+                        >
+                            Produit
+                        </p>
+                        <h1
+                            class="mt-0.5 text-2xl font-semibold tracking-tight"
+                        >
                             {{ produit.nom }}
                         </h1>
                         <p

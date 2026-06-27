@@ -202,7 +202,7 @@ test('delete user → removed from list', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
     // L'utilisateur ne doit plus apparaître
-    const search2 = page.locator('input[placeholder*="rechercher" i]:visible').first();
+    const search2 = page.locator('input[placeholder*="rechercher" i]:not([data-testid="global-search"]):visible').first();
     await search2.fill(prenom);
     await expect(
         page.locator('tbody tr', {
