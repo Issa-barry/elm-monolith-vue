@@ -189,7 +189,7 @@ class CommissionVentePaiementService
 
         if ($fraisDepenses > 0.009) {
             return sprintf(
-                'Solde disponible : 0,00 GNF — %s GNF de frais (dépenses validées) ont déjà été déduits du net à payer de ce bénéficiaire.',
+                'Solde disponible : 0,00 GNF — %s GNF de dépenses validées ont déjà été déduites du net à payer de ce bénéficiaire.',
                 number_format($fraisDepenses, 2, ',', ' ')
             );
         }

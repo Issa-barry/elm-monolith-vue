@@ -40,7 +40,7 @@ class DepenseTypesSeeder extends Seeder
         [
             'code' => 'accident_vehicule',
             'libelle' => 'Accident véhicule',
-            'description' => 'Frais liés à un accident de véhicule.',
+            'description' => 'Dépenses liées à un accident de véhicule.',
             'categorie' => 'vehicule',
             'commentaire_obligatoire' => true,
             'justificatif_obligatoire' => true,
@@ -125,7 +125,7 @@ class DepenseTypesSeeder extends Seeder
         [
             'code' => 'accident_livreur',
             'libelle' => 'Accident livreur',
-            'description' => 'Frais liés à un accident du livreur.',
+            'description' => 'Dépenses liées à un accident du livreur.',
             'categorie' => 'livreur',
             'commentaire_obligatoire' => true,
             'justificatif_obligatoire' => true,
@@ -133,8 +133,8 @@ class DepenseTypesSeeder extends Seeder
         ],
         [
             'code' => 'frais_medicaux_livreur',
-            'libelle' => 'Frais médicaux',
-            'description' => 'Prise en charge frais médicaux du livreur.',
+            'libelle' => 'Dépenses médicales',
+            'description' => 'Prise en charge dépenses médicales du livreur.',
             'categorie' => 'livreur',
             'commentaire_obligatoire' => true,
             'justificatif_obligatoire' => true,
@@ -210,7 +210,7 @@ class DepenseTypesSeeder extends Seeder
         [
             'code' => 'transport_interne',
             'libelle' => 'Transport interne',
-            'description' => 'Frais de transport interne à l\'agence.',
+            'description' => 'Dépenses de transport interne à l\'agence.',
             'categorie' => 'interne',
             'commentaire_obligatoire' => false,
             'justificatif_obligatoire' => false,

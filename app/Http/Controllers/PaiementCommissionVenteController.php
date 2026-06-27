@@ -136,7 +136,7 @@ class PaiementCommissionVenteController extends Controller
         $soldeReel = max(0.0, (float) (clone $base)->sum('montant_brut') - $totalFrais - (float) (clone $base)->sum('montant_verse'));
 
         return match (true) {
-            $soldeReel <= 0.009 => 'Aucun montant disponible : les frais dépassent ou égalisent la commission brute.',
+            $soldeReel <= 0.009 => 'Aucun montant disponible : les dépenses dépassent ou égalisent la commission brute.',
             $montant > $soldeReel + 0.009 => sprintf(
                 'Le montant saisi (%s GNF) dépasse le solde réel disponible (%s GNF).',
                 number_format($montant, 0, ',', ' '),

@@ -33,9 +33,9 @@ class FraisCommissionPartController extends Controller
             'type_frais' => ['required', 'string', 'in:carburant,reparation,autre'],
             'commentaire_frais' => ['nullable', 'string', 'max:500'],
         ], [
-            'frais.required' => 'Le montant des frais est obligatoire.',
-            'frais.min' => 'Les frais ne peuvent pas être négatifs.',
-            'type_frais.required' => 'Le type de frais est obligatoire.',
+            'frais.required' => 'Le montant des dépenses est obligatoire.',
+            'frais.min' => 'Les dépenses ne peuvent pas être négatives.',
+            'type_frais.required' => 'Le type de dépense est obligatoire.',
         ]);
 
         // Applique frais → recalcule montant_net = max(0, brut - frais)
@@ -48,6 +48,6 @@ class FraisCommissionPartController extends Controller
         // Recalcule montant_verse + statut depuis les paiements réels (peut avoir changé)
         $part->recalculStatut();
 
-        return back()->with('success', 'Frais mis à jour.');
+        return back()->with('success', 'Dépense mise à jour.');
     }
 }

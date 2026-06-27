@@ -242,7 +242,7 @@ class VehiculeController extends Controller
             'montant.required' => 'Le montant est obligatoire.',
             'montant.min' => 'Le montant doit être supérieur à 0.',
             'type.required' => 'Le type est obligatoire.',
-            'type.in' => 'Type de frais invalide.',
+            'type.in' => 'Type de dépense invalide.',
             'commentaire.max' => 'Le commentaire ne peut pas dépasser 150 caractères.',
         ]);
 
@@ -254,7 +254,7 @@ class VehiculeController extends Controller
 
         return redirect()
             ->route('vehicules.show', $vehicule)
-            ->with('success', 'Frais ajouté.');
+            ->with('success', 'Dépense ajoutée.');
     }
 
     public function updateFrais(Request $request, Vehicule $vehicule, VehiculeFrais $frais): RedirectResponse
@@ -282,7 +282,7 @@ class VehiculeController extends Controller
             'montant.required' => 'Le montant est obligatoire.',
             'montant.min' => 'Le montant doit être supérieur à 0.',
             'type.required' => 'Le type est obligatoire.',
-            'type.in' => 'Type de frais invalide.',
+            'type.in' => 'Type de dépense invalide.',
             'commentaire.max' => 'Le commentaire ne peut pas dépasser 150 caractères.',
         ]);
 
@@ -294,7 +294,7 @@ class VehiculeController extends Controller
 
         return redirect()
             ->route('vehicules.show', $vehicule)
-            ->with('success', 'Frais modifié.');
+            ->with('success', 'Dépense modifiée.');
     }
 
     public function destroyFrais(Vehicule $vehicule, VehiculeFrais $frais): RedirectResponse
@@ -306,7 +306,7 @@ class VehiculeController extends Controller
 
         return redirect()
             ->route('vehicules.show', $vehicule)
-            ->with('success', 'Frais supprimé.');
+            ->with('success', 'Dépense supprimée.');
     }
 
     public function edit(Vehicule $vehicule): Response
@@ -461,7 +461,7 @@ class VehiculeController extends Controller
             'photo.image' => 'Le fichier doit être une image.',
             'photo.mimes' => 'La photo doit être au format jpg, jpeg, png ou webp.',
             'photo.max' => 'La photo ne peut pas dépasser 3 Mo.',
-            'pris_en_charge_par_usine.required' => 'Veuillez indiquer si les frais sont pris en charge par l\'usine (Oui ou Non).',
+            'pris_en_charge_par_usine.required' => 'Veuillez indiquer si les dépenses sont prises en charge par l\'usine (Oui ou Non).',
         ];
     }
 }

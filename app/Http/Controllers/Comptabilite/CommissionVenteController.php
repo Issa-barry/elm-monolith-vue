@@ -511,7 +511,7 @@ class CommissionVenteController extends Controller
         return response()->streamDownload(function () use ($rows, $periodeLabel) {
             $handle = fopen('php://output', 'w');
             fwrite($handle, "\xEF\xBB\xBF");
-            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Total cumulé (GNF)', 'Frais (GNF)', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
+            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Total cumulé (GNF)', 'Dépenses (GNF)', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
             foreach ($rows as $row) {
                 fputcsv($handle, [
                     $row['beneficiaire_nom'],

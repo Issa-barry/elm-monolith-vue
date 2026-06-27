@@ -619,7 +619,7 @@ function isVersementDisabled(part: CommissionPart): boolean {
                                     <th
                                         class="px-4 py-3 text-right font-medium text-muted-foreground"
                                     >
-                                        Frais
+                                        Dépenses
                                     </th>
                                     <th
                                         class="px-4 py-3 text-right font-medium text-muted-foreground"
@@ -707,7 +707,7 @@ function isVersementDisabled(part: CommissionPart): boolean {
                                                         ? (typesFraisLabels[
                                                               part.type_frais
                                                           ] ?? part.type_frais)
-                                                        : 'Frais'
+                                                        : 'Dépense'
                                                 }}
                                             </p>
                                         </div>

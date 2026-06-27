@@ -8,7 +8,7 @@ const props = withDefaults(
         fraisLabel?: string;
     }>(),
     {
-        fraisLabel: 'Frais',
+        fraisLabel: 'Dépenses',
     },
 );
 </script>

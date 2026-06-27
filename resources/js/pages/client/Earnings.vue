@@ -178,7 +178,7 @@ function resolveInitialVehiculeId(
                         class="mt-1 text-xs text-destructive"
                     >
                         dont {{ formatMoney(earnings.frais_depenses_total) }} de
-                        frais déduits
+                        dépenses déduites
                     </p>
                 </div>
             </div>
@@ -200,7 +200,7 @@ function resolveInitialVehiculeId(
                                 <th
                                     class="py-2 pr-4 font-medium text-destructive"
                                 >
-                                    Frais
+                                    Dépenses
                                 </th>
                                 <th class="py-2 pr-4 font-medium">Verses</th>
                                 <th class="py-2 pr-0 font-medium">
@@ -269,7 +269,7 @@ function resolveInitialVehiculeId(
                                 <th class="py-2 pr-4 font-medium">
                                     Montant net
                                 </th>
-                                <th class="py-2 pr-4 font-medium">Frais</th>
+                                <th class="py-2 pr-4 font-medium">Dépenses</th>
                                 <th class="py-2 pr-4 font-medium">Verse</th>
                                 <th class="py-2 pr-4 font-medium">Reste</th>
                                 <th class="py-2 pr-0 font-medium">Statut</th>
