@@ -94,7 +94,8 @@ function submit() {
                     :href="`/equipes-livraison/${equipe.id}`"
                     class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
                 >
-                    <ArrowLeft class="h-4 w-4" /> {{ equipe.vehicule_nom ?? '—' }}
+                    <ArrowLeft class="h-4 w-4" />
+                    {{ equipe.vehicule_nom ?? '—' }}
                 </Link>
                 <h1 class="text-2xl font-semibold tracking-tight">
                     {{ equipe.vehicule_nom ?? '—' }}

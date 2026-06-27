@@ -178,7 +178,6 @@ class ProprietaireTest extends TestCase
             'organization_id' => $this->org->id,
             'vehicule_id' => $vehicule->id,
             'proprietaire_id' => $proprietaire->id,
-            'nom' => 'Équipe Baba Ousou',
             'is_active' => true,
             'taux_commission_proprietaire' => 60,
         ]);
@@ -193,7 +192,7 @@ class ProprietaireTest extends TestCase
             ->get(route('proprietaires.show', $proprietaire))
             ->assertStatus(200)
             ->assertInertia(fn (Assert $page) => $page
-                ->where('vehicules.0.equipe_detail.nom', 'Équipe Baba Ousou')
+                ->where('vehicules.0.equipe_detail.nom', $vehicule->nom_vehicule)
                 ->where('vehicules.0.equipe_detail.taux_commission_proprietaire', fn ($v) => (float) $v === 60.0)
                 ->where('vehicules.0.equipe_detail.chauffeur.nom', 'Oumar CAMARA')
                 ->has('vehicules.0.equipe_detail.convoyeurs', 1)
