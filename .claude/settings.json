@@ -166,7 +166,14 @@
       "Bash(./vendor/bin/pint app/Services/Search/ app/Http/Controllers/Api/Search/ app/Http/Requests/Api/Search/ tests/Feature/Api/GlobalSearchTest.php)",
       "PowerShell(Get-Content \"C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\d34c5111-7226-49a5-a547-426f100aea4e\\\\tasks\\\\bsnmgwe7e.output\" -Wait -Tail 20)",
       "Bash(grep -n \"use App\\\\\\\\Http\\\\\\\\Controllers\\\\\\\\Api\\\\\\\\Search\" routes/web.php)",
-      "Bash(git -C \"c:/laragon/www/eau-la-maman/elm-monolithe\" diff app/Models/User.php)"
+      "Bash(git -C \"c:/laragon/www/eau-la-maman/elm-monolithe\" diff app/Models/User.php)",
+      "Bash(vendor/bin/pint --test app/Http/Controllers/Comptabilite/CommissionVenteController.php)",
+      "Bash(grep -rn \"equipe\\\\.nom\\\\b\" --include=\"*.vue\" --include=\"*.ts\" resources/js/)",
+      "Bash(grep -rn ''\\\\''nom'\\\\'' => $e->nom\\\\b' --include=*.php app/)",
+      "Bash(grep -n \"equipe_nom\" app/Http/Controllers/Comptabilite/CommissionLogistiqueController.php)",
+      "Bash(grep -rn \"equipe_nom\" app/Http/Controllers/Comptabilite/)",
+      "Bash(grep -n '$equipe\\\\|->equipe\\\\b\\\\|->load\\\\|->with\\(' app/Http/Controllers/CommandeVenteController.php)",
+      "Bash(vendor/bin/pint --test database/seeders/VehiculesSeeder.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"

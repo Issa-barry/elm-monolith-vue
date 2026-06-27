@@ -486,16 +486,22 @@ class CommissionVenteController extends Controller
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+        $isAdmin = $user->isAdmin();
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
         $search = trim((string) $request->input('search', ''));
+        $filtreSiteIds = $isAdmin
+            ? array_values(array_filter((array) $request->input('site_ids', [])))
+            : $this->siteScope->accessibleSiteIds($user)->all();
 
-        $parts = $this->loadPartsForExport($orgId, $filtrePeriode);
+        $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSiteIds);
         $fraisDepensesParLivreur = CommissionVenteCalculatorService::fraisDepensesParLivreur(
             $orgId,
             $parts->pluck('livreur_id')->filter()->unique()->values()->all(),
-            $filtrePeriode
+            $filtrePeriode,
+            ! empty($filtreSiteIds) ? $filtreSiteIds : null,
         );
         $rows = $this->buildExportRows($parts, $filtrePeriode, $filtreStatut, $search, $fraisDepensesParLivreur);
 
@@ -505,7 +511,7 @@ class CommissionVenteController extends Controller
         return response()->streamDownload(function () use ($rows, $periodeLabel) {
             $handle = fopen('php://output', 'w');
             fwrite($handle, "\xEF\xBB\xBF");
-            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Total cumulé (GNF)', 'Frais (GNF)', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
+            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Total cumulé (GNF)', 'Dépenses (GNF)', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
             foreach ($rows as $row) {
                 fputcsv($handle, [
                     $row['beneficiaire_nom'],
@@ -529,16 +535,22 @@ class CommissionVenteController extends Controller
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+        $isAdmin = $user->isAdmin();
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
         $search = trim((string) $request->input('search', ''));
+        $filtreSiteIds = $isAdmin
+            ? array_values(array_filter((array) $request->input('site_ids', [])))
+            : $this->siteScope->accessibleSiteIds($user)->all();
 
-        $parts = $this->loadPartsForExport($orgId, $filtrePeriode);
+        $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSiteIds);
         $fraisDepensesParLivreur = CommissionVenteCalculatorService::fraisDepensesParLivreur(
             $orgId,
             $parts->pluck('livreur_id')->filter()->unique()->values()->all(),
-            $filtrePeriode
+            $filtrePeriode,
+            ! empty($filtreSiteIds) ? $filtreSiteIds : null,
         );
         $rows = $this->buildExportRows($parts, $filtrePeriode, $filtreStatut, $search, $fraisDepensesParLivreur);
         $siteGroups = $this->buildSiteGroups($rows);
@@ -559,7 +571,10 @@ class CommissionVenteController extends Controller
         return $pdf->download('commissions-vente-'.now()->format('Y-m-d').'.pdf');
     }
 
-    private function loadPartsForExport(string $orgId, string $filtrePeriode): Collection
+    /**
+     * @param  array<int, string>  $filtreSiteIds
+     */
+    private function loadPartsForExport(string $orgId, string $filtrePeriode, array $filtreSiteIds = []): Collection
     {
         $query = CommissionPart::with([
             'commission.commande.site:id,nom',
@@ -574,6 +589,10 @@ class CommissionVenteController extends Controller
         if ($filtrePeriode !== '') {
             [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
             $query->whereHas('commission', fn ($q) => $q->whereBetween('created_at', [$debut, $fin]));
+        }
+
+        if (! empty($filtreSiteIds)) {
+            $query->whereHas('commission.commande', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));
         }
 
         return $query->get();

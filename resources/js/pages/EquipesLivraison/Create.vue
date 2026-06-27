@@ -35,7 +35,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const form = useForm({
-    nom: '',
     is_active: true,
     vehicule_id: (props.initialVehiculeId ?? null) as string | null,
     proprietaire_id: null as string | null,

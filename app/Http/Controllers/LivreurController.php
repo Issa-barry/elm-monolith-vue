@@ -19,7 +19,7 @@ class LivreurController extends Controller
     {
         $this->authorize('viewAny', Livreur::class);
 
-        $livreurs = Livreur::with('equipes')
+        $livreurs = Livreur::with(['equipes.vehicule:id,nom_vehicule'])
             ->where('organization_id', auth()->user()->organization_id)
             ->orderByRaw('is_active DESC, nom')
             ->get()
@@ -33,7 +33,7 @@ class LivreurController extends Controller
                 'has_account' => $l->user_id !== null,
                 'equipes' => $l->equipes->map(fn ($e) => [
                     'id' => $e->id,
-                    'nom' => $e->nom,
+                    'vehicule_nom' => $e->vehicule?->nom_vehicule ?? '—',
                     'role' => $e->pivot->role,
                 ])->values(),
             ]);
@@ -109,7 +109,7 @@ class LivreurController extends Controller
     {
         $this->authorize('view', $livreur);
 
-        $livreur->load('equipes');
+        $livreur->load(['equipes.vehicule:id,nom_vehicule']);
 
         $user = auth()->user();
         $isStaff = $user->hasAnyRole(['super_admin', 'admin_entreprise', 'manager', 'commerciale', 'comptable']);
@@ -125,7 +125,7 @@ class LivreurController extends Controller
                 'has_account' => $livreur->user_id !== null,
                 'equipes' => $livreur->equipes->map(fn ($e) => [
                     'id' => $e->id,
-                    'nom' => $e->nom,
+                    'vehicule_nom' => $e->vehicule?->nom_vehicule ?? '—',
                     'role' => $e->pivot->role,
                 ])->values(),
             ],

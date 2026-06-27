@@ -42,8 +42,8 @@ enum AuditEvent: string
             self::PRINTED => 'Imprimé',
             self::AUTO_GENERATED => 'Génération automatique',
             self::AUTO_RECALCULATED => 'Recalcul automatique',
-            self::FRAIS_ADDED => 'Frais ajouté',
-            self::FRAIS_DELETED => 'Frais supprimé',
+            self::FRAIS_ADDED => 'Dépense ajoutée',
+            self::FRAIS_DELETED => 'Dépense supprimée',
             self::PAYMENT_CANCELLED => 'Paiement annulé',
             self::STATUS_CHANGED => 'Changement de statut',
         };

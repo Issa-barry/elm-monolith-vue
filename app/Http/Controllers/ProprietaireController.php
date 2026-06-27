@@ -142,7 +142,7 @@ class ProprietaireController extends Controller
                     'categorie' => $vehicule->categorie,
                     'is_active' => $vehicule->is_active,
                     'equipe_detail' => $equipe ? [
-                        'nom' => $equipe->nom,
+                        'nom' => $vehicule->nom_vehicule,
                         'taux_commission_proprietaire' => $equipe->taux_commission_proprietaire !== null
                             ? (float) $equipe->taux_commission_proprietaire
                             : null,

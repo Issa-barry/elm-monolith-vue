@@ -210,7 +210,7 @@ class CommissionVenteFraisTest extends TestCase
             ->assertSessionHasErrors('montant');
 
         $this->assertStringContainsString(
-            'frais',
+            'dépenses',
             mb_strtolower($response->getSession()->get('errors')->get('montant')[0])
         );
     }

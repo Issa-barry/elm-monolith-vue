@@ -21,7 +21,7 @@ class CommissionPartController extends Controller
     {
         abort_unless($commission->organization_id === auth()->user()->organization_id, 403, 'Accès refusé.');
         abort_unless($part->commission_vente_id === $commission->id, 403, 'Part invalide.');
-        abort_unless($part->type_beneficiaire === 'proprietaire', 422, 'Les frais ne s\'appliquent qu\'à la part propriétaire.');
+        abort_unless($part->type_beneficiaire === 'proprietaire', 422, 'Les dépenses ne s\'appliquent qu\'à la part propriétaire.');
         abort_if($commission->isAnnulee(), 422, 'Cette commission est annulée.');
 
         $fraisMontant = (float) $request->input('frais_supplementaires', 0);
@@ -45,11 +45,11 @@ class CommissionPartController extends Controller
                 'max:150',
             ],
         ], [
-            'frais_supplementaires.required' => 'Le montant des frais est obligatoire.',
-            'frais_supplementaires.min' => 'Les frais ne peuvent pas être négatifs.',
-            'frais_supplementaires.max' => 'Les frais ne peuvent pas dépasser la part brute.',
-            'type_frais.required' => 'Le type de frais est obligatoire.',
-            'type_frais.in' => 'Type de frais invalide.',
+            'frais_supplementaires.required' => 'Le montant des dépenses est obligatoire.',
+            'frais_supplementaires.min' => 'Les dépenses ne peuvent pas être négatives.',
+            'frais_supplementaires.max' => 'Les dépenses ne peuvent pas dépasser la part brute.',
+            'type_frais.required' => 'Le type de dépense est obligatoire.',
+            'type_frais.in' => 'Type de dépense invalide.',
             'commentaire_frais.required' => 'Le commentaire est obligatoire pour le type « Autre ».',
             'commentaire_frais.max' => 'Le commentaire ne peut pas dépasser 150 caractères.',
         ]);
@@ -62,6 +62,6 @@ class CommissionPartController extends Controller
 
         return redirect()
             ->route('commissions.show', $commission)
-            ->with('success', 'Frais mis à jour.');
+            ->with('success', 'Dépense mise à jour.');
     }
 }

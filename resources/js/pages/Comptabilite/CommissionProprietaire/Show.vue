@@ -96,7 +96,7 @@ const showPaiementDialog = ref(false);
 
             <CommissionSummaryCards
                 :summary="commission_summary"
-                frais-label="Frais véhicules"
+                frais-label="Dépenses véhicules"
             />
 
             <CommissionGlobalFilters

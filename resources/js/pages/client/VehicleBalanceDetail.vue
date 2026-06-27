@@ -110,7 +110,7 @@ function goBack(): void {
                     </p>
                 </div>
                 <div class="rounded-xl border border-border bg-card p-3">
-                    <p class="text-xs text-muted-foreground">Frais</p>
+                    <p class="text-xs text-muted-foreground">Dépenses</p>
                     <p class="mt-1 text-lg font-semibold text-destructive">
                         {{
                             summary.frais_depenses > 0
@@ -180,7 +180,7 @@ function goBack(): void {
                                 </p>
                             </div>
                             <div>
-                                <p class="text-muted-foreground">Frais</p>
+                                <p class="text-muted-foreground">Dépenses</p>
                                 <p class="font-medium text-destructive">
                                     {{
                                         line.frais > 0

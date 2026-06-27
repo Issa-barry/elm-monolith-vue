@@ -37,7 +37,6 @@ interface ProprietaireOption {
 }
 
 interface FormData {
-    nom: string;
     is_active: boolean;
     vehicule_id: string | null;
     proprietaire_id: string | null;
@@ -62,11 +61,6 @@ const emit = defineEmits<{ submit: [] }>();
 const vehiculeSelected = ref<VehiculeOption | null>(
     props.vehicules.find((v) => v.value === props.form.vehicule_id) ?? null,
 );
-
-if (vehiculeSelected.value && !props.form.nom) {
-    // eslint-disable-next-line vue/no-mutating-props
-    props.form.nom = vehiculeSelected.value.label;
-}
 
 if (
     !props.form.proprietaire_id &&
@@ -93,8 +87,6 @@ function searchVehicule(event: { query: string }) {
 function onVehiculeSelect(v: VehiculeOption | null) {
     // eslint-disable-next-line vue/no-mutating-props
     props.form.vehicule_id = v ? v.value : null;
-    // eslint-disable-next-line vue/no-mutating-props
-    props.form.nom = v ? v.label : '';
     if (v?.categorie === 'interne') {
         proprietaireSelected.value = null;
         // eslint-disable-next-line vue/no-mutating-props
@@ -119,8 +111,6 @@ function onVehiculeClear() {
     vehiculeSelected.value = null;
     // eslint-disable-next-line vue/no-mutating-props
     props.form.vehicule_id = null;
-    // eslint-disable-next-line vue/no-mutating-props
-    props.form.nom = '';
     proprietaireSelected.value = null;
     // eslint-disable-next-line vue/no-mutating-props
     props.form.proprietaire_id = null;
@@ -407,37 +397,6 @@ function handleSubmit() {
                         <AlertTriangle class="h-3.5 w-3.5 shrink-0" />
                         {{ vehiculeWarning }}
                     </div>
-                </div>
-
-                <!-- Nom de l'équipe (auto-renseigné) -->
-                <div>
-                    <Label for="nom" class="mb-1.5 block">
-                        Nom de l'équipe
-                        <span class="text-destructive">*</span>
-                    </Label>
-                    <div
-                        class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
-                        :class="{ 'border-destructive': form.errors?.nom }"
-                    >
-                        <span
-                            :class="
-                                form.nom
-                                    ? 'text-foreground'
-                                    : 'text-muted-foreground'
-                            "
-                        >
-                            {{ form.nom || 'Sélectionnez un véhicule…' }}
-                        </span>
-                        <Lock
-                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
-                        />
-                    </div>
-                    <p
-                        v-if="form.errors?.nom"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ form.errors.nom }}
-                    </p>
                 </div>
 
                 <!-- Propriétaire -->
