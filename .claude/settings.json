@@ -144,7 +144,19 @@
       "Bash(ls \"C:/Users/issab/Desktop\" 2>/dev/null | head -5; echo \"exists check done\")",
       "Read(//c/Users/issab/Desktop/**)",
       "Bash(\"/c/Program Files/Google/Chrome/Application/chrome.exe\" --headless --disable-gpu --no-sandbox --print-to-pdf=\"C:/Users/issab/Desktop/rapport-couverture-e2e.pdf\" --print-to-pdf-no-header \"C:/Users/issab/AppData/Local/Temp/claude/c--laragon-www-eau-la-maman-elm-monolithe/51c97e71-c00f-4ed6-b29b-38ef7ca86c8f/scratchpad/rapport-couverture-e2e.html\")",
-      "Bash(node scripts/check-ui-standards.mjs)"
+      "Bash(node scripts/check-ui-standards.mjs)",
+      "Bash(grep -n 'protected $fillable\\\\|public function' 'c:\\\\laragon\\\\www\\\\eau-la-maman\\\\elm-monolithe\\\\app\\\\Models\\\\Client.php')",
+      "Bash(grep -n 'protected $fillable\\\\|public function' 'c:\\\\laragon\\\\www\\\\eau-la-maman\\\\elm-monolithe\\\\app\\\\Models\\\\CommandeVente.php')",
+      "Bash(grep -n 'protected $fillable\\\\|protected $table' 'c:\\\\laragon\\\\www\\\\eau-la-maman\\\\elm-monolithe\\\\app\\\\Models\\\\Livreur.php')",
+      "Bash(grep -n 'protected $fillable\\\\|protected $table' 'c:\\\\laragon\\\\www\\\\eau-la-maman\\\\elm-monolithe\\\\app\\\\Models\\\\TransfertLogistique.php')",
+      "Bash(grep -n 'protected $fillable' 'c:\\\\laragon\\\\www\\\\eau-la-maman\\\\elm-monolithe\\\\app\\\\Models\\\\Produit.php')",
+      "Bash(grep -n 'protected $fillable' 'c:\\\\laragon\\\\www\\\\eau-la-maman\\\\elm-monolithe\\\\app\\\\Models\\\\Prestataire.php')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:8000/api/v1/search/global?q=baba)",
+      "Bash(curl -s http://127.0.0.1:8000/api/v1/search/global?q=baba)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:8000/api/v1/mobile/notifications)",
+      "Bash(curl -s http://127.0.0.1:8000/api/v1/mobile/notifications)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:8000/comptabilite/historique)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type}\\\\n\" http://127.0.0.1:8000/cette-page-n-existe-pas)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"
