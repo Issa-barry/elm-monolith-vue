@@ -501,7 +501,7 @@ function formatGNF(val: number): string {
                                 >
                                     <tr>
                                         <th class="px-4 py-3 font-medium">
-                                            Membre
+                                            Livreur
                                         </th>
                                         <th class="px-4 py-3 font-medium">
                                             Téléphone

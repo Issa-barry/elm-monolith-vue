@@ -162,8 +162,19 @@ watch(
             commission.value = props.equipe.commission_unitaire_par_pack;
             montantProp.value = props.equipe.montant_par_pack_proprietaire ?? 0;
         } else {
-            membres.value = [];
-            commission.value = 0;
+            membres.value = [
+                {
+                    livreur_id: null,
+                    role: '',
+                    prenom: '',
+                    nom: '',
+                    telephone: '',
+                    montant_par_pack: 0,
+                    ordre: 0,
+                    _errors: {},
+                },
+            ];
+            commission.value = 950;
             montantProp.value = 0;
         }
     },
@@ -256,7 +267,7 @@ function goToStep2() {
     if (!validateStep1()) return;
     markChanged();
     buildLignes();
-    if (commission.value <= 0) commission.value = 200;
+    if (commission.value <= 0) commission.value = 950;
     step.value = 2;
 }
 
@@ -272,7 +283,7 @@ function toMontant(taux: number, comm: number): number {
 }
 
 function buildLignes() {
-    const comm = commission.value > 0 ? commission.value : 200;
+    const comm = commission.value > 0 ? commission.value : 950;
     const newLignes: LignePartage[] = [];
 
     if (isExterne.value) {
@@ -724,9 +735,24 @@ const hasStep1Errors = computed(() =>
                             v-for="ligne in lignes"
                             :key="ligne.id"
                             class="border-b last:border-b-0"
+                            :class="
+                                ligne.id === 'proprietaire' ? 'bg-primary/5' : ''
+                            "
                         >
                             <td class="px-3 py-2 text-sm">
-                                {{ ligne.label }}
+                                <template v-if="ligne.id === 'proprietaire'">
+                                    <span
+                                        class="mr-1.5 inline-flex items-center rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground uppercase tracking-wide"
+                                        >Propriétaire</span
+                                    >
+                                    <span class="font-medium text-primary">{{
+                                        ligne.label.replace(
+                                            'Propriétaire — ',
+                                            '',
+                                        )
+                                    }}</span>
+                                </template>
+                                <template v-else>{{ ligne.label }}</template>
                             </td>
                             <td class="px-3 py-2">
                                 <InputNumber
