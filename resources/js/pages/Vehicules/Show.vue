@@ -114,6 +114,7 @@ const statutLabel: Record<string, string> = {
     brouillon: 'Brouillon',
     soumis: 'Soumis',
     approuve: 'Approuvé',
+    valide: 'Validé',
     rejete: 'Rejeté',
 };
 
@@ -121,6 +122,18 @@ const totalApprouve = computed(() =>
     props.depenses
         .filter((d) => d.statut === 'approuve')
         .reduce((s, d) => s + d.montant, 0),
+);
+
+const totalLivreurs = computed(() =>
+    props.vehicule.equipe_membres.reduce((s, m) => s + m.montant_par_pack, 0),
+);
+
+const tauxLivreurs = computed(() =>
+    parseFloat(
+        props.vehicule.equipe_membres
+            .reduce((s, m) => s + m.taux_commission, 0)
+            .toFixed(2),
+    ),
 );
 
 function formatGNF(val: number): string {
@@ -211,10 +224,21 @@ function formatGNF(val: number): string {
                     </div>
                 </template>
                 <template #actions>
+                    <Link
+                        v-if="vehicule.proprietaire_id"
+                        :href="`/proprietaires/${vehicule.proprietaire_id}`"
+                        target="_blank"
+                        data-testid="voir-fiche-proprietaire-btn"
+                    >
+                        <Button variant="outline" size="sm">
+                            <ExternalLink class="mr-1.5 h-4 w-4" />
+                            Fiche propriétaire
+                        </Button>
+                    </Link>
                     <Link href="/vehicules">
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
-                            Retour
+                            Liste de véhicules
                         </Button>
                     </Link>
                     <Link
@@ -385,15 +409,6 @@ function formatGNF(val: number): string {
                                         )
                                     }}
                                 </p>
-                                <Link
-                                    :href="`/proprietaires/${vehicule.proprietaire_id}`"
-                                    target="_blank"
-                                    data-testid="voir-fiche-proprietaire-btn"
-                                    class="mt-3 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-                                >
-                                    Voir la fiche propriétaire
-                                    <ExternalLink class="h-3 w-3 opacity-60" />
-                                </Link>
                             </template>
                             <template v-else>
                                 <p class="mt-1 text-sm text-muted-foreground">
@@ -488,7 +503,7 @@ function formatGNF(val: number): string {
                                 >
                                     <tr>
                                         <th class="px-4 py-3 font-medium">
-                                            Membre
+                                            Livreur
                                         </th>
                                         <th class="px-4 py-3 font-medium">
                                             Téléphone
@@ -556,6 +571,74 @@ function formatGNF(val: number): string {
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+
+                        <!-- Récap répartition -->
+                        <div
+                            v-if="equipe && vehicule.equipe_membres.length > 0"
+                            class="mt-2 rounded-lg border bg-muted/30 p-4"
+                        >
+                            <p
+                                class="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Répartition par pack
+                            </p>
+                            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                                <div>
+                                    <p class="text-xs text-muted-foreground">
+                                        Commission totale
+                                    </p>
+                                    <p
+                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
+                                    >
+                                        {{
+                                            formatGNF(
+                                                equipe.commission_unitaire_par_pack,
+                                            )
+                                        }}
+                                    </p>
+                                    <p class="text-xs text-muted-foreground">
+                                        100%
+                                    </p>
+                                </div>
+                                <div
+                                    v-if="
+                                        vehicule.categorie === 'externe' &&
+                                        equipe.montant_par_pack_proprietaire
+                                    "
+                                >
+                                    <p class="text-xs text-muted-foreground">
+                                        Part propriétaire
+                                    </p>
+                                    <p
+                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
+                                    >
+                                        {{
+                                            formatGNF(
+                                                equipe.montant_par_pack_proprietaire,
+                                            )
+                                        }}
+                                    </p>
+                                    <p class="text-xs text-muted-foreground">
+                                        {{
+                                            equipe.taux_commission_proprietaire
+                                        }}%
+                                    </p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-muted-foreground">
+                                        Part livreurs
+                                    </p>
+                                    <p
+                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
+                                    >
+                                        {{ formatGNF(totalLivreurs) }}
+                                    </p>
+                                    <p class="text-xs text-muted-foreground">
+                                        {{ tauxLivreurs }}%
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
