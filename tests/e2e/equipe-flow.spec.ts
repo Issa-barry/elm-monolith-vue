@@ -323,8 +323,8 @@ test('étape 1 inline : validation bloque si champs vides', async ({
     await expect(dialog.getByText(/requis/i).first()).toBeVisible({
         timeout: 3_000,
     });
-    // Toujours à l'étape 1
-    await expect(dialog.getByText(/partage/i).first()).not.toBeVisible();
+    // Toujours à l'étape 1 : le bouton footer "Ajouter un membre" n'existe qu'à l'étape 1
+    await expect(dialog.getByRole('button', { name: /ajouter un membre/i })).toBeVisible();
 });
 
 test('étape 1 inline : supprimer une ligne sans sous-modal', async ({
@@ -365,7 +365,7 @@ test('fermeture avec modifications : affiche confirmation, "Continuer" garde le 
 
     // Cliquer sur le X du modal principal
     await page.locator('[role="dialog"]').filter({ hasText: /équipe/i })
-        .locator('.p-dialog-header-close, [aria-label="Close"]').first().click();
+        .locator('.p-dialog-close-button, .p-dialog-header-close, .p-dialog-header button').first().click();
 
     // La confirmation doit apparaître
     await expect(
@@ -393,7 +393,7 @@ test('fermeture avec modifications : "Quitter" ferme le wizard', async ({
 
     // Cliquer sur le X
     await page.locator('[role="dialog"]').filter({ hasText: /équipe/i })
-        .locator('.p-dialog-header-close, [aria-label="Close"]').first().click();
+        .locator('.p-dialog-close-button, .p-dialog-header-close, .p-dialog-header button').first().click();
 
     await expect(
         page.getByRole('dialog', { name: /quitter sans enregistrer/i }),
@@ -414,7 +414,7 @@ test('fermeture sans modifications : ferme directement sans confirmation', async
 
     // Aucune interaction — clic sur X
     await page.locator('[role="dialog"]').filter({ hasText: /équipe/i })
-        .locator('.p-dialog-header-close, [aria-label="Close"]').first().click();
+        .locator('.p-dialog-close-button, .p-dialog-header-close, .p-dialog-header button').first().click();
 
     // Aucune confirmation, modal fermé directement
     await expect(
