@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
     ensureModuleEnabled,
     login,
@@ -6,6 +8,16 @@ import {
 } from './helpers';
 
 test.setTimeout(240_000);
+
+let seedRefs: { ref001: string; ref002: string };
+
+test.beforeAll(() => {
+    const seedPath = path.join(process.cwd(), '.auth', 'commission-seed.json');
+    seedRefs = JSON.parse(fs.readFileSync(seedPath, 'utf-8')) as {
+        ref001: string;
+        ref002: string;
+    };
+});
 
 test.beforeEach(async ({ page }) => {
     await login(page);
@@ -165,14 +177,14 @@ test('stepper — 6 étapes dont "Commission" grise dès la création', async ({
     ).toBeDisabled({ timeout: 5_000 });
 });
 
-test('stepper — étape commission affiche "Impayé" ou "Partiel" sur TL-SEED-001 (clôturé)', async ({
+test('stepper — étape commission affiche "Impayé" ou "Partiel" sur elm-2 (commission impayée)', async ({
     page,
 }) => {
-    await goToTransfertDetail(page, 'TL-SEED-001');
+    await goToTransfertDetail(page, seedRefs.ref001);
 
     // Le stepper affiche le statut de commission.
-    // TL-SEED-001 est "Impayé" sur seed fresh, mais peut devenir "Partiel"
-    // si le test logistique-commission-flow a déjà effectué des versements.
+    // elm-2 commence "Impayé" mais peut devenir "Partiel" si
+    // logistique-commission-flow a déjà effectué des versements partiels.
     const stepper = stepperCard(page);
     await expect(stepper).toBeVisible({ timeout: 10_000 });
     await expect(stepper).toContainText(/impay|partiel/i);
@@ -183,10 +195,10 @@ test('stepper — étape commission affiche "Impayé" ou "Partiel" sur TL-SEED-0
     ).not.toBeDisabled({ timeout: 5_000 });
 });
 
-test('stepper — étape commission affiche "Payé" sur TL-SEED-002 (versé)', async ({
+test('stepper — étape commission affiche "Payé" sur elm-1 (commission intégralement versée)', async ({
     page,
 }) => {
-    await goToTransfertDetail(page, 'TL-SEED-002');
+    await goToTransfertDetail(page, seedRefs.ref002);
 
     // Le stepper affiche "Payé" comme libellé de l'étape commission
     const stepper = stepperCard(page);
@@ -199,10 +211,10 @@ test('stepper — étape commission affiche "Payé" sur TL-SEED-002 (versé)', a
     ).not.toBeDisabled({ timeout: 5_000 });
 });
 
-test('stepper — "Réceptionné" passe au vert quand commission générée (TL-SEED-001)', async ({
+test('stepper — "Réceptionné" passe au vert quand commission générée (elm-2)', async ({
     page,
 }) => {
-    await goToTransfertDetail(page, 'TL-SEED-001');
+    await goToTransfertDetail(page, seedRefs.ref001);
 
     const stepper = stepperCard(page);
     await expect(stepper).toBeVisible({ timeout: 10_000 });

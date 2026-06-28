@@ -293,6 +293,8 @@ test('stat cards reflect active search filter', async ({ page }) => {
         .locator('input[placeholder*="recherch" i]:not([data-testid="global-search"]):visible')
         .first();
     await searchInput.fill('ZZZZNO_MATCH_9999');
+    await searchInput.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     await expect(totalCard).toHaveText('0', { timeout: 5_000 });
 
@@ -309,5 +311,7 @@ test('stat cards reflect active search filter', async ({ page }) => {
     await expect(inactiveCard).toHaveText('0');
 
     await searchInput.fill('');
+    await searchInput.press('Enter');
+    await page.waitForLoadState('networkidle');
     await expect(totalCard).not.toHaveText('0', { timeout: 5_000 });
 });

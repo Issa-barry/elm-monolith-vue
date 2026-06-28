@@ -21,7 +21,7 @@ class VehiculeController extends Controller
     private function vehiculeData(Vehicule $v): array
     {
         $equipe = $v->equipe;
-        $membres = $equipe ? ($equipe->relationLoaded('membres') ? $equipe->membres : $equipe->load('membres.livreur')->membres) : collect();
+        $membres = $equipe ? $equipe->loadMissing('membres.livreur')->membres : collect();
         $proprietaireUser = $v->proprietaire?->user;
         $agence = $proprietaireUser
             ? (($proprietaireUser->sites->firstWhere('pivot.is_default', true)) ?? $proprietaireUser->sites->first())
@@ -51,8 +51,10 @@ class VehiculeController extends Controller
                 : null,
             'equipe_membres' => $membres->map(fn ($m) => [
                 'livreur_nom' => $m->livreur ? trim($m->livreur->prenom.' '.$m->livreur->nom) : null,
+                'telephone' => $m->livreur?->telephone ?? null,
                 'role' => $m->role,
                 'taux_commission' => (float) $m->taux_commission,
+                'montant_par_pack' => (int) $m->montant_par_pack,
             ])->values()->all(),
             'frais' => $v->relationLoaded('frais')
                 ? $v->frais->map(fn (VehiculeFrais $f) => [
@@ -86,7 +88,7 @@ class VehiculeController extends Controller
         ]);
     }
 
-    public function create(Request $request): Response
+    public function create(Request $request): Response|RedirectResponse
     {
         $this->authorize('create', Vehicule::class);
 
@@ -195,7 +197,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('view', $vehicule);
 
-        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur']);
+        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'equipe.proprietaire']);
 
         $depenses = Depense::where('beneficiaire_type', 'vehicule')
             ->where('beneficiaire_id', $vehicule->id)
@@ -212,9 +214,44 @@ class VehiculeController extends Controller
                 'commentaire' => $d->commentaire,
             ]);
 
+        $equipe = $vehicule->equipe;
+        $equipeData = null;
+        if ($equipe) {
+            $roleCounts = [];
+            $membres = $equipe->membres->sortBy('ordre')->map(function ($m) use (&$roleCounts) {
+                $role = $m->role;
+                $roleCounts[$role] = ($roleCounts[$role] ?? 0) + 1;
+
+                return [
+                    'livreur_id' => $m->livreur_id,
+                    'nom' => $m->livreur?->nom ?? '',
+                    'prenom' => $m->livreur?->prenom ?? '',
+                    'telephone' => $m->livreur?->telephone ?? '',
+                    'role' => $role,
+                    'montant_par_pack' => (float) $m->montant_par_pack,
+                    'taux_commission' => (float) $m->taux_commission,
+                    'ordre' => $m->ordre,
+                    'numero' => $roleCounts[$role],
+                ];
+            })->values()->all();
+
+            $equipeData = [
+                'id' => $equipe->id,
+                'is_active' => $equipe->is_active,
+                'commission_unitaire_par_pack' => (float) $equipe->commission_unitaire_par_pack,
+                'montant_par_pack_proprietaire' => $equipe->montant_par_pack_proprietaire !== null ? (float) $equipe->montant_par_pack_proprietaire : null,
+                'taux_commission_proprietaire' => $equipe->taux_commission_proprietaire !== null ? (float) $equipe->taux_commission_proprietaire : null,
+                'proprietaire_id' => $equipe->proprietaire_id,
+                'proprietaire_nom' => $equipe->proprietaire ? trim("{$equipe->proprietaire->prenom} {$equipe->proprietaire->nom}") : null,
+                'membres' => $membres,
+            ];
+        }
+
         return Inertia::render('Vehicules/Show', [
             'vehicule' => $this->vehiculeData($vehicule),
             'depenses' => $depenses,
+            'equipe' => $equipeData,
+            'proprietaires' => $this->proprietairesOptions(),
         ]);
     }
 

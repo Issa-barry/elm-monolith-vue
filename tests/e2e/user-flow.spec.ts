@@ -204,6 +204,8 @@ test('delete user → removed from list', async ({ page }) => {
     // L'utilisateur ne doit plus apparaître
     const search2 = page.locator('input[placeholder*="rechercher" i]:not([data-testid="global-search"]):visible').first();
     await search2.fill(prenom);
+    await search2.press('Enter');
+    await page.waitForLoadState('networkidle');
     await expect(
         page.locator('tbody tr', {
             hasText: new RegExp(escapeRegExp(prenom), 'i'),

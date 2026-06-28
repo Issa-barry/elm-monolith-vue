@@ -11,7 +11,6 @@ class DatabaseSeeder extends Seeder
         $this->call([
             // ── Système ───────────────────────────────────────────────────────
             RolesAndPermissionsSeeder::class,   // Organisation, comptes staff, rôles, permissions
-            ComptableCommercialeSeeder::class,  // Comptes connectables: comptable + commerciale
 
             // ── Référentiels ──────────────────────────────────────────────────
             ClientSeeder::class,                // Comptes clients (utilisateurs)
@@ -32,14 +31,10 @@ class DatabaseSeeder extends Seeder
             VehiculesSeeder::class,             // 10 vehicules : 5 externes + 5 internes
 
             // ── Module RH ─────────────────────────────────────────────────────
-            EmployesSeeder::class,                  // 2 employés (Matoto + Lansanaya) avec contrats CDI
+            EmployesSeeder::class,              // 2 employés (Matoto + Lansanaya) avec contrats CDI
 
             // ── Paramétrage métier ────────────────────────────────────────────
-            DepenseTypesSeeder::class,              // 5 types de dépense par défaut
-
-            // ── Module Commissions ────────────────────────────────────────────
-            // CommissionsSeeder::class,           // 6 commissions : EN_ATTENTE / PARTIELLE / VERSÉE
-            CommissionLogistiqueSeeder::class,  // 2 commissions logistiques : IMPAYÉ + PAYÉ
+            DepenseTypesSeeder::class,          // 5 types de dépense par défaut
         ]);
     }
 }

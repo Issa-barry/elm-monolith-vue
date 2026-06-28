@@ -8,10 +8,10 @@ test.setTimeout(120_000);
  * partial payment because soldesParLivreur used SUM(CASE WHEN statut='paye'
  * THEN montant_net ELSE 0 END) instead of SUM(montant_verse).
  *
- * Relies on CommissionLogistiqueSeeder which creates:
- *   - Aissatou BALDÉ  : 5 600 GNF impayé
- *   - Thierno SALL    : 2 400 GNF impayé
- *   - Boubacar KONATÉ : 8 000 GNF déjà payé
+ * Commission data is created via UI in global-setup.ts (no seeder) :
+ *   - Aissatou BALDÉ  : 11 200 GNF impayé  (elm-2, 80 packs × 200 × 70 %)
+ *   - Thierno SALL    : 4 800 GNF impayé   (elm-2, 80 packs × 200 × 30 %)
+ *   - Boubacar KONATÉ : 24 000 GNF payé    (elm-1, 120 packs × 200 × 100 %)
  */
 test('paiement partiel commission logistique — Déjà payé et Reste à payer se mettent à jour', async ({
     page,
@@ -34,8 +34,8 @@ test('paiement partiel commission logistique — Déjà payé et Reste à payer 
     const colReste = row.locator('td').nth(4); // "Reste à payer"
     const colPaye  = row.locator('td').nth(5); // "Déjà payé"
 
-    // État initial : 5 600 GNF impayé, 0 GNF payé
-    await expect(colReste).toContainText(/5[\s ]600/);
+    // État initial : 11 200 GNF impayé, 0 GNF payé
+    await expect(colReste).toContainText(/11[\s ]200/);
     await expect(colPaye).toContainText(/0\s*GNF/);
 
     // ── 2. Ouvrir le menu et cliquer « Payer » ─────────────────────────────────
@@ -59,9 +59,9 @@ test('paiement partiel commission logistique — Déjà payé et Reste à payer 
 
     // ── 4. Vérifier après paiement partiel ────────────────────────────────────
     // « Déjà payé » doit afficher 2 000 GNF (régression : restait à 0 GNF avant fix)
-    await expect(colPaye).toContainText(/2[\s ]000/, { timeout: 20_000 });
-    // « Reste à payer » doit afficher 3 600 GNF
-    await expect(colReste).toContainText(/3[\s ]600/);
+    await expect(colPaye).toContainText(/2[\s ]000/, { timeout: 20_000 });
+    // « Reste à payer » doit afficher 9 200 GNF
+    await expect(colReste).toContainText(/9[\s ]200/);
 
     // ── 5. Payer le solde restant ──────────────────────────────────────────────
     await row.locator('button').last().click();
@@ -72,7 +72,7 @@ test('paiement partiel commission logistique — Déjà payé et Reste à payer 
     const dialog2 = page.locator('[role="dialog"]').filter({ hasText: /Aissatou/i });
     await expect(dialog2).toBeVisible({ timeout: 10_000 });
 
-    // Le solde pre-rempli doit être 3 600 GNF — laisser tel quel et confirmer
+    // Le solde pre-rempli doit être 9 200 GNF — laisser tel quel et confirmer
     const confirmerBtn2 = dialog2.getByRole('button', { name: /confirmer le paiement/i });
     await expect(confirmerBtn2).toBeEnabled({ timeout: 5_000 });
     await confirmerBtn2.click();
@@ -80,8 +80,8 @@ test('paiement partiel commission logistique — Déjà payé et Reste à payer 
     // ── 6. Vérifier que tout est payé ─────────────────────────────────────────
     // « Reste à payer » doit être 0 GNF
     await expect(colReste).toContainText(/0\s*GNF/, { timeout: 20_000 });
-    // « Déjà payé » doit afficher 5 600 GNF
-    await expect(colPaye).toContainText(/5[\s ]600/);
+    // « Déjà payé » doit afficher 11 200 GNF
+    await expect(colPaye).toContainText(/11[\s ]200/);
 });
 
 test('livreur déjà payé intégralement — Reste à payer = 0 GNF', async ({
@@ -92,7 +92,7 @@ test('livreur déjà payé intégralement — Reste à payer = 0 GNF', async ({
     await page.goto('/logistique/commissions');
     await expect(page).toHaveURL(/\/logistique\/commissions/, { timeout: 20_000 });
 
-    // Boubacar KONATÉ est seedé avec 8 000 GNF entièrement payés
+    // Boubacar KONATÉ est payé avec 24 000 GNF (120 packs × 200 × 100 %)
     const row = page
         .locator('tbody tr', { hasText: /Boubacar\s+KONAT/i })
         .first();
@@ -102,7 +102,7 @@ test('livreur déjà payé intégralement — Reste à payer = 0 GNF', async ({
     const colPaye  = row.locator('td').nth(5);
 
     await expect(colReste).toContainText(/0\s*GNF/);
-    await expect(colPaye).toContainText(/8[\s ]000/);
+    await expect(colPaye).toContainText(/24[\s ]000/);
 
     // Le bouton « Payer » ne doit PAS apparaître (solde = 0)
     await row.locator('button').last().click();

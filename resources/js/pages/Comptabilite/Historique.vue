@@ -193,6 +193,7 @@ function formatJson(val: unknown): string {
                 :values="historiqueFilters"
                 :fields="filterFields"
                 :result-count="logs.total"
+                search-key="search"
                 search-placeholder="Recherche libre…"
                 v-model:search="search"
             />

@@ -5,7 +5,6 @@ import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { router, usePage } from '@inertiajs/vue3';
-import { useDebounceFn } from '@vueuse/core';
 import { Lock, Search, X } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed, ref, watch } from 'vue';
@@ -76,6 +75,8 @@ const emit = defineEmits<{
 }>();
 
 const search = defineModel<string>('search', { default: '' });
+// Saisie en cours — ne modifie search (et donc les computeds parents) qu'à l'apply
+const localSearch = ref(search.value);
 
 // ── Détection admin ───────────────────────────────────────────────────────────
 
@@ -174,6 +175,7 @@ watch(() => props.values, initLocal, { deep: true });
 // ── Détection de changements en attente ───────────────────────────────────────
 
 const pendingChange = computed(() => {
+    if (localSearch.value !== search.value) return true;
     const siteChanged =
         JSON.stringify([...localSiteIds.value].sort()) !==
         JSON.stringify([...appliedSiteIds.value].sort());
@@ -202,8 +204,8 @@ function meaningfulTotal(options?: FilterOption[]): number {
 function buildParams(): Record<string, string | string[]> {
     const params: Record<string, string | string[]> = { ...props.baseParams };
 
-    if (props.searchKey && search.value) {
-        params[props.searchKey] = search.value;
+    if (props.searchKey && localSearch.value) {
+        params[props.searchKey] = localSearch.value;
     }
 
     // Filtre agence : seulement pour admin, et seulement si une sélection partielle
@@ -255,6 +257,7 @@ function buildParams(): Record<string, string | string[]> {
 }
 
 function applyFilters() {
+    search.value = localSearch.value;
     const values = buildParams();
     if (props.url) {
         router.get(props.url, values, { preserveScroll: true, replace: true });
@@ -271,6 +274,7 @@ function resetFilters() {
         localSiteIds.value = [];
     }
 
+    localSearch.value = '';
     search.value = '';
     for (const field of props.fields) {
         if (field.disabled) continue;
@@ -298,19 +302,12 @@ function resetFilters() {
     emit('reset');
 }
 
-// ── Recherche — debounce 500ms, auto-apply ────────────────────────────────────
+// ── Bouton X du champ recherche ───────────────────────────────────────────────
 
-const debouncedSearchApply = useDebounceFn(() => {
-    if (props.url || emit) applyFilters();
-}, 500);
-
-watch(
-    search,
-    () => {
-        debouncedSearchApply();
-    },
-    { immediate: false },
-);
+function clearSearch() {
+    localSearch.value = '';
+    applyFilters();
+}
 
 // ── Champs inline vs drawer ───────────────────────────────────────────────────
 
@@ -350,7 +347,7 @@ const hasActiveFilters = computed(
         drawerFilterCount.value > 0 ||
         countActiveFields(inlineFields.value) > 0 ||
         (isAdmin.value && localSiteIds.value.length > 0) ||
-        !!search.value,
+        !!(search.value || localSearch.value),
 );
 </script>
 
@@ -491,23 +488,24 @@ const hasActiveFilters = computed(
             </FilterDrawer>
         </div>
 
-        <!-- Recherche (auto-apply 500ms) — pleine largeur sur mobile (sa propre ligne) -->
+        <!-- Recherche — déclenché par Entrée ou clic sur "Rechercher" -->
         <div class="relative order-2 w-full shrink-0 sm:w-[260px]">
             <Search
                 class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             />
             <input
-                v-model="search"
+                v-model="localSearch"
                 type="text"
                 data-testid="search-input"
                 :placeholder="searchPlaceholder"
                 class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                @keydown.enter="applyFilters"
             />
             <button
-                v-if="search"
+                v-if="localSearch"
                 type="button"
                 class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                @click="search = ''"
+                @click="clearSearch"
             >
                 <X class="h-3.5 w-3.5" />
             </button>

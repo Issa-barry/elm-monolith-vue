@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
+import EquipeStepperModal from '@/pages/Vehicules/partials/EquipeStepperModal.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
@@ -16,13 +17,16 @@ import {
     Pencil,
     Plus,
     Receipt,
+    Settings,
     Users,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface EquipeMembre {
     livreur_nom: string | null;
+    telephone: string | null;
     taux_commission: number;
+    montant_par_pack: number;
     role: string;
 }
 
@@ -33,6 +37,35 @@ interface DepenseRow {
     date_depense: string | null;
     statut: string;
     commentaire: string | null;
+}
+
+interface MembreEquipeDetail {
+    livreur_id: string | null;
+    nom: string;
+    prenom: string;
+    telephone: string;
+    role: string;
+    montant_par_pack: number;
+    taux_commission: number;
+    ordre: number;
+    numero: number;
+}
+
+interface EquipeData {
+    id: string;
+    is_active: boolean;
+    commission_unitaire_par_pack: number;
+    montant_par_pack_proprietaire: number | null;
+    taux_commission_proprietaire: number | null;
+    proprietaire_id: string | null;
+    proprietaire_nom: string | null;
+    membres: MembreEquipeDetail[];
+}
+
+interface ProprietaireOption {
+    value: string;
+    label: string;
+    telephone?: string;
 }
 
 interface VehiculeData {
@@ -49,17 +82,22 @@ interface VehiculeData {
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     equipe_id: string | null;
-    equipe_nom: string | null;
     equipe_membres: EquipeMembre[];
     pris_en_charge_par_usine: boolean;
     photo_url: string | null;
     is_active: boolean;
 }
 
-const props = defineProps<{ vehicule: VehiculeData; depenses: DepenseRow[] }>();
+const props = defineProps<{
+    vehicule: VehiculeData;
+    depenses: DepenseRow[];
+    equipe: EquipeData | null;
+    proprietaires: ProprietaireOption[];
+}>();
 
 const { can } = usePermissions();
 const page = usePage();
+const showStepperModal = ref(false);
 const flashSuccess = computed(
     () => (page.props as { flash?: { success?: string } }).flash?.success,
 );
@@ -405,36 +443,28 @@ function formatGNF(val: number): string {
                                 }}
                             </p>
                         </div>
-                        <Link
-                            v-if="can('vehicules.update') && vehicule.equipe_id"
-                            :href="`/equipes-livraison/${vehicule.equipe_id}/edit`"
+                        <Button
+                            v-if="
+                                can('equipes-livraison.update') &&
+                                vehicule.equipe_id
+                            "
+                            size="sm"
+                            @click="showStepperModal = true"
                         >
-                            <Button size="sm">
-                                <Pencil class="mr-1.5 h-4 w-4" />
-                                Modifier l'équipe
-                            </Button>
-                        </Link>
-                        <Link
-                            v-else-if="can('vehicules.update')"
-                            :href="`/equipes-livraison/create?vehicule_id=${vehicule.id}`"
+                            <Settings class="mr-1.5 h-4 w-4" />
+                            Gérer l'équipe
+                        </Button>
+                        <Button
+                            v-else-if="can('equipes-livraison.create')"
+                            size="sm"
+                            @click="showStepperModal = true"
                         >
-                            <Button size="sm">
-                                <Plus class="mr-1.5 h-4 w-4" />
-                                Ajouter une équipe
-                            </Button>
-                        </Link>
+                            <Plus class="mr-1.5 h-4 w-4" />
+                            Ajouter une équipe
+                        </Button>
                     </div>
 
                     <div class="space-y-3">
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">
-                                Nom de l'équipe
-                            </p>
-                            <p class="mt-1 text-sm font-medium">
-                                {{ vehicule.equipe_nom ?? '—' }}
-                            </p>
-                        </div>
-
                         <div
                             v-if="vehicule.equipe_membres.length === 0"
                             class="rounded-lg border border-dashed py-10 text-center"
@@ -445,7 +475,14 @@ function formatGNF(val: number): string {
                         </div>
 
                         <div v-else class="overflow-x-auto rounded-lg border">
-                            <table class="w-full text-sm">
+                            <table class="w-full table-fixed text-sm">
+                                <colgroup>
+                                    <col class="w-1/5" />
+                                    <col class="w-1/5" />
+                                    <col class="w-1/5" />
+                                    <col class="w-1/5" />
+                                    <col class="w-1/5" />
+                                </colgroup>
                                 <thead
                                     class="bg-muted/30 text-left text-muted-foreground"
                                 >
@@ -454,9 +491,17 @@ function formatGNF(val: number): string {
                                             Membre
                                         </th>
                                         <th class="px-4 py-3 font-medium">
+                                            Téléphone
+                                        </th>
+                                        <th class="px-4 py-3 font-medium">
                                             Rôle
                                         </th>
                                         <th class="px-4 py-3 font-medium">
+                                            Montant / pack
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-right font-medium"
+                                        >
                                             Commission
                                         </th>
                                     </tr>
@@ -472,6 +517,17 @@ function formatGNF(val: number): string {
                                         <td class="px-4 py-3 font-medium">
                                             {{ m.livreur_nom ?? '—' }}
                                         </td>
+                                        <td
+                                            class="px-4 py-3 font-mono text-xs text-muted-foreground"
+                                        >
+                                            {{
+                                                m.telephone
+                                                    ? formatPhoneDisplay(
+                                                          m.telephone,
+                                                      )
+                                                    : '—'
+                                            }}
+                                        </td>
                                         <td class="px-4 py-3">
                                             <span
                                                 v-if="m.role === 'principal'"
@@ -484,8 +540,16 @@ function formatGNF(val: number): string {
                                                 >{{ m.role }}</span
                                             >
                                         </td>
+                                        <td class="px-4 py-3 font-mono text-sm">
+                                            {{
+                                                m.montant_par_pack.toLocaleString(
+                                                    'fr-FR',
+                                                )
+                                            }}
+                                            GNF
+                                        </td>
                                         <td
-                                            class="px-4 py-3 text-muted-foreground"
+                                            class="px-4 py-3 text-right text-muted-foreground"
                                         >
                                             {{ m.taux_commission }}%
                                         </td>
@@ -569,4 +633,19 @@ function formatGNF(val: number): string {
             </div>
         </div>
     </AppLayout>
+
+    <EquipeStepperModal
+        v-model:visible="showStepperModal"
+        :vehicule="{
+            id: vehicule.id,
+            nom_vehicule: vehicule.nom_vehicule,
+            immatriculation: vehicule.immatriculation,
+            categorie: vehicule.categorie,
+            capacite_packs: vehicule.capacite_packs,
+            proprietaire_id: vehicule.proprietaire_id,
+            proprietaire_nom: vehicule.proprietaire_nom,
+        }"
+        :equipe="equipe"
+        :proprietaires="proprietaires"
+    />
 </template>

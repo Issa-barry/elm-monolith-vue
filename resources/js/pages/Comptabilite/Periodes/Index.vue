@@ -160,6 +160,7 @@ const typeBadge = (type: string) =>
                 :values="filters"
                 :fields="filterFields"
                 :result-count="periodes.data.length"
+                search-key="search"
                 search-placeholder="Rechercher une référence, un type..."
                 v-model:search="search"
             />

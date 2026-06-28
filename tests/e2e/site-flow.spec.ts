@@ -59,6 +59,8 @@ test('create site -> open details page', async ({ page }) => {
 
     const search = getVisibleSearchInput(page);
     await search.fill(nom);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     const row = rowByName(page, nom);
     await expect(row).toBeVisible({ timeout: 15_000 });
@@ -85,6 +87,8 @@ test('create site -> edit -> delete', async ({ page }) => {
 
     const search = getVisibleSearchInput(page);
     await search.fill(nom);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     const row = rowByName(page, nom);
     await expect(row).toBeVisible({ timeout: 15_000 });
@@ -109,6 +113,8 @@ test('create site -> edit -> delete', async ({ page }) => {
     await expect(page).toHaveURL(/\/sites$/, { timeout: 20_000 });
 
     await search.fill(nom);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
     const updatedRow = rowByName(page, nom);
     await expect(updatedRow).toBeVisible({ timeout: 15_000 });
 
@@ -124,5 +130,7 @@ test('create site -> edit -> delete', async ({ page }) => {
 
     await page.waitForLoadState('networkidle');
     await search.fill(nom);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
     await expect(rowByName(page, nom)).toHaveCount(0);
 });
