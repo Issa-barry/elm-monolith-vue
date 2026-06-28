@@ -68,8 +68,10 @@ class VehiculeTest extends TestCase
 
     public function test_create_returns_200_for_authorized_user(): void
     {
+        $site = $this->user->sites()->first();
+
         $this->actingAs($this->user)
-            ->get(route('vehicules.create'))
+            ->get(route('vehicules.create', ['site_id' => $site->id]))
             ->assertStatus(200);
     }
 

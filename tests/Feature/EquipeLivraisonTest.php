@@ -510,5 +510,4 @@ class EquipeLivraisonTest extends TestCase
             'taux_commission_proprietaire' => 60,
         ]);
     }
-
 }
