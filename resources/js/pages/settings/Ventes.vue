@@ -5,7 +5,12 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
-import { AlertTriangle, Lock, PackageCheck, ShieldCheck } from 'lucide-vue-next';
+import {
+    AlertTriangle,
+    Lock,
+    PackageCheck,
+    ShieldCheck,
+} from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 interface RoleQuantite {
@@ -318,8 +323,8 @@ function onSeuilBlur() {
                             </p>
                             <p class="mt-0.5 text-xs text-muted-foreground">
                                 Si active, la creation de commande est interdite
-                                lorsque la dette du client ou du vehicule depasse
-                                le seuil ci-dessous.
+                                lorsque la dette du client ou du vehicule
+                                depasse le seuil ci-dessous.
                             </p>
                         </div>
 
@@ -379,7 +384,7 @@ function onSeuilBlur() {
                                         !form.controle_impayes_actif ||
                                         form.processing
                                     "
-                                    class="w-52 rounded-md border bg-background py-2 pl-3 pr-14 text-right text-lg font-bold tabular-nums shadow-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                    class="w-52 rounded-md border bg-background py-2 pr-14 pl-3 text-right text-lg font-bold tabular-nums shadow-sm focus:ring-2 focus:ring-ring focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                     @input="onSeuilInput"
                                     @focus="onSeuilFocus"
                                     @blur="onSeuilBlur"

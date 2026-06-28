@@ -769,9 +769,7 @@ function confirmerEtCreer() {
                                         Voir les factures
                                     </button>
                                 </div>
-                                <div
-                                    class="grid grid-cols-3 gap-2 text-center"
-                                >
+                                <div class="grid grid-cols-3 gap-2 text-center">
                                     <div>
                                         <p
                                             class="text-xs text-red-700 dark:text-red-400"
@@ -1106,9 +1104,7 @@ function confirmerEtCreer() {
                                         Voir les factures
                                     </button>
                                 </div>
-                                <div
-                                    class="grid grid-cols-3 gap-2 text-center"
-                                >
+                                <div class="grid grid-cols-3 gap-2 text-center">
                                     <div>
                                         <p
                                             class="text-xs text-red-700 dark:text-red-400"
