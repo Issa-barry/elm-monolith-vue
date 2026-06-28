@@ -38,6 +38,7 @@ interface Equipe {
     somme_taux: number;
     premier_chauffeur_nom: string | null;
     premier_chauffeur_telephone: string | null;
+    vehicule_id: string | null;
     vehicule_nom: string | null;
     vehicule_immatriculation: string | null;
     vehicule_categorie: 'interne' | 'externe' | null;
@@ -388,11 +389,11 @@ function confirmDelete(equipe: Equipe) {
                                     "
                                 />
                                 <DropdownMenuItem
-                                    v-if="can('equipes-livraison.update')"
+                                    v-if="can('equipes-livraison.update') && data.vehicule_id"
                                     as-child
                                 >
                                     <Link
-                                        :href="`/equipes-livraison/${data.id}/edit`"
+                                        :href="`/vehicules/${data.vehicule_id}`"
                                         class="flex items-center gap-2"
                                     >
                                         <Pencil class="h-4 w-4" />

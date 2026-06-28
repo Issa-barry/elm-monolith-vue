@@ -22,6 +22,7 @@ interface Membre {
 interface EquipeData {
     id: string;
     is_active: boolean;
+    vehicule_id: string | null;
     vehicule_nom: string | null;
     vehicule_immatriculation: string | null;
     vehicule_type_label: string | null;
@@ -98,8 +99,8 @@ function roleLabel(role: string, numero?: number): string {
                         </Button>
                     </Link>
                     <Link
-                        v-if="can('equipes-livraison.update')"
-                        :href="`/equipes-livraison/${equipe.id}/edit`"
+                        v-if="can('equipes-livraison.update') && equipe.vehicule_id"
+                        :href="`/vehicules/${equipe.vehicule_id}`"
                     >
                         <Button>
                             <Pencil class="mr-2 h-4 w-4" />

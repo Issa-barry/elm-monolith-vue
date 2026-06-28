@@ -6,11 +6,15 @@ test.setTimeout(120_000);
 /**
  * Vérifie que les 3 pages détail commission (Vente / Logistique / Propriétaire)
  * partagent désormais la même UI : 5 cartes résumé, mêmes tabs, même dialog de
- * paiement. La logistique s'appuie sur CommissionLogistiqueSeeder (toujours actif
- * dans DatabaseSeeder). Vente et Propriétaire dépendent de CommissionsSeeder, qui
- * est désactivé dans DatabaseSeeder — ces deux tests prennent donc la première
- * ligne disponible et se "skip" proprement si la liste est vide plutôt que
- * d'échouer sur des données qui n'existent pas dans cet environnement.
+ * paiement. La logistique s'appuie sur les transferts créés via UI dans
+ * global-setup.ts (aucun seeder). Vente et Propriétaire dépendent de
+ * CommissionsSeeder, désactivé dans DatabaseSeeder — ces deux tests prennent
+ * donc la première ligne disponible et se "skip" proprement si la liste est
+ * vide plutôt que d'échouer sur des données qui n'existent pas.
+ *
+ * Les tests logistique ciblent Thierno SALL (elm-2, 4 800 GNF impayé) plutôt
+ * qu'Aissatou BALDÉ car logistique-commission-flow.spec.ts paie intégralement
+ * Aissatou — Thierno reste impayé quelle que soit l'ordre d'exécution parallèle.
  */
 
 const SUMMARY_LABELS = [
@@ -46,7 +50,7 @@ test('détail Commission logistique — 5 cartes, tabs, dialog paiement', async 
     await page.goto('/comptabilite/commissions/logistique');
 
     const row = page
-        .locator('tbody tr', { hasText: /Aissatou\s+BALD/i })
+        .locator('tbody tr', { hasText: /Thierno\s+SALL/i })
         .first();
     await expect(row).toBeVisible({ timeout: 20_000 });
     await row.click();
@@ -69,7 +73,7 @@ test('détail Commission logistique — 5 cartes, tabs, dialog paiement', async 
 
     const dialog = page
         .locator('[role="dialog"]')
-        .filter({ hasText: /Aissatou/i });
+        .filter({ hasText: /Thierno/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
     await expect(dialog.getByText(/solde à payer/i)).toBeVisible();
     await page.keyboard.press('Escape');
@@ -199,7 +203,7 @@ test('filtres globaux présents et identiques sur Commission logistique et propr
 
     await page.goto('/comptabilite/commissions/logistique');
     const logistiqueRow = page
-        .locator('tbody tr', { hasText: /Aissatou\s+BALD/i })
+        .locator('tbody tr', { hasText: /Thierno\s+SALL/i })
         .first();
     await expect(logistiqueRow).toBeVisible({ timeout: 20_000 });
     await logistiqueRow.click();

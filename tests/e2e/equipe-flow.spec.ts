@@ -5,31 +5,21 @@ import {
     escapeRegExp,
     login,
     navigateToFirstSiteVehiclesTab,
-    openRowActions,
     randomDigits,
     selectOptionFromCombobox,
 } from './helpers';
 
-const E2E_EQUIPE_NOM_PREFIX = 'E2EEQ-';
+const E2E_VH_PREFIX = 'E2EEQ-';
 const SETUP_VH_PREFIX = 'E2EEQVH-';
-const SETUP_PROP_PREFIX = 'e2eeqprop';
 
 test.setTimeout(120_000);
 
-function equipeRowByPrefix(page: Page, prefix: string) {
-    return page
-        .locator('.p-datatable-table tbody tr:not(.p-datatable-emptymessage)', {
-            hasText: new RegExp(escapeRegExp(prefix), 'i'),
-        })
-        .first();
-}
-
-/** Navigue depuis la liste véhicules vers le formulaire de création d'équipe. */
-async function navigateToEquipeCreate(page: Page) {
+/** Navigue vers la fiche d'un véhicule E2EEQ-, onglet Équipe. */
+async function navigateToVehiculeEquipeTab(page: Page) {
     await page.goto('/vehicules');
     const vehiculeRow = page
         .locator('.p-datatable-table tbody tr:not(.p-datatable-emptymessage)', {
-            hasText: new RegExp(escapeRegExp(E2E_EQUIPE_NOM_PREFIX), 'i'),
+            hasText: new RegExp(escapeRegExp(E2E_VH_PREFIX), 'i'),
         })
         .first();
     await vehiculeRow.click();
@@ -39,10 +29,52 @@ async function navigateToEquipeCreate(page: Page) {
         .locator('aside button')
         .filter({ hasText: /equipe/i })
         .click();
-    await page.getByRole('button', { name: /ajouter une équipe/i }).click();
-    await page.waitForURL(/\/equipes-livraison\/create\?vehicule_id=/, {
-        timeout: 15_000,
-    });
+}
+
+/** Ouvre le stepper modal depuis l'onglet Équipe. */
+async function openStepperModal(page: Page) {
+    await navigateToVehiculeEquipeTab(page);
+    const btn = page
+        .getByRole('button', {
+            name: /ajouter une équipe|gérer l'équipe/i,
+        })
+        .first();
+    await expect(btn).toBeVisible({ timeout: 10_000 });
+    await btn.click();
+    await expect(
+        page.locator('[role="dialog"]').filter({ hasText: /équipe/i }),
+    ).toBeVisible({ timeout: 10_000 });
+}
+
+/**
+ * Ajoute une ligne membre dans le tableau inline de l'étape 1.
+ * Attend la présence des inputs par data-testid après clic sur "Ajouter une ligne".
+ */
+async function addMembreLigne(
+    dialog: ReturnType<Page['locator']>,
+    page: Page,
+    idx: number,
+    {
+        role,
+        prenom,
+        nom,
+        telephone,
+    }: { role: RegExp; prenom: string; nom: string; telephone: string },
+) {
+    await dialog.getByRole('button', { name: /ajouter une ligne/i }).click();
+
+    await selectOptionFromCombobox(
+        page,
+        page.getByTestId(`role-dropdown-${idx}`),
+        role,
+    );
+
+    await page.getByTestId(`prenom-${idx}`).fill(prenom);
+    await page.getByTestId(`nom-${idx}`).fill(nom);
+
+    const phoneInput = page.getByTestId(`telephone-${idx}`);
+    await phoneInput.click();
+    await phoneInput.fill(telephone);
 }
 
 test.beforeAll(async ({ browser }) => {
@@ -53,36 +85,22 @@ test.beforeAll(async ({ browser }) => {
         await ensureModuleEnabled(page, 'module.vehicules');
         const unique = randomDigits(6);
 
-        // Create an interne vehicle via the site detail Véhicules tab
         await navigateToFirstSiteVehiclesTab(page);
         await page.getByTestId('add-site-vehicle-btn').click();
         await page.waitForURL(/\/vehicules\/create\?site_id=/, {
             timeout: 15_000,
         });
-        await page.locator('#nom_vehicule').fill(`E2EEQ-${unique}`);
+        await page.locator('#nom_vehicule').fill(`${E2E_VH_PREFIX}${unique}`);
         await page
             .locator('#immatriculation')
             .fill(`${SETUP_VH_PREFIX}${unique}`);
-        // Only the type_vehicule combobox is active (categorie is locked to interne)
         const vhCombos = page.locator('#vehicule-form').getByRole('combobox');
         await selectOptionFromCombobox(page, vhCombos.first());
         await page
             .locator('#vehicule-form button[type="submit"]:visible')
             .first()
             .click();
-        await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, {
-            timeout: 20_000,
-        });
-
-        await page.goto('/proprietaires/create');
-        await page.locator('#prenom').fill(`${SETUP_PROP_PREFIX}${unique}`);
-        await page.locator('#nom').fill('E2ETest');
-        await page.locator('#telephone').fill(`620${unique}`);
-        await page
-            .locator('#proprietaire-form button[type="submit"]:visible')
-            .first()
-            .click();
-        await page.waitForURL(/\/proprietaires$/, { timeout: 20_000 });
+        await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 20_000 });
     } finally {
         await context.close();
     }
@@ -100,9 +118,8 @@ test.afterAll(async ({ browser }) => {
     try {
         await login(page);
         await cleanupRowsByPrefix(page, '/vehicules', SETUP_VH_PREFIX);
-        await cleanupRowsByPrefix(page, '/proprietaires', SETUP_PROP_PREFIX);
     } catch (e) {
-        console.warn('E2E equipe beforeAll cleanup warning:', e);
+        console.warn('E2E equipe afterAll cleanup warning:', e);
     } finally {
         await context.close();
     }
@@ -111,53 +128,45 @@ test.afterAll(async ({ browser }) => {
 test.afterEach(async ({ browser }) => {
     try {
         const context = await browser.newContext();
+        const page = await context.newPage();
         try {
-            const page = await context.newPage();
             await login(page);
-            await ensureModuleEnabled(page, 'module.vehicules');
             await page.goto('/equipes-livraison');
-
             const searchInput = page
                 .locator(
                     'input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible',
                 )
                 .first();
-            await searchInput
-                .fill(E2E_EQUIPE_NOM_PREFIX)
-                .catch(() => undefined);
+            await searchInput.fill(E2E_VH_PREFIX).catch(() => undefined);
             await searchInput.press('Enter').catch(() => undefined);
-            await page.waitForLoadState('networkidle').catch(() => undefined);
+            await page
+                .waitForLoadState('networkidle')
+                .catch(() => undefined);
 
             for (let i = 0; i < 4; i++) {
-                const row = equipeRowByPrefix(page, E2E_EQUIPE_NOM_PREFIX);
+                const row = page
+                    .locator(
+                        '.p-datatable-table tbody tr:not(.p-datatable-emptymessage)',
+                        {
+                            hasText: new RegExp(
+                                escapeRegExp(E2E_VH_PREFIX),
+                                'i',
+                            ),
+                        },
+                    )
+                    .first();
                 if (!(await row.isVisible().catch(() => false))) break;
-
-                try {
-                    await row.locator('button').last().click({ timeout: 3000 });
-                    const deleteItem = page
-                        .getByRole('menuitem', { name: /supprimer/i })
-                        .first();
-                    if (!(await deleteItem.isVisible().catch(() => false)))
-                        break;
-                    await deleteItem.click({ timeout: 3000, force: true });
-
-                    const confirmBtn = page
-                        .getByRole('button', { name: /^supprimer$/i })
-                        .last();
-                    if (!(await confirmBtn.isVisible().catch(() => false)))
-                        break;
-                    await confirmBtn.click({ timeout: 3000 });
-                } catch {
-                    break;
-                }
-
-                await page
-                    .waitForLoadState('networkidle')
-                    .catch(() => undefined);
-                await searchInput
-                    .fill(E2E_EQUIPE_NOM_PREFIX)
-                    .catch(() => undefined);
-                await searchInput.press('Enter').catch(() => undefined);
+                await row.locator('button').last().click({ timeout: 3000 });
+                const deleteItem = page
+                    .getByRole('menuitem', { name: /supprimer/i })
+                    .first();
+                if (!(await deleteItem.isVisible().catch(() => false))) break;
+                await deleteItem.click({ timeout: 3000, force: true });
+                const confirmBtn = page
+                    .getByRole('button', { name: /^supprimer$/i })
+                    .last();
+                if (!(await confirmBtn.isVisible().catch(() => false))) break;
+                await confirmBtn.click({ timeout: 3000 });
                 await page
                     .waitForLoadState('networkidle')
                     .catch(() => undefined);
@@ -166,147 +175,180 @@ test.afterEach(async ({ browser }) => {
             await context.close().catch(() => undefined);
         }
     } catch (e) {
-        console.warn('E2E equipe cleanup warning:', e);
+        console.warn('E2E equipe afterEach cleanup warning:', e);
     }
 });
 
-test('create equipe depuis vehicule avec chauffeur et partage + verify list', async ({
+test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     page,
 }) => {
-    await navigateToEquipeCreate(page);
+    await openStepperModal(page);
 
-    // Le véhicule est verrouillé (pre-sélectionné depuis la fiche)
-    await expect(page.getByTestId('vehicule-locked')).toBeVisible({
-        timeout: 10_000,
-    });
+    const dialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /équipe/i });
+
+    // Étape 1 : Membres — tableau inline (pas de sous-modal)
+    await expect(dialog.getByText(/membres/i).first()).toBeVisible();
     await expect(
-        page
-            .getByText(new RegExp(escapeRegExp(E2E_EQUIPE_NOM_PREFIX), 'i'))
-            .first(),
-    ).toBeVisible();
+        page.locator('[role="dialog"]').filter({ hasText: /nouveau membre/i }),
+    ).not.toBeVisible();
 
-    await page
-        .locator('button', { hasText: /ajouter un membre/i })
-        .first()
-        .click();
+    await addMembreLigne(dialog, page, 0, {
+        role: /chauffeur/i,
+        prenom: 'Mamadou',
+        nom: 'Diallo',
+        telephone: '620111222',
+    });
 
-    const membreDialog = page
-        .locator('[role="dialog"]')
-        .filter({ hasText: /nouveau membre/i });
-    await expect(membreDialog).toBeVisible({ timeout: 10_000 });
-    await expect(membreDialog.locator('text=+224')).toBeVisible();
+    // +224 affiché dans la ligne inline
+    await expect(dialog.getByText('+224').first()).toBeVisible();
+    // Prénom visible dans le tableau
+    await expect(page.getByTestId('prenom-0')).toHaveValue('Mamadou');
 
-    await selectOptionFromCombobox(
-        page,
-        membreDialog.getByRole('combobox').first(),
-        /chauffeur/i,
-    );
-    await membreDialog.locator('#membre-prenom').fill('Mamadou');
-    await membreDialog.locator('#membre-nom').fill('Diallo');
-    await membreDialog.locator('#membre-telephone').fill('620111222');
-    await membreDialog.locator('button', { hasText: /ajouter/i }).click();
-    await expect(membreDialog).toBeHidden({ timeout: 5_000 });
+    // Passer à l'étape 2
+    await dialog.getByRole('button', { name: /suivant/i }).click();
+    await expect(dialog.getByText(/partage/i).first()).toBeVisible({
+        timeout: 5_000,
+    });
 
-    await page
-        .locator('button', { hasText: /configurer le partage/i })
-        .first()
-        .click();
+    // Saisir commission
+    const commissionInput = dialog.locator('input#step-commission');
+    await commissionInput.click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('200');
+    await page.keyboard.press('Tab');
 
-    const partageDialog = page
-        .locator('[role="dialog"]')
-        .filter({ hasText: /configurer le partage/i });
-    await expect(partageDialog).toBeVisible({ timeout: 10_000 });
-
-    const premierMontantInput = partageDialog
+    // Saisir le montant du membre dans le tableau de partage
+    const membreMontantInput = dialog
         .locator('tbody tr')
         .first()
         .locator('td')
         .nth(1)
         .locator('input');
-    await premierMontantInput.click();
+    await membreMontantInput.click();
     await page.keyboard.press('Control+a');
     await page.keyboard.type('200');
     await page.keyboard.press('Tab');
 
-    const validerBtn = partageDialog.locator('button', {
-        hasText: /valider le partage/i,
-    });
-    await expect(validerBtn).toBeEnabled({ timeout: 5_000 });
-    await validerBtn.click();
-    await expect(partageDialog).toBeHidden({ timeout: 5_000 });
+    await expect(dialog.getByText('✓ 100 %')).toBeVisible({ timeout: 5_000 });
 
-    await page.locator('form button[type="submit"]:visible').first().click();
-    await expect(page).toHaveURL(/\/equipes-livraison\/[a-z0-9]+$/, {
-        timeout: 20_000,
-    });
+    // Passer à l'étape 3
+    await dialog.getByRole('button', { name: /suivant/i }).click();
+    await expect(
+        dialog.getByText(/récapitulatif/i).first(),
+    ).toBeVisible({ timeout: 5_000 });
 
-    await page.goto('/equipes-livraison');
-    await expect(page).toHaveURL(/\/equipes-livraison$/);
+    // Vérifier le récap
+    await expect(dialog.getByText(/Mamadou/i).first()).toBeVisible();
+    await expect(dialog.getByText(/200 GNF/i).first()).toBeVisible();
 
-    const searchInput = page
-        .locator(
-            'input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible',
-        )
-        .first();
-    await searchInput.fill(E2E_EQUIPE_NOM_PREFIX);
-    await searchInput.press('Enter');
-    await page.waitForLoadState('networkidle');
-
-    const row = equipeRowByPrefix(page, E2E_EQUIPE_NOM_PREFIX);
-    await expect(row).toBeVisible({ timeout: 10_000 });
-
-    await openRowActions(row);
-    await page
-        .getByRole('menuitem', { name: /modifier/i })
-        .first()
+    // Enregistrer
+    await dialog
+        .getByRole('button', { name: /valider l'équipe/i })
         .click();
-    await expect(page).toHaveURL(/\/equipes-livraison\/[a-z0-9]+\/edit$/);
+    await expect(dialog).toBeHidden({ timeout: 20_000 });
 
+    // Après enregistrement, la page véhicule montre les membres
+    await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+$/, {
+        timeout: 15_000,
+    });
+    await page.locator('aside button').filter({ hasText: /equipe/i }).click();
     await expect(page.getByText(/Mamadou/i).first()).toBeVisible({
         timeout: 10_000,
     });
 });
 
-test('equipe index ne propose plus de bouton creation directe', async ({
+test('equipe index ne propose pas de bouton création directe', async ({
     page,
 }) => {
     await page.goto('/equipes-livraison');
-    await expect(page).toHaveURL(/\/equipes-livraison$/);
     await expect(
         page.getByRole('link', { name: /nouvelle équipe/i }),
     ).not.toBeVisible();
 });
 
-test('formulaire equipe sans membres desactive le submit', async ({ page }) => {
-    await navigateToEquipeCreate(page);
-
-    // Véhicule verrouillé, aucun membre → submit désactivé
-    const submitBtn = page
-        .locator('form button[type="submit"]:visible')
-        .first();
-    await expect(submitBtn).toBeDisabled();
-});
-
-test('membre modal affiche prefixe +224 et rejette telephone invalide', async ({
+test('stepper étape 1 : bouton Suivant désactivé sans membres', async ({
     page,
 }) => {
-    await navigateToEquipeCreate(page);
-
-    await page
-        .locator('button', { hasText: /ajouter un membre/i })
-        .first()
-        .click();
-
+    await openStepperModal(page);
     const dialog = page
         .locator('[role="dialog"]')
-        .filter({ hasText: /nouveau membre/i });
-    await expect(dialog).toBeVisible({ timeout: 10_000 });
-    await expect(dialog.locator('text=+224')).toBeVisible();
+        .filter({ hasText: /équipe/i });
+    const suivantBtn = dialog.getByRole('button', { name: /suivant/i });
+    await expect(suivantBtn).toBeDisabled();
+});
 
-    await dialog.locator('#membre-telephone').fill('abc');
-    const phoneValue = await dialog.locator('#membre-telephone').inputValue();
+test('étape 1 inline : +224 affiché et téléphone invalide bloqué', async ({
+    page,
+}) => {
+    await openStepperModal(page);
+    const dialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /équipe/i });
+
+    // Pas de sous-modal
+    await expect(
+        page.locator('[role="dialog"]').filter({ hasText: /nouveau membre/i }),
+    ).not.toBeVisible();
+
+    // Ajouter une ligne inline
+    await dialog.getByRole('button', { name: /ajouter une ligne/i }).click();
+
+    // +224 est visible dans la ligne inline
+    await expect(dialog.getByText('+224').first()).toBeVisible();
+
+    // Tenter de saisir des lettres dans le champ téléphone
+    const phoneInput = page.getByTestId('telephone-0');
+    await phoneInput.click();
+    await page.keyboard.type('abcdefghi');
+    const phoneValue = await phoneInput.inputValue();
     expect(phoneValue.replace(/\D/g, '')).toBe('');
+});
 
-    await dialog.locator('button', { hasText: /annuler/i }).click();
-    await expect(dialog).toBeHidden({ timeout: 5_000 });
+test('étape 1 inline : validation bloque si champs vides', async ({
+    page,
+}) => {
+    await openStepperModal(page);
+    const dialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /équipe/i });
+
+    // Ajouter une ligne vide
+    await dialog.getByRole('button', { name: /ajouter une ligne/i }).click();
+
+    // Tenter de passer à l'étape 2 sans remplir la ligne
+    await dialog.getByRole('button', { name: /suivant/i }).click();
+
+    // Doit rester sur l'étape 1 (erreurs inline visibles)
+    await expect(dialog.getByText(/requis/i).first()).toBeVisible({
+        timeout: 3_000,
+    });
+    // Toujours à l'étape 1
+    await expect(dialog.getByText(/partage/i).first()).not.toBeVisible();
+});
+
+test('étape 1 inline : supprimer une ligne sans sous-modal', async ({
+    page,
+}) => {
+    await openStepperModal(page);
+    const dialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /équipe/i });
+
+    // Ajouter deux lignes
+    await dialog.getByRole('button', { name: /ajouter une ligne/i }).click();
+    await dialog.getByRole('button', { name: /ajouter une ligne/i }).click();
+
+    // 2 champs prénom visibles
+    await expect(page.getByTestId('prenom-0')).toBeVisible();
+    await expect(page.getByTestId('prenom-1')).toBeVisible();
+
+    // Supprimer la première ligne (bouton poubelle dans la ligne 0)
+    const rows = dialog.locator('tbody tr');
+    await rows.first().locator('button').click();
+
+    // Il ne reste plus qu'une ligne
+    await expect(page.getByTestId('prenom-0')).toBeVisible();
+    await expect(page.getByTestId('prenom-1')).not.toBeVisible();
 });

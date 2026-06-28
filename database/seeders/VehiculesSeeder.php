@@ -28,7 +28,7 @@ use Illuminate\Database\Seeder;
  * | elm-2    | Minibus 200 | ELM Logistique 2 | ELM-002-GN | Matoto |
  * | elm-3    | Camion      | ELM Logistique 3 | ELM-003-GN | Matoto |
  * | elm-4    | Minibus 200 | ELM Logistique 4 | ELM-004-GN | Matoto |
- * | Cousin   | —           | Cousin           | BK-4627-02 | Kouria |
+ * | Cousin   | Camion      | Cousin           | BK-4627-02 | Kouria |
  */
 class VehiculesSeeder extends Seeder
 {
@@ -203,7 +203,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => null,
                 'modele' => null,
                 'immatriculation' => 'BK-4627-02',
-                'type_vehicule_id' => null,
+                'type_vehicule_id' => $type('Camion'),
                 'capacite_packs' => 200,
                 'categorie' => 'interne',
                 'site_id' => $kouria->id,
