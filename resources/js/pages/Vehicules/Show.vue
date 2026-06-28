@@ -123,6 +123,18 @@ const totalApprouve = computed(() =>
         .reduce((s, d) => s + d.montant, 0),
 );
 
+const totalLivreurs = computed(() =>
+    props.vehicule.equipe_membres.reduce((s, m) => s + m.montant_par_pack, 0),
+);
+
+const tauxLivreurs = computed(() =>
+    parseFloat(
+        props.vehicule.equipe_membres
+            .reduce((s, m) => s + m.taux_commission, 0)
+            .toFixed(2),
+    ),
+);
+
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
@@ -556,6 +568,76 @@ function formatGNF(val: number): string {
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+
+                        <!-- Récap répartition -->
+                        <div
+                            v-if="
+                                equipe && vehicule.equipe_membres.length > 0
+                            "
+                            class="mt-2 rounded-lg border bg-muted/30 p-4"
+                        >
+                            <p
+                                class="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Répartition par pack
+                            </p>
+                            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                                <div>
+                                    <p class="text-xs text-muted-foreground">
+                                        Commission totale
+                                    </p>
+                                    <p
+                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
+                                    >
+                                        {{
+                                            formatGNF(
+                                                equipe.commission_unitaire_par_pack,
+                                            )
+                                        }}
+                                    </p>
+                                    <p class="text-xs text-muted-foreground">
+                                        100%
+                                    </p>
+                                </div>
+                                <div
+                                    v-if="
+                                        vehicule.categorie === 'externe' &&
+                                        equipe.montant_par_pack_proprietaire
+                                    "
+                                >
+                                    <p class="text-xs text-muted-foreground">
+                                        Part propriétaire
+                                    </p>
+                                    <p
+                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
+                                    >
+                                        {{
+                                            formatGNF(
+                                                equipe.montant_par_pack_proprietaire,
+                                            )
+                                        }}
+                                    </p>
+                                    <p class="text-xs text-muted-foreground">
+                                        {{
+                                            equipe.taux_commission_proprietaire
+                                        }}%
+                                    </p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-muted-foreground">
+                                        Part livreurs
+                                    </p>
+                                    <p
+                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
+                                    >
+                                        {{ formatGNF(totalLivreurs) }}
+                                    </p>
+                                    <p class="text-xs text-muted-foreground">
+                                        {{ tauxLivreurs }}%
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
