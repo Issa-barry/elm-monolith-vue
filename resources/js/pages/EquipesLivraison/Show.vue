@@ -99,7 +99,10 @@ function roleLabel(role: string, numero?: number): string {
                         </Button>
                     </Link>
                     <Link
-                        v-if="can('equipes-livraison.update') && equipe.vehicule_id"
+                        v-if="
+                            can('equipes-livraison.update') &&
+                            equipe.vehicule_id
+                        "
                         :href="`/vehicules/${equipe.vehicule_id}`"
                     >
                         <Button>

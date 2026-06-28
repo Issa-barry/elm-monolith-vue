@@ -444,7 +444,10 @@ function formatGNF(val: number): string {
                             </p>
                         </div>
                         <Button
-                            v-if="can('equipes-livraison.update') && vehicule.equipe_id"
+                            v-if="
+                                can('equipes-livraison.update') &&
+                                vehicule.equipe_id
+                            "
                             size="sm"
                             @click="showStepperModal = true"
                         >
@@ -496,7 +499,9 @@ function formatGNF(val: number): string {
                                         <th class="px-4 py-3 font-medium">
                                             Montant / pack
                                         </th>
-                                        <th class="px-4 py-3 text-right font-medium">
+                                        <th
+                                            class="px-4 py-3 text-right font-medium"
+                                        >
                                             Commission
                                         </th>
                                     </tr>
@@ -512,8 +517,16 @@ function formatGNF(val: number): string {
                                         <td class="px-4 py-3 font-medium">
                                             {{ m.livreur_nom ?? '—' }}
                                         </td>
-                                        <td class="px-4 py-3 font-mono text-xs text-muted-foreground">
-                                            {{ m.telephone ? formatPhoneDisplay(m.telephone) : '—' }}
+                                        <td
+                                            class="px-4 py-3 font-mono text-xs text-muted-foreground"
+                                        >
+                                            {{
+                                                m.telephone
+                                                    ? formatPhoneDisplay(
+                                                          m.telephone,
+                                                      )
+                                                    : '—'
+                                            }}
                                         </td>
                                         <td class="px-4 py-3">
                                             <span
@@ -528,9 +541,16 @@ function formatGNF(val: number): string {
                                             >
                                         </td>
                                         <td class="px-4 py-3 font-mono text-sm">
-                                            {{ m.montant_par_pack.toLocaleString('fr-FR') }} GNF
+                                            {{
+                                                m.montant_par_pack.toLocaleString(
+                                                    'fr-FR',
+                                                )
+                                            }}
+                                            GNF
                                         </td>
-                                        <td class="px-4 py-3 text-right text-muted-foreground">
+                                        <td
+                                            class="px-4 py-3 text-right text-muted-foreground"
+                                        >
                                             {{ m.taux_commission }}%
                                         </td>
                                     </tr>

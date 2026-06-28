@@ -160,8 +160,7 @@ watch(
                 _errors: {},
             }));
             commission.value = props.equipe.commission_unitaire_par_pack;
-            montantProp.value =
-                props.equipe.montant_par_pack_proprietaire ?? 0;
+            montantProp.value = props.equipe.montant_par_pack_proprietaire ?? 0;
         } else {
             membres.value = [];
             commission.value = 0;
@@ -194,11 +193,22 @@ function removeLigne(idx: number) {
 
 function handlePhoneKeydown(e: KeyboardEvent) {
     const pass = [
-        'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
-        'ArrowLeft', 'ArrowRight', 'Home', 'End',
+        'Backspace',
+        'Delete',
+        'Tab',
+        'Escape',
+        'Enter',
+        'ArrowLeft',
+        'ArrowRight',
+        'Home',
+        'End',
     ];
     if (pass.includes(e.key)) return;
-    if ((e.ctrlKey || e.metaKey) && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())) return;
+    if (
+        (e.ctrlKey || e.metaKey) &&
+        ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())
+    )
+        return;
     if (!/^\d$/.test(e.key)) e.preventDefault();
 }
 
@@ -216,9 +226,18 @@ function validateStep1(): boolean {
 
     membres.value.forEach((m) => {
         m._errors = {};
-        if (!m.role) { m._errors.role = 'Rôle requis'; valid = false; }
-        if (!m.prenom.trim()) { m._errors.prenom = 'Prénom requis'; valid = false; }
-        if (!m.nom.trim()) { m._errors.nom = 'Nom requis'; valid = false; }
+        if (!m.role) {
+            m._errors.role = 'Rôle requis';
+            valid = false;
+        }
+        if (!m.prenom.trim()) {
+            m._errors.prenom = 'Prénom requis';
+            valid = false;
+        }
+        if (!m.nom.trim()) {
+            m._errors.nom = 'Nom requis';
+            valid = false;
+        }
         if (!m.telephone || !/^\d{9}$/.test(m.telephone)) {
             m._errors.telephone = '9 chiffres requis';
             valid = false;
@@ -445,7 +464,11 @@ const hasStep1Errors = computed(() =>
         :style="{ width: 'min(960px, 95vw)' }"
         :dismissable-mask="false"
         :closable="true"
-        @update:visible="(val) => { if (!val) requestClose(); }"
+        @update:visible="
+            (val) => {
+                if (!val) requestClose();
+            }
+        "
     >
         <!-- ── Indicateur d'étapes ────────────────────────────────────────── -->
         <div class="mb-6 flex items-center gap-2">
@@ -496,7 +519,9 @@ const hasStep1Errors = computed(() =>
         <!-- ── Étape 1 : Membres ─────────────────────────────────────────── -->
         <div v-if="step === 1" class="space-y-4">
             <p v-if="membres.length > 0" class="text-sm text-muted-foreground">
-                <span class="font-medium text-foreground">{{ membres.length }}</span>
+                <span class="font-medium text-foreground">{{
+                    membres.length
+                }}</span>
                 membre{{ membres.length !== 1 ? 's' : '' }}
             </p>
 
@@ -504,7 +529,8 @@ const hasStep1Errors = computed(() =>
                 v-if="membres.length === 0"
                 class="rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground"
             >
-                Aucun membre. Cliquez sur « + Ajouter un membre » ci-dessous pour commencer.
+                Aucun membre. Cliquez sur « + Ajouter un membre » ci-dessous
+                pour commencer.
             </div>
 
             <div v-else class="overflow-x-auto rounded-lg border">
@@ -640,10 +666,7 @@ const hasStep1Errors = computed(() =>
                 </table>
             </div>
 
-            <p
-                v-if="hasStep1Errors"
-                class="text-xs text-destructive"
-            >
+            <p v-if="hasStep1Errors" class="text-xs text-destructive">
                 Corrigez les erreurs dans le tableau avant de continuer.
             </p>
         </div>
@@ -672,7 +695,10 @@ const hasStep1Errors = computed(() =>
                 </p>
             </div>
 
-            <div v-if="lignes.length > 0" class="overflow-hidden rounded-lg border">
+            <div
+                v-if="lignes.length > 0"
+                class="overflow-hidden rounded-lg border"
+            >
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b bg-muted/40">
@@ -725,9 +751,7 @@ const hasStep1Errors = computed(() =>
                                     :max="100"
                                     :max-fraction-digits="2"
                                     suffix=" %"
-                                    :disabled="
-                                        !commission || commission <= 0
-                                    "
+                                    :disabled="!commission || commission <= 0"
                                     class="w-full"
                                     :input-style="{
                                         textAlign: 'right',
@@ -742,9 +766,7 @@ const hasStep1Errors = computed(() =>
                     </tbody>
                     <tfoot>
                         <tr class="border-t bg-muted/20">
-                            <td
-                                class="px-3 py-2.5 text-sm font-semibold"
-                            >
+                            <td class="px-3 py-2.5 text-sm font-semibold">
                                 Total
                             </td>
                             <td
@@ -837,9 +859,7 @@ const hasStep1Errors = computed(() =>
             </div>
 
             <div class="overflow-hidden rounded-lg border">
-                <div
-                    class="border-b bg-muted/30 px-4 py-2.5"
-                >
+                <div class="border-b bg-muted/30 px-4 py-2.5">
                     <p
                         class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                     >
@@ -860,10 +880,7 @@ const hasStep1Errors = computed(() =>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
-                        <tr
-                            v-for="(m, i) in membres"
-                            :key="i"
-                        >
+                        <tr v-for="(m, i) in membres" :key="i">
                             <td class="px-4 py-2.5 font-medium">
                                 {{ m.prenom }} {{ m.nom }}
                             </td>

@@ -389,7 +389,10 @@ function confirmDelete(equipe: Equipe) {
                                     "
                                 />
                                 <DropdownMenuItem
-                                    v-if="can('equipes-livraison.update') && data.vehicule_id"
+                                    v-if="
+                                        can('equipes-livraison.update') &&
+                                        data.vehicule_id
+                                    "
                                     as-child
                                 >
                                     <Link
