@@ -46,35 +46,6 @@ async function openStepperModal(page: Page) {
     ).toBeVisible({ timeout: 10_000 });
 }
 
-/**
- * Ajoute un membre via le bouton footer "Ajouter un membre" de l'étape 1.
- */
-async function addMembreLigne(
-    dialog: ReturnType<Page['locator']>,
-    page: Page,
-    idx: number,
-    {
-        role,
-        prenom,
-        nom,
-        telephone,
-    }: { role: RegExp; prenom: string; nom: string; telephone: string },
-) {
-    await dialog.getByRole('button', { name: /ajouter un membre/i }).click();
-
-    await selectOptionFromCombobox(
-        page,
-        page.getByTestId(`role-dropdown-${idx}`),
-        role,
-    );
-
-    await page.getByTestId(`prenom-${idx}`).fill(prenom);
-    await page.getByTestId(`nom-${idx}`).fill(nom);
-
-    const phoneInput = page.getByTestId(`telephone-${idx}`);
-    await phoneInput.click();
-    await phoneInput.fill(telephone);
-}
 
 test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext();
