@@ -736,13 +736,15 @@ const hasStep1Errors = computed(() =>
                             :key="ligne.id"
                             class="border-b last:border-b-0"
                             :class="
-                                ligne.id === 'proprietaire' ? 'bg-primary/5' : ''
+                                ligne.id === 'proprietaire'
+                                    ? 'bg-primary/5'
+                                    : ''
                             "
                         >
                             <td class="px-3 py-2 text-sm">
                                 <template v-if="ligne.id === 'proprietaire'">
                                     <span
-                                        class="mr-1.5 inline-flex items-center rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground uppercase tracking-wide"
+                                        class="mr-1.5 inline-flex items-center rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold tracking-wide text-primary-foreground uppercase"
                                         >Propriétaire</span
                                     >
                                     <span class="font-medium text-primary">{{

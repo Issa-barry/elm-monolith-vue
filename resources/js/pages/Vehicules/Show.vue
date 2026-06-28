@@ -224,10 +224,21 @@ function formatGNF(val: number): string {
                     </div>
                 </template>
                 <template #actions>
+                    <Link
+                        v-if="vehicule.proprietaire_id"
+                        :href="`/proprietaires/${vehicule.proprietaire_id}`"
+                        target="_blank"
+                        data-testid="voir-fiche-proprietaire-btn"
+                    >
+                        <Button variant="outline" size="sm">
+                            <ExternalLink class="mr-1.5 h-4 w-4" />
+                            Fiche propriétaire
+                        </Button>
+                    </Link>
                     <Link href="/vehicules">
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
-                            Retour
+                            Liste de véhicules
                         </Button>
                     </Link>
                     <Link
@@ -398,15 +409,6 @@ function formatGNF(val: number): string {
                                         )
                                     }}
                                 </p>
-                                <Link
-                                    :href="`/proprietaires/${vehicule.proprietaire_id}`"
-                                    target="_blank"
-                                    data-testid="voir-fiche-proprietaire-btn"
-                                    class="mt-3 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-                                >
-                                    Voir la fiche propriétaire
-                                    <ExternalLink class="h-3 w-3 opacity-60" />
-                                </Link>
                             </template>
                             <template v-else>
                                 <p class="mt-1 text-sm text-muted-foreground">
@@ -573,9 +575,7 @@ function formatGNF(val: number): string {
 
                         <!-- Récap répartition -->
                         <div
-                            v-if="
-                                equipe && vehicule.equipe_membres.length > 0
-                            "
+                            v-if="equipe && vehicule.equipe_membres.length > 0"
                             class="mt-2 rounded-lg border bg-muted/30 p-4"
                         >
                             <p
