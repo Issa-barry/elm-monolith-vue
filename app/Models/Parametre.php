@@ -51,6 +51,10 @@ class Parametre extends Model
 
     public const CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX = 'ventes_autoriser_saisie_dessous_qte_max';
 
+    public const CLE_VENTES_CONTROLE_IMPAYES_ACTIF = 'ventes_controle_impayes_actif';
+
+    public const CLE_VENTES_SEUIL_IMPAYES_MAX = 'ventes_seuil_impayes_max';
+
     protected $fillable = [
         'organization_id',
         'cle',
@@ -113,6 +117,8 @@ class Parametre extends Model
             self::CLE_CASHBACK_SEUIL_ACHAT,
             self::CLE_CASHBACK_MONTANT_GAIN,
             self::CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX,
+            self::CLE_VENTES_CONTROLE_IMPAYES_ACTIF,
+            self::CLE_VENTES_SEUIL_IMPAYES_MAX,
         ] as $cle) {
             Cache::forget(self::cacheKey($orgId, $cle));
         }
@@ -175,6 +181,41 @@ class Parametre extends Model
         );
 
         Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX));
+    }
+
+    public static function isVentesControleImpayesActif(string $orgId): bool
+    {
+        return (bool) self::get($orgId, self::CLE_VENTES_CONTROLE_IMPAYES_ACTIF, false);
+    }
+
+    public static function getVentesSeuilImpayesMax(string $orgId): int
+    {
+        return (int) self::get($orgId, self::CLE_VENTES_SEUIL_IMPAYES_MAX, 0);
+    }
+
+    public static function setVentesControleImpayes(string $orgId, bool $actif, int $seuil): void
+    {
+        static::updateOrCreate(
+            ['organization_id' => $orgId, 'cle' => self::CLE_VENTES_CONTROLE_IMPAYES_ACTIF],
+            [
+                'valeur' => $actif ? '1' : '0',
+                'type' => self::TYPE_BOOLEAN,
+                'groupe' => self::GROUPE_VENTES,
+                'description' => 'Activer le blocage de commande sur seuil d\'impayes',
+            ],
+        );
+        Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_CONTROLE_IMPAYES_ACTIF));
+
+        static::updateOrCreate(
+            ['organization_id' => $orgId, 'cle' => self::CLE_VENTES_SEUIL_IMPAYES_MAX],
+            [
+                'valeur' => (string) $seuil,
+                'type' => self::TYPE_INTEGER,
+                'groupe' => self::GROUPE_VENTES,
+                'description' => 'Seuil maximum de dette autorise (GNF)',
+            ],
+        );
+        Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_SEUIL_IMPAYES_MAX));
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────

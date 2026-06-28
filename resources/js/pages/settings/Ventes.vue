@@ -5,8 +5,8 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
-import { Lock, PackageCheck, ShieldCheck } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { AlertTriangle, Lock, PackageCheck, ShieldCheck } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
 
 interface RoleQuantite {
     name: string;
@@ -19,6 +19,8 @@ interface RoleQuantite {
 const props = defineProps<{
     roles: RoleQuantite[];
     autoriser_saisie_dessous_qte_max: boolean;
+    controle_impayes_actif: boolean;
+    seuil_impayes_max: number;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -39,6 +41,8 @@ const form = useForm({
         .filter((role) => role.can_update_prix_unitaire && !role.locked)
         .map((role) => role.name),
     autoriser_saisie_dessous_qte_max: props.autoriser_saisie_dessous_qte_max,
+    controle_impayes_actif: props.controle_impayes_actif,
+    seuil_impayes_max: props.seuil_impayes_max,
 });
 
 type EditableRoleField = 'quantity_edit_role_names' | 'price_edit_role_names';
@@ -63,6 +67,36 @@ function toggleRole(role: RoleQuantite, field: EditableRoleField) {
 
 function submit() {
     form.put('/settings/ventes', { preserveScroll: true });
+}
+
+// ── Formatage seuil impayés ───────────────────────────────────────────────────
+function formatSeuil(val: number): string {
+    return val > 0 ? new Intl.NumberFormat('fr-FR').format(val) : '';
+}
+
+const seuilDisplay = ref(formatSeuil(props.seuil_impayes_max));
+
+watch(
+    () => form.seuil_impayes_max,
+    (val) => {
+        if (document.activeElement?.id !== 'seuil-impayes-input') {
+            seuilDisplay.value = formatSeuil(val);
+        }
+    },
+);
+
+function onSeuilInput(e: Event) {
+    const raw = (e.target as HTMLInputElement).value.replace(/\D/g, '');
+    form.seuil_impayes_max = raw ? parseInt(raw, 10) : 0;
+}
+
+function onSeuilFocus() {
+    seuilDisplay.value =
+        form.seuil_impayes_max > 0 ? String(form.seuil_impayes_max) : '';
+}
+
+function onSeuilBlur() {
+    seuilDisplay.value = formatSeuil(form.seuil_impayes_max);
 }
 </script>
 
@@ -262,6 +296,100 @@ function submit() {
                                 "
                             />
                         </button>
+                    </div>
+                </div>
+
+                <div class="overflow-hidden rounded-xl border bg-card">
+                    <div
+                        class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
+                    >
+                        <AlertTriangle class="h-4 w-4 text-muted-foreground" />
+                        <h3 class="text-sm font-semibold text-foreground">
+                            Controle des impayes
+                        </h3>
+                    </div>
+
+                    <div
+                        class="flex items-center justify-between gap-4 px-5 py-4"
+                    >
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-medium text-foreground">
+                                Activer le blocage sur seuil d'impayes
+                            </p>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                Si active, la creation de commande est interdite
+                                lorsque la dette du client ou du vehicule depasse
+                                le seuil ci-dessous.
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            role="switch"
+                            :aria-checked="form.controle_impayes_actif"
+                            :disabled="form.processing"
+                            class="relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                            :class="
+                                form.controle_impayes_actif
+                                    ? 'bg-primary'
+                                    : 'bg-input'
+                            "
+                            @click="
+                                form.controle_impayes_actif =
+                                    !form.controle_impayes_actif
+                            "
+                        >
+                            <span
+                                class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
+                                :class="
+                                    form.controle_impayes_actif
+                                        ? 'translate-x-5'
+                                        : 'translate-x-0'
+                                "
+                            />
+                        </button>
+                    </div>
+
+                    <div class="border-t px-5 py-4">
+                        <div class="flex items-center gap-4">
+                            <div class="min-w-0 flex-1">
+                                <p
+                                    class="text-sm font-medium"
+                                    :class="
+                                        form.controle_impayes_actif
+                                            ? 'text-foreground'
+                                            : 'text-muted-foreground'
+                                    "
+                                >
+                                    Seuil maximum de dette autorise (GNF)
+                                </p>
+                                <p class="mt-0.5 text-xs text-muted-foreground">
+                                    La commande est bloquee si la dette depasse
+                                    ce montant. 0 = aucune dette toleree.
+                                </p>
+                            </div>
+                            <div class="relative">
+                                <input
+                                    id="seuil-impayes-input"
+                                    type="text"
+                                    inputmode="numeric"
+                                    :value="seuilDisplay"
+                                    placeholder="0"
+                                    :disabled="
+                                        !form.controle_impayes_actif ||
+                                        form.processing
+                                    "
+                                    class="w-52 rounded-md border bg-background py-2 pl-3 pr-14 text-right text-lg font-bold tabular-nums shadow-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                    @input="onSeuilInput"
+                                    @focus="onSeuilFocus"
+                                    @blur="onSeuilBlur"
+                                />
+                                <span
+                                    class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-muted-foreground"
+                                    >GNF</span
+                                >
+                            </div>
+                        </div>
                     </div>
                 </div>
 

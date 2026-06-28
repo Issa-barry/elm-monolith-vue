@@ -42,6 +42,10 @@ interface SolvabiliteResult {
     total_encaisse: number;
     last_invoice_reference: string | null;
     last_invoice_date: string | null;
+    controle_actif: boolean;
+    seuil_impayes: number;
+    blocked: boolean;
+    depassement: number;
     factures: FactureDetail[];
 }
 
@@ -365,12 +369,20 @@ onMounted(() => {
 // ── Type de commande ──────────────────────────────────────────────────────────
 const isCommandeLogistique = computed(() => form.vehicule_id !== null);
 
+// ── Blocage impayés ───────────────────────────────────────────────────────────
+const commandeBloquee = computed(
+    () =>
+        (vehiculeSolvabilite.value?.blocked ?? false) ||
+        (clientSolvabilite.value?.blocked ?? false),
+);
+
 // ── Validation locale ────────────────────────────────────────────────────────
 const canSubmit = computed(
     () =>
         (form.vehicule_id !== null || form.client_id !== null) &&
         totalGeneral.value > 0 &&
         capaciteVehiculeConforme.value &&
+        !commandeBloquee.value &&
         !form.processing,
 );
 
@@ -566,11 +578,12 @@ function confirmerEtCreer() {
                                 </div>
                             </div>
 
-                            <!-- ⚠ Dettes -->
+                            <!-- ⚠ Dettes (dans les limites) -->
                             <div
                                 v-else-if="
                                     vehiculeSolvabilite &&
-                                    vehiculeSolvabilite.has_debt
+                                    vehiculeSolvabilite.has_debt &&
+                                    !vehiculeSolvabilite.blocked
                                 "
                                 class="mt-3 rounded-xl border p-3"
                                 :class="
@@ -712,6 +725,103 @@ function confirmerEtCreer() {
                                     </button>
                                 </div>
                             </div>
+
+                            <!-- 🚫 Commande bloquée -->
+                            <div
+                                v-else-if="vehiculeSolvabilite?.blocked"
+                                class="mt-3 rounded-xl border border-red-300 bg-red-100 p-3 dark:border-red-700 dark:bg-red-950/50"
+                            >
+                                <div
+                                    class="mb-3 flex items-center justify-between gap-3"
+                                >
+                                    <p
+                                        class="text-xs font-bold tracking-wide text-red-800 uppercase dark:text-red-300"
+                                    >
+                                        Commande bloquée — facture impayée
+                                    </p>
+                                    <button
+                                        type="button"
+                                        class="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60"
+                                        @click="
+                                            ouvrirDialogFactures(
+                                                vehiculeSolvabilite,
+                                                {
+                                                    type: 'vehicule',
+                                                    titre: vehiculeSelected
+                                                        ? vehiculeLabel(
+                                                              vehiculeSelected,
+                                                          )
+                                                        : 'Véhicule',
+                                                    chauffeur:
+                                                        vehiculeSelected?.livreur_nom
+                                                            ? vehiculeSelected.livreur_nom +
+                                                              (vehiculeSelected.livreur_telephone
+                                                                  ? ' — ' +
+                                                                    formatPhoneDisplay(
+                                                                        vehiculeSelected.livreur_telephone,
+                                                                    )
+                                                                  : '')
+                                                            : undefined,
+                                                },
+                                            )
+                                        "
+                                    >
+                                        Voir les factures
+                                    </button>
+                                </div>
+                                <div
+                                    class="grid grid-cols-3 gap-2 text-center"
+                                >
+                                    <div>
+                                        <p
+                                            class="text-xs text-red-700 dark:text-red-400"
+                                        >
+                                            Dette actuelle
+                                        </p>
+                                        <p
+                                            class="font-bold text-red-900 tabular-nums dark:text-red-200"
+                                        >
+                                            {{
+                                                formatGNF(
+                                                    vehiculeSolvabilite.total_remaining,
+                                                )
+                                            }}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p
+                                            class="text-xs text-red-700 dark:text-red-400"
+                                        >
+                                            Limite autorisé
+                                        </p>
+                                        <p
+                                            class="font-bold text-red-900 tabular-nums dark:text-red-200"
+                                        >
+                                            {{
+                                                formatGNF(
+                                                    vehiculeSolvabilite.seuil_impayes,
+                                                )
+                                            }}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p
+                                            class="text-xs text-red-700 dark:text-red-400"
+                                        >
+                                            Dépassement
+                                        </p>
+                                        <p
+                                            class="font-bold text-red-900 tabular-nums dark:text-red-200"
+                                        >
+                                            +{{
+                                                formatGNF(
+                                                    vehiculeSolvabilite.depassement,
+                                                )
+                                            }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Client -->
@@ -813,11 +923,12 @@ function confirmerEtCreer() {
                                 </div>
                             </div>
 
-                            <!-- ⚠ Dettes -->
+                            <!-- ⚠ Dettes (dans les limites) -->
                             <div
                                 v-else-if="
                                     clientSolvabilite &&
-                                    clientSolvabilite.has_debt
+                                    clientSolvabilite.has_debt &&
+                                    !clientSolvabilite.blocked
                                 "
                                 class="mt-3 rounded-xl border p-3"
                                 :class="
@@ -953,6 +1064,99 @@ function confirmerEtCreer() {
                                     >
                                         Voir les factures
                                     </button>
+                                </div>
+                            </div>
+
+                            <!-- 🚫 Commande bloquée -->
+                            <div
+                                v-else-if="clientSolvabilite?.blocked"
+                                class="mt-3 rounded-xl border border-red-300 bg-red-100 p-3 dark:border-red-700 dark:bg-red-950/50"
+                            >
+                                <div
+                                    class="mb-3 flex items-center justify-between gap-3"
+                                >
+                                    <p
+                                        class="text-xs font-bold tracking-wide text-red-800 uppercase dark:text-red-300"
+                                    >
+                                        Commande bloquée — seuil dépassé
+                                    </p>
+                                    <button
+                                        type="button"
+                                        class="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60"
+                                        @click="
+                                            ouvrirDialogFactures(
+                                                clientSolvabilite,
+                                                {
+                                                    type: 'client',
+                                                    titre: clientSelected
+                                                        ? clientLabel(
+                                                              clientSelected,
+                                                          )
+                                                        : 'Client',
+                                                    sousTitre:
+                                                        clientSelected?.telephone
+                                                            ? formatPhoneDisplay(
+                                                                  clientSelected.telephone,
+                                                              )
+                                                            : undefined,
+                                                },
+                                            )
+                                        "
+                                    >
+                                        Voir les factures
+                                    </button>
+                                </div>
+                                <div
+                                    class="grid grid-cols-3 gap-2 text-center"
+                                >
+                                    <div>
+                                        <p
+                                            class="text-xs text-red-700 dark:text-red-400"
+                                        >
+                                            Dette actuelle
+                                        </p>
+                                        <p
+                                            class="font-bold text-red-900 tabular-nums dark:text-red-200"
+                                        >
+                                            {{
+                                                formatGNF(
+                                                    clientSolvabilite.total_remaining,
+                                                )
+                                            }}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p
+                                            class="text-xs text-red-700 dark:text-red-400"
+                                        >
+                                            Seuil autorisé
+                                        </p>
+                                        <p
+                                            class="font-bold text-red-900 tabular-nums dark:text-red-200"
+                                        >
+                                            {{
+                                                formatGNF(
+                                                    clientSolvabilite.seuil_impayes,
+                                                )
+                                            }}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p
+                                            class="text-xs text-red-700 dark:text-red-400"
+                                        >
+                                            Dépassement
+                                        </p>
+                                        <p
+                                            class="font-bold text-red-900 tabular-nums dark:text-red-200"
+                                        >
+                                            +{{
+                                                formatGNF(
+                                                    clientSolvabilite.depassement,
+                                                )
+                                            }}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1111,6 +1315,7 @@ function confirmerEtCreer() {
                                             option-value="value"
                                             placeholder="Choisir un produit..."
                                             filter
+                                            :disabled="commandeBloquee"
                                             class="w-full"
                                             :class="{
                                                 'p-invalid': (
@@ -1146,6 +1351,7 @@ function confirmerEtCreer() {
                                                     : (capaciteVehiculeSelectionne ??
                                                       undefined)
                                             "
+                                            :disabled="commandeBloquee"
                                             :use-grouping="false"
                                             class="w-full"
                                             input-class="w-full text-center"
@@ -1209,6 +1415,7 @@ function confirmerEtCreer() {
                                 option-value="value"
                                 placeholder="Choisir un produit..."
                                 filter
+                                :disabled="commandeBloquee"
                                 class="w-full"
                                 :class="{
                                     'p-invalid': (form.errors as any)[
@@ -1245,6 +1452,7 @@ function confirmerEtCreer() {
                                                 : (capaciteVehiculeSelectionne ??
                                                   undefined)
                                         "
+                                        :disabled="commandeBloquee"
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full text-center"
@@ -1318,6 +1526,7 @@ function confirmerEtCreer() {
                             type="button"
                             variant="outline"
                             size="sm"
+                            :disabled="commandeBloquee"
                             @click="addLigne"
                         >
                             <Plus class="mr-2 h-4 w-4" />
@@ -1583,7 +1792,7 @@ function confirmerEtCreer() {
                 <button
                     type="button"
                     class="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-                    :disabled="form.processing"
+                    :disabled="form.processing || commandeBloquee"
                     @click="confirmerEtCreer"
                 >
                     {{

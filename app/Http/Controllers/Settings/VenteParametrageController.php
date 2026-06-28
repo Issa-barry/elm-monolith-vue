@@ -45,6 +45,8 @@ class VenteParametrageController extends Controller
         return Inertia::render('settings/Ventes', [
             'roles' => $roles,
             'autoriser_saisie_dessous_qte_max' => Parametre::isVentesAutorisationSaisieDessousQteMax($orgId),
+            'controle_impayes_actif' => Parametre::isVentesControleImpayesActif($orgId),
+            'seuil_impayes_max' => Parametre::getVentesSeuilImpayesMax($orgId),
         ]);
     }
 
@@ -60,6 +62,8 @@ class VenteParametrageController extends Controller
             'price_edit_role_names' => ['array'],
             'price_edit_role_names.*' => ['string', Rule::exists('roles', 'name')],
             'autoriser_saisie_dessous_qte_max' => ['required', 'boolean'],
+            'controle_impayes_actif' => ['required', 'boolean'],
+            'seuil_impayes_max' => ['required', 'integer', 'min:0'],
         ]);
 
         $enabledQuantityRoleNames = collect($validated['quantity_edit_role_names'] ?? [])
@@ -85,13 +89,18 @@ class VenteParametrageController extends Controller
             }
         }
 
-        Parametre::setVentesAutorisationSaisieDessousQteMax(
-            auth()->user()->organization_id,
-            (bool) $validated['autoriser_saisie_dessous_qte_max'],
+        $orgId = auth()->user()->organization_id;
+
+        Parametre::setVentesAutorisationSaisieDessousQteMax($orgId, (bool) $validated['autoriser_saisie_dessous_qte_max']);
+
+        Parametre::setVentesControleImpayes(
+            $orgId,
+            (bool) $validated['controle_impayes_actif'],
+            (int) $validated['seuil_impayes_max'],
         );
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
-        Parametre::clearCache(auth()->user()->organization_id);
+        Parametre::clearCache($orgId);
 
         return back()->with('success', 'Parametrage ventes mis a jour.');
     }
