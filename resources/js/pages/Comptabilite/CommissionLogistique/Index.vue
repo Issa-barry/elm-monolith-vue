@@ -185,10 +185,9 @@ function handlePaiementSubmit(payload: {
 }
 
 function livreurStatuts(l: LivreurRow) {
-    const badges = [];
-    if (l.impaye > 0) badges.push({ label: 'Impayé', dotClass: 'bg-red-500' });
-    if (l.paye > 0) badges.push({ label: 'Payé', dotClass: 'bg-emerald-500' });
-    return badges;
+    if (l.impaye > 0) return [{ label: 'Impayé', dotClass: 'bg-red-500' }];
+    if (l.paye > 0) return [{ label: 'Payé', dotClass: 'bg-emerald-500' }];
+    return [];
 }
 
 function buildParams(): URLSearchParams {
@@ -342,6 +341,7 @@ function fmtTel(tel: string | null | undefined): string {
                 :fields="filterFields"
                 :sites="sites"
                 :result-count="livreurs.length"
+                search-key="search"
                 search-placeholder="Rechercher un livreur, téléphone, véhicule..."
                 v-model:search="search"
             />

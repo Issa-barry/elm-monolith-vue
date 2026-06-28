@@ -62,6 +62,8 @@ test('create achat -> annuler -> supprimer depuis la liste', async ({
 
     const search = getVisibleSearchInput(page);
     await search.fill(note);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     const row = page
         .locator('.p-datatable-table tbody tr', {
@@ -82,6 +84,8 @@ test('create achat -> annuler -> supprimer depuis la liste', async ({
 
     await page.waitForLoadState('networkidle');
     await search.fill(note);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
     await expect(
         page.locator('.p-datatable-table tbody tr', {
             hasText: new RegExp(escapeRegExp(note), 'i'),

@@ -167,6 +167,8 @@ test('delete livreur via API -> removed from list', async ({ page }) => {
     await page.goto('/livreurs');
     const search = getVisibleSearchInput(page);
     await search.fill(prenom);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     await expect(
         page.locator('tbody tr', {

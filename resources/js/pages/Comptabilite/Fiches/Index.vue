@@ -216,6 +216,7 @@ function exportExcel() {
                 :values="filters"
                 :fields="filterFields"
                 :result-count="fiches.data.length"
+                search-key="search"
                 v-model:search="search"
             />
 

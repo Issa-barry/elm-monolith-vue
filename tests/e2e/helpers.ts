@@ -545,6 +545,7 @@ export async function findUserInList(
     await page.goto('/users');
     const search = getVisibleSearchInput(page);
     await search.fill(query);
+    await search.press('Enter');
     const row = page
         .locator('tbody tr', {
             hasText: new RegExp(escapeRegExp(query), 'i'),
@@ -560,6 +561,8 @@ export async function findRowByName(
 ): Promise<Locator> {
     const search = getVisibleSearchInput(page);
     await search.fill(name);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
     return page
         .locator('tbody tr', { hasText: new RegExp(escapeRegExp(name), 'i') })
         .first();
@@ -591,6 +594,8 @@ export async function cleanupRowsByPrefix(
 
     const searchInput = getVisibleSearchInput(page);
     await searchInput.fill(prefix);
+    await searchInput.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     const guard = new RegExp(escapeRegExp(prefix), 'i');
 
@@ -627,5 +632,7 @@ export async function cleanupRowsByPrefix(
 
         await page.waitForLoadState('networkidle');
         await searchInput.fill(prefix);
+        await searchInput.press('Enter');
+        await page.waitForLoadState('networkidle');
     }
 }

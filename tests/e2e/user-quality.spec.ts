@@ -34,6 +34,8 @@ test('search by name filters the list', async ({ page }) => {
     // Recherche par prénom – doit trouver
     const search = getVisibleSearchInput(page);
     await search.fill(prenom);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
     const rows = page.locator('[data-testid="staff-users-table"] tbody tr:visible');
     await expect(rows.first()).toBeVisible();
     const count = await rows.count();
@@ -43,6 +45,8 @@ test('search by name filters the list', async ({ page }) => {
 
     // Recherche fictive – doit ne rien trouver
     await search.fill('xxxxxxxxxxxxxxxx_nomquinexistepas');
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
     await expect(page.getByText(/aucun utilisateur trouv/i)).toBeVisible();
 });
 
@@ -59,6 +63,8 @@ test('search by email filters the list', async ({ page }) => {
     await page.goto('/users');
     const search = getVisibleSearchInput(page);
     await search.fill(email);
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     const row = page
         .locator('tbody tr', { hasText: new RegExp(escapeRegExp(email), 'i') })
@@ -157,6 +163,8 @@ test('prenom is saved as title case and nom as uppercase', async ({ page }) => {
     await page.goto('/users');
     const search = getVisibleSearchInput(page);
     await search.fill('mamadou barry');
+    await search.press('Enter');
+    await page.waitForLoadState('networkidle');
     const row = page
         .locator('tbody tr', { hasText: /Mamadou/i })
         .filter({ hasText: /BARRY/i })

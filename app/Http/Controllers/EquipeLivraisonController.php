@@ -13,11 +13,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
-use Inertia\Response;
+use Inertia\Response as InertiaResponse;
 
 class EquipeLivraisonController extends Controller
 {
-    public function index(): Response
+    public function index(): InertiaResponse
     {
         $this->authorize('viewAny', EquipeLivraison::class);
 
@@ -30,20 +30,6 @@ class EquipeLivraisonController extends Controller
 
         return Inertia::render('EquipesLivraison/Index', [
             'equipes' => $equipes,
-        ]);
-    }
-
-    public function create(Request $request): Response
-    {
-        $this->authorize('create', EquipeLivraison::class);
-
-        $orgId = auth()->user()->organization_id;
-
-        return Inertia::render('EquipesLivraison/Create', [
-            'proprietaires' => $this->proprietairesOptions($orgId),
-            'vehicules' => $this->vehiculesOptions($orgId),
-            'currentSiteName' => $this->currentSiteName(),
-            'initialVehiculeId' => $request->input('vehicule_id'),
         ]);
     }
 
@@ -128,26 +114,13 @@ class EquipeLivraisonController extends Controller
             }
         });
 
-        return redirect()->route('equipes-livraison.show', $equipe)
+        $vehiculeId = $equipe->vehicule_id;
+
+        return redirect()->route('vehicules.show', $vehiculeId)
             ->with('success', 'Équipe créée avec succès.');
     }
 
-    public function edit(EquipeLivraison $equipes_livraison): Response
-    {
-        $this->authorize('update', $equipes_livraison);
-
-        $orgId = auth()->user()->organization_id;
-        $equipes_livraison->load('membres.livreur', 'proprietaire', 'vehicule');
-
-        return Inertia::render('EquipesLivraison/Edit', [
-            'equipe' => $this->equipeData($equipes_livraison),
-            'proprietaires' => $this->proprietairesOptions($orgId),
-            'vehicules' => $this->vehiculesOptions($orgId, $equipes_livraison->id),
-            'currentSiteName' => $this->currentSiteName(),
-        ]);
-    }
-
-    public function show(EquipeLivraison $equipes_livraison): Response
+    public function show(EquipeLivraison $equipes_livraison): InertiaResponse
     {
         $this->authorize('view', $equipes_livraison);
 
@@ -243,7 +216,7 @@ class EquipeLivraisonController extends Controller
             }
         });
 
-        return redirect()->route('equipes-livraison.edit', $equipes_livraison)
+        return redirect()->route('vehicules.show', $equipes_livraison->vehicule_id)
             ->with('success', 'Équipe mise à jour avec succès.');
     }
 
@@ -255,8 +228,15 @@ class EquipeLivraisonController extends Controller
             Vehicule::whereKey($equipes_livraison->vehicule_id)->update(['is_active' => false]);
         }
 
+        $vehiculeId = $equipes_livraison->vehicule_id;
+
         $equipes_livraison->membres()->delete();
         $equipes_livraison->delete();
+
+        if ($vehiculeId) {
+            return redirect()->route('vehicules.show', $vehiculeId)
+                ->with('success', 'Équipe supprimée.');
+        }
 
         return redirect()->route('equipes-livraison.index')
             ->with('success', 'Équipe supprimée.');

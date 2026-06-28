@@ -33,6 +33,8 @@ test('login + create product + verify list', async ({ page }) => {
 
     const searchInput = getVisibleSearchInput(page);
     await searchInput.fill(productName);
+    await searchInput.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     const productRow = page
         .locator('tbody tr', {

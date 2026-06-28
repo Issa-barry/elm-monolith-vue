@@ -64,6 +64,8 @@ test('login + create vehicule interne via site + verify in site tab + verify glo
 
     const searchInput = getVisibleSearchInput(page);
     await searchInput.fill(immatriculation);
+    await searchInput.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     const vehiculeRow = page
         .locator('tbody tr', {
@@ -89,6 +91,8 @@ test('login + create vehicule interne via site + verify in site tab + verify glo
     await page.goto('/vehicules');
     const searchInput2 = getVisibleSearchInput(page);
     await searchInput2.fill(immatriculation);
+    await searchInput2.press('Enter');
+    await page.waitForLoadState('networkidle');
 
     const modifiedRow = page
         .locator('tbody tr', {
@@ -103,7 +107,6 @@ test('externe — radio pris_en_charge_par_usine non sélectionné bloque le for
 }) => {
     await login(page);
 
-    // /vehicules/create without context still renders the form with the categorie dropdown
     await page.goto('/vehicules/create');
     await expect(page).toHaveURL(/\/vehicules\/create$/);
 
