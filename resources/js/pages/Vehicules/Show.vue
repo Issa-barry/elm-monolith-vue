@@ -114,6 +114,7 @@ const statutLabel: Record<string, string> = {
     brouillon: 'Brouillon',
     soumis: 'Soumis',
     approuve: 'Approuvé',
+    valide: 'Validé',
     rejete: 'Rejeté',
 };
 
