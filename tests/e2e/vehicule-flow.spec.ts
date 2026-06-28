@@ -107,10 +107,8 @@ test('externe — radio pris_en_charge_par_usine non sélectionné bloque le for
 }) => {
     await login(page);
 
-    const siteUrl = await navigateToFirstSiteVehiclesTab(page);
-    const siteId = new URL(siteUrl).pathname.split('/').pop()!;
-    await page.goto(`/vehicules/create?site_id=${siteId}`);
-    await expect(page).toHaveURL(/\/vehicules\/create/);
+    await page.goto('/vehicules/create');
+    await expect(page).toHaveURL(/\/vehicules\/create$/);
 
     const submitBtn = page
         .locator('#vehicule-form button[type="submit"]:visible')
@@ -146,10 +144,8 @@ test('externe — radio pris_en_charge_par_usine Oui sélectionnable', async ({
 }) => {
     await login(page);
 
-    const siteUrl = await navigateToFirstSiteVehiclesTab(page);
-    const siteId = new URL(siteUrl).pathname.split('/').pop()!;
-    await page.goto(`/vehicules/create?site_id=${siteId}`);
-    await expect(page).toHaveURL(/\/vehicules\/create/);
+    await page.goto('/vehicules/create');
+    await expect(page).toHaveURL(/\/vehicules\/create$/);
 
     const comboboxes = page.locator('#vehicule-form').getByRole('combobox');
     await selectOptionFromCombobox(page, comboboxes.first(), /externe/i);

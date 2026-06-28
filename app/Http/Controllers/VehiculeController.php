@@ -92,10 +92,6 @@ class VehiculeController extends Controller
     {
         $this->authorize('create', Vehicule::class);
 
-        if (! $request->filled('site_id') && ! $request->filled('proprietaire_id')) {
-            return redirect('/vehicules');
-        }
-
         $user = auth()->user();
         $initialProprietaireId = null;
         $initialSiteId = null;
