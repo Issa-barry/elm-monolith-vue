@@ -193,12 +193,17 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
         page.locator('[role="dialog"]').filter({ hasText: /nouveau membre/i }),
     ).not.toBeVisible();
 
-    await addMembreLigne(dialog, page, 0, {
-        role: /chauffeur/i,
-        prenom: 'Mamadou',
-        nom: 'Diallo',
-        telephone: '620111222',
-    });
+    // La ligne 0 est auto-ajoutée — la remplir directement sans cliquer "Ajouter"
+    await selectOptionFromCombobox(
+        page,
+        page.getByTestId('role-dropdown-0'),
+        /chauffeur/i,
+    );
+    await page.getByTestId('prenom-0').fill('Mamadou');
+    await page.getByTestId('nom-0').fill('Diallo');
+    const phone0 = page.getByTestId('telephone-0');
+    await phone0.click();
+    await phone0.fill('620111222');
 
     // +224 affiché dans la ligne inline
     await expect(dialog.getByText('+224').first()).toBeVisible();
@@ -275,6 +280,8 @@ test('stepper étape 1 : bouton Suivant désactivé sans membres', async ({
         .locator('[role="dialog"]')
         .filter({ hasText: /équipe/i });
     const suivantBtn = dialog.getByRole('button', { name: /suivant/i });
+    // La ligne est auto-ajoutée à l'ouverture — la supprimer pour revenir à 0 membres
+    await dialog.locator('tbody tr').first().locator('button').click();
     await expect(suivantBtn).toBeDisabled();
 });
 
@@ -335,8 +342,7 @@ test('étape 1 inline : supprimer une ligne sans sous-modal', async ({
         .locator('[role="dialog"]')
         .filter({ hasText: /équipe/i });
 
-    // Ajouter deux lignes via le bouton footer
-    await dialog.getByRole('button', { name: /ajouter un membre/i }).click();
+    // La ligne 0 est auto-ajoutée — ajouter une seule ligne supplémentaire
     await dialog.getByRole('button', { name: /ajouter un membre/i }).click();
 
     // 2 champs prénom visibles
