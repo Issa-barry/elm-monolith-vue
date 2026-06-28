@@ -47,8 +47,7 @@ async function openStepperModal(page: Page) {
 }
 
 /**
- * Ajoute une ligne membre dans le tableau inline de l'étape 1.
- * Attend la présence des inputs par data-testid après clic sur "Ajouter une ligne".
+ * Ajoute un membre via le bouton footer "Ajouter un membre" de l'étape 1.
  */
 async function addMembreLigne(
     dialog: ReturnType<Page['locator']>,
@@ -61,7 +60,7 @@ async function addMembreLigne(
         telephone,
     }: { role: RegExp; prenom: string; nom: string; telephone: string },
 ) {
-    await dialog.getByRole('button', { name: /ajouter une ligne/i }).click();
+    await dialog.getByRole('button', { name: /ajouter un membre/i }).click();
 
     await selectOptionFromCombobox(
         page,
@@ -245,7 +244,7 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
 
     // Enregistrer
     await dialog
-        .getByRole('button', { name: /valider l'équipe/i })
+        .getByRole('button', { name: /enregistrer l'équipe/i })
         .click();
     await expect(dialog).toBeHidden({ timeout: 20_000 });
 
@@ -292,8 +291,8 @@ test('étape 1 inline : +224 affiché et téléphone invalide bloqué', async ({
         page.locator('[role="dialog"]').filter({ hasText: /nouveau membre/i }),
     ).not.toBeVisible();
 
-    // Ajouter une ligne inline
-    await dialog.getByRole('button', { name: /ajouter une ligne/i }).click();
+    // Ajouter un membre via le bouton footer
+    await dialog.getByRole('button', { name: /ajouter un membre/i }).click();
 
     // +224 est visible dans la ligne inline
     await expect(dialog.getByText('+224').first()).toBeVisible();
@@ -314,8 +313,8 @@ test('étape 1 inline : validation bloque si champs vides', async ({
         .locator('[role="dialog"]')
         .filter({ hasText: /équipe/i });
 
-    // Ajouter une ligne vide
-    await dialog.getByRole('button', { name: /ajouter une ligne/i }).click();
+    // Ajouter une ligne vide via le bouton footer
+    await dialog.getByRole('button', { name: /ajouter un membre/i }).click();
 
     // Tenter de passer à l'étape 2 sans remplir la ligne
     await dialog.getByRole('button', { name: /suivant/i }).click();
@@ -336,9 +335,9 @@ test('étape 1 inline : supprimer une ligne sans sous-modal', async ({
         .locator('[role="dialog"]')
         .filter({ hasText: /équipe/i });
 
-    // Ajouter deux lignes
-    await dialog.getByRole('button', { name: /ajouter une ligne/i }).click();
-    await dialog.getByRole('button', { name: /ajouter une ligne/i }).click();
+    // Ajouter deux lignes via le bouton footer
+    await dialog.getByRole('button', { name: /ajouter un membre/i }).click();
+    await dialog.getByRole('button', { name: /ajouter un membre/i }).click();
 
     // 2 champs prénom visibles
     await expect(page.getByTestId('prenom-0')).toBeVisible();
@@ -351,4 +350,75 @@ test('étape 1 inline : supprimer une ligne sans sous-modal', async ({
     // Il ne reste plus qu'une ligne
     await expect(page.getByTestId('prenom-0')).toBeVisible();
     await expect(page.getByTestId('prenom-1')).not.toBeVisible();
+});
+
+test('fermeture avec modifications : affiche confirmation, "Continuer" garde le modal ouvert', async ({
+    page,
+}) => {
+    await openStepperModal(page);
+    const dialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /équipe/i });
+
+    // Ajouter un membre (déclenche hasChanges)
+    await dialog.getByRole('button', { name: /ajouter un membre/i }).click();
+
+    // Cliquer sur le X du modal principal
+    await page.locator('[role="dialog"]').filter({ hasText: /équipe/i })
+        .locator('.p-dialog-header-close, [aria-label="Close"]').first().click();
+
+    // La confirmation doit apparaître
+    await expect(
+        page.getByRole('dialog', { name: /quitter sans enregistrer/i }),
+    ).toBeVisible({ timeout: 5_000 });
+
+    // "Continuer l'édition" referme la confirmation et garde le wizard ouvert
+    await page.getByRole('button', { name: /continuer l'édition/i }).click();
+    await expect(
+        page.getByRole('dialog', { name: /quitter sans enregistrer/i }),
+    ).toBeHidden({ timeout: 3_000 });
+    await expect(dialog).toBeVisible();
+});
+
+test('fermeture avec modifications : "Quitter" ferme le wizard', async ({
+    page,
+}) => {
+    await openStepperModal(page);
+    const dialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /équipe/i });
+
+    // Ajouter un membre (déclenche hasChanges)
+    await dialog.getByRole('button', { name: /ajouter un membre/i }).click();
+
+    // Cliquer sur le X
+    await page.locator('[role="dialog"]').filter({ hasText: /équipe/i })
+        .locator('.p-dialog-header-close, [aria-label="Close"]').first().click();
+
+    await expect(
+        page.getByRole('dialog', { name: /quitter sans enregistrer/i }),
+    ).toBeVisible({ timeout: 5_000 });
+
+    // "Quitter" ferme tout
+    await page.getByRole('button', { name: /^quitter$/i }).click();
+    await expect(dialog).toBeHidden({ timeout: 5_000 });
+});
+
+test('fermeture sans modifications : ferme directement sans confirmation', async ({
+    page,
+}) => {
+    await openStepperModal(page);
+    const dialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /équipe/i });
+
+    // Aucune interaction — clic sur X
+    await page.locator('[role="dialog"]').filter({ hasText: /équipe/i })
+        .locator('.p-dialog-header-close, [aria-label="Close"]').first().click();
+
+    // Aucune confirmation, modal fermé directement
+    await expect(
+        page.locator('[role="dialog"]').filter({ hasText: /quitter sans enregistrer/i }),
+    ).not.toBeVisible();
+    await expect(dialog).toBeHidden({ timeout: 5_000 });
 });

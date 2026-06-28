@@ -92,6 +92,26 @@ const emit = defineEmits<{
 const step = ref(1);
 const isSubmitting = ref(false);
 const serverErrors = reactive<Record<string, string>>({});
+const showConfirmClose = ref(false);
+const hasChanges = ref(false);
+
+function markChanged() {
+    hasChanges.value = true;
+}
+
+function requestClose() {
+    if (hasChanges.value) {
+        showConfirmClose.value = true;
+    } else {
+        emit('update:visible', false);
+    }
+}
+
+function confirmClose() {
+    showConfirmClose.value = false;
+    hasChanges.value = false;
+    emit('update:visible', false);
+}
 
 const membres = ref<MembreLigne[]>([]);
 const commission = ref(0);
@@ -121,6 +141,8 @@ watch(
     (val) => {
         if (!val) return;
         step.value = 1;
+        hasChanges.value = false;
+        showConfirmClose.value = false;
         Object.keys(serverErrors).forEach((k) => delete serverErrors[k]);
         isSubmitting.value = false;
 
@@ -151,6 +173,7 @@ watch(
 // ── Étape 1 : Membres ───────────────────────────────────────────────────────
 
 function addLigne() {
+    markChanged();
     membres.value.push({
         livreur_id: null,
         role: '',
@@ -164,6 +187,7 @@ function addLigne() {
 }
 
 function removeLigne(idx: number) {
+    markChanged();
     membres.value.splice(idx, 1);
     membres.value.forEach((m, i) => (m.ordre = i));
 }
@@ -179,6 +203,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 }
 
 function onPhoneInput(e: Event, idx: number) {
+    markChanged();
     const raw = (e.target as HTMLInputElement).value.replace(/\D/g, '');
     const local = raw.slice(0, 9);
     membres.value[idx].telephone = local;
@@ -210,6 +235,7 @@ function validateStep1(): boolean {
 
 function goToStep2() {
     if (!validateStep1()) return;
+    markChanged();
     buildLignes();
     if (commission.value <= 0) commission.value = 200;
     step.value = 2;
@@ -264,11 +290,13 @@ watch(commission, (newComm) => {
 });
 
 function onMontantChange(ligne: LignePartage, val: number | null) {
+    markChanged();
     ligne.montant = val ?? 0;
     ligne.taux = toTaux(ligne.montant, commission.value);
 }
 
 function onTauxChange(ligne: LignePartage, val: number | null) {
+    markChanged();
     ligne.taux = val ?? 0;
     ligne.montant = toMontant(ligne.taux, commission.value);
 }
@@ -375,6 +403,41 @@ const hasStep1Errors = computed(() =>
 </script>
 
 <template>
+    <!-- ── Confirmation fermeture ────────────────────────────────────────── -->
+    <Dialog
+        v-model:visible="showConfirmClose"
+        modal
+        header="Quitter sans enregistrer ?"
+        :style="{ width: 'min(400px, 90vw)' }"
+        append-to="body"
+        :closable="false"
+    >
+        <p class="text-sm text-muted-foreground">
+            Vos modifications seront perdues.
+        </p>
+        <template #footer>
+            <div class="flex w-full items-center justify-between">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    @click="showConfirmClose = false"
+                >
+                    Continuer l'édition
+                </Button>
+                <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    @click="confirmClose"
+                >
+                    Quitter
+                </Button>
+            </div>
+        </template>
+    </Dialog>
+
+    <!-- ── Modal principal ───────────────────────────────────────────────── -->
     <Dialog
         :visible="visible"
         modal
@@ -382,7 +445,7 @@ const hasStep1Errors = computed(() =>
         :style="{ width: 'min(960px, 95vw)' }"
         :dismissable-mask="false"
         :closable="true"
-        @update:visible="emit('update:visible', $event)"
+        @update:visible="(val) => { if (!val) requestClose(); }"
     >
         <!-- ── Indicateur d'étapes ────────────────────────────────────────── -->
         <div class="mb-6 flex items-center gap-2">
@@ -432,24 +495,16 @@ const hasStep1Errors = computed(() =>
 
         <!-- ── Étape 1 : Membres ─────────────────────────────────────────── -->
         <div v-if="step === 1" class="space-y-4">
-            <div class="flex items-center justify-between">
-                <p class="text-sm text-muted-foreground">
-                    <span class="font-medium text-foreground">{{
-                        membres.length
-                    }}</span>
-                    membre{{ membres.length !== 1 ? 's' : '' }}
-                </p>
-                <Button type="button" size="sm" @click="addLigne">
-                    <Plus class="mr-1.5 h-4 w-4" />
-                    Ajouter une ligne
-                </Button>
-            </div>
+            <p v-if="membres.length > 0" class="text-sm text-muted-foreground">
+                <span class="font-medium text-foreground">{{ membres.length }}</span>
+                membre{{ membres.length !== 1 ? 's' : '' }}
+            </p>
 
             <div
                 v-if="membres.length === 0"
                 class="rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground"
             >
-                Aucun membre. Cliquez sur « Ajouter une ligne » pour commencer.
+                Aucun membre. Cliquez sur « + Ajouter un membre » ci-dessous pour commencer.
             </div>
 
             <div v-else class="overflow-x-auto rounded-lg border">
@@ -483,6 +538,7 @@ const hasStep1Errors = computed(() =>
                                     :class="{ 'p-invalid': m._errors.role }"
                                     append-to="body"
                                     :data-testid="`role-dropdown-${i}`"
+                                    @change="markChanged"
                                 />
                                 <p
                                     v-if="m._errors.role"
@@ -500,6 +556,7 @@ const hasStep1Errors = computed(() =>
                                     :class="{ 'p-invalid': m._errors.prenom }"
                                     placeholder="Prénom"
                                     :data-testid="`prenom-${i}`"
+                                    @input="markChanged"
                                 />
                                 <p
                                     v-if="m._errors.prenom"
@@ -517,6 +574,7 @@ const hasStep1Errors = computed(() =>
                                     :class="{ 'p-invalid': m._errors.nom }"
                                     placeholder="Nom"
                                     :data-testid="`nom-${i}`"
+                                    @input="markChanged"
                                 />
                                 <p
                                     v-if="m._errors.nom"
@@ -849,9 +907,10 @@ const hasStep1Errors = computed(() =>
                     type="button"
                     variant="outline"
                     size="sm"
-                    @click="emit('update:visible', false)"
+                    @click="addLigne"
                 >
-                    Annuler
+                    <Plus class="mr-1.5 h-4 w-4" />
+                    Ajouter un membre
                 </Button>
 
                 <!-- Bouton droit -->
@@ -887,7 +946,7 @@ const hasStep1Errors = computed(() =>
                     {{
                         isSubmitting
                             ? 'Enregistrement…'
-                            : "Valider l'équipe"
+                            : "Enregistrer l'équipe"
                     }}
                 </Button>
             </div>
