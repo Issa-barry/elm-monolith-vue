@@ -300,26 +300,19 @@ test('workflow rejete → modifier montant → resoumettre → statut soumis', a
     await page.waitForLoadState('networkidle');
     await expect(depenseRowByComment(page, comment)).toContainText(/soumis/i);
 
-    // 3. La rejeter — le dialog de motif peut ou non s'afficher selon la config
+    // 3. La rejeter — ouvre le dialog avec un <select> de motif
     const rowSoumis = depenseRowByComment(page, comment);
     await rowSoumis.getByRole('button', { name: /actions/i }).first().click();
     await page.getByRole('menuitem', { name: /rejeter/i }).first().click();
 
-    // Attendre l'éventuel dialog de motif (textarea ou input visible)
-    const dialog = page.locator('[role="dialog"]').first();
-    const dialogVisible = await dialog
-        .isVisible({ timeout: 4_000 })
-        .catch(() => false);
-    if (dialogVisible) {
-        const motifField = dialog.locator('textarea, input[type="text"]').first();
-        if (await motifField.isVisible({ timeout: 2_000 }).catch(() => false)) {
-            await motifField.fill('Non conforme E2E');
-        }
-        await dialog
-            .getByRole('button', { name: /confirmer|rejeter|valider/i })
-            .last()
-            .click();
-    }
+    // Attendre le dialog de rejet (shadcn Dialog → role="dialog")
+    await page.getByRole('dialog').waitFor({ state: 'visible', timeout: 8_000 });
+
+    // Sélectionner le motif dans le <select id="idx-reject-motif">
+    await page.selectOption('#idx-reject-motif', 'Non conforme');
+
+    // Confirmer le rejet
+    await page.getByRole('button', { name: /rejeter la dépense/i }).click();
     await page.waitForLoadState('networkidle');
     await expect(depenseRowByComment(page, comment)).toContainText(/rejet/i, {
         timeout: 10_000,
