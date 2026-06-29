@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -56,7 +56,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Paie', href: '/paie' },
 ];
 
-const search = ref('');
 
 const anneesOptions = Array.from({ length: 10 }, (_, i) => {
     const y = new Date().getFullYear() - i;
@@ -119,7 +118,6 @@ function statutSeverity(statut: string) {
                 :values="filters"
                 :fields="filterFields"
                 :result-count="periodesFiltrees.length"
-                v-model:search="search"
             />
 
             <!-- Table -->

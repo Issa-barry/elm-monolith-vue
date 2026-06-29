@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -46,7 +46,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Livreurs', href: '/livreurs' },
 ];
 
-const search = ref('');
 const statutFilter = ref<'tous' | 'actif' | 'inactif' | 'pending'>('tous');
 
 const filterFields: FilterField[] = [
@@ -158,8 +157,6 @@ function approuver(livreur: Livreur) {
 
             <!-- Filtres -->
             <DataFilters
-                v-model:search="search"
-                search-placeholder="Nom, téléphone…"
                 :values="{ statut: statutFilter }"
                 :fields="filterFields"
                 :result-count="livreursFiltres.length"

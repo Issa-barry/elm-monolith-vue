@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
 import ConcerneDetailDialog from '@/components/Depenses/ConcerneDetailDialog.vue';
 import VehiculeDetailDialog from '@/components/Depenses/VehiculeDetailDialog.vue';
@@ -100,7 +100,6 @@ const props = defineProps<{
     categories: Option[];
     statuts: Option[];
     filters: {
-        search?: string;
         type?: string;
         statut?: string;
         categorie?: string;
@@ -109,6 +108,7 @@ const props = defineProps<{
         date_fin?: string;
         vehicule?: string;
         concerne?: string;
+        telephone_concerne?: string;
         montant?: string;
     };
     stats: {
@@ -128,11 +128,9 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dépenses', href: '/depenses' },
 ];
 
-const filterSearch = ref(props.filters.search ?? '');
 
 function currentParams() {
     return {
-        search: filterSearch.value || undefined,
         type: props.filters.type || undefined,
         statut: props.filters.statut || undefined,
         categorie: props.filters.categorie || undefined,
@@ -140,12 +138,12 @@ function currentParams() {
         date_fin: props.filters.date_fin || undefined,
         vehicule: props.filters.vehicule || undefined,
         concerne: props.filters.concerne || undefined,
+        telephone_concerne: props.filters.telephone_concerne || undefined,
         montant: props.filters.montant || undefined,
     };
 }
 
 const filterValues = computed(() => ({
-    search: props.filters.search ?? '',
     type: props.filters.type ?? '',
     statut: props.filters.statut ?? '',
     categorie: props.filters.categorie ?? '',
@@ -154,10 +152,50 @@ const filterValues = computed(() => ({
     date_fin: props.filters.date_fin ?? '',
     vehicule: props.filters.vehicule ?? '',
     concerne: props.filters.concerne ?? '',
+    telephone_concerne: props.filters.telephone_concerne ?? '',
     montant: props.filters.montant ?? '',
 }));
 
 const filterFields = computed<FilterField[]>(() => [
+    // ── Inline : visibles directement dans la barre ──────────────────────────
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        inline: true,
+        options: [
+            { value: '', label: 'Tous les statuts' },
+            ...props.statuts.map((s) => ({ value: s.value, label: s.label })),
+        ],
+    },
+    {
+        key: 'concerne',
+        label: 'Concerné',
+        type: 'autocomplete',
+        inline: true,
+        placeholder: 'Nom ou prénom…',
+        suggestionsUrl: '/depenses/suggestions',
+        suggestionsField: 'concerne',
+    },
+    {
+        key: 'telephone_concerne',
+        label: 'Téléphone',
+        type: 'autocomplete',
+        inline: true,
+        placeholder: 'Ex: 622…',
+        suggestionsUrl: '/depenses/suggestions',
+        suggestionsField: 'telephone_concerne',
+    },
+    {
+        key: 'vehicule',
+        label: 'Véhicule',
+        type: 'autocomplete',
+        inline: true,
+        placeholder: 'Nom ou immatriculation…',
+        suggestionsUrl: '/depenses/suggestions',
+        suggestionsField: 'vehicule',
+    },
+    // ── Drawer : filtres avancés ─────────────────────────────────────────────
     {
         key: 'type',
         label: 'Type de dépense',
@@ -169,23 +207,14 @@ const filterFields = computed<FilterField[]>(() => [
     },
     {
         key: 'categorie',
-        label: 'Concerné',
+        label: 'Catégorie concerné',
         type: 'select',
         options: [
-            { value: '', label: 'Tous les concernés' },
+            { value: '', label: 'Toutes les catégories' },
             ...props.categories.map((c) => ({
                 value: c.value,
                 label: c.label,
             })),
-        ],
-    },
-    {
-        key: 'statut',
-        label: 'Statut',
-        type: 'select',
-        options: [
-            { value: '', label: 'Tous les statuts' },
-            ...props.statuts.map((s) => ({ value: s.value, label: s.label })),
         ],
     },
     {
@@ -194,18 +223,6 @@ const filterFields = computed<FilterField[]>(() => [
         type: 'date-range',
         startKey: 'date_debut',
         endKey: 'date_fin',
-    },
-    {
-        key: 'vehicule',
-        label: 'Véhicule',
-        type: 'text',
-        placeholder: 'Nom ou immatriculation…',
-    },
-    {
-        key: 'concerne',
-        label: 'Recherche concerné',
-        type: 'text',
-        placeholder: 'Nom, prénom ou téléphone…',
     },
     {
         key: 'montant',
@@ -496,9 +513,6 @@ const categorieColors: Record<string, string> = {
                 :sites="sites"
                 :result-count="depenses.total"
                 :fields="filterFields"
-                search-key="search"
-                search-placeholder="Rechercher…"
-                v-model:search="filterSearch"
             />
 
             <!-- Tableau -->

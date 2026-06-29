@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -64,8 +64,6 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Site>(
     (site) => `/sites/${site.id}`,
 );
 
-const mobileSearch = ref('');
-const search = ref('');
 const type = ref<string>('');
 
 const typeOptions = computed(() => {
@@ -442,8 +440,6 @@ function confirmDelete(s: Site) {
                 :fields="filterFields"
                 :values="{ type }"
                 :result-count="desktopTypeFiltered.length"
-                search-placeholder="Rechercher…"
-                v-model:search="search"
                 @apply="handleApply"
                 @reset="resetFilters"
             />

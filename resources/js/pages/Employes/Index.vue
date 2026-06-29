@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -82,7 +82,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Employés', href: '/employes' },
 ];
 
-const search = ref(props.filters.search ?? '');
 
 const filterFields: FilterField[] = [
     {
@@ -194,8 +193,6 @@ function confirmDelete(e: Employe) {
                 :values="filters"
                 :fields="filterFields"
                 :result-count="employes.length"
-                search-placeholder="Matricule, nom, téléphone, email…"
-                v-model:search="search"
             />
 
             <!-- Table -->

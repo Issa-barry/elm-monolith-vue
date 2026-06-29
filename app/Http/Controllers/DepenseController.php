@@ -45,7 +45,7 @@ class DepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'montant']);
+        $filters = $request->only(['type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         $paginator = $this->buildQuery($filters, $orgId, $siteIds)
@@ -99,7 +99,7 @@ class DepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'montant']);
+        $filters = $request->only(['type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         $depenses = $this->buildQuery($filters, $orgId, $siteIds)
@@ -142,6 +142,118 @@ class DepenseController extends Controller
 
             fclose($handle);
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    public function suggestions(Request $request): JsonResponse
+    {
+        $this->authorize('viewAny', Depense::class);
+
+        $field = $request->input('field', '');
+        $q = trim($request->input('q', ''));
+
+        if (mb_strlen($q) < 2) {
+            return response()->json([]);
+        }
+
+        $orgId = auth()->user()->organization_id;
+        $like = '%'.$q.'%';
+
+        if ($field === 'vehicule') {
+            $likeImmat = '%'.preg_replace('/[\s\-]/', '', $q).'%';
+
+            $vehicules = Depense::where('organization_id', $orgId)
+                ->where('beneficiaire_type', 'vehicule')
+                ->whereHas('vehiculeBeneficiaire', fn ($qb) => $qb
+                    ->where('nom_vehicule', 'LIKE', $like)
+                    ->orWhereRaw("REPLACE(REPLACE(immatriculation, '-', ''), ' ', '') LIKE ?", [$likeImmat])
+                )
+                ->with('vehiculeBeneficiaire:id,nom_vehicule,immatriculation')
+                ->get()
+                ->pluck('vehiculeBeneficiaire')
+                ->filter()
+                ->unique('id')
+                ->take(8)
+                ->map(fn ($v) => [
+                    'label' => $v->nom_vehicule.' — '.$v->immatriculation,
+                    'value' => $v->immatriculation,
+                ])
+                ->values();
+
+            return response()->json($vehicules);
+        }
+
+        if ($field === 'concerne') {
+            $results = collect();
+
+            foreach (['employe' => 'employeBeneficiaire', 'livreur' => 'livreurBeneficiaire', 'proprietaire' => 'proprietaireBeneficiaire'] as $type => $relation) {
+                $items = Depense::where('organization_id', $orgId)
+                    ->where('beneficiaire_type', $type)
+                    ->whereHas($relation, fn ($qb) => $qb
+                        ->where('nom', 'LIKE', $like)
+                        ->orWhere('prenom', 'LIKE', $like)
+                    )
+                    ->with($relation.':id,nom,prenom')
+                    ->get()
+                    ->pluck($relation)
+                    ->filter()
+                    ->unique('id')
+                    ->take(4)
+                    ->map(fn ($p) => [
+                        'label' => trim($p->prenom.' '.$p->nom),
+                        'value' => trim($p->prenom.' '.$p->nom),
+                    ]);
+
+                $results = $results->merge($items);
+            }
+
+            $vehicules = Depense::where('organization_id', $orgId)
+                ->where('beneficiaire_type', 'vehicule')
+                ->whereHas('vehiculeBeneficiaire', fn ($qb) => $qb->where('nom_vehicule', 'LIKE', $like))
+                ->with('vehiculeBeneficiaire:id,nom_vehicule')
+                ->get()
+                ->pluck('vehiculeBeneficiaire')
+                ->filter()
+                ->unique('id')
+                ->take(4)
+                ->map(fn ($v) => [
+                    'label' => $v->nom_vehicule,
+                    'value' => $v->nom_vehicule,
+                ]);
+
+            $results = $results->merge($vehicules);
+
+            return response()->json($results->unique('value')->take(8)->values());
+        }
+
+        if ($field === 'telephone_concerne') {
+            $digits = preg_replace('/\D/', '', $q);
+            $likeTel = '%'.($digits ?: $q).'%';
+            $results = collect();
+
+            foreach (['employe' => 'employeBeneficiaire', 'livreur' => 'livreurBeneficiaire', 'proprietaire' => 'proprietaireBeneficiaire'] as $type => $relation) {
+                $items = Depense::where('organization_id', $orgId)
+                    ->where('beneficiaire_type', $type)
+                    ->whereHas($relation, fn ($qb) => $qb
+                        ->whereRaw("REPLACE(REPLACE(telephone, ' ', ''), '-', '') LIKE ?", [$likeTel])
+                    )
+                    ->with($relation.':id,nom,prenom,telephone')
+                    ->get()
+                    ->pluck($relation)
+                    ->filter()
+                    ->unique('id')
+                    ->take(4)
+                    ->map(fn ($p) => [
+                        'label' => trim($p->prenom.' '.$p->nom).' — '.$p->telephone,
+                        'value' => $p->telephone,
+                    ]);
+
+                $results = $results->merge($items);
+            }
+
+            return response()->json($results->unique('value')->take(8)->values());
+        }
+
+        return response()->json([]);
     }
 
     public function concereneDetail(Request $request): JsonResponse
@@ -253,7 +365,7 @@ class DepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'montant']);
+        $filters = $request->only(['type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
         $org = Organization::find($orgId);
         $printedBy = $user->name;
@@ -651,58 +763,14 @@ class DepenseController extends Controller
             ->orderByDesc('date_depense')
             ->orderByDesc('created_at');
 
-        if (! empty($filters['search'])) {
-            $like = '%'.$filters['search'].'%';
-            $query->where(function ($w) use ($like) {
-                $w->where('commentaire', 'LIKE', $like)
-                    ->orWhere('montant', 'LIKE', $like)
-                    ->orWhereHas('depenseType', fn ($q) => $q->where('libelle', 'LIKE', $like))
-                    ->orWhere(fn ($w2) => $w2
-                        ->where('beneficiaire_type', 'vehicule')
-                        ->whereHas('vehiculeBeneficiaire', fn ($q) => $q
-                            ->where('nom_vehicule', 'LIKE', $like)
-                            ->orWhere('immatriculation', 'LIKE', $like)
-                            ->orWhereHas('proprietaire', fn ($q) => $q
-                                ->where('nom', 'LIKE', $like)
-                                ->orWhere('prenom', 'LIKE', $like)
-                            )
-                        )
-                    )
-                    ->orWhere(fn ($w2) => $w2
-                        ->where('beneficiaire_type', 'employe')
-                        ->whereHas('employeBeneficiaire', fn ($q) => $q
-                            ->where('nom', 'LIKE', $like)
-                            ->orWhere('prenom', 'LIKE', $like)
-                            ->orWhere('telephone', 'LIKE', $like)
-                        )
-                    )
-                    ->orWhere(fn ($w2) => $w2
-                        ->where('beneficiaire_type', 'livreur')
-                        ->whereHas('livreurBeneficiaire', fn ($q) => $q
-                            ->where('nom', 'LIKE', $like)
-                            ->orWhere('prenom', 'LIKE', $like)
-                            ->orWhere('telephone', 'LIKE', $like)
-                        )
-                    )
-                    ->orWhere(fn ($w2) => $w2
-                        ->where('beneficiaire_type', 'proprietaire')
-                        ->whereHas('proprietaireBeneficiaire', fn ($q) => $q
-                            ->where('nom', 'LIKE', $like)
-                            ->orWhere('prenom', 'LIKE', $like)
-                            ->orWhere('telephone', 'LIKE', $like)
-                        )
-                    );
-            });
-        }
-
         if (! empty($filters['type'])) {
-            $query->where('depense_type_id', $filters['type']);
+            $query->whereIn('depense_type_id', (array) $filters['type']);
         }
         if (! empty($filters['statut'])) {
-            $query->where('statut', $filters['statut']);
+            $query->whereIn('statut', (array) $filters['statut']);
         }
         if (! empty($filters['categorie'])) {
-            $query->whereHas('depenseType', fn ($q) => $q->where('categorie', $filters['categorie']));
+            $query->whereHas('depenseType', fn ($q) => $q->whereIn('categorie', (array) $filters['categorie']));
         }
         if (! empty($siteIds)) {
             $query->whereIn('site_id', $siteIds);
@@ -715,11 +783,12 @@ class DepenseController extends Controller
         }
 
         if (! empty($filters['vehicule'])) {
-            $like = '%'.$filters['vehicule'].'%';
+            $likeVeh = '%'.$filters['vehicule'].'%';
+            $likeImmat = '%'.preg_replace('/[\s\-]/', '', $filters['vehicule']).'%';
             $query->where('beneficiaire_type', 'vehicule')
                 ->whereHas('vehiculeBeneficiaire', fn ($q) => $q
-                    ->where('nom_vehicule', 'LIKE', $like)
-                    ->orWhere('immatriculation', 'LIKE', $like)
+                    ->where('nom_vehicule', 'LIKE', $likeVeh)
+                    ->orWhereRaw("REPLACE(REPLACE(immatriculation, '-', ''), ' ', '') LIKE ?", [$likeImmat])
                 );
         }
 
@@ -731,22 +800,45 @@ class DepenseController extends Controller
                     ->whereHas('employeBeneficiaire', fn ($q) => $q
                         ->where('nom', 'LIKE', $like)
                         ->orWhere('prenom', 'LIKE', $like)
-                        ->orWhere('telephone', 'LIKE', $like)
+                        ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like])
                     )
                 )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'livreur')
                     ->whereHas('livreurBeneficiaire', fn ($q) => $q
                         ->where('nom', 'LIKE', $like)
                         ->orWhere('prenom', 'LIKE', $like)
-                        ->orWhere('telephone', 'LIKE', $like)
+                        ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like])
                     )
                 )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'proprietaire')
                     ->whereHas('proprietaireBeneficiaire', fn ($q) => $q
                         ->where('nom', 'LIKE', $like)
                         ->orWhere('prenom', 'LIKE', $like)
-                        ->orWhere('telephone', 'LIKE', $like)
+                        ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like])
                     )
+                )->orWhere(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'vehicule')
+                    ->whereHas('vehiculeBeneficiaire', fn ($q) => $q
+                        ->where('nom_vehicule', 'LIKE', $like)
+                    )
+                );
+            });
+        }
+
+        if (! empty($filters['telephone_concerne'])) {
+            $digits = preg_replace('/\D/', '', $filters['telephone_concerne']);
+            $likeTel = '%'.($digits ?: $filters['telephone_concerne']).'%';
+            $query->where(function ($w) use ($likeTel) {
+                $norm = "REPLACE(REPLACE(telephone, ' ', ''), '-', '')";
+                $w->where(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'employe')
+                    ->whereHas('employeBeneficiaire', fn ($q) => $q->whereRaw("{$norm} LIKE ?", [$likeTel]))
+                )->orWhere(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'livreur')
+                    ->whereHas('livreurBeneficiaire', fn ($q) => $q->whereRaw("{$norm} LIKE ?", [$likeTel]))
+                )->orWhere(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'proprietaire')
+                    ->whereHas('proprietaireBeneficiaire', fn ($q) => $q->whereRaw("{$norm} LIKE ?", [$likeTel]))
                 );
             });
         }

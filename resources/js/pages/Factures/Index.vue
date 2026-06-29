@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -190,7 +190,6 @@ const filterFields = computed<FilterField[]>(() => [
 ]);
 
 // ── Recherche locale (client-side, immédiate) ─────────────────────────────────
-const search = ref('');
 
 const facturesFiltrees = computed(() => {
     const q = search.value.toLowerCase().trim();
@@ -238,7 +237,6 @@ function formatGNF(val: number): string {
 }
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
-const mobileSearch = ref('');
 
 const mobileFiltered = computed(() => {
     const q = mobileSearch.value.toLowerCase().trim();
@@ -593,8 +591,6 @@ function _progressPercent(f: FactureItem): number {
                 :values="filterValues"
                 :result-count="facturesFiltrees.length"
                 :fields="filterFields"
-                search-placeholder="Référence, véhicule, client…"
-                v-model:search="search"
             />
 
             <!-- Tableau -->

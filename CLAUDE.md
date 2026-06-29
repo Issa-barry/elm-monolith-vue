@@ -32,10 +32,14 @@ Toute page de liste (Index) avec des filtres doit utiliser
 `resources/js/components/filters/DataFilters.vue`, pas des `<select>`/`<Dropdown>` faits main :
 
 ```vue
-<DataFilters url="/produits" :values="filters" :fields="filterFields" v-model:search="search" />
+<DataFilters url="/produits" :values="filters" :fields="filterFields" />
 ```
 
-- Ordre standard de la barre : **Filtres → Recherche → Agence**.
+- **Aucun champ de recherche globale** (`search`) : supprimé du composant et de toutes les pages.
+  Les pages font leur propre filtre texte via un champ `type: 'text'` avec `inline: true`.
+- Ordre standard de la barre : **[Agence] → [Statut] → [Autres filtres inline] → [Bouton Filtres]**.
+  - Les champs affichés directement dans la barre ont `inline: true` dans `filterFields`.
+  - Les champs avancés (sans `inline`) vont dans le drawer (bouton **Filtres**).
 - Le filtre Agence est obligatoire dès qu'une page affiche des données multi-sites, et doit
   envoyer `site_ids[]` au backend.
 - Ne déclare pas plusieurs `ref` nommées `filterXxx`/`filtreXxx` sans importer `DataFilters.vue` —

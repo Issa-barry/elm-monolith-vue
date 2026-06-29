@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -70,14 +70,12 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Vehicule>(
 );
 
 // Mobile — filtrage immédiat
-const mobileSearch = ref('');
 const mobileFilterType = ref('');
 const mobileFilterStatut = ref('');
 const mobileFilterCategorie = ref('');
 const mobileFilterAgence = ref('');
 
 // Desktop
-const search = ref('');
 const filterType = ref<string | null>(null);
 const filterStatut = ref<string | null>(null);
 const filterCategorie = ref<string | null>(null);
@@ -474,8 +472,6 @@ function confirmDelete(v: Vehicule) {
 
             <!-- Filtres -->
             <DataFilters
-                v-model:search="search"
-                search-placeholder="Nom, immatriculation, propriétaire…"
                 :values="{
                     type: filterType ?? '',
                     categorie: filterCategorie ?? '',

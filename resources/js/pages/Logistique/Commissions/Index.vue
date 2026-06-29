@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -68,7 +68,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Filtres ───────────────────────────────────────────────────────────────────
 
-const search = ref(props.search ?? '');
 
 const filterFields = computed<FilterField[]>(() => [
     {
@@ -270,9 +269,6 @@ function formatPhone(tel: string | null): string {
                 :values="filterValues"
                 :fields="filterFields"
                 :result-count="livreurs.length"
-                search-placeholder="Nom, téléphone, véhicule, immatriculation, montant, statut…"
-                search-key="search"
-                v-model:search="search"
             />
 
             <!-- ── Tableau livreurs ──────────────────────────────────────────── -->

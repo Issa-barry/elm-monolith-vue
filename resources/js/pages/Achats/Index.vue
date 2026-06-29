@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -60,7 +60,6 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
     (commande) => `/achats/${commande.id}`,
 );
 
-const search = ref('');
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
@@ -86,7 +85,6 @@ function formatGNF(val: number): string {
 }
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
-const mobileSearch = ref('');
 
 const mobileFiltered = computed(() => {
     const q = mobileSearch.value.toLowerCase().trim();
@@ -283,8 +281,6 @@ function confirmDelete(c: Commande) {
 
             <!-- Filtres -->
             <DataFilters
-                v-model:search="search"
-                search-placeholder="Rechercher..."
                 :fields="[]"
                 :result-count="desktopFiltered.length"
                 @reset="

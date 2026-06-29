@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -55,7 +55,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Journal financier', href: '/comptabilite/journal' },
 ];
 
-const search = ref(props.filters.search ?? '');
 
 const filterFields: FilterField[] = [
     {
@@ -153,9 +152,6 @@ function fmt(n: number) {
                 :fields="filterFields"
                 :sites="journalSites"
                 :result-count="lignes.data.length"
-                search-key="search"
-                search-placeholder="Rechercher une référence, un libellé..."
-                v-model:search="search"
             />
 
             <!-- Table -->

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -49,7 +49,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Propositions', href: '#' },
 ];
 
-const search = ref('');
 
 const filterFields: FilterField[] = [
     {
@@ -110,7 +109,6 @@ const colorClasses: Record<string, string> = {
                 :values="filters"
                 :fields="filterFields"
                 :result-count="propositions.length"
-                v-model:search="search"
             />
 
             <!-- Table -->

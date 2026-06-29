@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -61,7 +61,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Périodes', href: '/comptabilite/periodes' },
 ];
 
-const search = ref(props.filters.search ?? '');
 
 const filterFields: FilterField[] = [
     {
@@ -160,9 +159,6 @@ const typeBadge = (type: string) =>
                 :values="filters"
                 :fields="filterFields"
                 :result-count="periodes.data.length"
-                search-key="search"
-                search-placeholder="Rechercher une référence, un type..."
-                v-model:search="search"
             />
 
             <!-- Table -->

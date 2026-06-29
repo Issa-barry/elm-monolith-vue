@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -121,7 +121,6 @@ const inactiveUsers = computed(
     () => props.users.filter((u) => !u.is_active).length,
 );
 
-const search = ref('');
 const statut = ref<string>('tous');
 const siteIds = ref<string[]>([]);
 
@@ -261,8 +260,6 @@ function confirmDelete(u: StaffUser) {
                 :fields="filterFields"
                 :values="{ statut }"
                 :result-count="filteredUsers.length"
-                search-placeholder="Rechercher un utilisateur…"
-                v-model:search="search"
                 @apply="handleApply"
                 @reset="resetFilters"
             />

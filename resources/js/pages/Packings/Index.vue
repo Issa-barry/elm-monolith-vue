@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -380,8 +380,6 @@ function confirmDelete(packing: Packing) {
 
             <!-- Filtres ──────────────────────────────────────────────────────── -->
             <DataFilters
-                v-model:search="search"
-                search-placeholder="Rechercher un packing…"
                 :values="{ statut: statutFilter }"
                 :fields="
                     [

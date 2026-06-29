@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -72,7 +72,6 @@ const AVATAR_COLORS: Record<string, string> = {
         'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
 };
 
-const search = ref('');
 const statusFilter = ref('tous');
 const typeFilter = ref('tous');
 
@@ -223,8 +222,6 @@ function confirmToggle(a: Account) {
                 :fields="filterFields"
                 :values="{ type: typeFilter, statut: statusFilter }"
                 :result-count="filteredAccounts.length"
-                search-placeholder="Rechercher un compte..."
-                v-model:search="search"
                 @apply="handleApply"
                 @reset="resetFilters"
             />

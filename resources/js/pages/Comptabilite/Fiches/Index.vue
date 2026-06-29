@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -87,7 +87,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: typeTitle[props.type], href: typeRoute[props.type] },
 ];
 
-const search = ref(props.filters.search ?? '');
 
 const filterFields = computed((): FilterField[] => [
     ...(props.sites.length > 0
@@ -216,8 +215,6 @@ function exportExcel() {
                 :values="filters"
                 :fields="filterFields"
                 :result-count="fiches.data.length"
-                search-key="search"
-                v-model:search="search"
             />
 
             <!-- Table -->

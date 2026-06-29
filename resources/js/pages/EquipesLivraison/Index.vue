@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -63,7 +63,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Équipes de livraison', href: '/equipes-livraison' },
 ];
 
-const search = ref('');
 const statut = ref<'tous' | 'actif' | 'inactif'>('tous');
 const categorie = ref<'tous' | 'interne' | 'externe'>('tous');
 const proprietaire = ref('tous');
@@ -209,7 +208,6 @@ function confirmDelete(equipe: Equipe) {
 
             <!-- Barre de recherche + filtres -->
             <DataFilters
-                v-model:search="search"
                 :values="{ statut, categorie, proprietaire }"
                 :fields="filterFields"
                 :result-count="equipesFiltrees.length"

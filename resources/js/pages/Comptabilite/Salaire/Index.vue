@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
 import DataFilters, {
     type FilterField,
@@ -102,7 +102,6 @@ const ANNEES = Array.from({ length: 5 }, (_, i) => {
     return { value: y, label: String(y) };
 });
 
-const search = ref(props.search ?? '');
 
 const filterFields = computed((): FilterField[] => [
     {
@@ -342,9 +341,6 @@ const periodeCourante = computed(
                 :fields="filterFields"
                 :sites="sites"
                 :result-count="lignes.length"
-                search-key="search"
-                search-placeholder="Rechercher un salarié..."
-                v-model:search="search"
             />
 
             <!-- Tableau -->

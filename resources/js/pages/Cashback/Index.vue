@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -90,8 +90,6 @@ const statutOptions = [
     { label: 'Partiel', value: 'partiel' },
     { label: 'Versé', value: 'verse' },
 ];
-const mobileSearch = ref('');
-const search = ref('');
 
 const filterFields = computed<FilterField[]>(() => [
     {
@@ -496,8 +494,6 @@ function formatPhone(phone: string | null): string {
             <!-- Filtres -->
             <DataFilters
                 url="/cashback"
-                v-model:search="search"
-                search-placeholder="Client, téléphone…"
                 :values="{
                     statut: filters.statut ?? 'tous',
                     client_id: filters.client_id ?? '',

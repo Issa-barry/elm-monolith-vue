@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -568,9 +568,6 @@ function confirmArchive(produit: Produit) {
             <!-- Barre de filtres -->
             <DataFilters
                 url="/produits"
-                v-model:search="searchInput"
-                search-key="search"
-                search-placeholder="Rechercher…"
                 :values="{
                     type: filters.type ?? '',
                     statut: filters.statut ?? '',

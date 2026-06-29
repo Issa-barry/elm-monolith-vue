@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -31,7 +31,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Types de véhicules', href: '/type-vehicules' },
 ];
 
-const search = ref('');
 
 const typesFiltres = computed(() => {
     const q = search.value.toLowerCase().trim();
@@ -97,8 +96,6 @@ function destroy(id: string) {
             </div>
 
             <DataFilters
-                v-model:search="search"
-                search-placeholder="Nom, description…"
                 :result-count="typesFiltres.length"
                 :fields="filterFields"
             />

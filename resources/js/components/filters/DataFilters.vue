@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import FilterBar from '@/components/FilterBar.vue';
 import FilterDrawer from '@/components/FilterDrawer.vue';
+import FilterAutocomplete from '@/components/filters/FilterAutocomplete.vue';
 import FilterMultiSelect from '@/components/filters/FilterMultiSelect.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { router, usePage } from '@inertiajs/vue3';
-import { Lock, Search, X } from 'lucide-vue-next';
+import { Lock } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed, ref, watch } from 'vue';
 
@@ -13,6 +14,7 @@ import { computed, ref, watch } from 'vue';
 
 export type FilterFieldType =
     | 'text'
+    | 'autocomplete'
     | 'select'
     | 'multi-select'
     | 'date'
@@ -36,6 +38,10 @@ export interface FilterField {
     disabled?: boolean;
     /** Affiche le champ dans la barre principale plutôt que dans le drawer */
     inline?: boolean;
+    /** Pour type: 'autocomplete' — URL de l'endpoint de suggestions */
+    suggestionsUrl?: string;
+    /** Pour type: 'autocomplete' — nom du champ passé à l'endpoint (?field=xxx) */
+    suggestionsField?: string;
 }
 
 interface SiteOption {
@@ -51,19 +57,15 @@ const props = withDefaults(
         baseParams?: Record<string, string | string[]>;
         values?: Record<string, unknown>;
         sites?: SiteOption[];
-        searchPlaceholder?: string;
-        searchKey?: string;
         resultCount: number;
         fields: FilterField[];
-        /** Masque le sélecteur générique Agence/Site (ex: Logistique qui a ses propres filtres site) */
+        /** Masque le sélecteur générique Agence/Site */
         hideAgenceSelector?: boolean;
     }>(),
     {
         baseParams: () => ({}),
         values: () => ({}),
         sites: () => [],
-        searchPlaceholder: 'Rechercher…',
-        searchKey: undefined,
         url: undefined,
         hideAgenceSelector: false,
     },
@@ -73,10 +75,6 @@ const emit = defineEmits<{
     apply: [values: Record<string, unknown>];
     reset: [];
 }>();
-
-const search = defineModel<string>('search', { default: '' });
-// Saisie en cours — ne modifie search (et donc les computeds parents) qu'à l'apply
-const localSearch = ref(search.value);
 
 // ── Détection admin ───────────────────────────────────────────────────────────
 
@@ -142,10 +140,8 @@ function initLocal() {
     const v = props.values ?? {};
 
     if (!isAdmin.value && authUserSites.value.length > 0) {
-        // Non-admin : périmètre verrouillé sur ses sites
         localSiteIds.value = authUserSites.value.map((s) => s.id);
     } else {
-        // Admin : reprendre la sélection serveur, ou [] (= toutes les agences)
         localSiteIds.value = toArray(v.site_ids);
     }
 
@@ -164,7 +160,6 @@ function initLocal() {
     }
     localValues.value = fresh;
 
-    // Sync les snapshots avec l'état serveur reçu
     appliedSiteIds.value = [...localSiteIds.value];
     appliedValues.value = JSON.parse(JSON.stringify(fresh));
 }
@@ -175,7 +170,6 @@ watch(() => props.values, initLocal, { deep: true });
 // ── Détection de changements en attente ───────────────────────────────────────
 
 const pendingChange = computed(() => {
-    if (localSearch.value !== search.value) return true;
     const siteChanged =
         JSON.stringify([...localSiteIds.value].sort()) !==
         JSON.stringify([...appliedSiteIds.value].sort());
@@ -204,21 +198,13 @@ function meaningfulTotal(options?: FilterOption[]): number {
 function buildParams(): Record<string, string | string[]> {
     const params: Record<string, string | string[]> = { ...props.baseParams };
 
-    if (props.searchKey && localSearch.value) {
-        params[props.searchKey] = localSearch.value;
-    }
-
     // Filtre agence : seulement pour admin, et seulement si une sélection partielle
     if (isAdmin.value && localSiteIds.value.length > 0) {
         const totalSites = siteOptions.value.length;
-        // Ne pas envoyer si tous les sites sont sélectionnés (= pas de filtre),
-        // sauf s'il n'y a qu'un seul site dispo : le sélectionner est alors un
-        // choix explicite, pas un "tout".
         if (totalSites <= 1 || localSiteIds.value.length < totalSites) {
             params.site_ids = localSiteIds.value;
         }
     }
-    // Non-admin : le backend applique automatiquement le périmètre — rien à envoyer
 
     for (const field of props.fields) {
         if (field.disabled) continue;
@@ -229,17 +215,18 @@ function buildParams(): Record<string, string | string[]> {
                 params[sk] = localValues.value[sk] as string;
             if (localValues.value[ek])
                 params[ek] = localValues.value[ek] as string;
-        } else if (field.type === 'multi-select' || field.type === 'select') {
+        } else if (field.type === 'multi-select') {
             const raw = (localValues.value[field.key] as string[]) ?? [];
             const arr = stripSentinels(raw);
             const total = meaningfulTotal(field.options);
-            // "Tout sélectionné = pas de filtre" n'a de sens que s'il y a
-            // plusieurs options à désélectionner. Avec une seule option
-            // dispo (ex: un seul "Période" existant), la sélectionner est un
-            // choix explicite et doit être envoyée, sinon elle disparaît
-            // silencieusement au clic sur "Appliquer".
             if (arr.length > 0 && (total <= 1 || arr.length < total)) {
                 params[field.key] = arr;
+            }
+        } else if (field.type === 'select') {
+            const raw = (localValues.value[field.key] as string[]) ?? [];
+            const arr = stripSentinels(raw);
+            if (arr.length > 0) {
+                params[field.key] = arr[0];
             }
         } else if (field.type === 'boolean') {
             const val = localValues.value[field.key];
@@ -257,7 +244,6 @@ function buildParams(): Record<string, string | string[]> {
 }
 
 function applyFilters() {
-    search.value = localSearch.value;
     const values = buildParams();
     if (props.url) {
         router.get(props.url, values, { preserveScroll: true, replace: true });
@@ -268,14 +254,10 @@ function applyFilters() {
 }
 
 function resetFilters() {
-    // Admin → réinitialiser la sélection agence (= toutes)
-    // Non-admin → périmètre inchangé (ses sites, imposé par le backend)
     if (isAdmin.value) {
         localSiteIds.value = [];
     }
 
-    localSearch.value = '';
-    search.value = '';
     for (const field of props.fields) {
         if (field.disabled) continue;
         if (field.type === 'date-range') {
@@ -300,13 +282,6 @@ function resetFilters() {
         });
     }
     emit('reset');
-}
-
-// ── Bouton X du champ recherche ───────────────────────────────────────────────
-
-function clearSearch() {
-    localSearch.value = '';
-    applyFilters();
 }
 
 // ── Champs inline vs drawer ───────────────────────────────────────────────────
@@ -338,23 +313,97 @@ function countActiveFields(fields: FilterField[]): number {
     return n;
 }
 
-// Badge du drawer : seulement les filtres non-inline
 const drawerFilterCount = computed(() => countActiveFields(drawerFields.value));
 
-// Les sites verrouillés du non-admin ne comptent pas comme filtre actif
 const hasActiveFilters = computed(
     () =>
         drawerFilterCount.value > 0 ||
         countActiveFields(inlineFields.value) > 0 ||
-        (isAdmin.value && localSiteIds.value.length > 0) ||
-        !!(search.value || localSearch.value),
+        (isAdmin.value && localSiteIds.value.length > 0),
 );
 </script>
 
 <template>
     <FilterBar>
-        <!-- Drawer filtres avancés — bouton à l'extrême gauche (uniquement les champs non-inline) -->
-        <div v-if="drawerFields.length > 0" class="order-1 shrink-0">
+
+        <!-- ── 1. Agence / Site ── toujours en premier ──────────────────────── -->
+        <div
+            v-if="!hideAgenceSelector && siteOptions.length > 0"
+            data-testid="agency-filter"
+            class="relative flex shrink-0 flex-col gap-1"
+        >
+            <span class="text-xs font-medium text-muted-foreground">Agence</span>
+            <div class="relative w-[200px]">
+                <FilterMultiSelect
+                    v-model="localSiteIds"
+                    :options="siteOptions"
+                    placeholder="Toutes les agences"
+                    :empty-means-all="isAdmin"
+                    :disabled="siteSelectorLocked"
+                />
+                <Lock
+                    v-if="siteSelectorLocked"
+                    class="pointer-events-none absolute top-1/2 right-8 h-3 w-3 -translate-y-1/2 text-muted-foreground opacity-50"
+                />
+            </div>
+        </div>
+
+        <!-- ── 2. Champs inline ──────────────────────────────────────────────── -->
+        <template v-for="field in inlineFields" :key="field.key">
+
+            <!-- select / multi-select -->
+            <div
+                v-if="field.type === 'multi-select' || field.type === 'select'"
+                class="relative flex shrink-0 flex-col gap-1"
+            >
+                <span class="text-xs font-medium text-muted-foreground">{{ field.label }}</span>
+                <div class="relative w-[180px]">
+                    <FilterMultiSelect
+                        v-model="localValues[field.key] as (string | number)[]"
+                        :options="field.options ?? []"
+                        :placeholder="field.placeholder ?? field.label"
+                        :disabled="field.disabled ?? false"
+                    />
+                    <Lock
+                        v-if="field.disabled"
+                        class="pointer-events-none absolute top-1/2 right-8 h-3 w-3 -translate-y-1/2 text-muted-foreground opacity-50"
+                    />
+                </div>
+            </div>
+
+            <!-- text -->
+            <div v-else-if="field.type === 'text'" class="flex shrink-0 flex-col gap-1">
+                <span class="text-xs font-medium text-muted-foreground">{{ field.label }}</span>
+                <input
+                    v-model="localValues[field.key]"
+                    type="text"
+                    :data-testid="`filter-inline-${field.key}`"
+                    :placeholder="field.placeholder ?? ''"
+                    :disabled="field.disabled ?? false"
+                    class="h-9 w-[180px] rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50"
+                    @keydown.enter="applyFilters"
+                />
+            </div>
+
+            <!-- autocomplete -->
+            <FilterAutocomplete
+                v-else-if="field.type === 'autocomplete' && field.suggestionsUrl"
+                v-model="localValues[field.key] as string"
+                :label="field.label"
+                :suggestions-url="field.suggestionsUrl"
+                :field-name="field.suggestionsField ?? field.key"
+                :placeholder="field.placeholder ?? ''"
+                :disabled="field.disabled ?? false"
+                @select="applyFilters"
+            />
+
+        </template>
+
+        <!-- ── Slot pour contrôles inline additionnels ───────────────────────── -->
+        <slot name="inline" />
+
+        <!-- ── 3. Bouton Filtres (drawer) ── toujours en dernier ────────────── -->
+        <div v-if="drawerFields.length > 0" class="shrink-0 self-end">
             <FilterDrawer
                 v-model:open="filterDrawerOpen"
                 title="Filtres"
@@ -365,12 +414,10 @@ const hasActiveFilters = computed(
             >
                 <div class="space-y-5">
                     <template v-for="field in drawerFields" :key="field.key">
+
                         <!-- multi-select ou select -->
                         <div
-                            v-if="
-                                field.type === 'multi-select' ||
-                                field.type === 'select'
-                            "
+                            v-if="field.type === 'multi-select' || field.type === 'select'"
                             :data-testid="`filter-field-${field.key}`"
                             class="space-y-1.5"
                         >
@@ -382,12 +429,7 @@ const hasActiveFilters = computed(
                                 />
                             </Label>
                             <FilterMultiSelect
-                                v-model="
-                                    localValues[field.key] as (
-                                        | string
-                                        | number
-                                    )[]
-                                "
+                                v-model="localValues[field.key] as (string | number)[]"
                                 :options="field.options ?? []"
                                 :placeholder="field.placeholder ?? 'Tous'"
                                 :disabled="field.disabled ?? false"
@@ -402,12 +444,7 @@ const hasActiveFilters = computed(
                             <div class="space-y-1.5">
                                 <Label>Date début</Label>
                                 <Input
-                                    v-model="
-                                        localValues[
-                                            field.startKey ??
-                                                `${field.key}_debut`
-                                        ]
-                                    "
+                                    v-model="localValues[field.startKey ?? `${field.key}_debut`]"
                                     type="date"
                                     class="h-9"
                                 />
@@ -415,11 +452,7 @@ const hasActiveFilters = computed(
                             <div class="space-y-1.5">
                                 <Label>Date fin</Label>
                                 <Input
-                                    v-model="
-                                        localValues[
-                                            field.endKey ?? `${field.key}_fin`
-                                        ]
-                                    "
+                                    v-model="localValues[field.endKey ?? `${field.key}_fin`]"
                                     type="date"
                                     class="h-9"
                                 />
@@ -427,10 +460,7 @@ const hasActiveFilters = computed(
                         </div>
 
                         <!-- date -->
-                        <div
-                            v-else-if="field.type === 'date'"
-                            class="space-y-1.5"
-                        >
+                        <div v-else-if="field.type === 'date'" class="space-y-1.5">
                             <Label>{{ field.label }}</Label>
                             <Input
                                 v-model="localValues[field.key]"
@@ -440,10 +470,7 @@ const hasActiveFilters = computed(
                         </div>
 
                         <!-- number -->
-                        <div
-                            v-else-if="field.type === 'number'"
-                            class="space-y-1.5"
-                        >
+                        <div v-else-if="field.type === 'number'" class="space-y-1.5">
                             <Label>{{ field.label }}</Label>
                             <Input
                                 v-model.number="localValues[field.key]"
@@ -454,10 +481,7 @@ const hasActiveFilters = computed(
                         </div>
 
                         <!-- boolean -->
-                        <div
-                            v-else-if="field.type === 'boolean'"
-                            class="space-y-1.5"
-                        >
+                        <div v-else-if="field.type === 'boolean'" class="space-y-1.5">
                             <Label>{{ field.label }}</Label>
                             <Select
                                 v-model="localValues[field.key]"
@@ -473,7 +497,7 @@ const hasActiveFilters = computed(
                             />
                         </div>
 
-                        <!-- text (défaut) -->
+                        <!-- text -->
                         <div v-else class="space-y-1.5">
                             <Label>{{ field.label }}</Label>
                             <Input
@@ -483,75 +507,11 @@ const hasActiveFilters = computed(
                                 class="h-9"
                             />
                         </div>
+
                     </template>
                 </div>
             </FilterDrawer>
         </div>
-
-        <!-- Recherche — déclenché par Entrée ou clic sur "Rechercher" -->
-        <div class="relative order-2 w-full shrink-0 sm:w-[260px]">
-            <Search
-                class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-                v-model="localSearch"
-                type="text"
-                data-testid="search-input"
-                :placeholder="searchPlaceholder"
-                class="h-9 w-full rounded-md border border-input bg-background py-2 pr-7 pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                @keydown.enter="applyFilters"
-            />
-            <button
-                v-if="localSearch"
-                type="button"
-                class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                @click="clearSearch"
-            >
-                <X class="h-3.5 w-3.5" />
-            </button>
-        </div>
-
-        <!-- Agence / Site générique (masqué quand la page gère ses propres filtres site) -->
-        <div
-            v-if="!hideAgenceSelector && siteOptions.length > 0"
-            data-testid="agency-filter"
-            class="relative order-3 w-[220px] shrink-0"
-        >
-            <FilterMultiSelect
-                v-model="localSiteIds"
-                :options="siteOptions"
-                placeholder="Toutes les agences"
-                :empty-means-all="isAdmin"
-                :disabled="siteSelectorLocked"
-            />
-            <!-- Cadenas : indique au non-admin que le périmètre est verrouillé -->
-            <Lock
-                v-if="siteSelectorLocked"
-                class="pointer-events-none absolute top-1/2 right-8 h-3 w-3 -translate-y-1/2 text-muted-foreground opacity-50"
-            />
-        </div>
-
-        <!-- Champs inline : visibles directement dans la barre (ex: Site départ / Site arrivée) -->
-        <template v-for="field in inlineFields" :key="field.key">
-            <div
-                v-if="field.type === 'multi-select' || field.type === 'select'"
-                class="relative order-4 w-[200px] shrink-0"
-            >
-                <FilterMultiSelect
-                    v-model="localValues[field.key] as (string | number)[]"
-                    :options="field.options ?? []"
-                    :placeholder="field.placeholder ?? field.label"
-                    :disabled="field.disabled ?? false"
-                />
-                <Lock
-                    v-if="field.disabled"
-                    class="pointer-events-none absolute top-1/2 right-8 h-3 w-3 -translate-y-1/2 text-muted-foreground opacity-50"
-                />
-            </div>
-        </template>
-
-        <!-- Slot pour contrôles inline additionnels -->
-        <slot name="inline" />
 
         <template #actions>
             <span
@@ -581,7 +541,7 @@ const hasActiveFilters = computed(
                 "
                 @click="applyFilters"
             >
-                Rechercher
+                Appliquer
             </button>
         </template>
     </FilterBar>

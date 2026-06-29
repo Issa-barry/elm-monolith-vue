@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -220,7 +220,6 @@ function initials(name: string | null) {
 
 // ── Membres : filtres ─────────────────────────────────────────────────────────
 
-const search = ref('');
 const statutFilter = ref<string>('tous');
 const roleFilter = ref<string>('tous');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });

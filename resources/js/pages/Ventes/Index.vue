@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -154,7 +154,6 @@ const filtresStatutCommission = [
 ];
 
 // ── Filtres ───────────────────────────────────────────────────────────────────
-const search = ref('');
 
 const filterFields: FilterField[] = [
     {
@@ -241,7 +240,6 @@ const commandesFiltrees = computed(() => {
 });
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
-const mobileSearch = ref('');
 
 const mobileFiltered = computed(() => {
     const q = mobileSearch.value.toLowerCase().trim();
@@ -598,8 +596,6 @@ function confirmDelete(c: Commande) {
                 :base-params="{ periode: 'all' }"
                 :values="filterValues"
                 :sites="sites"
-                v-model:search="search"
-                search-placeholder="Référence, véhicule, client…"
                 :result-count="commandesFiltrees.length"
                 :fields="filterFields"
             />
