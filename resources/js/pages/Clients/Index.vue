@@ -73,8 +73,17 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Client>(
 );
 
 const statut = ref<string>('tous');
+const search = ref('');
+const mobileSearch = ref('');
 
 const filterFields: FilterField[] = [
+    {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher un client...',
+    },
     {
         key: 'statut',
         label: 'Statut',
@@ -391,12 +400,13 @@ function confirmDelete(c: Client) {
 
             <!-- Tableau -->
             <DataFilters
-                :values="{ statut: statut }"
+                :values="{ statut: statut, search: search }"
                 :fields="filterFields"
                 :result-count="filteredClients.length"
                 @apply="
                     (vals) => {
                         statut.value = (vals.statut as string) || 'tous';
+                        search.value = (vals.search as string) || '';
                     }
                 "
                 @reset="resetFilters"
