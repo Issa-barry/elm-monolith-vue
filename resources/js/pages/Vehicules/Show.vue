@@ -7,7 +7,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import EquipeStepperModal from '@/pages/Vehicules/partials/EquipeStepperModal.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     Car,
@@ -20,7 +20,6 @@ import {
     Settings,
     Users,
 } from 'lucide-vue-next';
-import { router } from '@inertiajs/vue3';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
@@ -735,7 +734,11 @@ function formatGNF(val: number): string {
                                 <span
                                     v-else
                                     class="inline-flex h-8 w-8 shrink-0 cursor-default items-center justify-center rounded-md"
-                                    :class="d.statut === 'valide' ? 'text-green-500/70' : 'text-blue-400/70'"
+                                    :class="
+                                        d.statut === 'valide'
+                                            ? 'text-green-500/70'
+                                            : 'text-blue-400/70'
+                                    "
                                     :title="`Dépense ${statutLabel[d.statut] ?? d.statut} — non modifiable`"
                                 >
                                     <CheckCircle class="h-3.5 w-3.5" />

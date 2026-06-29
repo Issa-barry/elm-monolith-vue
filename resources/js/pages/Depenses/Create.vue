@@ -607,7 +607,10 @@ function submitBrouillon() {
                                     class="mb-1.5 flex items-center gap-1 text-xs font-medium"
                                 >
                                     Site
-                                    <Lock v-if="!can_change_site" class="h-3 w-3 text-muted-foreground" />
+                                    <Lock
+                                        v-if="!can_change_site"
+                                        class="h-3 w-3 text-muted-foreground"
+                                    />
                                 </Label>
                                 <select
                                     id="dep-site"
