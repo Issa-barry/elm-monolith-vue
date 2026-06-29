@@ -115,7 +115,7 @@ class DepenseParametrageTest extends TestCase
 
     // ── updateDroits ──────────────────────────────────────────────────────────
 
-    public function test_updateDroits_forbidden_sans_permission(): void
+    public function test_update_droits_forbidden_sans_permission(): void
     {
         $user = User::factory()->create(['organization_id' => $this->org->id]);
         $user->assignRole('manager');
@@ -126,7 +126,7 @@ class DepenseParametrageTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_updateDroits_sauvegarde_peut_valider_true(): void
+    public function test_update_droits_sauvegarde_peut_valider_true(): void
     {
         $user = $this->adminWith('parametres.update');
 
@@ -151,7 +151,7 @@ class DepenseParametrageTest extends TestCase
         ]);
     }
 
-    public function test_updateDroits_sauvegarde_peut_valider_false(): void
+    public function test_update_droits_sauvegarde_peut_valider_false(): void
     {
         $user = $this->adminWith('parametres.update');
 
@@ -175,7 +175,7 @@ class DepenseParametrageTest extends TestCase
         ]);
     }
 
-    public function test_updateDroits_sauvegarde_perimetre_son_agence(): void
+    public function test_update_droits_sauvegarde_perimetre_son_agence(): void
     {
         $user = $this->adminWith('parametres.update');
 
@@ -199,7 +199,7 @@ class DepenseParametrageTest extends TestCase
         ]);
     }
 
-    public function test_updateDroits_sauvegarde_perimetre_agences_selectionnees_avec_sites(): void
+    public function test_update_droits_sauvegarde_perimetre_agences_selectionnees_avec_sites(): void
     {
         $user = $this->adminWith('parametres.update');
 
@@ -225,7 +225,7 @@ class DepenseParametrageTest extends TestCase
         $this->assertContains($this->site->id, $droit->sites);
     }
 
-    public function test_updateDroits_sites_ignores_si_perimetre_pas_agences_selectionnees(): void
+    public function test_update_droits_sites_ignores_si_perimetre_pas_agences_selectionnees(): void
     {
         $user = $this->adminWith('parametres.update');
 
@@ -249,7 +249,7 @@ class DepenseParametrageTest extends TestCase
         $this->assertNull($droit->sites);
     }
 
-    public function test_updateDroits_met_a_jour_ligne_existante(): void
+    public function test_update_droits_met_a_jour_ligne_existante(): void
     {
         $user = $this->adminWith('parametres.update');
 
@@ -290,7 +290,7 @@ class DepenseParametrageTest extends TestCase
         ]);
     }
 
-    public function test_updateDroits_rejette_site_autre_org(): void
+    public function test_update_droits_rejette_site_autre_org(): void
     {
         $user = $this->adminWith('parametres.update');
 

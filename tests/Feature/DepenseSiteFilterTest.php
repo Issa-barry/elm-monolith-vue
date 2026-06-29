@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Enums\StatutDepense;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Organization;
@@ -88,7 +87,7 @@ class DepenseSiteFilterTest extends TestCase
         return $user;
     }
 
-    private function depenseBrouillon(User $user, Site $site = null): Depense
+    private function depenseBrouillon(User $user, ?Site $site = null): Depense
     {
         return Depense::factory()->brouillon()->create([
             'organization_id' => $this->org->id,

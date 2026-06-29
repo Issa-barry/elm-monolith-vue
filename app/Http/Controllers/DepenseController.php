@@ -9,14 +9,15 @@ use App\Http\Requests\StoreDepenseRequest;
 use App\Http\Requests\UpdateDepenseRequest;
 use App\Models\AuditLog;
 use App\Models\Depense;
-use App\Models\DroitCreationDepense;
 use App\Models\DepenseImputation;
 use App\Models\DepenseType;
+use App\Models\DroitCreationDepense;
 use App\Models\Employe;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\DepenseImputationService;
@@ -751,7 +752,7 @@ class DepenseController extends Controller
         return $query;
     }
 
-    private function transformDepense(Depense $d, array $labelCache, array $vehiculeInfoCache, ?\App\Models\User $user = null, ?DroitCreationDepense $droitValidation = null): array
+    private function transformDepense(Depense $d, array $labelCache, array $vehiculeInfoCache, ?User $user = null, ?DroitCreationDepense $droitValidation = null): array
     {
         $categorie = $d->depenseType?->categorie;
         $cacheKey = "{$d->beneficiaire_type}:{$d->beneficiaire_id}";
@@ -808,7 +809,7 @@ class DepenseController extends Controller
             'site' => $d->site ? ['id' => $d->site->id, 'nom' => $d->site->nom] : null,
             'user' => ['id' => $d->user->id, 'name' => $d->user->name],
             'validateur' => $d->validateur ? ['id' => $d->validateur->id, 'name' => $d->validateur->name] : null,
-            'can_valider' => $user && $d->statut === \App\Enums\StatutDepense::SOUMIS
+            'can_valider' => $user && $d->statut === StatutDepense::SOUMIS
                 && $this->droitCreationDepense->peutValiderSurSite($user, $droitValidation, $d->site_id),
         ];
     }

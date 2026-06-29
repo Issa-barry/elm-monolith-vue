@@ -213,7 +213,7 @@ class DroitCreationDepenseServiceTest extends TestCase
 
     // ── droitValidationPour ───────────────────────────────────────────────────
 
-    public function test_admin_droitValidationPour_retourne_null(): void
+    public function test_admin_droit_validation_pour_retourne_null(): void
     {
         $this->assertNull($this->service->droitValidationPour($this->adminUser(), $this->org->id));
     }
@@ -255,19 +255,19 @@ class DroitCreationDepenseServiceTest extends TestCase
 
     // ── peutValiderSurSite ────────────────────────────────────────────────────
 
-    public function test_admin_peutValiderSurSite_retourne_true(): void
+    public function test_admin_peut_valider_sur_site_retourne_true(): void
     {
         $site = $this->site();
         $this->assertTrue($this->service->peutValiderSurSite($this->adminUser(), null, $site->id));
     }
 
-    public function test_sans_droit_peutValiderSurSite_retourne_false(): void
+    public function test_sans_droit_peut_valider_sur_site_retourne_false(): void
     {
         $site = $this->site();
         $this->assertFalse($this->service->peutValiderSurSite($this->commercialeUser(), null, $site->id));
     }
 
-    public function test_toutes_agences_peutValiderSurSite_retourne_true(): void
+    public function test_toutes_agences_peut_valider_sur_site_retourne_true(): void
     {
         $user = $this->commercialeUser();
         $site = $this->site();
@@ -282,7 +282,7 @@ class DroitCreationDepenseServiceTest extends TestCase
         $this->assertTrue($this->service->peutValiderSurSite($user, $droit, $site->id));
     }
 
-    public function test_son_agence_peutValiderSurSite_meme_site_retourne_true(): void
+    public function test_son_agence_peut_valider_sur_site_meme_site_retourne_true(): void
     {
         $user = $this->commercialeUser();
         $site = $this->site();
@@ -299,7 +299,7 @@ class DroitCreationDepenseServiceTest extends TestCase
         $this->assertTrue($this->service->peutValiderSurSite($user, $droit, $site->id));
     }
 
-    public function test_son_agence_peutValiderSurSite_autre_site_retourne_false(): void
+    public function test_son_agence_peut_valider_sur_site_autre_site_retourne_false(): void
     {
         $user = $this->commercialeUser();
         $siteA = $this->site();
@@ -322,7 +322,7 @@ class DroitCreationDepenseServiceTest extends TestCase
         $this->assertFalse($this->service->peutValiderSurSite($user, $droit, $siteB->id));
     }
 
-    public function test_agences_selectionnees_peutValiderSurSite_site_autorise_retourne_true(): void
+    public function test_agences_selectionnees_peut_valider_sur_site_site_autorise_retourne_true(): void
     {
         $user = $this->commercialeUser();
         $site = $this->site();
@@ -338,7 +338,7 @@ class DroitCreationDepenseServiceTest extends TestCase
         $this->assertTrue($this->service->peutValiderSurSite($user, $droit, $site->id));
     }
 
-    public function test_agences_selectionnees_peutValiderSurSite_site_non_autorise_retourne_false(): void
+    public function test_agences_selectionnees_peut_valider_sur_site_site_non_autorise_retourne_false(): void
     {
         $user = $this->commercialeUser();
         $siteA = $this->site();

@@ -65,7 +65,7 @@ class DepenseValidationTest extends TestCase
         }
     }
 
-    private function adminUser(Site $site = null): User
+    private function adminUser(?Site $site = null): User
     {
         $user = User::factory()->create(['organization_id' => $this->org->id]);
         $user->assignRole('admin_entreprise');
@@ -75,7 +75,7 @@ class DepenseValidationTest extends TestCase
         return $user;
     }
 
-    private function managerUser(Site $site = null): User
+    private function managerUser(?Site $site = null): User
     {
         $user = User::factory()->create(['organization_id' => $this->org->id]);
         $user->assignRole('manager');
@@ -85,7 +85,7 @@ class DepenseValidationTest extends TestCase
         return $user;
     }
 
-    private function depenseSoumise(Site $site = null): Depense
+    private function depenseSoumise(?Site $site = null): Depense
     {
         return Depense::factory()->soumis()->create([
             'organization_id' => $this->org->id,
