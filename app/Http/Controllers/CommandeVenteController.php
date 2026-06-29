@@ -53,8 +53,11 @@ class CommandeVenteController extends Controller
         $vehiculeId = $request->input('vehicule_id');
         $clientId = $request->input('client_id');
 
+        $controleActif = Parametre::isVentesControleImpayesActif($orgId);
+        $seuilMax = Parametre::getVentesSeuilImpayesMax($orgId);
+
         if (! $vehiculeId && ! $clientId) {
-            return response()->json($this->emptySolvabilite());
+            return response()->json($this->emptySolvabilite($controleActif, $seuilMax));
         }
 
         $query = FactureVente::where('organization_id', $orgId)
@@ -71,22 +74,29 @@ class CommandeVenteController extends Controller
         $factures = $query->get();
 
         if ($factures->isEmpty()) {
-            return response()->json($this->emptySolvabilite());
+            return response()->json($this->emptySolvabilite($controleActif, $seuilMax));
         }
 
-        $totalRemaining = $factures->sum(fn ($f) => $f->montant_restant);
-        $totalEncaisse = $factures->sum(fn ($f) => $f->montant_encaisse);
+        $totalRemaining = (int) round($factures->sum(fn ($f) => $f->montant_restant));
+        $totalEncaisse = (int) round($factures->sum(fn ($f) => $f->montant_encaisse));
         $hasImpayee = $factures->contains(fn ($f) => $f->statut_facture === StatutFactureVente::IMPAYEE);
         $derniere = $factures->first();
+
+        $blocked = $controleActif && $totalRemaining > $seuilMax;
+        $depassement = $blocked ? $totalRemaining - $seuilMax : 0;
 
         return response()->json([
             'has_debt' => true,
             'status' => $hasImpayee ? 'impaye' : 'partiel',
             'unpaid_invoices_count' => $factures->count(),
-            'total_remaining' => (int) round($totalRemaining),
-            'total_encaisse' => (int) round($totalEncaisse),
+            'total_remaining' => $totalRemaining,
+            'total_encaisse' => $totalEncaisse,
             'last_invoice_reference' => $derniere->reference,
             'last_invoice_date' => $derniere->created_at?->format('Y-m-d'),
+            'controle_actif' => $controleActif,
+            'seuil_impayes' => $seuilMax,
+            'blocked' => $blocked,
+            'depassement' => $depassement,
             'factures' => $factures->map(fn ($f) => [
                 'commande_id' => $f->commande_vente_id,
                 'reference' => $f->reference,
@@ -100,7 +110,7 @@ class CommandeVenteController extends Controller
         ]);
     }
 
-    private function emptySolvabilite(): array
+    private function emptySolvabilite(bool $controleActif = false, int $seuilMax = 0): array
     {
         return [
             'has_debt' => false,
@@ -110,6 +120,10 @@ class CommandeVenteController extends Controller
             'total_encaisse' => 0,
             'last_invoice_reference' => null,
             'last_invoice_date' => null,
+            'controle_actif' => $controleActif,
+            'seuil_impayes' => $seuilMax,
+            'blocked' => false,
+            'depassement' => 0,
             'factures' => [],
         ];
     }
@@ -341,6 +355,7 @@ class CommandeVenteController extends Controller
         $data = $request->validate($this->commandeValidationRules(), $this->commandeValidationMessages());
 
         $this->ensureVehiculeOrClientSelected($data);
+        $this->enforceImpayesBlocking($data, $orgId);
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
         $this->enforcePrixVentePolicy($data, null);
 
@@ -704,6 +719,35 @@ class CommandeVenteController extends Controller
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    private function enforceImpayesBlocking(array $data, string $orgId): void
+    {
+        if (! Parametre::isVentesControleImpayesActif($orgId)) {
+            return;
+        }
+
+        $seuilMax = Parametre::getVentesSeuilImpayesMax($orgId);
+        $vehiculeId = $data['vehicule_id'] ?? null;
+        $clientId = $data['client_id'] ?? null;
+
+        $query = FactureVente::where('organization_id', $orgId)
+            ->whereIn('statut_facture', [StatutFactureVente::IMPAYEE->value, StatutFactureVente::PARTIEL->value])
+            ->with('encaissements');
+
+        if ($vehiculeId) {
+            $query->where('vehicule_id', $vehiculeId);
+        } else {
+            $query->whereHas('commande', fn ($q) => $q->where('client_id', $clientId));
+        }
+
+        $totalRemaining = (int) round($query->get()->sum(fn ($f) => $f->montant_restant));
+
+        if ($totalRemaining > $seuilMax) {
+            throw ValidationException::withMessages([
+                'impayes' => 'Creation bloquee : le montant des impayes ('.number_format($totalRemaining, 0, ',', ' ').' GNF) depasse le seuil autorise ('.number_format($seuilMax, 0, ',', ' ').' GNF).',
+            ]);
+        }
+    }
 
     private function getCommissionStatutGlobal(CommandeVente $commande): ?array
     {
