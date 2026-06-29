@@ -68,7 +68,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Filtres ───────────────────────────────────────────────────────────────────
 
-
 const filterFields = computed<FilterField[]>(() => [
     {
         key: 'statut',

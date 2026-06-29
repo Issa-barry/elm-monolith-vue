@@ -128,7 +128,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dépenses', href: '/depenses' },
 ];
 
-
 function currentParams() {
     return {
         type: props.filters.type || undefined,

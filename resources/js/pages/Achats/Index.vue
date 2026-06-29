@@ -60,7 +60,6 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
     (commande) => `/achats/${commande.id}`,
 );
 
-
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Achats', href: '/achats' },

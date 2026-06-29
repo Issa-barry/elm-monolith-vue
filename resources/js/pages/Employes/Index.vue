@@ -27,7 +27,6 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { ref } from 'vue';
 
 interface ContratActif {
     id: string;
@@ -81,7 +80,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Employés', href: '/employes' },
 ];
-
 
 const filterFields: FilterField[] = [
     {

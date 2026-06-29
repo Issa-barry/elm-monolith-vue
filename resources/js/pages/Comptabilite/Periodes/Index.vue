@@ -11,7 +11,6 @@ import { Head, Link } from '@inertiajs/vue3';
 import { Calendar, Plus } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import { ref } from 'vue';
 
 interface Periode {
     id: string;
@@ -60,7 +59,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Comptabilité', href: '/comptabilite' },
     { title: 'Périodes', href: '/comptabilite/periodes' },
 ];
-
 
 const filterFields: FilterField[] = [
     {

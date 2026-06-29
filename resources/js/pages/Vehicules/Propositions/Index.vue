@@ -6,7 +6,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import { CheckCircle, Eye } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
 interface Proposition {
     id: string;
@@ -48,7 +48,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Véhicules', href: '/vehicules' },
     { title: 'Propositions', href: '#' },
 ];
-
 
 const filterFields: FilterField[] = [
     {

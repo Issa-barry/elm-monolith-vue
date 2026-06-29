@@ -102,7 +102,6 @@ const ANNEES = Array.from({ length: 5 }, (_, i) => {
     return { value: y, label: String(y) };
 });
 
-
 const filterFields = computed((): FilterField[] => [
     {
         key: 'mois',

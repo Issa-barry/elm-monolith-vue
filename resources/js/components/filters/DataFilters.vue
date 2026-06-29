@@ -325,14 +325,15 @@ const hasActiveFilters = computed(
 
 <template>
     <FilterBar>
-
         <!-- ── 1. Agence / Site ── toujours en premier ──────────────────────── -->
         <div
             v-if="!hideAgenceSelector && siteOptions.length > 0"
             data-testid="agency-filter"
             class="relative flex shrink-0 flex-col gap-1"
         >
-            <span class="text-xs font-medium text-muted-foreground">Agence</span>
+            <span class="text-xs font-medium text-muted-foreground"
+                >Agence</span
+            >
             <div class="relative w-[200px]">
                 <FilterMultiSelect
                     v-model="localSiteIds"
@@ -350,13 +351,14 @@ const hasActiveFilters = computed(
 
         <!-- ── 2. Champs inline ──────────────────────────────────────────────── -->
         <template v-for="field in inlineFields" :key="field.key">
-
             <!-- select / multi-select -->
             <div
                 v-if="field.type === 'multi-select' || field.type === 'select'"
                 class="relative flex shrink-0 flex-col gap-1"
             >
-                <span class="text-xs font-medium text-muted-foreground">{{ field.label }}</span>
+                <span class="text-xs font-medium text-muted-foreground">{{
+                    field.label
+                }}</span>
                 <div class="relative w-[180px]">
                     <FilterMultiSelect
                         v-model="localValues[field.key] as (string | number)[]"
@@ -372,8 +374,13 @@ const hasActiveFilters = computed(
             </div>
 
             <!-- text -->
-            <div v-else-if="field.type === 'text'" class="flex shrink-0 flex-col gap-1">
-                <span class="text-xs font-medium text-muted-foreground">{{ field.label }}</span>
+            <div
+                v-else-if="field.type === 'text'"
+                class="flex shrink-0 flex-col gap-1"
+            >
+                <span class="text-xs font-medium text-muted-foreground">{{
+                    field.label
+                }}</span>
                 <input
                     v-model="localValues[field.key]"
                     type="text"
@@ -387,7 +394,9 @@ const hasActiveFilters = computed(
 
             <!-- autocomplete -->
             <FilterAutocomplete
-                v-else-if="field.type === 'autocomplete' && field.suggestionsUrl"
+                v-else-if="
+                    field.type === 'autocomplete' && field.suggestionsUrl
+                "
                 v-model="localValues[field.key] as string"
                 :label="field.label"
                 :suggestions-url="field.suggestionsUrl"
@@ -396,7 +405,6 @@ const hasActiveFilters = computed(
                 :disabled="field.disabled ?? false"
                 @select="applyFilters"
             />
-
         </template>
 
         <!-- ── Slot pour contrôles inline additionnels ───────────────────────── -->
@@ -414,10 +422,12 @@ const hasActiveFilters = computed(
             >
                 <div class="space-y-5">
                     <template v-for="field in drawerFields" :key="field.key">
-
                         <!-- multi-select ou select -->
                         <div
-                            v-if="field.type === 'multi-select' || field.type === 'select'"
+                            v-if="
+                                field.type === 'multi-select' ||
+                                field.type === 'select'
+                            "
                             :data-testid="`filter-field-${field.key}`"
                             class="space-y-1.5"
                         >
@@ -429,7 +439,12 @@ const hasActiveFilters = computed(
                                 />
                             </Label>
                             <FilterMultiSelect
-                                v-model="localValues[field.key] as (string | number)[]"
+                                v-model="
+                                    localValues[field.key] as (
+                                        | string
+                                        | number
+                                    )[]
+                                "
                                 :options="field.options ?? []"
                                 :placeholder="field.placeholder ?? 'Tous'"
                                 :disabled="field.disabled ?? false"
@@ -444,7 +459,12 @@ const hasActiveFilters = computed(
                             <div class="space-y-1.5">
                                 <Label>Date début</Label>
                                 <Input
-                                    v-model="localValues[field.startKey ?? `${field.key}_debut`]"
+                                    v-model="
+                                        localValues[
+                                            field.startKey ??
+                                                `${field.key}_debut`
+                                        ]
+                                    "
                                     type="date"
                                     class="h-9"
                                 />
@@ -452,7 +472,11 @@ const hasActiveFilters = computed(
                             <div class="space-y-1.5">
                                 <Label>Date fin</Label>
                                 <Input
-                                    v-model="localValues[field.endKey ?? `${field.key}_fin`]"
+                                    v-model="
+                                        localValues[
+                                            field.endKey ?? `${field.key}_fin`
+                                        ]
+                                    "
                                     type="date"
                                     class="h-9"
                                 />
@@ -460,7 +484,10 @@ const hasActiveFilters = computed(
                         </div>
 
                         <!-- date -->
-                        <div v-else-if="field.type === 'date'" class="space-y-1.5">
+                        <div
+                            v-else-if="field.type === 'date'"
+                            class="space-y-1.5"
+                        >
                             <Label>{{ field.label }}</Label>
                             <Input
                                 v-model="localValues[field.key]"
@@ -470,7 +497,10 @@ const hasActiveFilters = computed(
                         </div>
 
                         <!-- number -->
-                        <div v-else-if="field.type === 'number'" class="space-y-1.5">
+                        <div
+                            v-else-if="field.type === 'number'"
+                            class="space-y-1.5"
+                        >
                             <Label>{{ field.label }}</Label>
                             <Input
                                 v-model.number="localValues[field.key]"
@@ -481,7 +511,10 @@ const hasActiveFilters = computed(
                         </div>
 
                         <!-- boolean -->
-                        <div v-else-if="field.type === 'boolean'" class="space-y-1.5">
+                        <div
+                            v-else-if="field.type === 'boolean'"
+                            class="space-y-1.5"
+                        >
                             <Label>{{ field.label }}</Label>
                             <Select
                                 v-model="localValues[field.key]"
@@ -507,7 +540,6 @@ const hasActiveFilters = computed(
                                 class="h-9"
                             />
                         </div>
-
                     </template>
                 </div>
             </FilterDrawer>

@@ -10,7 +10,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import { Download, ReceiptText } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
 interface Fiche {
     id: string;
@@ -86,7 +86,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Comptabilité', href: '/comptabilite' },
     { title: typeTitle[props.type], href: typeRoute[props.type] },
 ];
-
 
 const filterFields = computed((): FilterField[] => [
     ...(props.sites.length > 0

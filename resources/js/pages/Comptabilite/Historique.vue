@@ -64,7 +64,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Historique', href: '/comptabilite/historique' },
 ];
 
-
 const filterFields: FilterField[] = [
     {
         key: 'module',

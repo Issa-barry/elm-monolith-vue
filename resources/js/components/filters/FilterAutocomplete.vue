@@ -41,10 +41,12 @@ watch(model, (val) => {
 
 async function fetchSuggestions(q: string) {
     try {
-        const url =
-            `${props.suggestionsUrl}?field=${encodeURIComponent(props.fieldName)}&q=${encodeURIComponent(q)}`;
+        const url = `${props.suggestionsUrl}?field=${encodeURIComponent(props.fieldName)}&q=${encodeURIComponent(q)}`;
         const res = await fetch(url, {
-            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
         });
         if (res.ok) {
             suggestions.value = await res.json();
@@ -77,7 +79,9 @@ onUnmounted(() => {
 
 <template>
     <div ref="rootRef" class="relative flex shrink-0 flex-col gap-1">
-        <span class="text-xs font-medium text-muted-foreground">{{ label }}</span>
+        <span class="text-xs font-medium text-muted-foreground">{{
+            label
+        }}</span>
         <div class="relative w-[180px]">
             <input
                 v-model="model"
@@ -86,12 +90,15 @@ onUnmounted(() => {
                 :disabled="disabled"
                 class="h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50"
                 @keydown.escape="open = false"
-                @keydown.enter.prevent="open = false; $emit('select')"
+                @keydown.enter.prevent="
+                    open = false;
+                    $emit('select');
+                "
             />
 
             <ul
                 v-if="open && suggestions.length"
-                class="absolute left-0 top-full z-50 mt-1 w-max min-w-full overflow-auto rounded-md border bg-popover text-popover-foreground shadow-md"
+                class="absolute top-full left-0 z-50 mt-1 w-max min-w-full overflow-auto rounded-md border bg-popover text-popover-foreground shadow-md"
                 style="max-height: 220px"
             >
                 <li

@@ -130,7 +130,6 @@ const breadcrumbs = computed((): BreadcrumbItem[] => [
 
 // ── Filtres desktop ───────────────────────────────────────────────────────────
 
-
 function indexUrl(): string {
     return props.vue === 'receptions'
         ? '/logistique/receptions'
@@ -184,7 +183,6 @@ const filterValues = computed(() => ({
 const filteredTransferts = computed(() => props.transferts);
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
-
 
 const mobileFiltered = computed(() => {
     const q = mobileSearch.value.toLowerCase().trim();

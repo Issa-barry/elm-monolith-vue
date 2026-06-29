@@ -6,7 +6,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
 interface TypeVehiculeRow {
     id: string;
@@ -30,7 +30,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Types de véhicules', href: '/type-vehicules' },
 ];
-
 
 const typesFiltres = computed(() => {
     const q = search.value.toLowerCase().trim();
