@@ -65,6 +65,8 @@ class VenteParametrageTest extends TestCase
                 'quantity_edit_role_names' => [],
                 'price_edit_role_names' => ['commerciale'],
                 'autoriser_saisie_dessous_qte_max' => true,
+                'controle_impayes_actif' => false,
+                'seuil_impayes_max' => 0,
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -101,6 +103,8 @@ class VenteParametrageTest extends TestCase
                 'quantity_edit_role_names' => [],
                 'price_edit_role_names' => [],
                 'autoriser_saisie_dessous_qte_max' => false,
+                'controle_impayes_actif' => false,
+                'seuil_impayes_max' => 0,
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -123,6 +127,8 @@ class VenteParametrageTest extends TestCase
                 'quantity_edit_role_names' => [],
                 'price_edit_role_names' => [],
                 'autoriser_saisie_dessous_qte_max' => true,
+                'controle_impayes_actif' => false,
+                'seuil_impayes_max' => 0,
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
