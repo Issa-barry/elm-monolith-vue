@@ -61,7 +61,6 @@ interface SiteItem {
 
 interface RoleConfig {
     role_name: string;
-    is_actif: boolean;
     peut_valider: boolean;
     perimetre: 'toutes_agences' | 'son_agence' | 'agences_selectionnees';
     sites: string[];
@@ -214,7 +213,7 @@ const categorieColors: Record<string, string> = {
         'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
 };
 
-// ── Droits création / validation ──────────────────────────────────────────────
+// ── Droits de validation ──────────────────────────────────────────────────────
 
 const ADMIN_ROLES = ['super_admin', 'admin_entreprise'];
 
@@ -241,56 +240,36 @@ function isAdminRole(roleName: string): boolean {
     return ADMIN_ROLES.includes(roleName);
 }
 
-// Colonnes d'actions
-const ACTIONS = ['peut_valider'] as const;
-type Action = (typeof ACTIONS)[number];
-
-const actionMeta: Record<Action, { label: string; color: string }> = {
-    peut_valider: {
-        label: 'Peut valider',
-        color: 'text-blue-600 dark:text-blue-400',
-    },
-};
-
 const nonAdminRows = computed(() =>
     droitsForm.value.filter((r) => !isAdminRole(r.role_name)),
 );
 
-function isChecked(entry: RoleConfig, action: Action): boolean {
-    return entry[action] as boolean;
-}
-
-function toggle(entry: RoleConfig, action: Action) {
-    (entry[action] as boolean) = !entry[action];
-    if (action === 'peut_valider' && !entry.peut_valider) {
-        entry.sites = [];
-    }
-}
-
 type ColState = 'all' | 'partial' | 'none';
 
-function columnState(action: Action): ColState {
+function columnState(): ColState {
     const rows = nonAdminRows.value;
-    const checked = rows.filter((r) => isChecked(r, action)).length;
+    const checked = rows.filter((r) => r.peut_valider).length;
     if (checked === 0) return 'none';
     if (checked === rows.length) return 'all';
     return 'partial';
 }
 
-function toggleColumn(action: Action) {
-    const state = columnState(action);
+function toggleColumn() {
+    const state = columnState();
     nonAdminRows.value.forEach((entry) => {
         const real = droitsForm.value.find(
             (r) => r.role_name === entry.role_name,
         )!;
-        (real[action] as boolean) = state !== 'all';
-        if (action === 'peut_valider' && state === 'all') {
-            real.sites = [];
-        }
+        real.peut_valider = state !== 'all';
+        if (state === 'all') real.sites = [];
     });
 }
 
-// Portée expandée
+function toggle(entry: RoleConfig) {
+    entry.peut_valider = !entry.peut_valider;
+    if (!entry.peut_valider) entry.sites = [];
+}
+
 const expandedPortee = ref<Set<string>>(new Set());
 
 function togglePortee(roleName: string) {
@@ -625,7 +604,7 @@ function saveDroits() {
                     </div>
                 </div>
 
-                <!-- ── Tab : Droits ────────────────────────────────────────── -->
+                <!-- ── Tab : Droits de validation ───────────────────────────── -->
                 <div v-show="activeTab === 'droits'">
                     <div
                         class="overflow-hidden rounded-xl border bg-card shadow-sm"
@@ -662,7 +641,7 @@ function saveDroits() {
                             </div>
                         </div>
 
-                        <!-- Table matrice -->
+                        <!-- Table -->
                         <div class="overflow-x-auto">
                             <table class="w-full">
                                 <thead>
@@ -677,8 +656,6 @@ function saveDroits() {
                                             >
                                         </th>
                                         <th
-                                            v-for="action in ACTIONS"
-                                            :key="action"
                                             class="px-8 py-4 text-center"
                                             style="width: 160px"
                                         >
@@ -686,73 +663,56 @@ function saveDroits() {
                                                 class="flex flex-col items-center gap-2"
                                             >
                                                 <span
-                                                    class="text-xs font-semibold tracking-wider uppercase"
-                                                    :class="
-                                                        actionMeta[action].color
-                                                    "
+                                                    class="text-xs font-semibold tracking-wider text-blue-600 uppercase dark:text-blue-400"
+                                                    >Peut valider</span
                                                 >
-                                                    {{
-                                                        actionMeta[action].label
-                                                    }}
-                                                </span>
-                                                <!-- Bouton toggle colonne -->
                                                 <button
                                                     type="button"
                                                     class="flex h-7 w-7 items-center justify-center rounded-md border-2 transition-all"
-                                                    :class="[
-                                                        columnState(action) ===
-                                                        'none'
+                                                    :class="
+                                                        columnState() === 'none'
                                                             ? 'border-border bg-background hover:border-primary/60'
-                                                            : columnState(
-                                                                    action,
-                                                                ) === 'all'
+                                                            : columnState() ===
+                                                                'all'
                                                               ? 'border-primary bg-primary text-primary-foreground'
-                                                              : 'border-primary/60 bg-primary/10',
-                                                    ]"
-                                                    :title="`Tout ${columnState(action) === 'all' ? 'désactiver' : 'activer'} — ${actionMeta[action].label}`"
-                                                    @click="
-                                                        toggleColumn(action)
+                                                              : 'border-primary/60 bg-primary/10'
                                                     "
+                                                    :title="`Tout ${columnState() === 'all' ? 'désactiver' : 'activer'}`"
+                                                    @click="toggleColumn()"
                                                 >
                                                     <Check
                                                         v-if="
-                                                            columnState(
-                                                                action,
-                                                            ) === 'all'
+                                                            columnState() ===
+                                                            'all'
                                                         "
                                                         class="h-4 w-4"
                                                     />
                                                     <Minus
                                                         v-else-if="
-                                                            columnState(
-                                                                action,
-                                                            ) === 'partial'
+                                                            columnState() ===
+                                                            'partial'
                                                         "
                                                         class="h-4 w-4 text-primary"
                                                     />
                                                 </button>
                                             </div>
                                         </th>
-                                        <!-- Colonne portée validation -->
                                         <th
                                             class="px-6 py-4 text-left"
                                             style="min-width: 220px"
                                         >
                                             <span
                                                 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                                                >De quelles agences peut-il
-                                                valider ?</span
+                                                >De quelles agences ?</span
                                             >
                                         </th>
                                     </tr>
                                 </thead>
-
                                 <tbody>
                                     <template
                                         v-for="entry in droitsForm"
                                         :key="entry.role_name"
                                     >
-                                        <!-- Ligne principale -->
                                         <tr
                                             class="border-b transition-colors"
                                             :class="
@@ -812,8 +772,7 @@ function saveDroits() {
                                                     </div>
                                                 </div>
                                             </td>
-
-                                            <!-- Cellule Validation -->
+                                            <!-- Peut valider -->
                                             <td class="px-8 py-4 text-center">
                                                 <div
                                                     class="flex justify-center"
@@ -839,12 +798,7 @@ function saveDroits() {
                                                                 ? 'border-primary bg-primary text-primary-foreground'
                                                                 : 'border-border bg-background hover:border-primary/60'
                                                         "
-                                                        @click="
-                                                            toggle(
-                                                                entry,
-                                                                'peut_valider',
-                                                            )
-                                                        "
+                                                        @click="toggle(entry)"
                                                     >
                                                         <Check
                                                             v-if="
@@ -855,7 +809,6 @@ function saveDroits() {
                                                     </button>
                                                 </div>
                                             </td>
-
                                             <!-- Portée -->
                                             <td class="px-6 py-4">
                                                 <div
@@ -904,7 +857,7 @@ function saveDroits() {
                                             </td>
                                         </tr>
 
-                                        <!-- Sous-ligne portée (expandable) -->
+                                        <!-- Sous-ligne portée -->
                                         <tr
                                             v-if="
                                                 !isAdminRole(entry.role_name) &&
@@ -918,78 +871,43 @@ function saveDroits() {
                                         >
                                             <td colspan="3" class="px-8 py-4">
                                                 <div class="space-y-3">
-                                                    <!-- Sélecteur portée -->
-                                                    <div class="space-y-1.5">
-                                                        <p
-                                                            class="text-xs font-medium text-muted-foreground"
+                                                    <div
+                                                        class="flex flex-wrap gap-2"
+                                                    >
+                                                        <button
+                                                            v-for="opt in [
+                                                                [
+                                                                    'toutes_agences',
+                                                                    'Toutes les agences',
+                                                                ],
+                                                                [
+                                                                    'son_agence',
+                                                                    'Son agence uniquement',
+                                                                ],
+                                                                [
+                                                                    'agences_selectionnees',
+                                                                    'Agences sélectionnées',
+                                                                ],
+                                                            ] as const"
+                                                            :key="opt[0]"
+                                                            type="button"
+                                                            class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
+                                                            :class="
+                                                                entry.perimetre ===
+                                                                opt[0]
+                                                                    ? 'border-primary bg-primary text-primary-foreground'
+                                                                    : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                                                            "
+                                                            @click="
+                                                                setPerimetre(
+                                                                    entry,
+                                                                    opt[0],
+                                                                )
+                                                            "
                                                         >
-                                                            De quelles agences
-                                                            peut-il valider ?
-                                                        </p>
-                                                        <div
-                                                            class="flex flex-wrap gap-2"
-                                                        >
-                                                            <button
-                                                                type="button"
-                                                                class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
-                                                                :class="
-                                                                    entry.perimetre ===
-                                                                    'toutes_agences'
-                                                                        ? 'border-primary bg-primary text-primary-foreground'
-                                                                        : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                                                                "
-                                                                @click="
-                                                                    setPerimetre(
-                                                                        entry,
-                                                                        'toutes_agences',
-                                                                    )
-                                                                "
-                                                            >
-                                                                Toutes les
-                                                                agences
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
-                                                                :class="
-                                                                    entry.perimetre ===
-                                                                    'son_agence'
-                                                                        ? 'border-primary bg-primary text-primary-foreground'
-                                                                        : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                                                                "
-                                                                @click="
-                                                                    setPerimetre(
-                                                                        entry,
-                                                                        'son_agence',
-                                                                    )
-                                                                "
-                                                            >
-                                                                Son agence
-                                                                uniquement
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
-                                                                :class="
-                                                                    entry.perimetre ===
-                                                                    'agences_selectionnees'
-                                                                        ? 'border-primary bg-primary text-primary-foreground'
-                                                                        : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                                                                "
-                                                                @click="
-                                                                    setPerimetre(
-                                                                        entry,
-                                                                        'agences_selectionnees',
-                                                                    )
-                                                                "
-                                                            >
-                                                                Agences
-                                                                sélectionnées
-                                                            </button>
-                                                        </div>
+                                                            {{ opt[1] }}
+                                                        </button>
                                                     </div>
-
-                                                    <!-- Grid agences -->
                                                     <div
                                                         v-if="
                                                             entry.perimetre ===
@@ -1082,22 +1000,22 @@ function saveDroits() {
                         <div
                             class="flex items-center gap-4 border-t bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
                         >
-                            <span class="flex items-center gap-1.5">
-                                <span
+                            <span class="flex items-center gap-1.5"
+                                ><span
                                     class="inline-block h-2 w-2 rounded-sm bg-primary"
                                 />
-                                Accordé
-                            </span>
-                            <span class="flex items-center gap-1.5">
-                                <span
+                                Accordé</span
+                            >
+                            <span class="flex items-center gap-1.5"
+                                ><span
                                     class="inline-block h-2 w-2 rounded-sm border border-border bg-background"
                                 />
-                                Non accordé
-                            </span>
-                            <span class="flex items-center gap-1.5">
-                                <Shield class="h-3 w-3 text-blue-500" />
-                                Admin — accès automatique
-                            </span>
+                                Non accordé</span
+                            >
+                            <span class="flex items-center gap-1.5"
+                                ><Shield class="h-3 w-3 text-blue-500" /> Admin
+                                — accès automatique</span
+                            >
                         </div>
                     </div>
                 </div>

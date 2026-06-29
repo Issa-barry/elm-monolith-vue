@@ -5,6 +5,7 @@ namespace App\Policies;
 use App\Enums\StatutDepense;
 use App\Models\Depense;
 use App\Models\User;
+use App\Services\DroitCreationDepenseService;
 
 class DepensePolicy
 {
@@ -33,8 +34,22 @@ class DepensePolicy
 
     public function valider(User $user, Depense $depense): bool
     {
-        return $user->can('depenses.update')
-            && $user->organization_id === $depense->organization_id;
+        if ($user->organization_id !== $depense->organization_id) {
+            return false;
+        }
+
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        if (! $user->can('depenses.update')) {
+            return false;
+        }
+
+        $service = app(DroitCreationDepenseService::class);
+        $droit = $service->droitValidationPour($user, $user->organization_id);
+
+        return $service->peutValiderSurSite($user, $droit, $depense->site_id);
     }
 
     public function delete(User $user, Depense $depense): bool

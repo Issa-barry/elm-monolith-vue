@@ -16,9 +16,6 @@ use Spatie\Permission\Models\Role;
 
 class DepenseParametrageController extends Controller
 {
-    /**
-     * Page combinée Paramètres dépenses : Types + Droits création/validation.
-     */
     public function edit(): Response
     {
         abort_unless(auth()->user()->can('parametres.update'), 403);
@@ -42,7 +39,6 @@ class DepenseParametrageController extends Controller
                 'depenses_count' => $t->depenses()->count(),
             ]);
 
-        // Droits création / validation
         $roles = Role::orderBy('name')->get(['id', 'name']);
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'code']);
 
@@ -52,7 +48,6 @@ class DepenseParametrageController extends Controller
 
         $config = $roles->map(fn (Role $role) => [
             'role_name' => $role->name,
-            'is_actif' => (bool) ($droits->get($role->name)?->is_actif ?? false),
             'peut_valider' => (bool) ($droits->get($role->name)?->peut_valider ?? false),
             'perimetre' => $droits->get($role->name)?->perimetre ?? 'toutes_agences',
             'sites' => $droits->get($role->name)?->sites ?? [],
@@ -66,9 +61,6 @@ class DepenseParametrageController extends Controller
         ]);
     }
 
-    /**
-     * Sauvegarde uniquement les droits création / validation.
-     */
     public function updateDroits(Request $request): RedirectResponse
     {
         abort_unless(auth()->user()->can('parametres.update'), 403);
@@ -79,7 +71,6 @@ class DepenseParametrageController extends Controller
         $validated = $request->validate([
             'config' => ['array'],
             'config.*.role_name' => ['required', 'string'],
-            'config.*.is_actif' => ['required', 'boolean'],
             'config.*.peut_valider' => ['required', 'boolean'],
             'config.*.perimetre' => ['required', Rule::in(['toutes_agences', 'son_agence', 'agences_selectionnees'])],
             'config.*.sites' => ['array'],
@@ -96,12 +87,11 @@ class DepenseParametrageController extends Controller
                 [
                     'perimetre' => $item['perimetre'],
                     'sites' => $sites,
-                    'is_actif' => $item['is_actif'],
                     'peut_valider' => $item['peut_valider'],
                 ]
             );
         }
 
-        return back()->with('success', 'Droits de création / validation mis à jour.');
+        return back()->with('success', 'Droits de validation mis à jour.');
     }
 }

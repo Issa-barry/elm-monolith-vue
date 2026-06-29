@@ -51,6 +51,44 @@ class DroitCreationDepenseService
     }
 
     /**
+     * Retourne la ligne DroitCreationDepense de validation pour l'utilisateur,
+     * ou null si admin (bypass) ou aucun droit.
+     */
+    public function droitValidationPour(User $user, string $orgId): ?DroitCreationDepense
+    {
+        if ($user->isAdmin()) {
+            return null;
+        }
+
+        return DroitCreationDepense::where('organization_id', $orgId)
+            ->where('peut_valider', true)
+            ->whereIn('role_name', $user->roles->pluck('name')->all())
+            ->first();
+    }
+
+    /**
+     * L'utilisateur peut-il valider la dépense d'un site donné ?
+     * Utilise un droit pré-chargé pour éviter les requêtes N+1.
+     */
+    public function peutValiderSurSite(User $user, ?DroitCreationDepense $droit, ?string $siteId): bool
+    {
+        if ($user->isAdmin()) {
+            return true;
+        }
+        if (! $droit) {
+            return false;
+        }
+        if ($droit->isToutesAgences()) {
+            return true;
+        }
+        if ($droit->perimetre === 'son_agence') {
+            return $user->sites()->where('sites.id', $siteId)->exists();
+        }
+
+        return in_array($siteId, $droit->sites ?? [], true);
+    }
+
+    /**
      * L'utilisateur peut-il valider des dépenses ?
      * Admin = toujours autorisé.
      */

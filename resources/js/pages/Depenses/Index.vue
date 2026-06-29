@@ -76,6 +76,7 @@ interface DepenseRow {
     site: { id: string; nom: string } | null;
     user: { id: string; name: string };
     validateur: { id: string; name: string } | null;
+    can_valider: boolean;
 }
 
 interface Paginator {
@@ -768,12 +769,9 @@ const categorieColors: Record<string, string> = {
                                                 Soumettre
                                             </DropdownMenuItem>
 
-                                            <!-- Valider (soumis + permission) -->
+                                            <!-- Valider -->
                                             <DropdownMenuItem
-                                                v-if="
-                                                    d.statut === 'soumis' &&
-                                                    can('depenses.update')
-                                                "
+                                                v-if="d.can_valider"
                                                 class="cursor-pointer text-emerald-700 focus:text-emerald-700"
                                                 @click="valider(d.id)"
                                             >
@@ -781,12 +779,9 @@ const categorieColors: Record<string, string> = {
                                                 Valider
                                             </DropdownMenuItem>
 
-                                            <!-- Rejeter (soumis + permission) -->
+                                            <!-- Rejeter -->
                                             <DropdownMenuItem
-                                                v-if="
-                                                    d.statut === 'soumis' &&
-                                                    can('depenses.update')
-                                                "
+                                                v-if="d.can_valider"
                                                 class="cursor-pointer text-destructive focus:text-destructive"
                                                 @click="rejeter(d.id)"
                                             >
