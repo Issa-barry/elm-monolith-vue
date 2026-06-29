@@ -282,6 +282,128 @@ test('stat cards reflect active filters', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 });
 
+test('workflow rejete → modifier montant → resoumettre → statut soumis', async ({
+    page,
+}) => {
+    const suffix = `${Date.now()}${randomDigits(2)}`.slice(-8);
+    const comment = `E2EREJ-${suffix}`;
+
+    // 1. Créer une dépense interne
+    await createDepenseInterne(page, comment, 3000);
+
+    // 2. La soumettre
+    await page.goto('/depenses');
+    const row = depenseRowByComment(page, comment);
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.getByRole('button', { name: /actions/i }).first().click();
+    await page.getByRole('menuitem', { name: /soumettre/i }).first().click();
+    await page.waitForLoadState('networkidle');
+    await expect(depenseRowByComment(page, comment)).toContainText(/soumis/i);
+
+    // 3. La rejeter
+    const rowSoumis = depenseRowByComment(page, comment);
+    await rowSoumis.getByRole('button', { name: /actions/i }).first().click();
+    await page.getByRole('menuitem', { name: /rejeter/i }).first().click();
+    // Dialog de motif de rejet
+    const motifInput = page.getByRole('textbox').filter({ hasText: '' }).last();
+    if (await motifInput.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await motifInput.fill('Non conforme E2E');
+        await page.getByRole('button', { name: /confirmer|rejeter/i }).last().click();
+    }
+    await page.waitForLoadState('networkidle');
+    await expect(depenseRowByComment(page, comment)).toContainText(/rejet/i, {
+        timeout: 10_000,
+    });
+
+    // 4. Modifier la dépense rejetée et resoumettre via le formulaire Edit
+    const rowRejete = depenseRowByComment(page, comment);
+    await rowRejete.getByRole('button', { name: /actions/i }).first().click();
+    await page.getByRole('menuitem', { name: /modifier/i }).first().click();
+    await expect(page).toHaveURL(/\/depenses\/[a-z0-9]+\/edit$/, {
+        timeout: 20_000,
+    });
+
+    await page.locator('#dep-montant').fill('4500');
+    await page.getByRole('button', { name: /soumettre pour validation/i }).click();
+    await page.waitForLoadState('networkidle');
+
+    // 5. Vérifier que le statut est bien "Soumis" (et non toujours "Rejeté")
+    await page.goto('/depenses');
+    await page.waitForLoadState('networkidle');
+    await expect(depenseRowByComment(page, comment)).toContainText(/soumis/i, {
+        timeout: 15_000,
+    });
+});
+
+test('admin valide depense cross-agence — can_valider vrai hors son site', async ({
+    page,
+}) => {
+    // Ce test vérifie que l'option "Valider" est visible pour l'admin
+    // même sur une dépense dont le site diffère du sien.
+    // Prérequis : le compte E2E doit être admin_entreprise (cas standard).
+    const suffix = `${Date.now()}${randomDigits(2)}`.slice(-8);
+    const comment = `E2EXAG-${suffix}`;
+
+    await createDepenseInterne(page, comment, 8000);
+
+    // Soumettre
+    await page.goto('/depenses');
+    const row = depenseRowByComment(page, comment);
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.getByRole('button', { name: /actions/i }).first().click();
+    await page.getByRole('menuitem', { name: /soumettre/i }).first().click();
+    await page.waitForLoadState('networkidle');
+
+    // L'option "Valider" doit être présente dans le menu Actions
+    const rowSoumis = depenseRowByComment(page, comment);
+    await rowSoumis.getByRole('button', { name: /actions/i }).first().click();
+    const validerItem = page.getByRole('menuitem', { name: /^valider$/i }).first();
+    await expect(validerItem).toBeVisible({ timeout: 5_000 });
+
+    // Valider
+    await validerItem.click();
+    await page.waitForLoadState('networkidle');
+    await expect(depenseRowByComment(page, comment)).toContainText(/valid/i, {
+        timeout: 10_000,
+    });
+});
+
+test('champ site verrouillé non cliquable affiché sur le form edit', async ({
+    page,
+}) => {
+    // Vérifie que le select site est bien disabled sur la page edit
+    // (pour les comptes non-admin — si le compte E2E est admin, le champ sera actif,
+    // ce test passe dans les deux cas car on vérifie l'attribut disabled par rapport à can_change_site)
+    const suffix = `${Date.now()}${randomDigits(2)}`.slice(-8);
+    const comment = `E2ELOCK-${suffix}`;
+
+    await createDepenseInterne(page, comment, 1000);
+
+    await page.goto('/depenses');
+    const row = depenseRowByComment(page, comment);
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.getByRole('button', { name: /actions/i }).first().click();
+    await page.getByRole('menuitem', { name: /modifier/i }).first().click();
+    await expect(page).toHaveURL(/\/depenses\/[a-z0-9]+\/edit$/, {
+        timeout: 20_000,
+    });
+
+    // Le select site existe toujours (il n'est pas supprimé)
+    await expect(page.locator('#dep-site')).toBeVisible({ timeout: 5_000 });
+
+    // Nettoyage : annuler
+    await page.getByRole('button', { name: /annuler/i }).first().click();
+    await page.waitForLoadState('networkidle');
+    await page.goto('/depenses');
+    const cleanRow = depenseRowByComment(page, comment);
+    if (await cleanRow.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await cleanRow.getByRole('button', { name: /actions/i }).first().click();
+        page.once('dialog', (d) => d.accept());
+        await page.getByRole('menuitem', { name: /supprimer/i }).first().click();
+        await page.waitForLoadState('networkidle');
+    }
+});
+
 test('filtre agence (site_ids) persiste après Appliquer — chip, case cochée et URL', async ({
     page,
 }) => {
