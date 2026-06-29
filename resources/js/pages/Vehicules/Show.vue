@@ -20,6 +20,9 @@ import {
     Settings,
     Users,
 } from 'lucide-vue-next';
+import { router } from '@inertiajs/vue3';
+import Toast from 'primevue/toast';
+import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 interface EquipeMembre {
@@ -97,6 +100,24 @@ const props = defineProps<{
 
 const { can } = usePermissions();
 const page = usePage();
+const toast = useToast();
+
+const STATUTS_EDITABLES = ['brouillon', 'rejete', 'annule'];
+
+function editerDepense(d: DepenseRow) {
+    if (!STATUTS_EDITABLES.includes(d.statut)) {
+        const label = statutLabel[d.statut] ?? d.statut;
+        toast.add({
+            severity: 'warn',
+            summary: 'Modification impossible',
+            detail: `Cette dépense est "${label}" et ne peut plus être modifiée. Seules les dépenses en brouillon, rejetées ou annulées sont éditables.`,
+            life: 5000,
+            group: 'top',
+        });
+        return;
+    }
+    router.visit(`/depenses/${d.id}/edit`);
+}
 const showStepperModal = ref(false);
 const flashSuccess = computed(
     () => (page.props as { flash?: { success?: string } }).flash?.success,
@@ -703,19 +724,31 @@ function formatGNF(val: number): string {
                                 :label="statutLabel[d.statut] ?? d.statut"
                                 class="shrink-0"
                             />
-                            <Link
-                                v-if="can('depenses.update')"
-                                :href="`/depenses/${d.id}/edit`"
-                                class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                            >
-                                <Pencil class="h-3.5 w-3.5" />
-                            </Link>
+                            <template v-if="can('depenses.update')">
+                                <button
+                                    v-if="STATUTS_EDITABLES.includes(d.statut)"
+                                    class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                                    @click="editerDepense(d)"
+                                >
+                                    <Pencil class="h-3.5 w-3.5" />
+                                </button>
+                                <span
+                                    v-else
+                                    class="inline-flex h-8 w-8 shrink-0 cursor-default items-center justify-center rounded-md"
+                                    :class="d.statut === 'valide' ? 'text-green-500/70' : 'text-blue-400/70'"
+                                    :title="`Dépense ${statutLabel[d.statut] ?? d.statut} — non modifiable`"
+                                >
+                                    <CheckCircle class="h-3.5 w-3.5" />
+                                </span>
+                            </template>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </AppLayout>
+
+    <Toast group="top" position="top-right" />
 
     <EquipeStepperModal
         v-model:visible="showStepperModal"

@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
+import { Lock } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
@@ -48,6 +49,7 @@ const props = defineProps<{
     proprietaires: PersonneOption[];
     default_site_id: string | null;
     categories: { value: string; label: string }[];
+    can_change_site: boolean;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -602,13 +604,16 @@ function submitBrouillon() {
                             <div>
                                 <Label
                                     for="dep-site"
-                                    class="mb-1.5 block text-xs font-medium"
-                                    >Site</Label
+                                    class="mb-1.5 flex items-center gap-1 text-xs font-medium"
                                 >
+                                    Site
+                                    <Lock v-if="!can_change_site" class="h-3 w-3 text-muted-foreground" />
+                                </Label>
                                 <select
                                     id="dep-site"
                                     v-model="form.site_id"
-                                    class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                                    :disabled="!can_change_site"
+                                    class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     <option value="">
                                         Aucun site spécifique
