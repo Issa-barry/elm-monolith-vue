@@ -18,7 +18,6 @@ class RegisterController extends Controller
             telephone: $request->input('telephone'),
             prenom: $request->input('prenom'),
             nom: $request->input('nom'),
-            email: $request->input('email'),
             password: $request->input('password'),
         );
 
@@ -32,7 +31,7 @@ class RegisterController extends Controller
         }
 
         return response()->json([
-            'message' => 'Compte créé avec succès. Un email de validation a été envoyé à '.$user->email.'. Vérifiez votre boîte de réception pour activer votre compte.',
+            'message' => 'Compte créé avec succès.',
             'user' => new UserResource($user),
         ], 201);
     }

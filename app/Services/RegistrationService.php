@@ -4,22 +4,17 @@ namespace App\Services;
 
 use App\DTOs\RegisterData;
 use App\Enums\UserStatus;
-use App\Mail\EmailVerificationMail;
 use App\Models\Client;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class RegistrationService
 {
-    private const TOKEN_TTL_HOURS = 24;
-
     /**
      * Recherche un numéro dans toutes les tables personnes.
      * Retourne le statut et les données de pré-remplissage si disponibles.
@@ -72,27 +67,21 @@ class RegistrationService
         }
 
         return DB::transaction(function () use ($data, $phone) {
-            $token = Str::random(64);
-
             $user = User::create([
                 'prenom' => self::formatPrenom($data->prenom),
                 'nom' => mb_strtoupper($data->nom),
-                'email' => mb_strtolower($data->email),
+                'email' => $data->email ? mb_strtolower($data->email) : null,
                 'telephone' => $phone,
                 'password' => $data->password,
-                'status' => UserStatus::PENDING->value,
-                'is_active' => false,
+                'status' => UserStatus::ACTIVE->value,
+                'is_active' => true,
                 'email_verified_at' => null,
-                'email_verification_token' => $token,
-                'email_verification_expires_at' => now()->addHours(self::TOKEN_TTL_HOURS),
             ]);
 
             Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
             $user->assignRole('client');
 
             $this->linkPersonRecords($user, $phone);
-
-            Mail::to($user->email)->send(new EmailVerificationMail($user, $token));
 
             return $user;
         });

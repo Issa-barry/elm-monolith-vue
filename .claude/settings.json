@@ -180,7 +180,12 @@
       "PowerShell(vendor/bin/pint --test app/Http/Controllers/DepenseController.php 2>&1)"
     ],
     "additionalDirectories": [
-      "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"
+      "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",
+      "C:\\laragon\\www\\eau-la-maman\\elm-mobile-client\\features\\auth\\types",
+      "C:\\laragon\\www\\eau-la-maman\\elm-mobile-client\\features\\auth\\hooks",
+      "C:\\laragon\\www\\eau-la-maman\\elm-mobile-client\\features\\auth\\validation",
+      "C:\\laragon\\www\\eau-la-maman\\elm-mobile-client\\features\\auth\\services",
+      "C:\\laragon\\www\\eau-la-maman\\elm-mobile-client\\features\\auth\\screens"
     ]
   }
 }

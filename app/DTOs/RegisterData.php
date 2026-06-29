@@ -8,7 +8,7 @@ readonly class RegisterData
         public string $telephone,
         public string $prenom,
         public string $nom,
-        public string $email,
         public string $password,
+        public ?string $email = null,
     ) {}
 }
