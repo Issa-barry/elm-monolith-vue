@@ -300,15 +300,25 @@ test('workflow rejete → modifier montant → resoumettre → statut soumis', a
     await page.waitForLoadState('networkidle');
     await expect(depenseRowByComment(page, comment)).toContainText(/soumis/i);
 
-    // 3. La rejeter
+    // 3. La rejeter — le dialog de motif peut ou non s'afficher selon la config
     const rowSoumis = depenseRowByComment(page, comment);
     await rowSoumis.getByRole('button', { name: /actions/i }).first().click();
     await page.getByRole('menuitem', { name: /rejeter/i }).first().click();
-    // Dialog de motif de rejet
-    const motifInput = page.getByRole('textbox').filter({ hasText: '' }).last();
-    if (await motifInput.isVisible({ timeout: 3_000 }).catch(() => false)) {
-        await motifInput.fill('Non conforme E2E');
-        await page.getByRole('button', { name: /confirmer|rejeter/i }).last().click();
+
+    // Attendre l'éventuel dialog de motif (textarea ou input visible)
+    const dialog = page.locator('[role="dialog"]').first();
+    const dialogVisible = await dialog
+        .isVisible({ timeout: 4_000 })
+        .catch(() => false);
+    if (dialogVisible) {
+        const motifField = dialog.locator('textarea, input[type="text"]').first();
+        if (await motifField.isVisible({ timeout: 2_000 }).catch(() => false)) {
+            await motifField.fill('Non conforme E2E');
+        }
+        await dialog
+            .getByRole('button', { name: /confirmer|rejeter|valider/i })
+            .last()
+            .click();
     }
     await page.waitForLoadState('networkidle');
     await expect(depenseRowByComment(page, comment)).toContainText(/rejet/i, {
@@ -368,12 +378,11 @@ test('admin valide depense cross-agence — can_valider vrai hors son site', asy
     });
 });
 
-test('champ site verrouillé non cliquable affiché sur le form edit', async ({
-    page,
-}) => {
-    // Vérifie que le select site est bien disabled sur la page edit
-    // (pour les comptes non-admin — si le compte E2E est admin, le champ sera actif,
-    // ce test passe dans les deux cas car on vérifie l'attribut disabled par rapport à can_change_site)
+test('champ site présent et accessible sur le form edit', async ({ page }) => {
+    // Vérifie que le select #dep-site est rendu sur la page Edit.
+    // Si le compte E2E est admin : champ actif (can_change_site=true).
+    // Si non-admin : champ désactivé (can_change_site=false).
+    // Dans les deux cas le select doit être visible.
     const suffix = `${Date.now()}${randomDigits(2)}`.slice(-8);
     const comment = `E2ELOCK-${suffix}`;
 
@@ -388,15 +397,14 @@ test('champ site verrouillé non cliquable affiché sur le form edit', async ({
         timeout: 20_000,
     });
 
-    // Le select site existe toujours (il n'est pas supprimé)
+    // Le select site doit être présent (peu importe qu'il soit enabled ou disabled)
     await expect(page.locator('#dep-site')).toBeVisible({ timeout: 5_000 });
 
-    // Nettoyage : annuler
-    await page.getByRole('button', { name: /annuler/i }).first().click();
-    await page.waitForLoadState('networkidle');
+    // Nettoyage : naviguer directement vers la liste puis supprimer
     await page.goto('/depenses');
+    await page.waitForLoadState('networkidle');
     const cleanRow = depenseRowByComment(page, comment);
-    if (await cleanRow.isVisible({ timeout: 3_000 }).catch(() => false)) {
+    if (await cleanRow.isVisible({ timeout: 5_000 }).catch(() => false)) {
         await cleanRow.getByRole('button', { name: /actions/i }).first().click();
         page.once('dialog', (d) => d.accept());
         await page.getByRole('menuitem', { name: /supprimer/i }).first().click();

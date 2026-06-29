@@ -176,7 +176,8 @@
       "Bash(vendor/bin/pint --test database/seeders/VehiculesSeeder.php)",
       "Bash(./vendor/bin/pint --test tests/Feature/EquipeLivraisonTest.php)",
       "Bash(./vendor/bin/pint tests/Feature/EquipeLivraisonTest.php)",
-      "Bash(php vendor/bin/phpunit tests/Unit/DroitCreationDepenseServiceTest.php tests/Feature/DepenseValidationTest.php tests/Feature/DepenseWorkflowTest.php tests/Feature/DepenseSiteFilterTest.php tests/Feature/Settings/DepenseParametrageTest.php --testdox)"
+      "Bash(php vendor/bin/phpunit tests/Unit/DroitCreationDepenseServiceTest.php tests/Feature/DepenseValidationTest.php tests/Feature/DepenseWorkflowTest.php tests/Feature/DepenseSiteFilterTest.php tests/Feature/Settings/DepenseParametrageTest.php --testdox)",
+      "PowerShell(vendor/bin/pint --test app/Http/Controllers/DepenseController.php 2>&1)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64"

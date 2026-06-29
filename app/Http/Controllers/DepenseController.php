@@ -383,6 +383,12 @@ class DepenseController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
 
+        abort_unless(
+            $this->droitCreationDepense->peutCreerSurSite($user, $orgId, (string) $request->site_id),
+            403,
+            'Vous n\'êtes pas autorisé à créer une dépense sur ce site.'
+        );
+
         if (! $user->isAdmin()) {
             $allowedSiteIds = $user->sites()->pluck('sites.id')->all();
             abort_unless(
