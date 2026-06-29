@@ -284,7 +284,7 @@ export async function applyDrawerFilterOption(
 export function getVisibleSearchInput(page: Page): Locator {
     return page
         .locator(
-            '[data-testid="search-input"]:visible, input[placeholder*="rechercher" i]:not([data-testid="global-search"]):visible, input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible',
+            '[data-testid="search-input"]:visible, [data-testid^="filter-inline-"]:visible, input[placeholder*="rechercher" i]:not([data-testid="global-search"]):visible, input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible',
         )
         .first();
 }

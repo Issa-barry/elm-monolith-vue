@@ -346,9 +346,16 @@ function confirmDelete(p: Prestataire) {
 
             <!-- Filtres -->
             <DataFilters
-                :values="{ statut: statusFilter }"
+                :values="{ nom: search, statut: statusFilter }"
                 :fields="
                     [
+                        {
+                            key: 'nom',
+                            type: 'text',
+                            label: 'Rechercher',
+                            inline: true,
+                            placeholder: 'Rechercher...',
+                        },
                         {
                             key: 'statut',
                             type: 'select',
@@ -364,6 +371,7 @@ function confirmDelete(p: Prestataire) {
                 :result-count="filteredPrestataires.length"
                 @apply="
                     (vals) => {
+                        search = (vals.nom as string) || '';
                         statusFilter = (vals.statut as string) || 'tous';
                     }
                 "

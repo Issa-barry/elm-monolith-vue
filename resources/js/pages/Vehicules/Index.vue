@@ -70,12 +70,14 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Vehicule>(
 );
 
 // Mobile — filtrage immédiat
+const mobileSearch = ref('');
 const mobileFilterType = ref('');
 const mobileFilterStatut = ref('');
 const mobileFilterCategorie = ref('');
 const mobileFilterAgence = ref('');
 
 // Desktop
+const search = ref('');
 const filterType = ref<string | null>(null);
 const filterStatut = ref<string | null>(null);
 const filterCategorie = ref<string | null>(null);
@@ -104,6 +106,13 @@ const agenceOptions = computed(() =>
 );
 
 const filterFields = computed<FilterField[]>(() => [
+    {
+        key: 'nom',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
     {
         key: 'type',
         label: 'Type',
@@ -473,6 +482,7 @@ function confirmDelete(v: Vehicule) {
             <!-- Filtres -->
             <DataFilters
                 :values="{
+                    nom: search,
                     type: filterType ?? '',
                     categorie: filterCategorie ?? '',
                     statut: filterStatut ?? '',
@@ -482,6 +492,7 @@ function confirmDelete(v: Vehicule) {
                 :result-count="filteredVehicules.length"
                 @apply="
                     (vals) => {
+                        search.value = (vals.nom as string) || '';
                         filterType.value = (vals.type as string) || null;
                         filterCategorie.value =
                             (vals.categorie as string) || null;
