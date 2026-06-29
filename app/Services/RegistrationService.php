@@ -4,11 +4,14 @@ namespace App\Services;
 
 use App\DTOs\RegisterData;
 use App\Enums\UserStatus;
+use App\Mail\EmailVerificationMail;
 use App\Models\Client;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -66,16 +69,20 @@ class RegistrationService
             ]);
         }
 
-        return DB::transaction(function () use ($data, $phone) {
+        $token = Str::random(64);
+
+        $user = DB::transaction(function () use ($data, $phone, $token) {
             $user = User::create([
                 'prenom' => self::formatPrenom($data->prenom),
                 'nom' => mb_strtoupper($data->nom),
                 'email' => $data->email ? mb_strtolower($data->email) : null,
                 'telephone' => $phone,
                 'password' => $data->password,
-                'status' => UserStatus::ACTIVE->value,
-                'is_active' => true,
+                'status' => UserStatus::PENDING->value,
+                'is_active' => false,
                 'email_verified_at' => null,
+                'email_verification_token' => $token,
+                'email_verification_expires_at' => now()->addHours(24),
             ]);
 
             Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
@@ -85,6 +92,12 @@ class RegistrationService
 
             return $user;
         });
+
+        if ($user->email) {
+            Mail::to($user->email)->send(new EmailVerificationMail($user, $token));
+        }
+
+        return $user;
     }
 
     /**

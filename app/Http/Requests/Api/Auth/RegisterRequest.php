@@ -16,7 +16,7 @@ class RegisterRequest extends FormRequest
             'prenom' => ['required', 'string', 'min:2', 'max:100'],
             'nom' => ['required', 'string', 'min:2', 'max:100'],
             'email' => [
-                'nullable',
+                'required',
                 'string',
                 'email',
                 'max:255',

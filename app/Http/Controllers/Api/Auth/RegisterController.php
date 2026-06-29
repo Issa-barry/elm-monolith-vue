@@ -19,6 +19,7 @@ class RegisterController extends Controller
             prenom: $request->input('prenom'),
             nom: $request->input('nom'),
             password: $request->input('password'),
+            email: $request->input('email'),
         );
 
         try {
