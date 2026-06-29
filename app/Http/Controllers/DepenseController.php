@@ -45,7 +45,7 @@ class DepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant']);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         $paginator = $this->buildQuery($filters, $orgId, $siteIds)
@@ -99,7 +99,7 @@ class DepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant']);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         $depenses = $this->buildQuery($filters, $orgId, $siteIds)
@@ -365,7 +365,7 @@ class DepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant']);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
         $org = Organization::find($orgId);
         $printedBy = $user->name;
@@ -792,35 +792,88 @@ class DepenseController extends Controller
                 );
         }
 
+        if (! empty($filters['search'])) {
+            $like = '%'.$filters['search'].'%';
+            $digits = preg_replace('/\D/', '', $filters['search']);
+            $likeTel = $digits ? '%'.$digits.'%' : null;
+            $likeImmat = '%'.preg_replace('/[\s\-]/', '', $filters['search']).'%';
+
+            $query->where(function ($w) use ($like, $likeTel, $likeImmat) {
+                $norm = "REPLACE(REPLACE(telephone, ' ', ''), '-', '')";
+
+                $w->where('commentaire', 'LIKE', $like)
+                    ->orWhereHas('depenseType', fn ($q) => $q->where('libelle', 'LIKE', $like))
+                    ->orWhere(fn ($w2) => $w2
+                        ->where('beneficiaire_type', 'vehicule')
+                        ->whereHas('vehiculeBeneficiaire', fn ($q) => $q
+                            ->where('nom_vehicule', 'LIKE', $like)
+                            ->orWhereRaw("REPLACE(REPLACE(immatriculation, '-', ''), ' ', '') LIKE ?", [$likeImmat])
+                        )
+                    )
+                    ->orWhere(fn ($w2) => $w2
+                        ->where('beneficiaire_type', 'employe')
+                        ->whereHas('employeBeneficiaire', function ($q) use ($like, $likeTel, $norm) {
+                            $q->where('nom', 'LIKE', $like)
+                                ->orWhere('prenom', 'LIKE', $like)
+                                ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like]);
+                            if ($likeTel) {
+                                $q->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
+                            }
+                        })
+                    )
+                    ->orWhere(fn ($w2) => $w2
+                        ->where('beneficiaire_type', 'livreur')
+                        ->whereHas('livreurBeneficiaire', function ($q) use ($like, $likeTel, $norm) {
+                            $q->where('nom', 'LIKE', $like)
+                                ->orWhere('prenom', 'LIKE', $like)
+                                ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like]);
+                            if ($likeTel) {
+                                $q->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
+                            }
+                        })
+                    )
+                    ->orWhere(fn ($w2) => $w2
+                        ->where('beneficiaire_type', 'proprietaire')
+                        ->whereHas('proprietaireBeneficiaire', function ($q) use ($like, $likeTel, $norm) {
+                            $q->where('nom', 'LIKE', $like)
+                                ->orWhere('prenom', 'LIKE', $like)
+                                ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like]);
+                            if ($likeTel) {
+                                $q->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
+                            }
+                        })
+                    );
+            });
+        }
+
         if (! empty($filters['concerne'])) {
             $like = '%'.$filters['concerne'].'%';
-            $query->where(function ($w) use ($like) {
+            $digits = preg_replace('/\D/', '', $filters['concerne']);
+            $likeTel = $digits ? '%'.$digits.'%' : null;
+            $norm = "REPLACE(REPLACE(telephone, ' ', ''), '-', '')";
+
+            $query->where(function ($w) use ($like, $likeTel, $norm) {
+                $matchPersonne = function ($q) use ($like, $likeTel, $norm) {
+                    $q->where('nom', 'LIKE', $like)
+                        ->orWhere('prenom', 'LIKE', $like)
+                        ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like]);
+                    if ($likeTel) {
+                        $q->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
+                    }
+                };
+
                 $w->where(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'employe')
-                    ->whereHas('employeBeneficiaire', fn ($q) => $q
-                        ->where('nom', 'LIKE', $like)
-                        ->orWhere('prenom', 'LIKE', $like)
-                        ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like])
-                    )
+                    ->whereHas('employeBeneficiaire', $matchPersonne)
                 )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'livreur')
-                    ->whereHas('livreurBeneficiaire', fn ($q) => $q
-                        ->where('nom', 'LIKE', $like)
-                        ->orWhere('prenom', 'LIKE', $like)
-                        ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like])
-                    )
+                    ->whereHas('livreurBeneficiaire', $matchPersonne)
                 )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'proprietaire')
-                    ->whereHas('proprietaireBeneficiaire', fn ($q) => $q
-                        ->where('nom', 'LIKE', $like)
-                        ->orWhere('prenom', 'LIKE', $like)
-                        ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like])
-                    )
+                    ->whereHas('proprietaireBeneficiaire', $matchPersonne)
                 )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'vehicule')
-                    ->whereHas('vehiculeBeneficiaire', fn ($q) => $q
-                        ->where('nom_vehicule', 'LIKE', $like)
-                    )
+                    ->whereHas('vehiculeBeneficiaire', fn ($q) => $q->where('nom_vehicule', 'LIKE', $like))
                 );
             });
         }
