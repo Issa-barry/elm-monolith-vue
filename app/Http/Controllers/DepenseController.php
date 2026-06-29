@@ -11,11 +11,13 @@ use App\Models\AuditLog;
 use App\Models\Depense;
 use App\Models\DepenseImputation;
 use App\Models\DepenseType;
+use App\Models\DroitCreationDepense;
 use App\Models\Employe;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\DepenseImputationService;
@@ -53,6 +55,8 @@ class DepenseController extends Controller
 
         [$beneficiaireCache, $vehiculeInfoCache] = $this->preloadBeneficiaires($paginator->items());
 
+        $droitValidation = $this->droitCreationDepense->droitValidationPour($user, $orgId);
+
         $types = DepenseType::where('organization_id', $orgId)
             ->ordered()
             ->get(['id', 'libelle', 'categorie']);
@@ -73,7 +77,7 @@ class DepenseController extends Controller
             ->first();
 
         return Inertia::render('Depenses/Index', [
-            'depenses' => $paginator->through(fn (Depense $d) => $this->transformDepense($d, $beneficiaireCache, $vehiculeInfoCache)),
+            'depenses' => $paginator->through(fn (Depense $d) => $this->transformDepense($d, $beneficiaireCache, $vehiculeInfoCache, $user, $droitValidation)),
             'types' => $types->map(fn ($t) => ['id' => $t->id, 'libelle' => $t->libelle, 'categorie' => $t->categorie->value]),
             'sites' => $sites,
             'categories' => CategorieDepense::options(),
@@ -368,6 +372,7 @@ class DepenseController extends Controller
             'proprietaires' => $this->loadProprietaires($orgId),
             'default_site_id' => $this->defaultSiteId(),
             'categories' => CategorieDepense::optionsConcerne(),
+            'can_change_site' => $user->isAdmin(),
         ]);
     }
 
@@ -379,10 +384,19 @@ class DepenseController extends Controller
         $orgId = $user->organization_id;
 
         abort_unless(
-            $this->droitCreationDepense->peutCreerSurSite($user, $orgId, (string) ($request->site_id ?? '')),
+            $this->droitCreationDepense->peutCreerSurSite($user, $orgId, (string) $request->site_id),
             403,
-            'Vous n\'êtes pas autorisé à saisir une dépense sur cette agence.'
+            'Vous n\'êtes pas autorisé à créer une dépense sur ce site.'
         );
+
+        if (! $user->isAdmin()) {
+            $allowedSiteIds = $user->sites()->pluck('sites.id')->all();
+            abort_unless(
+                in_array($request->site_id, $allowedSiteIds, true),
+                403,
+                'Vous ne pouvez pas choisir ce site.'
+            );
+        }
 
         $type = DepenseType::where('organization_id', $orgId)->findOrFail($request->depense_type_id);
 
@@ -412,7 +426,16 @@ class DepenseController extends Controller
     {
         $this->authorize('update', $depense);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+
+        $sites = $user->isAdmin()
+            ? $this->loadSites($orgId)
+            : $user->sites()
+                ->where('sites.organization_id', $orgId)
+                ->orderBy('sites.nom')
+                ->get(['sites.id', 'sites.nom'])
+                ->map(fn ($s) => ['id' => $s->id, 'nom' => $s->nom]);
 
         return Inertia::render('Depenses/Edit', [
             'depense' => [
@@ -428,11 +451,12 @@ class DepenseController extends Controller
             ],
             'types' => $this->loadTypes($orgId),
             'vehicules' => $this->loadVehicules($orgId),
-            'sites' => $this->loadSites($orgId),
+            'sites' => $sites,
             'employes' => $this->loadEmployes($orgId),
             'livreurs' => $this->loadLivreurs($orgId),
             'proprietaires' => $this->loadProprietaires($orgId),
             'categories' => CategorieDepense::optionsConcerne(),
+            'can_change_site' => $user->isAdmin(),
         ]);
     }
 
@@ -442,7 +466,21 @@ class DepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
+
+        if (! $user->isAdmin()) {
+            $allowedSiteIds = $user->sites()->pluck('sites.id')->all();
+            abort_unless(
+                in_array($request->site_id, $allowedSiteIds, true),
+                403,
+                'Vous ne pouvez pas choisir ce site.'
+            );
+        }
+
         $type = DepenseType::where('organization_id', $orgId)->findOrFail($request->depense_type_id);
+
+        $submittableStatuts = [StatutDepense::BROUILLON, StatutDepense::REJETE, StatutDepense::ANNULE];
+        $shouldSubmit = $request->input('statut') === 'soumis'
+            && in_array($depense->statut, $submittableStatuts, true);
 
         $fields = ['depense_type_id', 'beneficiaire_type', 'beneficiaire_id', 'site_id', 'montant', 'date_depense', 'commentaire'];
         $before = $depense->only($fields);
@@ -458,11 +496,22 @@ class DepenseController extends Controller
         ]);
 
         [$oldDiff, $newDiff] = $this->audit->diffFields($before, $depense->fresh()->only($fields), $fields);
-        $this->audit->record($depense, AuditEvent::UPDATED, auth()->user(), $oldDiff, $newDiff, [
+        $this->audit->record($depense, AuditEvent::UPDATED, $user, $oldDiff, $newDiff, [
             'module' => 'depenses',
             'site_id' => $depense->site_id,
             'description' => 'Dépense modifiée',
         ]);
+
+        if ($shouldSubmit) {
+            $depense->update(['statut' => StatutDepense::SOUMIS]);
+            $this->audit->record($depense, AuditEvent::SUBMITTED, $user, null, null, [
+                'module' => 'depenses',
+                'site_id' => $depense->site_id,
+                'description' => 'Dépense soumise pour validation',
+            ]);
+
+            return redirect()->route('depenses.show', $depense)->with('success', 'Dépense soumise pour validation.');
+        }
 
         return redirect()->route('depenses.show', $depense)->with('success', 'Dépense mise à jour.');
     }
@@ -471,8 +520,9 @@ class DepenseController extends Controller
     {
         $this->authorize('view', $depense);
 
-        if ($depense->statut !== StatutDepense::BROUILLON) {
-            return back()->withErrors(['statut' => 'Seules les dépenses en brouillon peuvent être soumises.']);
+        $submittable = [StatutDepense::BROUILLON, StatutDepense::REJETE, StatutDepense::ANNULE];
+        if (! in_array($depense->statut, $submittable, true)) {
+            return back()->withErrors(['statut' => 'Cette dépense ne peut pas être soumise.']);
         }
 
         $depense->update(['statut' => StatutDepense::SOUMIS]);
@@ -708,7 +758,7 @@ class DepenseController extends Controller
         return $query;
     }
 
-    private function transformDepense(Depense $d, array $labelCache, array $vehiculeInfoCache): array
+    private function transformDepense(Depense $d, array $labelCache, array $vehiculeInfoCache, ?User $user = null, ?DroitCreationDepense $droitValidation = null): array
     {
         $categorie = $d->depenseType?->categorie;
         $cacheKey = "{$d->beneficiaire_type}:{$d->beneficiaire_id}";
@@ -765,6 +815,8 @@ class DepenseController extends Controller
             'site' => $d->site ? ['id' => $d->site->id, 'nom' => $d->site->nom] : null,
             'user' => ['id' => $d->user->id, 'name' => $d->user->name],
             'validateur' => $d->validateur ? ['id' => $d->validateur->id, 'name' => $d->validateur->name] : null,
+            'can_valider' => $user && $d->statut === StatutDepense::SOUMIS
+                && $this->droitCreationDepense->peutValiderSurSite($user, $droitValidation, $d->site_id),
         ];
     }
 

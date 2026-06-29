@@ -210,4 +210,153 @@ class DroitCreationDepenseServiceTest extends TestCase
         $this->assertNotNull($result);
         $this->assertCount(0, $result);
     }
+
+    // ── droitValidationPour ───────────────────────────────────────────────────
+
+    public function test_admin_droit_validation_pour_retourne_null(): void
+    {
+        $this->assertNull($this->service->droitValidationPour($this->adminUser(), $this->org->id));
+    }
+
+    public function test_non_admin_sans_droit_validation_retourne_null(): void
+    {
+        $this->assertNull($this->service->droitValidationPour($this->commercialeUser(), $this->org->id));
+    }
+
+    public function test_non_admin_avec_droit_validation_retourne_droit(): void
+    {
+        $user = $this->commercialeUser();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+        ]);
+
+        $result = $this->service->droitValidationPour($user, $this->org->id);
+        $this->assertNotNull($result);
+        $this->assertEquals($droit->id, $result->id);
+    }
+
+    public function test_non_admin_avec_droit_peut_valider_false_retourne_null(): void
+    {
+        $user = $this->commercialeUser();
+        DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => false,
+        ]);
+
+        $this->assertNull($this->service->droitValidationPour($user, $this->org->id));
+    }
+
+    // ── peutValiderSurSite ────────────────────────────────────────────────────
+
+    public function test_admin_peut_valider_sur_site_retourne_true(): void
+    {
+        $site = $this->site();
+        $this->assertTrue($this->service->peutValiderSurSite($this->adminUser(), null, $site->id));
+    }
+
+    public function test_sans_droit_peut_valider_sur_site_retourne_false(): void
+    {
+        $site = $this->site();
+        $this->assertFalse($this->service->peutValiderSurSite($this->commercialeUser(), null, $site->id));
+    }
+
+    public function test_toutes_agences_peut_valider_sur_site_retourne_true(): void
+    {
+        $user = $this->commercialeUser();
+        $site = $this->site();
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'toutes_agences',
+            'sites' => null,
+            'peut_valider' => true,
+        ]);
+
+        $this->assertTrue($this->service->peutValiderSurSite($user, $droit, $site->id));
+    }
+
+    public function test_son_agence_peut_valider_sur_site_meme_site_retourne_true(): void
+    {
+        $user = $this->commercialeUser();
+        $site = $this->site();
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'son_agence',
+            'sites' => null,
+            'peut_valider' => true,
+        ]);
+
+        $this->assertTrue($this->service->peutValiderSurSite($user, $droit, $site->id));
+    }
+
+    public function test_son_agence_peut_valider_sur_site_autre_site_retourne_false(): void
+    {
+        $user = $this->commercialeUser();
+        $siteA = $this->site();
+        $siteB = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Agence B',
+            'type' => 'depot',
+            'localisation' => 'Kindia',
+        ]);
+        $user->sites()->attach($siteA->id, ['role' => 'employe', 'is_default' => true]);
+
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'son_agence',
+            'sites' => null,
+            'peut_valider' => true,
+        ]);
+
+        $this->assertFalse($this->service->peutValiderSurSite($user, $droit, $siteB->id));
+    }
+
+    public function test_agences_selectionnees_peut_valider_sur_site_site_autorise_retourne_true(): void
+    {
+        $user = $this->commercialeUser();
+        $site = $this->site();
+
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'agences_selectionnees',
+            'sites' => [$site->id],
+            'peut_valider' => true,
+        ]);
+
+        $this->assertTrue($this->service->peutValiderSurSite($user, $droit, $site->id));
+    }
+
+    public function test_agences_selectionnees_peut_valider_sur_site_site_non_autorise_retourne_false(): void
+    {
+        $user = $this->commercialeUser();
+        $siteA = $this->site();
+        $siteB = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Agence B',
+            'type' => 'depot',
+            'localisation' => 'Kindia',
+        ]);
+
+        $droit = DroitCreationDepense::create([
+            'organization_id' => $this->org->id,
+            'role_name' => 'commerciale',
+            'perimetre' => 'agences_selectionnees',
+            'sites' => [$siteA->id],
+            'peut_valider' => true,
+        ]);
+
+        $this->assertFalse($this->service->peutValiderSurSite($user, $droit, $siteB->id));
+    }
 }
