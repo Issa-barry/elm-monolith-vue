@@ -65,6 +65,8 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Site>(
 );
 
 const type = ref<string>('');
+const search = ref('');
+const mobileSearch = ref('');
 
 const typeOptions = computed(() => {
     const map = new Map<string, string>();
@@ -78,6 +80,13 @@ const typeOptions = computed(() => {
 
 const filterFields = computed((): FilterField[] => [
     {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
+    {
         key: 'type',
         label: 'Type',
         type: 'select',
@@ -86,6 +95,7 @@ const filterFields = computed((): FilterField[] => [
 ]);
 
 function handleApply(values: Record<string, unknown>) {
+    search.value = (values.search as string) ?? '';
     type.value = (values.type as string[])?.[0] ?? '';
 }
 
@@ -438,7 +448,7 @@ function confirmDelete(s: Site) {
 
             <DataFilters
                 :fields="filterFields"
-                :values="{ type }"
+                :values="{ search, type }"
                 :result-count="desktopTypeFiltered.length"
                 @apply="handleApply"
                 @reset="resetFilters"

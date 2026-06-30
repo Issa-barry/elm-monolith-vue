@@ -71,9 +71,18 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Proprietaire>(
 );
 const toast = useToast();
 
+const search = ref('');
+const mobileSearch = ref('');
 const statut = ref<string>('tous');
 
 const filterFields: FilterField[] = [
+    {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
     {
         key: 'statut',
         label: 'Statut',
@@ -412,12 +421,13 @@ function confirmDelete(p: Proprietaire) {
 
             <!-- Tableau -->
             <DataFilters
-                :values="{ statut: statut }"
+                :values="{ search: search, statut: statut }"
                 :fields="filterFields"
                 :result-count="filteredProprietaires.length"
                 @apply="
                     (vals) => {
-                        statut.value = (vals.statut as string) || 'tous';
+                        search = (vals.search as string) || '';
+                        statut = (vals.statut as string) || 'tous';
                     }
                 "
                 @reset="resetFilters"

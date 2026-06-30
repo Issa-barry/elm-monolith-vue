@@ -46,9 +46,17 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Livreurs', href: '/livreurs' },
 ];
 
+const search = ref('');
 const statutFilter = ref<'tous' | 'actif' | 'inactif' | 'pending'>('tous');
 
 const filterFields: FilterField[] = [
+    {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
     {
         key: 'statut',
         label: 'Statut',
@@ -157,12 +165,13 @@ function approuver(livreur: Livreur) {
 
             <!-- Filtres -->
             <DataFilters
-                :values="{ statut: statutFilter }"
+                :values="{ search: search, statut: statutFilter }"
                 :fields="filterFields"
                 :result-count="livreursFiltres.length"
                 @apply="
                     (vals) => {
-                        statutFilter.value =
+                        search = (vals.search as string) || '';
+                        statutFilter =
                             (vals.statut as
                                 | 'tous'
                                 | 'actif'

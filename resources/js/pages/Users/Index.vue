@@ -121,10 +121,18 @@ const inactiveUsers = computed(
     () => props.users.filter((u) => !u.is_active).length,
 );
 
+const search = ref('');
 const statut = ref<string>('tous');
 const siteIds = ref<string[]>([]);
 
 const filterFields: FilterField[] = [
+    {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
     {
         key: 'statut',
         label: 'Statut',
@@ -161,6 +169,7 @@ const filteredUsers = computed(() => {
 });
 
 function handleApply(values: Record<string, unknown>) {
+    search.value = (values.search as string) ?? '';
     statut.value = (values.statut as string[])?.[0] ?? 'tous';
     siteIds.value = (values.site_ids as string[]) ?? [];
 }
@@ -258,7 +267,7 @@ function confirmDelete(u: StaffUser) {
 
             <DataFilters
                 :fields="filterFields"
-                :values="{ statut }"
+                :values="{ search, statut }"
                 :result-count="filteredUsers.length"
                 @apply="handleApply"
                 @reset="resetFilters"

@@ -100,6 +100,7 @@ const props = defineProps<{
     categories: Option[];
     statuts: Option[];
     filters: {
+        search?: string;
         type?: string;
         statut?: string;
         categorie?: string;
@@ -130,6 +131,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 function currentParams() {
     return {
+        search: props.filters.search || undefined,
         type: props.filters.type || undefined,
         statut: props.filters.statut || undefined,
         categorie: props.filters.categorie || undefined,
@@ -143,6 +145,7 @@ function currentParams() {
 }
 
 const filterValues = computed(() => ({
+    search: props.filters.search ?? '',
     type: props.filters.type ?? '',
     statut: props.filters.statut ?? '',
     categorie: props.filters.categorie ?? '',
@@ -157,6 +160,13 @@ const filterValues = computed(() => ({
 
 const filterFields = computed<FilterField[]>(() => [
     // ── Inline : visibles directement dans la barre ──────────────────────────
+    {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
     {
         key: 'statut',
         label: 'Statut',
