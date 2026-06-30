@@ -220,6 +220,7 @@ function initials(name: string | null) {
 
 // ── Membres : filtres ─────────────────────────────────────────────────────────
 
+const search = ref('');
 const statutFilter = ref<string>('tous');
 const roleFilter = ref<string>('tous');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });

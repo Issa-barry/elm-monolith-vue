@@ -50,7 +50,6 @@ interface Site {
     parent_id: number | null;
     parent_nom: string | null;
     enfants_count: number;
-    localisation: string | null;
     telephone: string | null;
 }
 

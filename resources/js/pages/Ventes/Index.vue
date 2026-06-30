@@ -155,6 +155,9 @@ const filtresStatutCommission = [
 
 // ── Filtres ───────────────────────────────────────────────────────────────────
 
+const search = ref('');
+const mobileSearch = ref('');
+
 const filterFields: FilterField[] = [
     {
         key: 'statuts',
@@ -588,6 +591,20 @@ function confirmDelete(c: Commande) {
                         {{ formatGNF(totaux.deja_paye) }}
                     </p>
                 </div>
+            </div>
+
+            <!-- Recherche locale rapide -->
+            <div class="relative">
+                <Search
+                    class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                />
+                <input
+                    v-model="search"
+                    type="text"
+                    data-testid="search-input"
+                    placeholder="Rechercher (commande, client, véhicule…)"
+                    class="h-9 w-full max-w-sm rounded-md border border-input bg-background pr-3 pl-8 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
+                />
             </div>
 
             <!-- Filtres -->

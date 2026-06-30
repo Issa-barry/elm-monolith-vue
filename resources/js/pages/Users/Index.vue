@@ -170,7 +170,7 @@ const filteredUsers = computed(() => {
 
 function handleApply(values: Record<string, unknown>) {
     search.value = (values.search as string) ?? '';
-    statut.value = (values.statut as string[])?.[0] ?? 'tous';
+    statut.value = (values.statut as string) ?? 'tous';
     siteIds.value = (values.site_ids as string[]) ?? [];
 }
 

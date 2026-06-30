@@ -131,8 +131,8 @@ const filteredAccounts = computed(() => {
 
 function handleApply(values: Record<string, unknown>) {
     search.value = (values.search as string) ?? '';
-    typeFilter.value = (values.type as string[])?.[0] ?? 'tous';
-    statusFilter.value = (values.statut as string[])?.[0] ?? 'tous';
+    typeFilter.value = (values.type as string) ?? 'tous';
+    statusFilter.value = (values.statut as string) ?? 'tous';
 }
 
 function resetFilters() {

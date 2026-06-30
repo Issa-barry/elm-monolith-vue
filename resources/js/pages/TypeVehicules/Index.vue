@@ -6,7 +6,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2 } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 interface TypeVehiculeRow {
     id: string;
@@ -31,6 +31,8 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Types de véhicules', href: '/type-vehicules' },
 ];
 
+const search = ref('');
+
 const typesFiltres = computed(() => {
     const q = search.value.toLowerCase().trim();
     if (!q) return props.types;
@@ -42,6 +44,13 @@ const typesFiltres = computed(() => {
 });
 
 const filterFields: FilterField[] = [
+    {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
     {
         key: 'is_active',
         label: 'Statut',
@@ -95,8 +104,10 @@ function destroy(id: string) {
             </div>
 
             <DataFilters
+                :values="{ search }"
                 :result-count="typesFiltres.length"
                 :fields="filterFields"
+                @apply="(vals) => { search = (vals.search as string) || ''; }"
             />
 
             <div class="rounded-xl border bg-card shadow-sm">
