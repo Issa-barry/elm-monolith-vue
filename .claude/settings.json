@@ -177,7 +177,11 @@
       "Bash(./vendor/bin/pint --test tests/Feature/EquipeLivraisonTest.php)",
       "Bash(./vendor/bin/pint tests/Feature/EquipeLivraisonTest.php)",
       "Bash(php vendor/bin/phpunit tests/Unit/DroitCreationDepenseServiceTest.php tests/Feature/DepenseValidationTest.php tests/Feature/DepenseWorkflowTest.php tests/Feature/DepenseSiteFilterTest.php tests/Feature/Settings/DepenseParametrageTest.php --testdox)",
-      "PowerShell(vendor/bin/pint --test app/Http/Controllers/DepenseController.php 2>&1)"
+      "PowerShell(vendor/bin/pint --test app/Http/Controllers/DepenseController.php 2>&1)",
+      "Bash(./vendor/bin/phpunit --filter test_vente_payments_ne_sont_pas_affectes_par_le_filtre_vehicule tests/Feature/Comptabilite/CommissionDetailKpiTest.php)",
+      "Bash(./vendor/bin/phpunit --filter test_show_affiche_exactement_les_memes_montants_que_index tests/Feature/Comptabilite/CommissionVenteFraisTest.php)",
+      "Bash(rm -f storage/logs/debug_paiements.log storage/logs/debug_frais.log storage/logs/laravel.log)",
+      "Bash(./vendor/bin/phpunit tests/Feature/Comptabilite/)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

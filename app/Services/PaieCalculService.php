@@ -153,7 +153,7 @@ class PaieCalculService
         $depenses = Depense::where('beneficiaire_type', 'employe')
             ->where('beneficiaire_id', $ligne->employe_id)
             ->where('statut', StatutDepense::VALIDE->value)
-            ->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()])
+            ->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString().' 23:59:59'])
             ->with('depenseType')
             ->get();
 

@@ -35,7 +35,7 @@ class CommissionVenteCalculatorService
 
         if ($periode !== null && $periode !== '') {
             [$debut, $fin] = PeriodeComptableService::dateRangeForCode($periode);
-            $query->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
+            $query->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString().' 23:59:59']);
         }
 
         if (! empty($siteIds)) {

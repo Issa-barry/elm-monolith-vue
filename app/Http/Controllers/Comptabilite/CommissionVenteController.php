@@ -359,7 +359,7 @@ class CommissionVenteController extends Controller
 
         if ($periodeFilter !== '') {
             [$debutPaiement, $finPaiement] = PeriodeComptableService::dateRangeForCode($periodeFilter);
-            $historiquePaiementsQuery->whereBetween('paid_at', [$debutPaiement->toDateString(), $finPaiement->toDateString()]);
+            $historiquePaiementsQuery->whereBetween('paid_at', [$debutPaiement->toDateString(), $finPaiement->toDateString().' 23:59:59']);
         }
 
         $historiquePaiements = $historiquePaiementsQuery
@@ -383,7 +383,7 @@ class CommissionVenteController extends Controller
 
         if ($periodeFilter !== '') {
             [$debut, $fin] = PeriodeComptableService::dateRangeForCode($periodeFilter);
-            $expensesQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
+            $expensesQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString().' 23:59:59']);
         }
 
         if (! empty($siteIds)) {
