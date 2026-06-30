@@ -181,7 +181,9 @@
       "Bash(./vendor/bin/phpunit --filter test_vente_payments_ne_sont_pas_affectes_par_le_filtre_vehicule tests/Feature/Comptabilite/CommissionDetailKpiTest.php)",
       "Bash(./vendor/bin/phpunit --filter test_show_affiche_exactement_les_memes_montants_que_index tests/Feature/Comptabilite/CommissionVenteFraisTest.php)",
       "Bash(rm -f storage/logs/debug_paiements.log storage/logs/debug_frais.log storage/logs/laravel.log)",
-      "Bash(./vendor/bin/phpunit tests/Feature/Comptabilite/)"
+      "Bash(./vendor/bin/phpunit tests/Feature/Comptabilite/)",
+      "PowerShell(gh --version)",
+      "Bash(tee /tmp/tsc_out.txt)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

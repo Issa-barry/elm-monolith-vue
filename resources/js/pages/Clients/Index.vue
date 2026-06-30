@@ -405,8 +405,8 @@ function confirmDelete(c: Client) {
                 :result-count="filteredClients.length"
                 @apply="
                     (vals) => {
-                        statut.value = (vals.statut as string) || 'tous';
-                        search.value = (vals.search as string) || '';
+                        statut = (vals.statut as string) || 'tous';
+                        search = (vals.search as string) || '';
                     }
                 "
                 @reset="resetFilters"

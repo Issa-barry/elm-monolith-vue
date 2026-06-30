@@ -1185,6 +1185,23 @@ function activiteDotClass(action: string): string {
                             </div>
                         </div>
 
+                        <!-- Pas encore de commission (étapes avant réception) -->
+                        <div
+                            v-else-if="!transfert.commission"
+                            class="px-5 py-8 text-center text-sm text-muted-foreground"
+                        >
+                            <ShieldCheck
+                                class="mx-auto mb-2 h-8 w-8 opacity-30"
+                            />
+                            <p class="font-medium">
+                                Commission pas encore générée
+                            </p>
+                            <p class="mt-1 text-xs">
+                                La commission sera calculée automatiquement à
+                                la réception du transfert.
+                            </p>
+                        </div>
+
                         <!-- Commission existante -->
                         <div v-else class="space-y-4 px-5 py-4">
                             <!-- Synthese style commission vente -->

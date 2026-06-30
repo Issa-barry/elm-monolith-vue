@@ -63,6 +63,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Équipes de livraison', href: '/equipes-livraison' },
 ];
 
+const search = ref('');
 const statut = ref<'tous' | 'actif' | 'inactif'>('tous');
 const categorie = ref<'tous' | 'interne' | 'externe'>('tous');
 const proprietaire = ref('tous');
@@ -85,6 +86,13 @@ const filterFields = computed<FilterField[]>(() => {
         ),
     ];
     return [
+        {
+            key: 'search',
+            label: 'Rechercher',
+            type: 'text',
+            inline: true,
+            placeholder: 'Rechercher...',
+        },
         {
             key: 'statut',
             label: 'Statut',
@@ -121,10 +129,11 @@ function resetFilters() {
     proprietaire.value = 'tous';
 }
 
-function applyFilters(vals: Record<string, string>) {
+function applyFilters(vals: Record<string, unknown>) {
+    search.value = (vals.search as string) || '';
     statut.value = (vals.statut as typeof statut.value) || 'tous';
     categorie.value = (vals.categorie as typeof categorie.value) || 'tous';
-    proprietaire.value = vals.proprietaire || 'tous';
+    proprietaire.value = (vals.proprietaire as string) || 'tous';
 }
 
 const equipesFiltrees = computed(() => {
@@ -208,7 +217,7 @@ function confirmDelete(equipe: Equipe) {
 
             <!-- Barre de recherche + filtres -->
             <DataFilters
-                :values="{ statut, categorie, proprietaire }"
+                :values="{ search, statut, categorie, proprietaire }"
                 :fields="filterFields"
                 :result-count="equipesFiltrees.length"
                 @apply="applyFilters"

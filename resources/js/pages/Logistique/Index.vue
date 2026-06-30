@@ -140,6 +140,8 @@ const siteOptions = computed(() =>
     props.sites.map((s) => ({ value: s.id, label: s.nom })),
 );
 
+const mobileSearch = ref('');
+
 const filterFields = computed<FilterField[]>(() => [
     {
         key: 'statut',

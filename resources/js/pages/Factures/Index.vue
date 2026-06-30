@@ -130,6 +130,9 @@ const filtres = [
     { value: 'annulee', label: 'Annulées' },
 ];
 
+const search = ref('');
+const mobileSearch = ref('');
+
 const filterBaseParams = computed(() => {
     const p: Record<string, string> = {};
     if (props.livreur_id) p.livreur_id = props.livreur_id;
@@ -582,6 +585,20 @@ function _progressPercent(f: FactureItem): number {
                         }}
                     </p>
                 </div>
+            </div>
+
+            <!-- Recherche locale (client-side, immédiate) -->
+            <div class="relative">
+                <Search
+                    class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                />
+                <input
+                    v-model="search"
+                    type="text"
+                    data-testid="search-input"
+                    placeholder="Rechercher (référence, véhicule, client…)"
+                    class="h-9 w-full max-w-sm rounded-md border border-input bg-background pr-3 pl-8 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
+                />
             </div>
 
             <!-- Filtres -->

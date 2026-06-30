@@ -72,10 +72,18 @@ const AVATAR_COLORS: Record<string, string> = {
         'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
 };
 
+const search = ref('');
 const statusFilter = ref('tous');
 const typeFilter = ref('tous');
 
 const filterFields: FilterField[] = [
+    {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
     {
         key: 'type',
         label: 'Type',
@@ -122,6 +130,7 @@ const filteredAccounts = computed(() => {
 });
 
 function handleApply(values: Record<string, unknown>) {
+    search.value = (values.search as string) ?? '';
     typeFilter.value = (values.type as string[])?.[0] ?? 'tous';
     statusFilter.value = (values.statut as string[])?.[0] ?? 'tous';
 }
@@ -220,7 +229,7 @@ function confirmToggle(a: Account) {
             <!-- Filtres -->
             <DataFilters
                 :fields="filterFields"
-                :values="{ type: typeFilter, statut: statusFilter }"
+                :values="{ search: search, type: typeFilter, statut: statusFilter }"
                 :result-count="filteredAccounts.length"
                 @apply="handleApply"
                 @reset="resetFilters"
