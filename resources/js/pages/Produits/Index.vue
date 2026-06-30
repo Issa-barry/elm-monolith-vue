@@ -167,6 +167,13 @@ const currentSiteLabel = computed(() => {
 
 const filterFields = computed<FilterField[]>(() => [
     {
+        key: 'search',
+        type: 'text',
+        label: 'Rechercher',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
+    {
         key: 'type',
         type: 'select',
         label: 'Type',
@@ -569,6 +576,7 @@ function confirmArchive(produit: Produit) {
             <DataFilters
                 url="/produits"
                 :values="{
+                    search: filters.search ?? '',
                     type: filters.type ?? '',
                     statut: filters.statut ?? '',
                     site_ids: filters.site_ids ?? [],
