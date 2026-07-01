@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -8,7 +8,6 @@ import { Head } from '@inertiajs/vue3';
 import { ArrowDown, ArrowUp, BookOpen } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import { ref } from 'vue';
 
 interface Ligne {
     id: string;
@@ -54,8 +53,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Comptabilité', href: '/comptabilite' },
     { title: 'Journal financier', href: '/comptabilite/journal' },
 ];
-
-const search = ref(props.filters.search ?? '');
 
 const filterFields: FilterField[] = [
     {
@@ -153,9 +150,6 @@ function fmt(n: number) {
                 :fields="filterFields"
                 :sites="journalSites"
                 :result-count="lignes.data.length"
-                search-key="search"
-                search-placeholder="Rechercher une référence, un libellé..."
-                v-model:search="search"
             />
 
             <!-- Table -->

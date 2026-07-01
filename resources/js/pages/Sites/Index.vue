@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -50,7 +50,6 @@ interface Site {
     parent_id: number | null;
     parent_nom: string | null;
     enfants_count: number;
-    localisation: string | null;
     telephone: string | null;
 }
 
@@ -64,9 +63,9 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Site>(
     (site) => `/sites/${site.id}`,
 );
 
-const mobileSearch = ref('');
-const search = ref('');
 const type = ref<string>('');
+const search = ref('');
+const mobileSearch = ref('');
 
 const typeOptions = computed(() => {
     const map = new Map<string, string>();
@@ -80,6 +79,13 @@ const typeOptions = computed(() => {
 
 const filterFields = computed((): FilterField[] => [
     {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
+    {
         key: 'type',
         label: 'Type',
         type: 'select',
@@ -88,6 +94,7 @@ const filterFields = computed((): FilterField[] => [
 ]);
 
 function handleApply(values: Record<string, unknown>) {
+    search.value = (values.search as string) ?? '';
     type.value = (values.type as string[])?.[0] ?? '';
 }
 
@@ -440,10 +447,8 @@ function confirmDelete(s: Site) {
 
             <DataFilters
                 :fields="filterFields"
-                :values="{ type }"
+                :values="{ search, type }"
                 :result-count="desktopTypeFiltered.length"
-                search-placeholder="Rechercher…"
-                v-model:search="search"
                 @apply="handleApply"
                 @reset="resetFilters"
             />

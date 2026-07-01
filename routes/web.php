@@ -253,6 +253,7 @@ Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commercial
     Route::middleware('module:'.ModuleFeature::DEPENSES)->group(function () {
         Route::get('depenses/export/excel', [DepenseController::class, 'exportCsv'])->name('depenses.export.excel');
         Route::get('depenses/imprimer', [DepenseController::class, 'imprimer'])->name('depenses.imprimer');
+        Route::get('depenses/suggestions', [DepenseController::class, 'suggestions'])->name('depenses.suggestions');
         Route::get('depenses/concerne-detail', [DepenseController::class, 'concereneDetail'])->name('depenses.concerne-detail');
         Route::get('depenses/vehicule-detail', [DepenseController::class, 'vehiculeDetail'])->name('depenses.vehicule-detail');
         Route::resource('depenses', DepenseController::class);

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -48,7 +48,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Types de dépense', href: '/settings/depense-types' },
 ];
 
-const search = ref('');
 const selectedCategorie = ref('');
 const selectedStatut = ref('');
 
@@ -231,8 +230,6 @@ const categorieColors: Record<string, string> = {
                         statut: selectedStatut,
                     }"
                     :result-count="filtered.length"
-                    search-placeholder="Rechercher…"
-                    v-model:search="search"
                     @apply="handleApply"
                     @reset="resetFilters"
                 />

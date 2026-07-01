@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -498,11 +498,9 @@ const { onRowClick, bodyRowPt } =
 
             <!-- Filtres -->
             <DataFilters
-                v-model:search="search"
                 :values="localFilterValues"
                 :fields="filterFields"
                 :result-count="listeFiltree.length"
-                search-placeholder="Nom, téléphone, véhicule, montant…"
                 @apply="handleApply"
                 @reset="resetFilters"
             >

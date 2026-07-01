@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -346,11 +346,16 @@ function confirmDelete(p: Prestataire) {
 
             <!-- Filtres -->
             <DataFilters
-                v-model:search="search"
-                search-placeholder="Rechercher..."
-                :values="{ statut: statusFilter }"
+                :values="{ nom: search, statut: statusFilter }"
                 :fields="
                     [
+                        {
+                            key: 'nom',
+                            type: 'text',
+                            label: 'Rechercher',
+                            inline: true,
+                            placeholder: 'Rechercher...',
+                        },
                         {
                             key: 'statut',
                             type: 'select',
@@ -366,6 +371,7 @@ function confirmDelete(p: Prestataire) {
                 :result-count="filteredPrestataires.length"
                 @apply="
                     (vals) => {
+                        search = (vals.nom as string) || '';
                         statusFilter = (vals.statut as string) || 'tous';
                     }
                 "

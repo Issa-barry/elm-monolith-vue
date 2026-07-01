@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -106,6 +106,13 @@ const agenceOptions = computed(() =>
 );
 
 const filterFields = computed<FilterField[]>(() => [
+    {
+        key: 'nom',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
     {
         key: 'type',
         label: 'Type',
@@ -474,9 +481,8 @@ function confirmDelete(v: Vehicule) {
 
             <!-- Filtres -->
             <DataFilters
-                v-model:search="search"
-                search-placeholder="Nom, immatriculation, propriétaire…"
                 :values="{
+                    nom: search,
                     type: filterType ?? '',
                     categorie: filterCategorie ?? '',
                     statut: filterStatut ?? '',
@@ -486,6 +492,7 @@ function confirmDelete(v: Vehicule) {
                 :result-count="filteredVehicules.length"
                 @apply="
                     (vals) => {
+                        search.value = (vals.nom as string) || '';
                         filterType.value = (vals.type as string) || null;
                         filterCategorie.value =
                             (vals.categorie as string) || null;

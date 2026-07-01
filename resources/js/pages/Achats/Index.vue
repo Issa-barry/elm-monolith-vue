@@ -1,5 +1,7 @@
-<script setup lang="ts">
-import DataFilters from '@/components/filters/DataFilters.vue';
+﻿<script setup lang="ts">
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -60,12 +62,23 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
     (commande) => `/achats/${commande.id}`,
 );
 
-const search = ref('');
-
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Achats', href: '/achats' },
 ];
+
+const search = ref('');
+const mobileSearch = ref('');
+
+const filterFields = computed<FilterField[]>(() => [
+    {
+        key: 'search',
+        type: 'text',
+        label: 'Rechercher',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
+]);
 
 const desktopFiltered = computed(() => {
     const q = search.value.toLowerCase().trim();
@@ -86,7 +99,6 @@ function formatGNF(val: number): string {
 }
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
-const mobileSearch = ref('');
 
 const mobileFiltered = computed(() => {
     const q = mobileSearch.value.toLowerCase().trim();
@@ -283,10 +295,14 @@ function confirmDelete(c: Commande) {
 
             <!-- Filtres -->
             <DataFilters
-                v-model:search="search"
-                search-placeholder="Rechercher..."
-                :fields="[]"
+                :values="{ search: search }"
+                :fields="filterFields"
                 :result-count="desktopFiltered.length"
+                @apply="
+                    (vals) => {
+                        search = (vals.search as string) || '';
+                    }
+                "
                 @reset="
                     () => {
                         search = '';

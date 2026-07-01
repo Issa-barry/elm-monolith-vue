@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -130,8 +130,6 @@ const breadcrumbs = computed((): BreadcrumbItem[] => [
 
 // ── Filtres desktop ───────────────────────────────────────────────────────────
 
-const search = ref('');
-
 function indexUrl(): string {
     return props.vue === 'receptions'
         ? '/logistique/receptions'
@@ -141,6 +139,8 @@ function indexUrl(): string {
 const siteOptions = computed(() =>
     props.sites.map((s) => ({ value: s.id, label: s.nom })),
 );
+
+const mobileSearch = ref('');
 
 const filterFields = computed<FilterField[]>(() => [
     {
@@ -185,8 +185,6 @@ const filterValues = computed(() => ({
 const filteredTransferts = computed(() => props.transferts);
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
-
-const mobileSearch = ref('');
 
 const mobileFiltered = computed(() => {
     const q = mobileSearch.value.toLowerCase().trim();
@@ -513,8 +511,6 @@ const commStatutDot: Record<string, string> = {
                 :values="filterValues"
                 :fields="filterFields"
                 :result-count="filteredTransferts.length"
-                search-placeholder="Référence, site, véhicule…"
-                v-model:search="search"
                 :hide-agence-selector="true"
             />
 

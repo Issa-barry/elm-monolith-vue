@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -127,6 +127,13 @@ const siteIds = ref<string[]>([]);
 
 const filterFields: FilterField[] = [
     {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
+    {
         key: 'statut',
         label: 'Statut',
         type: 'select',
@@ -162,7 +169,8 @@ const filteredUsers = computed(() => {
 });
 
 function handleApply(values: Record<string, unknown>) {
-    statut.value = (values.statut as string[])?.[0] ?? 'tous';
+    search.value = (values.search as string) ?? '';
+    statut.value = (values.statut as string) ?? 'tous';
     siteIds.value = (values.site_ids as string[]) ?? [];
 }
 
@@ -259,10 +267,8 @@ function confirmDelete(u: StaffUser) {
 
             <DataFilters
                 :fields="filterFields"
-                :values="{ statut }"
+                :values="{ search, statut }"
                 :result-count="filteredUsers.length"
-                search-placeholder="Rechercher un utilisateur…"
-                v-model:search="search"
                 @apply="handleApply"
                 @reset="resetFilters"
             />

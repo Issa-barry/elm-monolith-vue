@@ -95,7 +95,7 @@ class CommissionProprietaireController extends Controller
             $applyPeriode = function ($query) use ($filtrePeriode) {
                 if ($filtrePeriode !== '') {
                     [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-                    $query->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
+                    $query->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString().' 23:59:59']);
                 }
 
                 return $query;
@@ -316,7 +316,7 @@ class CommissionProprietaireController extends Controller
 
         if ($periodeFilter !== '') {
             [$debutDep, $finDep] = PeriodeComptableService::dateRangeForCode($periodeFilter);
-            $fraisDepensesQuery->whereBetween('date_depense', [$debutDep->toDateString(), $finDep->toDateString()]);
+            $fraisDepensesQuery->whereBetween('date_depense', [$debutDep->toDateString(), $finDep->toDateString().' 23:59:59']);
         }
 
         if (! empty($siteIds)) {
@@ -417,7 +417,7 @@ class CommissionProprietaireController extends Controller
 
         if ($periodeFilter !== '') {
             [$debutPaiement, $finPaiement] = PeriodeComptableService::dateRangeForCode($periodeFilter);
-            $historiquePaiementsQuery->whereBetween('paid_at', [$debutPaiement->toDateString(), $finPaiement->toDateString()]);
+            $historiquePaiementsQuery->whereBetween('paid_at', [$debutPaiement->toDateString(), $finPaiement->toDateString().' 23:59:59']);
         }
 
         $historiquePaiements = $historiquePaiementsQuery
@@ -629,7 +629,7 @@ class CommissionProprietaireController extends Controller
             $applyPeriode = function ($query) use ($filtrePeriode) {
                 if ($filtrePeriode !== '') {
                     [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-                    $query->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
+                    $query->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString().' 23:59:59']);
                 }
 
                 return $query;

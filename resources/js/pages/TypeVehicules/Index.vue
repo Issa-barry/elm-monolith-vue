@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -44,6 +44,13 @@ const typesFiltres = computed(() => {
 });
 
 const filterFields: FilterField[] = [
+    {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
     {
         key: 'is_active',
         label: 'Statut',
@@ -97,10 +104,14 @@ function destroy(id: string) {
             </div>
 
             <DataFilters
-                v-model:search="search"
-                search-placeholder="Nom, description…"
+                :values="{ search }"
                 :result-count="typesFiltres.length"
                 :fields="filterFields"
+                @apply="
+                    (vals) => {
+                        search = (vals.search as string) || '';
+                    }
+                "
             />
 
             <div class="rounded-xl border bg-card shadow-sm">
