@@ -22,6 +22,8 @@ class ModuleService
      */
     public static function allForOrg(Organization $org): array
     {
+        Feature::for($org)->loadMissing(ModuleFeature::ALL);
+
         $result = [];
         foreach (ModuleFeature::ALL as $module) {
             $result[$module] = self::isActive($module, $org);

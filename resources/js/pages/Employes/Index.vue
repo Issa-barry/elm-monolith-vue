@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -27,7 +27,6 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { ref } from 'vue';
 
 interface ContratActif {
     id: string;
@@ -81,8 +80,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/dashboard' },
     { title: 'Employés', href: '/employes' },
 ];
-
-const search = ref(props.filters.search ?? '');
 
 const filterFields: FilterField[] = [
     {
@@ -194,8 +191,6 @@ function confirmDelete(e: Employe) {
                 :values="filters"
                 :fields="filterFields"
                 :result-count="employes.length"
-                search-placeholder="Matricule, nom, téléphone, email…"
-                v-model:search="search"
             />
 
             <!-- Table -->

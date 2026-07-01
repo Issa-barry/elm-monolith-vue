@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -71,11 +71,18 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Proprietaire>(
 );
 const toast = useToast();
 
-const mobileSearch = ref('');
 const search = ref('');
+const mobileSearch = ref('');
 const statut = ref<string>('tous');
 
 const filterFields: FilterField[] = [
+    {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
     {
         key: 'statut',
         label: 'Statut',
@@ -414,14 +421,13 @@ function confirmDelete(p: Proprietaire) {
 
             <!-- Tableau -->
             <DataFilters
-                v-model:search="search"
-                search-placeholder="Rechercher…"
-                :values="{ statut: statut }"
+                :values="{ search: search, statut: statut }"
                 :fields="filterFields"
                 :result-count="filteredProprietaires.length"
                 @apply="
                     (vals) => {
-                        statut.value = (vals.statut as string) || 'tous';
+                        search = (vals.search as string) || '';
+                        statut = (vals.statut as string) || 'tous';
                     }
                 "
                 @reset="resetFilters"

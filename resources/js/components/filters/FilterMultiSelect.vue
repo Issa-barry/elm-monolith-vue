@@ -61,6 +61,11 @@ function handleChange(newVal: (string | number)[]) {
         :show-toggle-all="false"
         append-to="self"
         :disabled="disabled"
+        :pt="{
+            root: { class: 'h-9' },
+            labelContainer: { class: 'flex items-center overflow-hidden' },
+            label: { class: 'truncate' },
+        }"
         @update:model-value="handleChange"
     >
         <template #header>

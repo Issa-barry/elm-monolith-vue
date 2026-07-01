@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -130,6 +130,9 @@ const filtres = [
     { value: 'annulee', label: 'Annulées' },
 ];
 
+const search = ref('');
+const mobileSearch = ref('');
+
 const filterBaseParams = computed(() => {
     const p: Record<string, string> = {};
     if (props.livreur_id) p.livreur_id = props.livreur_id;
@@ -190,7 +193,6 @@ const filterFields = computed<FilterField[]>(() => [
 ]);
 
 // ── Recherche locale (client-side, immédiate) ─────────────────────────────────
-const search = ref('');
 
 const facturesFiltrees = computed(() => {
     const q = search.value.toLowerCase().trim();
@@ -238,7 +240,6 @@ function formatGNF(val: number): string {
 }
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
-const mobileSearch = ref('');
 
 const mobileFiltered = computed(() => {
     const q = mobileSearch.value.toLowerCase().trim();
@@ -586,6 +587,20 @@ function _progressPercent(f: FactureItem): number {
                 </div>
             </div>
 
+            <!-- Recherche locale (client-side, immédiate) -->
+            <div class="relative">
+                <Search
+                    class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                />
+                <input
+                    v-model="search"
+                    type="text"
+                    data-testid="search-input"
+                    placeholder="Rechercher (référence, véhicule, client…)"
+                    class="h-9 w-full max-w-sm rounded-md border border-input bg-background pr-3 pl-8 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
+                />
+            </div>
+
             <!-- Filtres -->
             <DataFilters
                 url="/factures"
@@ -593,8 +608,6 @@ function _progressPercent(f: FactureItem): number {
                 :values="filterValues"
                 :result-count="facturesFiltrees.length"
                 :fields="filterFields"
-                search-placeholder="Référence, véhicule, client…"
-                v-model:search="search"
             />
 
             <!-- Tableau -->

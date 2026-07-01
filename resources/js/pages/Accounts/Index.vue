@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -78,6 +78,13 @@ const typeFilter = ref('tous');
 
 const filterFields: FilterField[] = [
     {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
+    },
+    {
         key: 'type',
         label: 'Type',
         type: 'select',
@@ -123,8 +130,9 @@ const filteredAccounts = computed(() => {
 });
 
 function handleApply(values: Record<string, unknown>) {
-    typeFilter.value = (values.type as string[])?.[0] ?? 'tous';
-    statusFilter.value = (values.statut as string[])?.[0] ?? 'tous';
+    search.value = (values.search as string) ?? '';
+    typeFilter.value = (values.type as string) ?? 'tous';
+    statusFilter.value = (values.statut as string) ?? 'tous';
 }
 
 function resetFilters() {
@@ -221,10 +229,12 @@ function confirmToggle(a: Account) {
             <!-- Filtres -->
             <DataFilters
                 :fields="filterFields"
-                :values="{ type: typeFilter, statut: statusFilter }"
+                :values="{
+                    search: search,
+                    type: typeFilter,
+                    statut: statusFilter,
+                }"
                 :result-count="filteredAccounts.length"
-                search-placeholder="Rechercher un compte..."
-                v-model:search="search"
                 @apply="handleApply"
                 @reset="resetFilters"
             />

@@ -21,7 +21,7 @@ test('cashback index renders and supports search/filter controls', async ({
     });
 
     const search = page
-        .locator('input[placeholder*="client" i]:visible')
+        .locator('input[placeholder*="Rechercher" i]:visible')
         .first();
     await expect(search).toBeVisible({ timeout: 10_000 });
     await search.fill('zzzz-no-result-e2e');

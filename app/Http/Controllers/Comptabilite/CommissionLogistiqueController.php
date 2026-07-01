@@ -99,7 +99,7 @@ class CommissionLogistiqueController extends Controller
                 ->where('organization_id', $orgId);
             if ($filtrePeriode !== '') {
                 [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-                $depQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
+                $depQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString().' 23:59:59']);
             }
             $fraisDepensesParLivreur = $depQuery->get(['beneficiaire_id', 'montant'])
                 ->groupBy('beneficiaire_id')
@@ -320,7 +320,7 @@ class CommissionLogistiqueController extends Controller
 
         if ($selectedPeriode !== '') {
             [$debut, $fin] = PeriodeComptableService::dateRangeForCode($selectedPeriode);
-            $expensesQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString()]);
+            $expensesQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString().' 23:59:59']);
         }
 
         if (! empty($siteIds)) {

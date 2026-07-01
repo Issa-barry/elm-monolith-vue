@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -81,7 +81,6 @@ const activeTab = ref<'types' | 'droits'>('types');
 
 const toast = useToast();
 
-const search = ref('');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => {
     filters.value.global.value = val;

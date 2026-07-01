@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
 import ClickableTableRow from '@/components/ClickableTableRow.vue';
 import DataFilters, {
@@ -341,9 +341,6 @@ function fmtTel(tel: string | null | undefined): string {
                 :fields="filterFields"
                 :sites="sites"
                 :result-count="livreurs.length"
-                search-key="search"
-                search-placeholder="Rechercher un livreur, téléphone, véhicule..."
-                v-model:search="search"
             />
 
             <!-- Tableau -->

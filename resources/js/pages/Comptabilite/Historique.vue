@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -63,8 +63,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Comptabilité', href: '/comptabilite' },
     { title: 'Historique', href: '/comptabilite/historique' },
 ];
-
-const search = ref(props.filters.search ?? '');
 
 const filterFields: FilterField[] = [
     {
@@ -193,9 +191,6 @@ function formatJson(val: unknown): string {
                 :values="historiqueFilters"
                 :fields="filterFields"
                 :result-count="logs.total"
-                search-key="search"
-                search-placeholder="Recherche libre…"
-                v-model:search="search"
             />
 
             <!-- Tableau -->
