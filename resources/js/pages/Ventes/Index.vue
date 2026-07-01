@@ -155,7 +155,6 @@ const filtresStatutCommission = [
 
 // ── Filtres ───────────────────────────────────────────────────────────────────
 
-
 const mobileSearch = ref('');
 
 const filterFields: FilterField[] = [
