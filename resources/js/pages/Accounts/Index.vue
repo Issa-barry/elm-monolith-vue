@@ -229,7 +229,11 @@ function confirmToggle(a: Account) {
             <!-- Filtres -->
             <DataFilters
                 :fields="filterFields"
-                :values="{ search: search, type: typeFilter, statut: statusFilter }"
+                :values="{
+                    search: search,
+                    type: typeFilter,
+                    statut: statusFilter,
+                }"
                 :result-count="filteredAccounts.length"
                 @apply="handleApply"
                 @reset="resetFilters"

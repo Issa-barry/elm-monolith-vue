@@ -1197,8 +1197,8 @@ function activiteDotClass(action: string): string {
                                 Commission pas encore générée
                             </p>
                             <p class="mt-1 text-xs">
-                                La commission sera calculée automatiquement à
-                                la réception du transfert.
+                                La commission sera calculée automatiquement à la
+                                réception du transfert.
                             </p>
                         </div>
 

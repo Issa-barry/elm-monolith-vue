@@ -107,7 +107,11 @@ function destroy(id: string) {
                 :values="{ search }"
                 :result-count="typesFiltres.length"
                 :fields="filterFields"
-                @apply="(vals) => { search = (vals.search as string) || ''; }"
+                @apply="
+                    (vals) => {
+                        search = (vals.search as string) || '';
+                    }
+                "
             />
 
             <div class="rounded-xl border bg-card shadow-sm">
