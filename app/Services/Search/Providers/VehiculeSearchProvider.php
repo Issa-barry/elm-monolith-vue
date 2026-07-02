@@ -39,8 +39,7 @@ class VehiculeSearchProvider implements SearchProvider
         if ($user->can('vehicules.read')) {
             $vehiculeQuery->where(function ($q) use ($like) {
                 $q->where('nom_vehicule', 'like', $like)
-                    ->orWhere('immatriculation', 'like', $like)
-                    ->orWhereHas('proprietaire', fn ($p) => $p->where('nom', 'like', $like)->orWhere('prenom', 'like', $like));
+                    ->orWhere('immatriculation', 'like', $like);
             });
             $vehiculeQuery = app(SiteScopeService::class)->applyToQuery($vehiculeQuery, $user);
         } elseif ($user->hasRole('proprietaire')) {
@@ -48,13 +47,11 @@ class VehiculeSearchProvider implements SearchProvider
             if ($proprietaireId === null) {
                 return collect();
             }
-            // Propriétaire : cherche par nom de véhicule, immatriculation, OU son propre nom
             $vehiculeQuery
                 ->where('proprietaire_id', $proprietaireId)
                 ->where(function ($q) use ($like) {
                     $q->where('nom_vehicule', 'like', $like)
-                        ->orWhere('immatriculation', 'like', $like)
-                        ->orWhereHas('proprietaire', fn ($p) => $p->where('nom', 'like', $like)->orWhere('prenom', 'like', $like));
+                        ->orWhere('immatriculation', 'like', $like);
                 });
         }
 

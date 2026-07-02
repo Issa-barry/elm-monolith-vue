@@ -93,6 +93,7 @@ const categoryRoutes: Record<string, (id: string) => string> = {
     commandes: (id) => `/ventes/${id}`,
     factures: (_id) => `/factures`,
     vehicules: (id) => `/vehicules/${id}`,
+    proprietaires: (id) => `/proprietaires/${id}`,
 };
 
 function navigateTo(category: string, id: string) {

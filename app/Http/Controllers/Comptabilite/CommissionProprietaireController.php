@@ -44,7 +44,8 @@ class CommissionProprietaireController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $search = trim((string) $request->input('search', ''));
+        $filtreNom = trim((string) $request->input('nom', ''));
+        $filtreTelephone = trim((string) $request->input('telephone', ''));
         $filtreStatut = (string) $request->input('statut', '');
         $filtrePeriode = trim((string) $request->input('periode', ''));
         if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
@@ -163,10 +164,17 @@ class CommissionProprietaireController extends Controller
             $beneficiaires = $beneficiaires->filter(fn ($b) => $b['statut_global'] === $filtreStatut);
         }
 
-        if ($search !== '') {
-            $s = mb_strtolower($search);
+        if ($filtreNom !== '') {
+            $s = mb_strtolower($filtreNom);
             $beneficiaires = $beneficiaires->filter(
                 fn ($b) => str_contains(mb_strtolower((string) $b['beneficiaire_nom']), $s)
+            );
+        }
+
+        if ($filtreTelephone !== '') {
+            $t = preg_replace('/\s/', '', $filtreTelephone);
+            $beneficiaires = $beneficiaires->filter(
+                fn ($b) => str_contains(preg_replace('/\s/', '', (string) ($b['telephone'] ?? '')), $t)
             );
         }
 
@@ -245,7 +253,8 @@ class CommissionProprietaireController extends Controller
         return Inertia::render('Comptabilite/CommissionProprietaire/Index', [
             'beneficiaires' => $list,
             'kpis' => $kpis,
-            'search' => $search,
+            'filtre_nom' => $filtreNom,
+            'filtre_telephone' => $filtreTelephone,
             'filtre_statut' => $filtreStatut,
             'filtre_site_ids' => $filtreSiteIds,
             'selected_periode' => $filtrePeriode,
@@ -535,10 +544,11 @@ class CommissionProprietaireController extends Controller
         $orgId = auth()->user()->organization_id;
         $filtrePeriode = trim((string) $request->input('periode', ''));
         $filtreStatut = trim((string) $request->input('statut', ''));
-        $search = trim((string) $request->input('search', ''));
+        $filtreNom = trim((string) $request->input('nom', ''));
+        $filtreTelephone = trim((string) $request->input('telephone', ''));
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport($orgId, $filtrePeriode);
-        $rows = $this->buildExportRows($parts, $fraisParProprio, $motifsParProprio, $filtrePeriode, $filtreStatut, $search);
+        $rows = $this->buildExportRows($parts, $fraisParProprio, $motifsParProprio, $filtrePeriode, $filtreStatut, $filtreNom, $filtreTelephone);
 
         $periodeLabel = $filtrePeriode !== '' ? PeriodeComptableService::labelForCode($filtrePeriode) : 'Toutes périodes';
         $filename = 'commissions-proprietaires-'.now()->format('Y-m-d').'.csv';
@@ -574,10 +584,11 @@ class CommissionProprietaireController extends Controller
         $orgId = auth()->user()->organization_id;
         $filtrePeriode = trim((string) $request->input('periode', ''));
         $filtreStatut = trim((string) $request->input('statut', ''));
-        $search = trim((string) $request->input('search', ''));
+        $filtreNom = trim((string) $request->input('nom', ''));
+        $filtreTelephone = trim((string) $request->input('telephone', ''));
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport($orgId, $filtrePeriode);
-        $rows = $this->buildExportRows($parts, $fraisParProprio, $motifsParProprio, $filtrePeriode, $filtreStatut, $search);
+        $rows = $this->buildExportRows($parts, $fraisParProprio, $motifsParProprio, $filtrePeriode, $filtreStatut, $filtreNom, $filtreTelephone);
         $siteGroups = $this->buildSiteGroups($rows);
 
         $org = Organization::find($orgId);
@@ -587,7 +598,7 @@ class CommissionProprietaireController extends Controller
             'title' => 'Commissions propriétaire',
             'org' => $org,
             'periode_label' => $periodeLabel,
-            'filters' => ['statut' => $filtreStatut, 'search' => $search],
+            'filters' => ['statut' => $filtreStatut, 'nom' => $filtreNom, 'telephone' => $filtreTelephone],
             'sites' => $siteGroups,
             'printed_by' => auth()->user()->name ?? '—',
             'generated_at' => now(),
@@ -675,7 +686,7 @@ class CommissionProprietaireController extends Controller
         return [$parts, $fraisParProprio, $motifsParProprio];
     }
 
-    private function buildExportRows(Collection $parts, array $fraisParProprio, array $motifsParProprio, string $filtrePeriode, string $filtreStatut, string $search): Collection
+    private function buildExportRows(Collection $parts, array $fraisParProprio, array $motifsParProprio, string $filtrePeriode, string $filtreStatut, string $filtreNom, string $filtreTelephone): Collection
     {
         $rows = $parts->groupBy('proprietaire_id')->map(function (Collection $propParts, string $proprioId) use ($fraisParProprio, $motifsParProprio, $filtrePeriode) {
             $first = $propParts->first();
@@ -738,9 +749,14 @@ class CommissionProprietaireController extends Controller
             }
         }
 
-        if ($search !== '') {
-            $s = mb_strtolower($search);
+        if ($filtreNom !== '') {
+            $s = mb_strtolower($filtreNom);
             $rows = $rows->filter(fn ($r) => str_contains(mb_strtolower($r['beneficiaire_nom']), $s));
+        }
+
+        if ($filtreTelephone !== '') {
+            $t = preg_replace('/\s/', '', $filtreTelephone);
+            $rows = $rows->filter(fn ($r) => str_contains(preg_replace('/\s/', '', (string) ($r['telephone'] ?? '')), $t));
         }
 
         return $rows->sortBy('beneficiaire_nom')->values();
