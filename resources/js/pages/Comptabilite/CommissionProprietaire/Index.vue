@@ -24,7 +24,6 @@ import {
     HandCoins,
     History,
     MoreHorizontal,
-
     User,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
