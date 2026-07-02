@@ -24,7 +24,6 @@ import {
     HandCoins,
     History,
     MoreHorizontal,
-    Truck,
     User,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
@@ -64,7 +63,8 @@ const props = defineProps<{
         total_verse: number;
         solde_total: number;
     };
-    search: string;
+    filtre_nom: string;
+    filtre_telephone: string;
     filtre_statut: string;
     filtre_site_ids: string[];
     selected_periode: string;
@@ -83,9 +83,21 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-const search = ref(props.search ?? '');
-
 const filterFields = computed((): FilterField[] => [
+    {
+        key: 'nom',
+        label: 'Nom complet',
+        type: 'text' as const,
+        inline: true,
+        placeholder: 'Nom du propriétaire…',
+    },
+    {
+        key: 'telephone',
+        label: 'Téléphone',
+        type: 'text' as const,
+        inline: true,
+        placeholder: 'Numéro…',
+    },
     {
         key: 'statut',
         label: 'Statut',
@@ -109,6 +121,8 @@ const filterFields = computed((): FilterField[] => [
 
 const currentFilters = computed(() => ({
     site_ids: props.filtre_site_ids ?? [],
+    nom: props.filtre_nom ?? '',
+    telephone: props.filtre_telephone ?? '',
     statut: props.filtre_statut ?? '',
     periode: props.selected_periode ?? '',
 }));
@@ -180,7 +194,8 @@ function buildParams(): URLSearchParams {
         params.append('site_ids[]', id);
     }
     if (props.filtre_statut) params.set('statut', props.filtre_statut);
-    if (search.value) params.set('search', search.value);
+    if (props.filtre_nom) params.set('nom', props.filtre_nom);
+    if (props.filtre_telephone) params.set('telephone', props.filtre_telephone);
     return params;
 }
 
@@ -343,11 +358,6 @@ function fmtTel(tel: string | null | undefined): string {
                                 <th
                                     class="px-5 py-3.5 text-left font-medium text-muted-foreground"
                                 >
-                                    Véhicule(s)
-                                </th>
-                                <th
-                                    class="px-5 py-3.5 text-left font-medium text-muted-foreground"
-                                >
                                     Agence
                                 </th>
                                 <th
@@ -408,36 +418,6 @@ function fmtTel(tel: string | null | undefined): string {
                                             </p>
                                         </div>
                                     </div>
-                                </td>
-                                <td class="px-5 py-3">
-                                    <div
-                                        v-if="b.vehicules.length"
-                                        class="flex items-start gap-1.5 text-sm text-muted-foreground"
-                                    >
-                                        <Truck
-                                            class="mt-0.5 h-3.5 w-3.5 shrink-0"
-                                        />
-                                        <div>
-                                            <div
-                                                v-for="(v, idx) in b.vehicules"
-                                                :key="idx"
-                                            >
-                                                <span>{{ v.nom }}</span>
-                                                <span
-                                                    v-if="v.immatriculation"
-                                                    class="block text-xs text-muted-foreground/80"
-                                                    >{{
-                                                        v.immatriculation
-                                                    }}</span
-                                                >
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <span
-                                        v-else
-                                        class="text-xs text-muted-foreground"
-                                        >—</span
-                                    >
                                 </td>
                                 <td class="px-5 py-3 text-sm">
                                     <div
